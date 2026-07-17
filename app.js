@@ -1856,7 +1856,7 @@ function renderEmployeesList() {
   const visible = list.filter(e => !e.archive);
   const user = DB.getCurrentUser();
   const isManager = user.role === ROLES.MANAGER;
-  const canCreate = user.role === ROLES.RH || user.role === ROLES.DIRECTEUR;
+  const canCreate = hasPermission(user, PERMISSIONS.CREER_SALARIE);
 
   const { pageItems, totalPages, page, pageStart } = paginate(visible, 'employeesPage');
 
@@ -2300,16 +2300,28 @@ function bindMesDocumentsEvents() {
 function canEditEmployeeRecord(employee) {
   const user = DB.getCurrentUser();
   if (!user) return false;
-  if (user.role === ROLES.DIRECTEUR) return true;
-  if (user.role === ROLES.RH) return user.id !== employee.id;
+  if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) {
+    if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false; // §9.3 : seul le Directeur modifie sa propre fiche
+    return true;
+  }
   if (user.role === ROLES.MANAGER) return (employee.managerIds || []).includes(user.id);
   return false;
 }
 
-/** Suppression définitive réservée au Directeur. */
+/** Même règle que canEditEmployeeRecord, mais pour l'archivage (permission distincte au §8). */
+function canArchiveEmployeeRecord(employee) {
+  const user = DB.getCurrentUser();
+  if (!user) return false;
+  if (hasPermission(user, PERMISSIONS.ARCHIVER_SALARIE)) {
+    if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false;
+    return true;
+  }
+  return false;
+}
+
 function canDeleteEmployeeRecord() {
   const user = DB.getCurrentUser();
-  return Boolean(user && user.role === ROLES.DIRECTEUR);
+  return hasPermission(user, PERMISSIONS.SUPPRIMER_SALARIE);
 }
 
 function renderEmployeeDetail(id) {
@@ -2346,7 +2358,7 @@ function renderEmployeeDetail(id) {
         <button class="btn btn-secondary" id="btn-toggle-favorite">${DB.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
-        ${canEdit ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
+        ${canArchiveEmployeeRecord(e) ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
         ${canDelete ? '<button class="btn btn-danger" id="btn-delete-employee">Supprimer</button>' : ''}
       </div>
     </div>
@@ -2431,7 +2443,11 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
-    { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' }
+    { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
+    { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
+    { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
+    { key: PERMISSIONS.ARCHIVER_SALARIE, label: 'Archiver un salarié' },
+    { key: PERMISSIONS.SUPPRIMER_SALARIE, label: 'Supprimer définitivement un salarié' }
   ];
   const overrides = e.permissionsOverrides || {};
   const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
