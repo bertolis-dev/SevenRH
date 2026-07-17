@@ -179,7 +179,7 @@ function renderLoginScreen() {
 }
 
 function renderLoginView() {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   const companies = DB.getCompanies();
   return `
     <div class="login-card">
@@ -653,7 +653,7 @@ function bindOnboardingWizardEvents() {
   const finishBtn = document.getElementById('btn-onboarding-finish');
   if (finishBtn) finishBtn.addEventListener('click', () => {
     const { profile, conventionCollective, organisation, admin } = state.onboarding;
-    DB.createCompanyFromOnboarding({ profile, conventionCollective, organisation, admin });
+    companyRepository.createFromOnboarding({ profile, conventionCollective, organisation, admin });
     closeModal();
     DB.login(admin.email, admin.motDePasse);
     showApp();
@@ -721,7 +721,7 @@ function performGlobalSearch(term) {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
-  DB.getEmployees().filter(e => !e.archive && isVisible(e.id)).forEach(e => {
+  employeeRepository.getAll().filter(e => !e.archive && isVisible(e.id)).forEach(e => {
     const haystack = `${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`.toLowerCase();
     if (haystack.includes(q)) {
       results.push({
@@ -734,8 +734,8 @@ function performGlobalSearch(term) {
     }
   });
 
-  DB.getLeaveRequests().forEach(r => {
-    const employee = DB.getEmployeeById(r.employeeId);
+  leaveRepository.getAll().forEach(r => {
+    const employee = employeeRepository.getById(r.employeeId);
     const type = DB.getLeaveTypeById(r.typeId);
     if (!employee || !type || !isVisible(employee.id)) return;
     const haystack = `${employee.prenom} ${employee.nom} ${type.nom} congé`.toLowerCase();
@@ -750,8 +750,8 @@ function performGlobalSearch(term) {
     }
   });
 
-  DB.getTeleworkRequests().forEach(r => {
-    const employee = DB.getEmployeeById(r.employeeId);
+  teleworkRepository.getAll().forEach(r => {
+    const employee = employeeRepository.getById(r.employeeId);
     if (!employee || !isVisible(employee.id)) return;
     if (`${employee.prenom} ${employee.nom} télétravail`.toLowerCase().includes(q)) {
       results.push({
@@ -764,8 +764,8 @@ function performGlobalSearch(term) {
     }
   });
 
-  DB.getExpenses().forEach(n => {
-    const employee = DB.getEmployeeById(n.employeeId);
+  expenseRepository.getAll().forEach(n => {
+    const employee = employeeRepository.getById(n.employeeId);
     if (!employee || !isVisible(employee.id)) return;
     const haystack = `${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`.toLowerCase();
     if (haystack.includes(q)) {
@@ -797,7 +797,7 @@ function searchResultItemHTML(result, index, isHighlighted) {
 function renderFavoritesDropdown(resultsBox) {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const favorites = DB.getFavoriteEmployeeIds()
-    .map(id => DB.getEmployeeById(id))
+    .map(id => employeeRepository.getById(id))
     .filter(e => e && (visibleIds === null || visibleIds.includes(e.id)));
 
   if (favorites.length === 0) {
@@ -930,23 +930,23 @@ function getVisibleNotificationsForCurrentUser() {
 function syncNotifications() {
   const candidates = [];
 
-  DB.getLeaveRequests().filter(r => r.statut === 'En attente').forEach(r => {
-    const employee = DB.getEmployeeById(r.employeeId);
+  leaveRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+    const employee = employeeRepository.getById(r.employeeId);
     const type = DB.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
     candidates.push(makeNotification(`leave-${r.id}`, '🏖️', 'Demande de congé en attente',
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'conges', { congesTab: 'demandes' }, employee.id));
   });
 
-  DB.getTeleworkRequests().filter(r => r.statut === 'En attente').forEach(r => {
-    const employee = DB.getEmployeeById(r.employeeId);
+  teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+    const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`telework-${r.id}`, '💻', 'Demande de télétravail en attente',
       `${employee.prenom} ${employee.nom}`, 'teletravail', { teletravailTab: 'demandes' }, employee.id));
   });
 
-  DB.getExpenses().filter(n => n.statut === 'En attente').forEach(n => {
-    const employee = DB.getEmployeeById(n.employeeId);
+  expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
+    const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, '🧾', 'Note de frais en attente',
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
@@ -962,10 +962,10 @@ function syncNotifications() {
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
-  DB.getDocuments().filter(d => d.dateExpiration).forEach(d => {
+  documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
     const daysUntil = Math.round((new Date(d.dateExpiration) - new Date()) / 86400000);
     if (daysUntil > 30) return;
-    const employee = DB.getEmployeeById(d.employeeId);
+    const employee = employeeRepository.getById(d.employeeId);
     if (!employee) return;
     const title = daysUntil < 0 ? 'Document expiré' : 'Document arrivant à expiration';
     candidates.push(makeNotification(`document-expiry-${d.id}`, '📄', title,
@@ -1218,9 +1218,9 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const cdi = actifs.filter(e => e.typeContrat === 'CDI').length;
   const cdd = actifs.filter(e => e.typeContrat === 'CDD').length;
   const services = new Set(actifs.map(e => e.service).filter(Boolean)).size;
-  let demandesEnAttente = DB.getLeaveRequests().filter(r => r.statut === 'En attente');
-  let notesEnAttente = DB.getExpenses().filter(n => n.statut === 'En attente');
-  let teletravailAujourdhui = DB.getTeleworkRequests().filter(r => r.statut === 'Validé');
+  let demandesEnAttente = leaveRepository.getAll().filter(r => r.statut === 'En attente');
+  let notesEnAttente = expenseRepository.getAll().filter(n => n.statut === 'En attente');
+  let teletravailAujourdhui = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
   if (employeeIds) {
     demandesEnAttente = demandesEnAttente.filter(r => employeeIds.includes(r.employeeId));
     notesEnAttente = notesEnAttente.filter(n => employeeIds.includes(n.employeeId));
@@ -1230,8 +1230,8 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   teletravailAujourdhui = teletravailAujourdhui.filter(r => today >= r.dateDebut && today <= r.dateFin);
   const now = new Date();
   const settings = DB.getSettings();
-  const leaveRequests = DB.getLeaveRequests();
-  const teleworkRequests = DB.getTeleworkRequests();
+  const leaveRequests = leaveRepository.getAll();
+  const teleworkRequests = teleworkRepository.getAll();
   const ticketsCeMois = actifs
     .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
 
@@ -1294,7 +1294,7 @@ function renderDashboardShortcuts() {
 }
 
 function renderDashboardRH() {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   return `
     <div class="view-header">
       <h1>Tableau de bord</h1>
@@ -1307,7 +1307,7 @@ function renderDashboardRH() {
 
 function renderDashboardManager() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  const employees = DB.getEmployees().filter(e => !e.archive && visibleIds.includes(e.id));
+  const employees = employeeRepository.getAll().filter(e => !e.archive && visibleIds.includes(e.id));
   return `
     <div class="view-header">
       <h1>Tableau de bord</h1>
@@ -1321,12 +1321,12 @@ function renderDashboardManager() {
 function renderDashboardSalarie(user) {
   const today = getTodayPresenceStatus(user);
   const requests = [
-    ...DB.getLeaveRequests().filter(r => r.employeeId === user.id).map(r => {
+    ...leaveRepository.getAll().filter(r => r.employeeId === user.id).map(r => {
       const type = DB.getLeaveTypeById(r.typeId);
       return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', date: r.dateDebut, statut: r.statut };
     }),
-    ...DB.getTeleworkRequests().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: '💻', date: r.dateDebut, statut: r.statut })),
-    ...DB.getExpenses().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: '🧾', date: n.date, statut: n.statut }))
+    ...teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: '💻', date: r.dateDebut, statut: r.statut })),
+    ...expenseRepository.getAll().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: '🧾', date: n.date, statut: n.statut }))
   ];
   const enAttente = requests.filter(r => r.statut === 'En attente').sort((a, b) => a.date.localeCompare(b.date));
   const aVenir = requests
@@ -1392,11 +1392,11 @@ function renderDashboardSalarie(user) {
 }
 
 function renderDashboardDirecteur() {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   const settings = DB.getSettings();
   const leaveTypes = DB.getLeaveTypes();
-  const leaveRequests = DB.getLeaveRequests();
-  const expenses = DB.getExpenses();
+  const leaveRequests = leaveRepository.getAll();
+  const expenses = expenseRepository.getAll();
   const actifs = employees.filter(e => e.statut === 'Actif');
   const year = new Date().getFullYear();
 
@@ -1406,9 +1406,9 @@ function renderDashboardDirecteur() {
   const fraisValides = expenses.filter(n => (n.statut === 'Remboursé') && String(n.date).startsWith(String(year)));
   const coutFrais = fraisValides.reduce((sum, n) => sum + n.montantTTC, 0);
   const now = new Date();
-  const teleworkRequests = DB.getTeleworkRequests();
+  const teleworkRequests = teleworkRepository.getAll();
   const coutTickets = actifs.reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).partEmployeur, 0);
-  const enAttenteToutesEtapes = [...leaveRequests, ...DB.getTeleworkRequests(), ...expenses].filter(r => r.statut === 'En attente').length;
+  const enAttenteToutesEtapes = [...leaveRequests, ...teleworkRepository.getAll(), ...expenses].filter(r => r.statut === 'En attente').length;
 
   const masseSalariale = settings.masseSalarialeActivee
     ? actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)
@@ -1456,7 +1456,7 @@ function renderDashboardDirecteur() {
 const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-info)', 'var(--color-danger)', 'var(--color-text-muted)'];
 
 function getServiceBreakdown(employees) {
-  employees = employees || DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const counts = {};
   employees.forEach(e => {
     const key = e.service || 'Non renseigné';
@@ -1468,7 +1468,7 @@ function getServiceBreakdown(employees) {
 }
 
 function getContratBreakdown(employees) {
-  employees = employees || DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const counts = {};
   employees.forEach(e => { counts[e.typeContrat] = (counts[e.typeContrat] || 0) + 1; });
   return Object.entries(counts).map(([label, value], i) => ({ label, value, color: CHART_COLORS[i % CHART_COLORS.length] }));
@@ -1476,7 +1476,7 @@ function getContratBreakdown(employees) {
 
 function getCongesParType(employeeIds) {
   const types = DB.getLeaveTypes();
-  let requests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
+  let requests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   if (employeeIds) requests = requests.filter(r => employeeIds.includes(r.employeeId));
   const year = String(new Date().getFullYear());
   return types
@@ -1491,10 +1491,10 @@ function getCongesParType(employeeIds) {
 }
 
 function getTicketsCostTrend(employees) {
-  employees = employees || DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const settings = DB.getSettings();
-  const leaveRequests = DB.getLeaveRequests();
-  const teleworkRequests = DB.getTeleworkRequests();
+  const leaveRequests = leaveRepository.getAll();
+  const teleworkRequests = teleworkRepository.getAll();
   const now = new Date();
   const points = [];
   for (let i = 5; i >= 0; i--) {
@@ -1507,7 +1507,7 @@ function getTicketsCostTrend(employees) {
 }
 
 function getUpcomingBirthdays(daysAhead = 60, employees) {
-  employees = (employees || DB.getEmployees()).filter(e => !e.archive && e.statut === 'Actif' && e.dateNaissance);
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateNaissance);
   const today = new Date();
   return employees
     .map(e => {
@@ -1522,7 +1522,7 @@ function getUpcomingBirthdays(daysAhead = 60, employees) {
 }
 
 function getUpcomingContractEnds(daysAhead = 60, employees) {
-  employees = (employees || DB.getEmployees()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinContrat);
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinContrat);
   const todayStr = toISODate(new Date());
   const limitStr = toISODate(addDays(new Date(), daysAhead));
   return employees
@@ -1724,14 +1724,14 @@ function getTodayPresenceStatus(employee, leaveRequests, teleworkRequests) {
     return { label: 'Repos', icon: '⚪', level: 'muted' };
   }
 
-  const onLeave = (leaveRequests || DB.getLeaveRequests()).find(r =>
+  const onLeave = (leaveRequests || leaveRepository.getAll()).find(r =>
     r.employeeId === employee.id && r.statut === 'Validé' && today >= r.dateDebut && today <= r.dateFin);
   if (onLeave) {
     const type = DB.getLeaveTypeById(onLeave.typeId);
     return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', level: 'warning' };
   }
 
-  const onTelework = (teleworkRequests || DB.getTeleworkRequests()).find(r =>
+  const onTelework = (teleworkRequests || teleworkRepository.getAll()).find(r =>
     r.employeeId === employee.id && r.statut === 'Validé' && today >= r.dateDebut && today <= r.dateFin);
   if (onTelework) {
     return { label: 'Télétravail', icon: '💻', level: 'info' };
@@ -1744,12 +1744,12 @@ const PRESENCE_CARD_LIMIT = 30;
 
 function renderPresenceCard() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
 
   // Récupérés une seule fois puis passés à chaque salarié — sinon getTodayPresenceStatus relit et re-trie tout le localStorage à chaque appel (mesuré : ~300ms pour 300 salariés au lieu de <5ms).
-  const leaveRequests = DB.getLeaveRequests();
-  const teleworkRequests = DB.getTeleworkRequests();
+  const leaveRequests = leaveRepository.getAll();
+  const teleworkRequests = teleworkRepository.getAll();
 
   const rows = employees
     .map(e => ({ employee: e, status: getTodayPresenceStatus(e, leaveRequests, teleworkRequests) }))
@@ -1802,7 +1802,7 @@ function kpiCard(label, value, icon) {
  */
 /** Salariés à proposer dans un filtre/sélecteur, restreints au périmètre de l'utilisateur courant. */
 function getScopedEmployeesForFilters() {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   return visibleIds === null ? employees : employees.filter(e => visibleIds.includes(e.id));
 }
@@ -1812,7 +1812,7 @@ function getVisibleEmployeeIdsForCurrentUser() {
   if (!user) return [];
   if ([ROLES.RH, ROLES.DIRECTEUR, ROLES.COMPTABILITE].includes(user.role)) return null;
   if (user.role === ROLES.MANAGER) {
-    const team = DB.getEmployees().filter(e => (e.managerIds || []).includes(user.id)).map(e => e.id);
+    const team = employeeRepository.getAll().filter(e => (e.managerIds || []).includes(user.id)).map(e => e.id);
     return [user.id, ...team];
   }
   return [user.id];
@@ -1820,7 +1820,7 @@ function getVisibleEmployeeIdsForCurrentUser() {
 
 function getFilteredSortedEmployees() {
   const settings = DB.getSettings();
-  let list = DB.getEmployees();
+  let list = employeeRepository.getAll();
 
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(e => visibleIds.includes(e.id));
@@ -1871,7 +1871,7 @@ function renderEmployeesList() {
       <input type="text" id="filter-search" class="input" placeholder="Rechercher un nom, un poste, un matricule..." value="${escapeHtml(state.search)}">
       <select id="filter-service" class="input">
         <option value="">Tous les services</option>
-        ${DB.getServices().map(s => `<option value="${escapeHtml(s.nom)}" ${state.filters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.filters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
       <select id="filter-contrat" class="input">
         <option value="">Tous les contrats</option>
@@ -2079,7 +2079,7 @@ function buildOrgTree(employees) {
 }
 
 function renderOrganigramme() {
-  const employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const { roots, childrenOf } = buildOrgTree(employees);
 
   return `
@@ -2162,20 +2162,20 @@ function renderDocumentRow(doc, canManage) {
 function bindDocumentRowEvents(scopeSelector) {
   document.querySelectorAll(`${scopeSelector} [data-download-document]`).forEach(btn => {
     btn.addEventListener('click', () => {
-      const doc = DB.getDocumentById(btn.dataset.downloadDocument);
+      const doc = documentRepository.getById(btn.dataset.downloadDocument);
       if (doc && doc.fichier) downloadDataUrl(doc.fichier.dataUrl, doc.fichier.nom);
     });
   });
   document.querySelectorAll(`${scopeSelector} [data-delete-document]`).forEach(btn => {
     btn.addEventListener('click', () => {
-      const doc = DB.getDocumentById(btn.dataset.deleteDocument);
+      const doc = documentRepository.getById(btn.dataset.deleteDocument);
       openConfirm({
         title: 'Supprimer ce document ?',
         message: `"${doc.nom}" sera définitivement supprimé.`,
         confirmLabel: 'Supprimer',
         danger: true,
         onConfirm: () => {
-          DB.deleteDocument(doc.id);
+          documentRepository.delete(doc.id);
           showToast('Document supprimé.');
           render();
         }
@@ -2185,7 +2185,7 @@ function bindDocumentRowEvents(scopeSelector) {
 }
 
 function renderEmployeeDocumentsCard(employee) {
-  const documents = DB.getDocumentsForEmployee(employee.id);
+  const documents = documentRepository.getForEmployee(employee.id);
   const canManage = canManageDocumentsFor();
 
   return `
@@ -2251,7 +2251,7 @@ function openDocumentModal(employeeId) {
       return;
     }
     const formData = new FormData(evt.target);
-    DB.addDocument({
+    documentRepository.create({
       employeeId,
       categorie: formData.get('categorie'),
       nom: formData.get('nom'),
@@ -2268,7 +2268,7 @@ function openDocumentModal(employeeId) {
 
 function renderMesDocuments() {
   const user = DB.getCurrentUser();
-  const documents = DB.getDocumentsForEmployee(user.id);
+  const documents = documentRepository.getForEmployee(user.id);
 
   return `
     <div class="view-header">
@@ -2308,7 +2308,7 @@ function canDeleteEmployeeRecord() {
 }
 
 function renderEmployeeDetail(id) {
-  const e = DB.getEmployeeById(id);
+  const e = employeeRepository.getById(id);
   if (!e) return `<button class="btn-link" id="btn-back-to-list">← Retour à la liste</button><div class="empty-state"><p>Salarié introuvable.</p></div>`;
 
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -2420,7 +2420,7 @@ function renderEmployeeBalances(employee) {
   const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
-  const requests = DB.getLeaveRequests();
+  const requests = leaveRepository.getAll();
   return `
     <div class="balance-grid">
       ${types.map(t => {
@@ -2450,7 +2450,7 @@ function infoRow(label, value) {
 
 function managerNames(managerIds) {
   const names = (managerIds || [])
-    .map(id => DB.getEmployeeById(id))
+    .map(id => employeeRepository.getById(id))
     .filter(Boolean)
     .map(m => `${m.prenom} ${m.nom}`);
   return names.length ? names.join(', ') : '—';
@@ -2459,7 +2459,7 @@ function managerNames(managerIds) {
 // ---- Modale : Fiche salarié imprimable / export PDF ----
 
 function openEmployeePrintModal(id) {
-  const e = DB.getEmployeeById(id);
+  const e = employeeRepository.getById(id);
   const age = calculateAge(e.dateNaissance);
 
   const html = `
@@ -2542,7 +2542,7 @@ function bindEmployeeDetailEvents() {
 
   const archiveBtn = document.getElementById('btn-archive-employee');
   if (archiveBtn) archiveBtn.addEventListener('click', () => {
-    const e = DB.getEmployeeById(state.currentEmployeeId);
+    const e = employeeRepository.getById(state.currentEmployeeId);
     const willArchive = !e.archive;
     openConfirm({
       title: willArchive ? 'Archiver ce salarié ?' : 'Réactiver ce salarié ?',
@@ -2551,7 +2551,7 @@ function bindEmployeeDetailEvents() {
         : `${e.prenom} ${e.nom} sera réactivé et repassera au statut actif.`,
       confirmLabel: willArchive ? 'Archiver' : 'Réactiver',
       onConfirm: () => {
-        DB.setArchived(e.id, willArchive);
+        employeeRepository.archive(e.id, willArchive);
         showToast(willArchive ? 'Salarié archivé.' : 'Salarié réactivé.');
         render();
       }
@@ -2560,14 +2560,14 @@ function bindEmployeeDetailEvents() {
 
   const deleteBtn = document.getElementById('btn-delete-employee');
   if (deleteBtn) deleteBtn.addEventListener('click', () => {
-    const e = DB.getEmployeeById(state.currentEmployeeId);
+    const e = employeeRepository.getById(state.currentEmployeeId);
     openConfirm({
       title: 'Supprimer définitivement ?',
       message: `Cette action est irréversible. La fiche de ${e.prenom} ${e.nom} sera définitivement supprimée.`,
       confirmLabel: 'Supprimer',
       danger: true,
       onConfirm: () => {
-        DB.deleteEmployee(e.id);
+        employeeRepository.delete(e.id);
         showToast('Salarié supprimé.');
         navigateTo('employees');
       }
@@ -2613,7 +2613,7 @@ function bindCongesEvents() {
 // ---- Sous-vue : Demandes ----
 
 function getFilteredLeaveRequests() {
-  let list = DB.getLeaveRequests();
+  let list = leaveRepository.getAll();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(r => visibleIds.includes(r.employeeId));
   if (state.congesFilters.employeeId) list = list.filter(r => r.employeeId === state.congesFilters.employeeId);
@@ -2676,7 +2676,7 @@ function renderCongesDemandes() {
 }
 
 function renderLeaveRequestRow(r) {
-  const employee = DB.getEmployeeById(r.employeeId);
+  const employee = employeeRepository.getById(r.employeeId);
   const type = DB.getLeaveTypeById(r.typeId);
   if (!employee || !type) return '';
 
@@ -2722,7 +2722,7 @@ function canActOnRequestFor(request) {
   const requiredRole = request.workflow[request.etapeIndex];
   if (user.role !== requiredRole) return false;
   if (requiredRole === ROLES.MANAGER) {
-    const emp = DB.getEmployeeById(request.employeeId);
+    const emp = employeeRepository.getById(request.employeeId);
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
   }
   return true;
@@ -2735,7 +2735,7 @@ function canManageRequestFor(employeeId) {
   if (employeeId === user.id) return false; // séparation des tâches : personne ne gère sa propre demande, même RH/Directeur
   if (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH) return true;
   if (user.role === ROLES.MANAGER) {
-    const emp = DB.getEmployeeById(employeeId);
+    const emp = employeeRepository.getById(employeeId);
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
   }
   return false;
@@ -2761,7 +2761,7 @@ function exportLeaveRequestsCSV() {
   const requests = getFilteredLeaveRequests();
   const headers = ['Salarié', 'Type', 'Début', 'Fin', 'Jours', 'Payé', 'Statut'];
   const rows = requests.map(r => {
-    const employee = DB.getEmployeeById(r.employeeId);
+    const employee = employeeRepository.getById(r.employeeId);
     const type = DB.getLeaveTypeById(r.typeId);
     return [
       employee ? `${employee.prenom} ${employee.nom}` : '—',
@@ -2817,8 +2817,8 @@ function bindCongesDemandesEvents() {
 // ---- Modale : Attestation de congé (imprimable / export PDF) ----
 
 function openLeaveAttestationModal(requestId) {
-  const r = DB.getLeaveRequestById(requestId);
-  const employee = DB.getEmployeeById(r.employeeId);
+  const r = leaveRepository.getById(requestId);
+  const employee = employeeRepository.getById(r.employeeId);
   const type = DB.getLeaveTypeById(r.typeId);
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
 
@@ -2866,27 +2866,27 @@ function openLeaveAttestationModal(requestId) {
 }
 
 function auditLabelForEmployee(employeeId) {
-  const employee = DB.getEmployeeById(employeeId);
+  const employee = employeeRepository.getById(employeeId);
   return employee ? `${employee.prenom} ${employee.nom}` : '—';
 }
 
 function handleApproveRequest(id) {
-  const request = DB.getLeaveRequestById(id);
-  DB.updateLeaveRequest(id, advanceWorkflow(request, 'Validé'));
+  const request = leaveRepository.getById(id);
+  leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
   DB.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
   showToast('Demande validée.');
   render();
 }
 
 function handleRefuseRequest(id) {
-  const request = DB.getLeaveRequestById(id);
+  const request = leaveRepository.getById(id);
   openConfirm({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
     confirmLabel: 'Refuser',
     danger: true,
     onConfirm: () => {
-      DB.updateLeaveRequest(id, refuseRequest(request));
+      leaveRepository.update(id, refuseRequest(request));
       DB.logAudit('Refus', 'Demande de congé', auditLabelForEmployee(request.employeeId));
       showToast('Demande refusée.');
       render();
@@ -2895,14 +2895,14 @@ function handleRefuseRequest(id) {
 }
 
 function handleCancelRequest(id) {
-  const request = DB.getLeaveRequestById(id);
+  const request = leaveRepository.getById(id);
   openConfirm({
     title: 'Annuler cette demande ?',
     message: 'Les jours seront recrédités sur le compteur du salarié.',
     confirmLabel: 'Annuler la demande',
     danger: true,
     onConfirm: () => {
-      DB.updateLeaveRequest(id, cancelRequest(request));
+      leaveRepository.update(id, cancelRequest(request));
       DB.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
       showToast('Demande annulée.');
       render();
@@ -2934,7 +2934,7 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
 }
 
 function openLeaveRequestModal(presetEmployeeId) {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
   state.pendingAttachment = null;
 
@@ -3022,8 +3022,8 @@ function updateLeaveRequestHints() {
   demiField.style.display = type && type.autoriserDemiJournee && dateDebut && dateDebut === dateFin ? 'block' : 'none';
 
   if (!type || !employeeId) { hint.textContent = ''; return; }
-  const employee = DB.getEmployeeById(employeeId);
-  const balance = getLeaveBalance(employee, type, DB.getLeaveRequests());
+  const employee = employeeRepository.getById(employeeId);
+  const balance = getLeaveBalance(employee, type, leaveRepository.getAll());
   const disponibleLabel = balance.disponible === Infinity ? 'illimité' : formatDurationFR(balance.disponible);
 
   let nbJoursLabel = '';
@@ -3056,7 +3056,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  const employee = DB.getEmployeeById(employeeId);
+  const employee = employeeRepository.getById(employeeId);
   const type = DB.getLeaveTypeById(typeId);
   const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee.joursTravailles);
 
@@ -3071,7 +3071,7 @@ function submitLeaveRequestForm(evt) {
   }
 
   if (!type.autoriserPlusieursDemandes) {
-    const overlapping = DB.getLeaveRequests().some(r =>
+    const overlapping = leaveRepository.getAll().some(r =>
       r.employeeId === employeeId && r.typeId === typeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
       r.dateDebut <= dateFin && r.dateFin >= dateDebut);
     if (overlapping) {
@@ -3080,7 +3080,7 @@ function submitLeaveRequestForm(evt) {
     }
   }
 
-  DB.addLeaveRequest({
+  leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, nbJours,
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
@@ -3360,11 +3360,11 @@ function renderCalendrier() {
 
   // Récupérés une seule fois pour toute la grille plutôt qu'à chaque cellule (~35-42 fois) — mesuré : 128ms -> ~15ms pour 300 salariés.
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = DB.getEmployees().filter(e => !e.archive);
+  let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const leaveTypes = DB.getLeaveTypes();
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
-  const teleworkRequests = DB.getTeleworkRequests().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
   const schoolHolidays = DB.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getFrenchPublicHolidays(y));
@@ -3570,7 +3570,7 @@ function bindParametresEvents() {
 // ---- Sous-vue : Entreprise (profil, multi-entreprise) ----
 
 function renderParametresEntreprise() {
-  const profile = DB.getCompanyProfile();
+  const profile = companyRepository.getProfile();
   const settings = DB.getSettings();
 
   return `
@@ -3613,7 +3613,7 @@ function bindParametresEntrepriseEvents() {
   document.getElementById('entreprise-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const formData = new FormData(evt.target);
-    DB.saveCompanyProfile({
+    companyRepository.saveProfile({
       raisonSociale: formData.get('raisonSociale'),
       siret: formData.get('siret'),
       tva: formData.get('tva'),
@@ -3632,7 +3632,7 @@ function bindParametresEntrepriseEvents() {
 // ---- Sous-vue : Services & équipes ----
 
 function renderParametresServices() {
-  const services = DB.getServices();
+  const services = serviceRepository.getAll();
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${services.length} service${services.length > 1 ? 's' : ''}</p>
@@ -3672,7 +3672,7 @@ function renderServiceCard(service) {
 }
 
 function managerShortName(employeeId) {
-  const m = DB.getEmployeeById(employeeId);
+  const m = employeeRepository.getById(employeeId);
   return m ? `${m.prenom} ${m.nom}` : '?';
 }
 
@@ -3682,14 +3682,14 @@ function bindParametresServicesEvents() {
   document.querySelectorAll('[data-rename-service]').forEach(btn => btn.addEventListener('click', () => openServiceModal(btn.dataset.renameService)));
 
   document.querySelectorAll('[data-delete-service]').forEach(btn => btn.addEventListener('click', () => {
-    const service = DB.getServiceById(btn.dataset.deleteService);
+    const service = serviceRepository.getById(btn.dataset.deleteService);
     openConfirm({
       title: 'Supprimer ce service ?',
       message: `"${service.nom}" et ses équipes seront définitivement supprimés. Les salariés déjà rattachés à ce service conservent leur donnée actuelle.`,
       confirmLabel: 'Supprimer',
       danger: true,
       onConfirm: () => {
-        DB.deleteService(service.id);
+        serviceRepository.delete(service.id);
         showToast('Service supprimé.');
         render();
       }
@@ -3708,7 +3708,7 @@ function bindParametresServicesEvents() {
 
   document.querySelectorAll('[data-delete-equipe]').forEach(btn => btn.addEventListener('click', () => {
     const [serviceId, equipeId] = btn.dataset.deleteEquipe.split(':');
-    const service = DB.getServiceById(serviceId);
+    const service = serviceRepository.getById(serviceId);
     const equipe = service.equipes.find(e => e.id === equipeId);
     openConfirm({
       title: 'Supprimer cette équipe ?',
@@ -3731,7 +3731,7 @@ function bindParametresServicesEvents() {
 
 function openServiceModal(id) {
   const isEdit = Boolean(id);
-  const service = isEdit ? DB.getServiceById(id) : { nom: '' };
+  const service = isEdit ? serviceRepository.getById(id) : { nom: '' };
 
   const html = `
     <div class="modal modal-small">
@@ -3761,7 +3761,7 @@ function openServiceModal(id) {
     evt.preventDefault();
     const nom = new FormData(evt.target).get('nom').trim();
     if (!nom) return;
-    if (isEdit) DB.renameService(id, nom); else DB.addService(nom);
+    if (isEdit) serviceRepository.rename(id, nom); else serviceRepository.create(nom);
     showToast(isEdit ? 'Service renommé.' : 'Service créé.');
     closeModal();
     navigateTo('parametres', { parametresTab: 'services' });
@@ -3769,9 +3769,9 @@ function openServiceModal(id) {
 }
 
 function openEquipeManagersModal(serviceId, equipeId) {
-  const service = DB.getServiceById(serviceId);
+  const service = serviceRepository.getById(serviceId);
   const equipe = service.equipes.find(e => e.id === equipeId);
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
 
   const html = `
     <div class="modal modal-small">
@@ -4221,7 +4221,7 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
 
 function getPlanningEmployees() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   if (state.planningFilters.service) employees = employees.filter(e => e.service === state.planningFilters.service);
   return employees;
@@ -4241,7 +4241,7 @@ function renderPlanning() {
     <div class="toolbar card">
       <select id="planning-filter-service" class="input">
         <option value="">Tous les services</option>
-        ${DB.getServices().map(s => `<option value="${escapeHtml(s.nom)}" ${state.planningFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.planningFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
     </div>
     <div id="planning-content">
@@ -4258,8 +4258,8 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
 function renderPlanningSemaine() {
   const weekDates = getWeekDates(state.planningWeekOffset);
   const employees = getPlanningEmployees();
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
-  const teleworkRequests = DB.getTeleworkRequests().filter(r => r.statut === 'Validé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
 
   return `
     <div class="view-header-row">
@@ -4293,8 +4293,8 @@ function renderPlanningMois() {
   const month = state.planningMonth;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const employees = getPlanningEmployees();
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
-  const teleworkRequests = DB.getTeleworkRequests().filter(r => r.statut === 'Validé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
 
   return `
     <div class="view-header-row">
@@ -4327,7 +4327,7 @@ function renderPlanningMois() {
 function renderPlanningAnnee() {
   const year = state.planningYear;
   const employees = getPlanningEmployees();
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
 
   return `
     <div class="view-header-row">
@@ -4435,7 +4435,7 @@ function bindTeletravailEvents() {
 // ---- Sous-vue : Demandes ----
 
 function getFilteredTeleworkRequests() {
-  let list = DB.getTeleworkRequests();
+  let list = teleworkRepository.getAll();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(r => visibleIds.includes(r.employeeId));
   if (state.teletravailFilters.employeeId) list = list.filter(r => r.employeeId === state.teletravailFilters.employeeId);
@@ -4476,7 +4476,7 @@ function renderTeletravailDemandes() {
 }
 
 function renderTeleworkRequestRow(r) {
-  const employee = DB.getEmployeeById(r.employeeId);
+  const employee = employeeRepository.getById(r.employeeId);
   if (!employee) return '';
 
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}`;
@@ -4513,22 +4513,22 @@ function bindTeletravailDemandesEvents() {
 }
 
 function handleApproveTelework(id) {
-  const request = DB.getTeleworkRequestById(id);
-  DB.updateTeleworkRequest(id, advanceWorkflow(request, 'Validé'));
+  const request = teleworkRepository.getById(id);
+  teleworkRepository.update(id, advanceWorkflow(request, 'Validé'));
   DB.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
   showToast('Télétravail validé.');
   render();
 }
 
 function handleRefuseTelework(id) {
-  const request = DB.getTeleworkRequestById(id);
+  const request = teleworkRepository.getById(id);
   openConfirm({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus.',
     confirmLabel: 'Refuser',
     danger: true,
     onConfirm: () => {
-      DB.updateTeleworkRequest(id, refuseRequest(request));
+      teleworkRepository.update(id, refuseRequest(request));
       DB.logAudit('Refus', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
       showToast('Demande refusée.');
       render();
@@ -4537,14 +4537,14 @@ function handleRefuseTelework(id) {
 }
 
 function handleCancelTelework(id) {
-  const request = DB.getTeleworkRequestById(id);
+  const request = teleworkRepository.getById(id);
   openConfirm({
     title: 'Annuler ce télétravail ?',
     message: 'Ce jour redeviendra un jour de présence au bureau.',
     confirmLabel: 'Annuler',
     danger: true,
     onConfirm: () => {
-      DB.updateTeleworkRequest(id, cancelRequest(request));
+      teleworkRepository.update(id, cancelRequest(request));
       DB.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
       showToast('Demande annulée.');
       render();
@@ -4555,7 +4555,7 @@ function handleCancelTelework(id) {
 // ---- Modale : Nouvelle demande de télétravail ----
 
 function openTeleworkRequestModal(presetEmployeeId) {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
 
   const html = `
     <div class="modal">
@@ -4605,13 +4605,13 @@ function updateTeleworkQuotaHint() {
   const hint = document.getElementById('telework-quota-hint');
   if (!employeeId || !dateDebut) { hint.textContent = ''; return; }
 
-  const employee = DB.getEmployeeById(employeeId);
+  const employee = employeeRepository.getById(employeeId);
   const quota = DB.getSettings().teletravailQuotaSemaine;
   const weekDates = getWeekDatesContaining(dateDebut);
   const weekStart = toISODate(weekDates[0]);
   const weekEnd = toISODate(weekDates[6]);
 
-  const activeRequests = DB.getTeleworkRequests().filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'));
+  const activeRequests = teleworkRepository.getAll().filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'));
   let usedThisWeek = 0;
   activeRequests.forEach(r => {
     for (let cursor = new Date(r.dateDebut); toISODate(cursor) <= r.dateFin; cursor.setDate(cursor.getDate() + 1)) {
@@ -4645,7 +4645,7 @@ function findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quo
     }
   };
 
-  DB.getTeleworkRequests()
+  teleworkRepository.getAll()
     .filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'))
     .forEach(r => tally(r.dateDebut, r.dateFin));
   tally(dateDebut, dateFin);
@@ -4672,7 +4672,7 @@ function submitTeleworkRequestForm(evt) {
     return;
   }
 
-  const employee = DB.getEmployeeById(employeeId);
+  const employee = employeeRepository.getById(employeeId);
   const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee.joursTravailles);
 
   if (nbJours <= 0) {
@@ -4687,7 +4687,7 @@ function submitTeleworkRequestForm(evt) {
     return;
   }
 
-  DB.addTeleworkRequest({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
+  teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
   showToast('Demande de télétravail envoyée.');
   closeModal();
@@ -4703,10 +4703,10 @@ function getWeekDates(weekOffset) {
 function renderTeletravailPlanning() {
   const weekDates = getWeekDates(state.teletravailWeekOffset);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
-  const teleworkRequests = DB.getTeleworkRequests().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
 
   return `
     <div class="view-header-row">
@@ -4811,7 +4811,7 @@ function exportRowsToCSV(headers, rows, filename) {
 // ---------------------------------------------------------------------------
 
 function getFilteredExpenses() {
-  let list = DB.getExpenses();
+  let list = expenseRepository.getAll();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(n => visibleIds.includes(n.employeeId));
   if (state.fraisFilters.employeeId) list = list.filter(n => n.employeeId === state.fraisFilters.employeeId);
@@ -4869,7 +4869,7 @@ function renderFrais() {
 }
 
 function renderExpenseRow(n) {
-  const employee = DB.getEmployeeById(n.employeeId);
+  const employee = employeeRepository.getById(n.employeeId);
   if (!employee) return '';
 
   const actions = n.statut === 'En attente'
@@ -4924,23 +4924,23 @@ function bindFraisEvents() {
 }
 
 function handleApproveExpense(id) {
-  const expense = DB.getExpenseById(id);
+  const expense = expenseRepository.getById(id);
   const patch = advanceWorkflow(expense, 'Remboursé');
-  DB.updateExpense(id, patch);
+  expenseRepository.update(id, patch);
   DB.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
   showToast(patch.statut === 'Remboursé' ? 'Note de frais remboursée.' : 'Étape de validation suivante en attente.');
   render();
 }
 
 function handleRefuseExpense(id) {
-  const expense = DB.getExpenseById(id);
+  const expense = expenseRepository.getById(id);
   openConfirm({
     title: 'Refuser cette note de frais ?',
     message: 'Le salarié sera informé du refus.',
     confirmLabel: 'Refuser',
     danger: true,
     onConfirm: () => {
-      DB.updateExpense(id, refuseRequest(expense));
+      expenseRepository.update(id, refuseRequest(expense));
       DB.logAudit('Refus', 'Note de frais', auditLabelForEmployee(expense.employeeId));
       showToast('Note de frais refusée.');
       render();
@@ -4949,14 +4949,14 @@ function handleRefuseExpense(id) {
 }
 
 function handleCancelExpense(id) {
-  const expense = DB.getExpenseById(id);
+  const expense = expenseRepository.getById(id);
   openConfirm({
     title: 'Annuler cette note de frais ?',
     message: 'La validation sera annulée.',
     confirmLabel: 'Annuler',
     danger: true,
     onConfirm: () => {
-      DB.updateExpense(id, cancelRequest(expense));
+      expenseRepository.update(id, cancelRequest(expense));
       DB.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
       showToast('Note de frais annulée.');
       render();
@@ -4968,7 +4968,7 @@ function exportExpensesCSV() {
   const expenses = getFilteredExpenses();
   const headers = ['Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Statut'];
   const rows = expenses.map(n => {
-    const employee = DB.getEmployeeById(n.employeeId);
+    const employee = employeeRepository.getById(n.employeeId);
     return [
       employee ? `${employee.prenom} ${employee.nom}` : '—',
       n.date,
@@ -4987,7 +4987,7 @@ function exportExpensesCSV() {
 // ---- Modale : Nouvelle note de frais ----
 
 function openExpenseModal(presetEmployeeId) {
-  const employees = DB.getEmployees().filter(e => !e.archive);
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
   const settings = DB.getSettings();
   state.pendingAttachment = null;
 
@@ -5104,7 +5104,7 @@ function submitExpenseForm(evt) {
     }
   }
 
-  DB.addExpense({
+  expenseRepository.create({
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
     date: formData.get('date'),
     libelle: formData.get('libelle'),
@@ -5120,8 +5120,8 @@ function submitExpenseForm(evt) {
 // ---- Modale : Détail / impression d'une note de frais ----
 
 function openExpenseDetailModal(id) {
-  const n = DB.getExpenseById(id);
-  const employee = DB.getEmployeeById(n.employeeId);
+  const n = expenseRepository.getById(id);
+  const employee = employeeRepository.getById(n.employeeId);
   const ht = computeMontantHT(n.montantTTC, n.tauxTVA);
   const tva = computeMontantTVA(n.montantTTC, n.tauxTVA);
 
@@ -5167,10 +5167,10 @@ function openExpenseDetailModal(id) {
 // ---------------------------------------------------------------------------
 
 function getTicketsRows() {
-  const employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const settings = DB.getSettings();
-  const leaveRequests = DB.getLeaveRequests();
-  const teleworkRequests = DB.getTeleworkRequests();
+  const leaveRequests = leaveRepository.getAll();
+  const teleworkRequests = teleworkRepository.getAll();
 
   return employees.map(e => ({
     employee: e,
@@ -5269,11 +5269,11 @@ function exportTicketsCSV() {
 // ---------------------------------------------------------------------------
 
 function getPaieRows(year, month) {
-  const employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
-  const leaveRequests = DB.getLeaveRequests().filter(r => r.statut === 'Validé');
-  const teleworkRequests = DB.getTeleworkRequests().filter(r => r.statut === 'Validé');
-  const expenses = DB.getExpenses().filter(n => n.statut === 'Remboursé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
   const settings = DB.getSettings();
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
@@ -5405,7 +5405,7 @@ function exportPaieCSV() {
 
 /** Noms des équipes du service donné (par nom de service, cohérent avec employee.service en texte libre). */
 function equipeOptionsForService(serviceNom) {
-  const service = DB.getServices().find(s => s.nom === serviceNom);
+  const service = serviceRepository.getAll().find(s => s.nom === serviceNom);
   return service ? service.equipes.map(eq => eq.nom) : [];
 }
 
@@ -5449,9 +5449,9 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
 
 function openEmployeeModal(id) {
   const isEdit = Boolean(id);
-  const employee = isEdit ? DB.getEmployeeById(id) : makeEmptyEmployee();
+  const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   const settings = DB.getSettings();
-  const managers = DB.getEmployees().filter(e => e.id !== id);
+  const managers = employeeRepository.getAll().filter(e => e.id !== id);
 
   const html = `
     <div class="modal modal-large">
@@ -5482,7 +5482,7 @@ function openEmployeeModal(id) {
           <fieldset class="form-section">
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
-              ${selectField('service', 'Service', DB.getServices().map(s => s.nom), employee.service)}
+              ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
               ${equipeSelectField(employee.service, employee.equipe)}
               ${selectField('poste', 'Poste', settings.postes, employee.poste)}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
@@ -5594,7 +5594,7 @@ function submitEmployeeForm(evt, id) {
   patch.managerIds = formData.getAll('managerIds');
   if ('salaireBrutMensuel' in patch) patch.salaireBrutMensuel = Number(patch.salaireBrutMensuel) || 0;
 
-  const emailTaken = DB.getEmployees().some(e =>
+  const emailTaken = employeeRepository.getAll().some(e =>
     e.id !== id && e.email.toLowerCase().trim() === (patch.email || '').toLowerCase().trim());
   if (emailTaken) {
     showToast('Cet email est déjà utilisé par un autre salarié — la connexion serait ambiguë.', 'error');
@@ -5611,12 +5611,12 @@ function submitEmployeeForm(evt, id) {
   }
 
   if (id) {
-    DB.updateEmployee(id, patch);
+    employeeRepository.update(id, patch);
     showToast('Salarié mis à jour.');
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: id });
   } else {
-    const created = DB.addEmployee(patch);
+    const created = employeeRepository.create(patch);
     showToast('Salarié créé.');
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: created.id });
