@@ -2447,7 +2447,8 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
     { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
     { key: PERMISSIONS.ARCHIVER_SALARIE, label: 'Archiver un salarié' },
-    { key: PERMISSIONS.SUPPRIMER_SALARIE, label: 'Supprimer définitivement un salarié' }
+    { key: PERMISSIONS.SUPPRIMER_SALARIE, label: 'Supprimer définitivement un salarié' },
+    { key: PERMISSIONS.VOIR_JOURNAL_AUDIT, label: 'Voir le journal d\'audit' }
   ];
   const overrides = e.permissionsOverrides || {};
   const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
@@ -3628,6 +3629,8 @@ const SETTINGS_LISTS = [
 ];
 
 function renderParametres() {
+  const canSeeAudit = hasPermission(DB.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
+  if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
@@ -3639,14 +3642,14 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
-      <button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>
+      ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
     </div>
     <div id="parametres-tab-content">
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
         : state.parametresTab === 'services' ? renderParametresServices()
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
-        : state.parametresTab === 'audit' ? renderParametresAudit()
+        : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
         : renderParametresListes()}
     </div>
   `;
