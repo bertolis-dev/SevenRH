@@ -942,6 +942,72 @@ const DB = {
   }
 };
 
+/**
+ * Repositories (§5.3) — couche d'abstraction entre les vues et le stockage.
+ * Chaque repository enveloppe les méthodes DB existantes (localStorage aujourd'hui)
+ * sous un nom par entité. Le jour où le stockage devient une API REST, seul le corps
+ * de ces méthodes change — aucun appelant dans app.js n'a besoin d'être modifié tant
+ * qu'il passe par ces repositories plutôt que par DB.getXxx()/DB.addXxx() directement.
+ * Migration progressive : le code existant continue d'appeler DB directement pour
+ * l'instant (fonctionnellement identique), les nouveaux écrans doivent utiliser ces
+ * repositories.
+ */
+const employeeRepository = {
+  getAll: () => DB.getEmployees(),
+  getById: (id) => DB.getEmployeeById(id),
+  create: (data) => DB.addEmployee(data),
+  update: (id, patch) => DB.updateEmployee(id, patch),
+  archive: (id, archived = true) => DB.setArchived(id, archived),
+  delete: (id) => DB.deleteEmployee(id)
+};
+
+const leaveRepository = {
+  getAll: () => DB.getLeaveRequests(),
+  getById: (id) => DB.getLeaveRequestById(id),
+  getForEmployee: (employeeId) => DB.getLeaveRequestsForEmployee(employeeId),
+  create: (data) => DB.addLeaveRequest(data),
+  update: (id, patch) => DB.updateLeaveRequest(id, patch)
+};
+
+const teleworkRepository = {
+  getAll: () => DB.getTeleworkRequests(),
+  getById: (id) => DB.getTeleworkRequestById(id),
+  getForEmployee: (employeeId) => DB.getTeleworkRequestsForEmployee(employeeId),
+  create: (data) => DB.addTeleworkRequest(data),
+  update: (id, patch) => DB.updateTeleworkRequest(id, patch)
+};
+
+const expenseRepository = {
+  getAll: () => DB.getExpenses(),
+  getById: (id) => DB.getExpenseById(id),
+  getForEmployee: (employeeId) => DB.getExpensesForEmployee(employeeId),
+  create: (data) => DB.addExpense(data),
+  update: (id, patch) => DB.updateExpense(id, patch)
+};
+
+const documentRepository = {
+  getAll: () => DB.getDocuments(),
+  getById: (id) => DB.getDocumentById(id),
+  getForEmployee: (employeeId) => DB.getDocumentsForEmployee(employeeId),
+  create: (data) => DB.addDocument(data),
+  delete: (id) => DB.deleteDocument(id)
+};
+
+const serviceRepository = {
+  getAll: () => DB.getServices(),
+  getById: (id) => DB.getServiceById(id),
+  create: (nom) => DB.addService(nom),
+  rename: (id, nom) => DB.renameService(id, nom),
+  delete: (id) => DB.deleteService(id)
+};
+
+const companyRepository = {
+  getCurrent: () => DB.getCurrentCompany(),
+  getProfile: () => DB.getCompanyProfile(),
+  saveProfile: (profile) => DB.saveCompanyProfile(profile),
+  createFromOnboarding: (payload) => DB.createCompanyFromOnboarding(payload)
+};
+
 /** Structure complète d'une fiche salarié (valeurs par défaut). */
 function makeEmptyEmployee() {
   return {
