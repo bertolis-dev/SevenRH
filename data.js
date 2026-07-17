@@ -167,6 +167,7 @@ function makeEmptyCompany() {
     email: '',
     conventionCollective: 'Aucune',
     matriculeSeq: 0,
+    etablissements: [],
     employees: [],
     services: [],
     settings: Object.assign({}, DEFAULT_SETTINGS),
@@ -202,6 +203,27 @@ function seedCompany() {
   });
 }
 
+/** Ajoute un établissement principal par défaut aux entreprises créées avant l'existence de ce
+ * concept (§12), et rattache tout salarié qui n'en a pas encore un — migration idempotente et sans
+ * perte de données (ne touche à rien si l'entreprise a déjà au moins un établissement). Appelée à
+ * la fois par DB.init() (entreprises déjà en localStorage) et createCompanyFromOnboarding()
+ * (nouvelles entreprises), pour ne jamais laisser une entreprise sans établissement. */
+function migrateCompanyEtablissements(company) {
+  if (company.etablissements && company.etablissements.length > 0) return false;
+  const etab = Object.assign(makeEmptyEtablissement(), {
+    id: generateId('etab'),
+    nom: 'Siège',
+    adresse: company.adresse || '',
+    telephone: company.telephone || '',
+    email: company.email || '',
+    principal: true,
+    actif: true
+  });
+  company.etablissements = [etab];
+  company.employees.forEach(e => { if (!e.etablissementId) e.etablissementId = etab.id; });
+  return true;
+}
+
 const DB = {
   /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
   init() {
@@ -214,6 +236,9 @@ const DB = {
       const companies = this.getCompanies();
       if (companies.length) localStorage.setItem(CURRENT_COMPANY_KEY, companies[0].id);
     }
+    const companies = this.getCompanies();
+    const migrated = companies.map(c => migrateCompanyEtablissements(c)).some(Boolean);
+    if (migrated) this.saveCompanies(companies);
   },
 
   // ---- Multi-entreprise ----
@@ -334,6 +359,7 @@ const DB = {
       dateModification: now
     });
     company.employees = [adminEmployee];
+    migrateCompanyEtablissements(company);
 
     const companies = this.getCompanies();
     companies.push(company);
@@ -447,6 +473,57 @@ const DB = {
   },
 
   // ---- Services & équipes (catalogue structuré, pas une simple liste de textes) ----
+
+  // ---- Établissements (§12) ----
+
+  getEtablissements() {
+    return this.getCurrentCompany().etablissements || [];
+  },
+
+  saveEtablissements(list) {
+    const company = this.getCurrentCompany();
+    company.etablissements = list;
+    this.saveCurrentCompany(company);
+  },
+
+  getEtablissementById(id) {
+    return this.getEtablissements().find(e => e.id === id) || null;
+  },
+
+  addEtablissement(data) {
+    const list = this.getEtablissements();
+    const etab = Object.assign(makeEmptyEtablissement(), data, { id: generateId('etab') });
+    if (etab.principal) list.forEach(e => { e.principal = false; }); // un seul principal à la fois
+    list.push(etab);
+    this.saveEtablissements(list);
+    this.logAudit('Création', 'Établissement', etab.nom);
+    return etab;
+  },
+
+  updateEtablissement(id, patch) {
+    const list = this.getEtablissements();
+    const index = list.findIndex(e => e.id === id);
+    if (index === -1) return;
+    if (patch.principal) list.forEach(e => { e.principal = false; });
+    list[index] = Object.assign({}, list[index], patch);
+    this.saveEtablissements(list);
+    this.logAudit('Modification', 'Établissement', list[index].nom);
+  },
+
+  /** Un établissement référencé par au moins un salarié ne peut pas être supprimé (pas d'orphelin),
+   * et il en faut toujours au moins un dans l'entreprise (§12). */
+  deleteEtablissement(id) {
+    const list = this.getEtablissements();
+    if (list.length <= 1) return { success: false, error: 'Une entreprise doit avoir au moins un établissement.' };
+    const inUse = this.getEmployees().some(e => e.etablissementId === id);
+    if (inUse) return { success: false, error: 'Cet établissement est encore rattaché à des salariés.' };
+    const etab = list.find(e => e.id === id);
+    const remaining = list.filter(e => e.id !== id);
+    if (etab && etab.principal && remaining.length) remaining[0].principal = true; // il faut toujours un principal
+    this.saveEtablissements(remaining);
+    if (etab) this.logAudit('Suppression', 'Établissement', etab.nom);
+    return { success: true };
+  },
 
   getServices() {
     return this.getCurrentCompany().services || [];
@@ -1084,6 +1161,14 @@ const serviceRepository = {
   delete: (id) => DB.deleteService(id)
 };
 
+const etablissementRepository = {
+  getAll: () => DB.getEtablissements(),
+  getById: (id) => DB.getEtablissementById(id),
+  create: (data) => DB.addEtablissement(data),
+  update: (id, patch) => DB.updateEtablissement(id, patch),
+  delete: (id) => DB.deleteEtablissement(id)
+};
+
 const companyRepository = {
   getCurrent: () => DB.getCurrentCompany(),
   getProfile: () => DB.getCompanyProfile(),
@@ -1109,6 +1194,7 @@ function makeEmptyEmployee() {
     numeroSecu: '',
 
     dateEmbauche: '',
+    etablissementId: '', // §12 : chaque salarié doit être rattaché à un établissement
     service: '',
     equipe: '',
     poste: '',
@@ -1146,6 +1232,26 @@ function makeEmptyEmployee() {
     verrouille: false,
     resetToken: null,
     permissionsOverrides: {} // surcharges individuelles §8, voir hasPermission()
+  };
+}
+
+/** Une entreprise peut avoir plusieurs établissements (§12) ; chaque salarié est rattaché à l'un
+ * d'eux (employee.etablissementId). Un seul établissement peut être `principal` à la fois — voir
+ * DB.addEtablissement/updateEtablissement, qui maintiennent cette contrainte. */
+function makeEmptyEtablissement() {
+  return {
+    id: null,
+    nom: '',
+    codeInterne: '',
+    adresse: '',
+    codePostal: '',
+    ville: '',
+    pays: 'France',
+    email: '',
+    telephone: '',
+    responsableId: null,
+    principal: false,
+    actif: true
   };
 }
 
