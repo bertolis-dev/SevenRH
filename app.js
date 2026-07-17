@@ -2427,7 +2427,8 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VOIR_SALARIES, label: 'Voir les salariés' },
     { key: PERMISSIONS.VOIR_EQUIPE, label: 'Voir son équipe' },
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
-    { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' }
+    { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
+    { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' }
   ];
   const overrides = e.permissionsOverrides || {};
   const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
@@ -2785,17 +2786,17 @@ function renderRequestStatutBadge(r) {
  * dans la chaîne de validation de la demande (`request.workflow[request.etapeIndex]`).
  * RH et Directeur peuvent toujours agir (accès complet) ; un manager uniquement sur son équipe.
  *
- * domain: 'absence' (congés/télétravail, défaut) consulte hasPermission (§8, VALIDER_ABSENCE) et
- * peut donc être surchargé individuellement. 'frais' garde le contrôle par rôle tel quel pour
- * l'instant — son circuit RH/Comptabilité à plusieurs étages n'a pas encore de mapping fiable
- * vers une permission unique, à traiter dans un increment dédié plutôt que de risquer une
- * régression silencieuse ici.
+ * domain: 'absence' (congés/télétravail, défaut) consulte hasPermission(VALIDER_ABSENCE) ;
+ * 'frais' (notes de frais) consulte hasPermission(VALIDER_NOTE_FRAIS) — dans les deux cas
+ * surchargeable individuellement (§8). Le bypass ne concerne que RH/Directeur par défaut :
+ * Comptabilité n'a pas VALIDER_NOTE_FRAIS et continue de ne passer qu'à son étage du workflow
+ * (`requiredRole === 'comptabilite'`), exactement comme avant.
  */
 function canActOnRequestFor(request, domain = 'absence') {
   const user = DB.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
   if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
-  if (domain === 'absence' ? hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) : (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH)) return true;
+  if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
   const requiredRole = request.workflow[request.etapeIndex];
   if (user.role !== requiredRole) return false;
   if (requiredRole === ROLES.MANAGER) {
@@ -2811,7 +2812,7 @@ function canManageRequestFor(employeeId, domain = 'absence') {
   const user = DB.getCurrentUser();
   if (!user) return false;
   if (employeeId === user.id) return false; // séparation des tâches : personne ne gère sa propre demande, même RH/Directeur
-  if (domain === 'absence' ? hasPermission(user, PERMISSIONS.ANNULER_ABSENCE) : (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH)) return true;
+  if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
   if (user.role === ROLES.MANAGER) {
     const emp = employeeRepository.getById(employeeId);
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
