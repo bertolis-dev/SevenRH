@@ -104,8 +104,8 @@ const NAV_ITEMS = [
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'] },
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'] },
-  { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'] },
-  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'] }
+  { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE] },
+  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] }
 ];
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
@@ -2428,7 +2428,10 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VOIR_EQUIPE, label: 'Voir son équipe' },
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
     { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
-    { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' }
+    { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
+    { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
+    { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
+    { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' }
   ];
   const overrides = e.permissionsOverrides || {};
   const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
@@ -2475,7 +2478,7 @@ function bindPermissionsCardEvents(employeeId) {
 
 /** Salaire/genre : données sensibles, réservées au Directeur, et seulement si l'entreprise a activé le suivi correspondant. */
 function renderConfidentialEmployeeCard(e, user) {
-  if (!user || user.role !== ROLES.DIRECTEUR) return '';
+  if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
   const settings = DB.getSettings();
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
