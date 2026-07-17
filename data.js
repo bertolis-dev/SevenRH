@@ -33,6 +33,89 @@ const ROLE_LABELS = {
   directeur: 'Directeur'
 };
 
+/**
+ * Catalogue des permissions individuelles (§8 du cahier des charges). Chaque droit peut être
+ * activé/désactivé indépendamment du rôle via `employee.permissionsOverrides`. IMPORTANT — comme
+ * pour les rôles (voir plus haut), ceci reste une simulation côté navigateur : la vérification
+ * réelle devra être refaite côté serveur dans la version commerciale (§8, dernière ligne).
+ */
+const PERMISSIONS = {
+  VOIR_PROPRE_FICHE: 'voirPropreFiche',
+  MODIFIER_PROPRES_COORDONNEES: 'modifierPropresCoordonnees',
+  VOIR_SALARIES: 'voirSalaries',
+  VOIR_EQUIPE: 'voirEquipe',
+  CREER_SALARIE: 'creerSalarie',
+  MODIFIER_SALARIE: 'modifierSalarie',
+  ARCHIVER_SALARIE: 'archiverSalarie',
+  SUPPRIMER_SALARIE: 'supprimerSalarie',
+  VOIR_INFOS_CONTRACTUELLES: 'voirInfosContractuelles',
+  VOIR_INFOS_FINANCIERES: 'voirInfosFinancieres',
+  VOIR_COMPTEURS: 'voirCompteurs',
+  MODIFIER_COMPTEURS: 'modifierCompteurs',
+  CREER_DEMANDE_ABSENCE: 'creerDemandeAbsence',
+  VALIDER_ABSENCE: 'validerAbsence',
+  REFUSER_ABSENCE: 'refuserAbsence',
+  ANNULER_ABSENCE: 'annulerAbsence',
+  SAISIR_MALADIE: 'saisirMaladie',
+  PROLONGER_MALADIE: 'prolongerMaladie',
+  VOIR_CALENDRIER_GENERAL: 'voirCalendrierGeneral',
+  VOIR_CALENDRIER_EQUIPE: 'voirCalendrierEquipe',
+  CREER_NOTE_FRAIS: 'creerNoteFrais',
+  VALIDER_NOTE_FRAIS: 'validerNoteFrais',
+  CONTROLER_NOTE_FRAIS: 'controlerNoteFrais',
+  MARQUER_NOTE_REMBOURSEE: 'marquerNoteRemboursee',
+  CALCULER_TICKETS_RESTAURANT: 'calculerTicketsRestaurant',
+  CORRIGER_TICKETS_RESTAURANT: 'corrigerTicketsRestaurant',
+  EXPORTER_PAIE: 'exporterPaie',
+  GERER_PARAMETRES: 'gererParametres',
+  GERER_UTILISATEURS: 'gererUtilisateurs',
+  GERER_PERMISSIONS: 'gererPermissions',
+  VOIR_JOURNAL_AUDIT: 'voirJournalAudit',
+  GERER_ABONNEMENTS: 'gererAbonnements'
+};
+
+/** Permissions accordées par défaut à chaque rôle — reproduit le comportement actuel de l'app
+ * (avant l'introduction des permissions individuelles), pour que le passage à ce système ne change
+ * rien tant qu'aucune surcharge individuelle n'est définie sur un salarié. */
+const DEFAULT_ROLE_PERMISSIONS = {
+  salarie: [
+    PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
+    PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL
+  ],
+  manager: [
+    PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
+    PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL,
+    PERMISSIONS.VOIR_EQUIPE, PERMISSIONS.VOIR_CALENDRIER_EQUIPE, PERMISSIONS.VALIDER_ABSENCE,
+    PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.VALIDER_NOTE_FRAIS
+  ],
+  rh: [
+    PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
+    PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL,
+    PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_CALENDRIER_EQUIPE, PERMISSIONS.CREER_SALARIE,
+    PERMISSIONS.MODIFIER_SALARIE, PERMISSIONS.ARCHIVER_SALARIE, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES,
+    PERMISSIONS.VOIR_INFOS_FINANCIERES, PERMISSIONS.MODIFIER_COMPTEURS, PERMISSIONS.VALIDER_ABSENCE,
+    PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.ANNULER_ABSENCE, PERMISSIONS.SAISIR_MALADIE,
+    PERMISSIONS.PROLONGER_MALADIE, PERMISSIONS.VALIDER_NOTE_FRAIS, PERMISSIONS.CALCULER_TICKETS_RESTAURANT,
+    PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, PERMISSIONS.EXPORTER_PAIE, PERMISSIONS.GERER_PARAMETRES,
+    PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT
+  ],
+  comptabilite: [
+    PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
+    PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL,
+    PERMISSIONS.CONTROLER_NOTE_FRAIS, PERMISSIONS.MARQUER_NOTE_REMBOURSEE, PERMISSIONS.EXPORTER_PAIE
+  ],
+  directeur: Object.values(PERMISSIONS)
+};
+
+/** Vérifie une permission individuelle : une surcharge explicite sur le salarié (true ou false)
+ * prime toujours sur le défaut de son rôle. */
+function hasPermission(employee, permissionKey) {
+  if (!employee) return false;
+  const overrides = employee.permissionsOverrides || {};
+  if (Object.prototype.hasOwnProperty.call(overrides, permissionKey)) return Boolean(overrides[permissionKey]);
+  return (DEFAULT_ROLE_PERMISSIONS[employee.role] || []).includes(permissionKey);
+}
+
 /** Taux de TVA français en vigueur (loi fiscale, non paramétrable par l'entreprise). */
 const TVA_RATES = [20, 10, 5.5, 2.1, 0];
 
@@ -1061,7 +1144,8 @@ function makeEmptyEmployee() {
     motDePasse: '',
     tentativesEchouees: 0,
     verrouille: false,
-    resetToken: null
+    resetToken: null,
+    permissionsOverrides: {} // surcharges individuelles §8, voir hasPermission()
   };
 }
 

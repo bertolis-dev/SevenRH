@@ -95,7 +95,7 @@ const state = getInitialViewState();
 // affiché et filtré comme "Mon équipe" (voir renderEmployeesList).
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Tableau de bord', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
-  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'] },
+  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE] },
   { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'] },
   { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'] },
   { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
@@ -108,8 +108,13 @@ const NAV_ITEMS = [
   { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'] }
 ];
 
-function navItemsForRole(role) {
-  return NAV_ITEMS.filter(item => item.roles.includes(role));
+/** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
+ * surcharges de permissions individuelles (§8) en plus du défaut de son rôle. */
+function navItemsForRole(user) {
+  return NAV_ITEMS.filter(item => {
+    if (item.permissions) return item.permissions.some(p => hasPermission(user, p));
+    return item.roles.includes(user.role);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,7 +1104,7 @@ function bindNotifItemEvents() {
 
 function navigateTo(view, params = {}) {
   const user = DB.getCurrentUser();
-  const allowedKeys = navItemsForRole(user ? user.role : ROLES.SALARIE).map(i => i.key);
+  const allowedKeys = navItemsForRole(user || { role: ROLES.SALARIE }).map(i => i.key);
   // Toujours autoriser les vues qui ne sont pas des entrées de menu (détail salarié, coming-soon...).
   const isNavView = NAV_ITEMS.some(i => i.key === view);
   state.view = isNavView && !allowedKeys.includes(view) ? 'dashboard' : view;
@@ -1117,7 +1122,7 @@ function navigateTo(view, params = {}) {
 function renderSidebar() {
   const user = DB.getCurrentUser();
   if (!user) return;
-  const items = navItemsForRole(user.role);
+  const items = navItemsForRole(user);
   const nav = document.getElementById('sidebar-nav');
 
   nav.innerHTML = items.map(item => {
