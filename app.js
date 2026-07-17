@@ -56,6 +56,7 @@ function getInitialViewState() {
     currentEmployeeId: null,
     search: '',
     filters: { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false },
+    organigrammeFilters: { search: '', etablissementId: '', service: '', equipe: '' },
     sortBy: 'nom',
     sortDir: 'asc',
     employeesPage: 1,
@@ -2094,16 +2095,40 @@ function buildOrgTree(employees) {
 }
 
 function renderOrganigramme() {
-  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const f = state.organigrammeFilters;
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+
+  const term = f.search.trim().toLowerCase();
+  if (term) employees = employees.filter(e => `${e.prenom} ${e.nom} ${e.poste}`.toLowerCase().includes(term));
+  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
+  if (f.service) employees = employees.filter(e => e.service === f.service);
+  if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+
   const { roots, childrenOf } = buildOrgTree(employees);
+  const allEquipes = Array.from(new Set(serviceRepository.getAll().flatMap(s => s.equipes.map(eq => eq.nom))));
 
   return `
     <div class="view-header">
       <h1>Organigramme</h1>
       <p class="view-subtitle">${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}</p>
     </div>
+    <div class="toolbar card">
+      <input type="text" id="org-filter-search" class="input" placeholder="Rechercher une personne..." value="${escapeHtml(f.search)}">
+      <select id="org-filter-etablissement" class="input">
+        <option value="">Tous les établissements</option>
+        ${etablissementRepository.getAll().map(e => `<option value="${e.id}" ${f.etablissementId === e.id ? 'selected' : ''}>${escapeHtml(e.nom)}</option>`).join('')}
+      </select>
+      <select id="org-filter-service" class="input">
+        <option value="">Tous les services</option>
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${f.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+      </select>
+      <select id="org-filter-equipe" class="input">
+        <option value="">Toutes les équipes</option>
+        ${allEquipes.map(nom => `<option value="${escapeHtml(nom)}" ${f.equipe === nom ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('')}
+      </select>
+    </div>
     <div class="card org-chart-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun salarié actif.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun salarié ne correspond à ces filtres.</p></div>` : `
         <ul class="org-tree">
           ${roots.map(r => renderOrgNode(r, childrenOf)).join('')}
         </ul>
@@ -2130,6 +2155,27 @@ function renderOrgNode(employee, childrenOf) {
 function bindOrganigrammeEvents() {
   document.querySelectorAll('[data-org-employee]').forEach(node => {
     node.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: node.dataset.orgEmployee }));
+  });
+
+  const searchInput = document.getElementById('org-filter-search');
+  searchInput.addEventListener('input', (e) => {
+    state.organigrammeFilters.search = e.target.value;
+    render();
+    document.getElementById('org-filter-search').focus();
+    const pos = e.target.selectionStart;
+    document.getElementById('org-filter-search').setSelectionRange(pos, pos);
+  });
+  document.getElementById('org-filter-etablissement').addEventListener('change', (e) => {
+    state.organigrammeFilters.etablissementId = e.target.value;
+    render();
+  });
+  document.getElementById('org-filter-service').addEventListener('change', (e) => {
+    state.organigrammeFilters.service = e.target.value;
+    render();
+  });
+  document.getElementById('org-filter-equipe').addEventListener('change', (e) => {
+    state.organigrammeFilters.equipe = e.target.value;
+    render();
   });
 }
 
