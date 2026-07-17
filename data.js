@@ -1068,6 +1068,37 @@ function formatDateTime(isoDate) {
   return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Formats français centralisés (§17 du cahier des charges) : virgule décimale, espace des milliers,
+ * jamais de point décimal visible. Toute nouvelle valeur numérique affichée doit passer par l'une de
+ * ces fonctions plutôt que par un `.toFixed()`/`${x}` manuel dans une vue. */
+function formatNumberFR(value, decimals = 2) {
+  const n = Number(value);
+  if (value === null || value === undefined || Number.isNaN(n)) return '—';
+  return n.toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrencyFR(value) {
+  const n = Number(value);
+  if (value === null || value === undefined || Number.isNaN(n)) return '—';
+  return `${formatNumberFR(n, 2)} €`;
+}
+
+/** maxDecimals borne le nombre de décimales affichées SANS forcer de zéros inutiles
+ * (100 -> "100 %", 5.5 -> "5,5 %", 2.1 -> "2,1 %" avec maxDecimals=1). */
+function formatPercentFR(value, maxDecimals = 1) {
+  const n = Number(value);
+  if (value === null || value === undefined || Number.isNaN(n)) return '—';
+  return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: maxDecimals })} %`;
+}
+
+/** unit reste l'abréviation "j" utilisée dans toute l'appli (cf. §16 pour le libellé complet
+ * "jour"/"jours", non appliqué ici — question de formulation distincte, pas encore tranchée). */
+function formatDurationFR(value, unit = 'j') {
+  const n = Number(value);
+  if (value === null || value === undefined || Number.isNaN(n)) return '—';
+  return `${formatNumberFR(n, 2)} ${unit}`;
+}
+
 function getInitials(prenom, nom) {
   const a = (prenom || '').trim().charAt(0);
   const b = (nom || '').trim().charAt(0);

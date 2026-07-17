@@ -577,9 +577,9 @@ function renderOnboardingStep5() {
     ${infoRow('Raison sociale', profile.raisonSociale)}
     ${infoRow('Email entreprise', profile.email)}
     ${infoRow('Convention collective', conventionCollective)}
-    ${infoRow('Horaires hebdomadaires', organisation.horairesHebdo + ' h')}
+    ${infoRow('Horaires hebdomadaires', formatNumberFR(organisation.horairesHebdo) + ' h')}
     ${infoRow('Télétravail', organisation.teletravailQuotaSemaine + ' j/semaine')}
-    ${infoRow('Tickets restaurant', `${organisation.ticketsValeurFaciale} € (${organisation.ticketsPartEmployeurPct} % employeur)`)}
+    ${infoRow('Tickets restaurant', `${formatCurrencyFR(organisation.ticketsValeurFaciale)} (${formatPercentFR(organisation.ticketsPartEmployeurPct)} employeur)`)}
     ${infoRow('Administrateur', `${admin.prenom} ${admin.nom} · ${admin.email}`)}
     <p class="text-muted" style="margin-top: 14px;">En créant l'entreprise, vous serez automatiquement connecté avec ce compte administrateur.</p>
   `;
@@ -772,7 +772,7 @@ function performGlobalSearch(term) {
       results.push({
         icon: '🧾',
         label: `${employee.prenom} ${employee.nom} · ${n.libelle}`,
-        sublabel: `Note de frais · ${n.montantTTC.toFixed(2)} € · ${n.statut}`,
+        sublabel: `Note de frais · ${formatCurrencyFR(n.montantTTC)} · ${n.statut}`,
         nav: 'frais',
         params: {}
       });
@@ -1430,13 +1430,13 @@ function renderDashboardDirecteur() {
 
     <div class="kpi-grid">
       ${kpiCard('Effectif actif', actifs.length, '👥')}
-      ${kpiCard('Turn-over (12 mois)', `${turnover} %`, '🔄')}
-      ${kpiCard('Ancienneté moyenne', `${anciennete} an${anciennete >= 2 ? 's' : ''}`, '🎖️')}
-      ${kpiCard('Absentéisme (maladie)', `${absenteisme} %`, '🌡️')}
-      ${kpiCard('Coût notes de frais', `${round2(coutFrais)} €`, '🧾')}
-      ${kpiCard('Coût tickets restaurant', `${round2(coutTickets)} €`, '🍽️')}
+      ${kpiCard('Turn-over (12 mois)', formatPercentFR(turnover), '🔄')}
+      ${kpiCard('Ancienneté moyenne', `${formatNumberFR(anciennete)} an${anciennete >= 2 ? 's' : ''}`, '🎖️')}
+      ${kpiCard('Absentéisme (maladie)', formatPercentFR(absenteisme), '🌡️')}
+      ${kpiCard('Coût notes de frais', formatCurrencyFR(coutFrais), '🧾')}
+      ${kpiCard('Coût tickets restaurant', formatCurrencyFR(coutTickets), '🍽️')}
       ${kpiCard('Demandes en attente (tous types)', enAttenteToutesEtapes, '⏳')}
-      ${masseSalariale !== null ? kpiCard('Masse salariale mensuelle', `${round2(masseSalariale)} €`, '💰') : ''}
+      ${masseSalariale !== null ? kpiCard('Masse salariale mensuelle', formatCurrencyFR(masseSalariale), '💰') : ''}
     </div>
 
     <div class="dashboard-grid">
@@ -2377,8 +2377,8 @@ function renderEmployeeDetail(id) {
       <div class="card">
         <h2>Temps de travail</h2>
         ${infoRow('Temps de travail', e.tempsTravail)}
-        ${infoRow('Pourcentage d\'activité', e.pourcentageActivite + ' %')}
-        ${infoRow('Heures hebdomadaires', e.horairesHebdo + ' h')}
+        ${infoRow('Pourcentage d\'activité', formatPercentFR(e.pourcentageActivite))}
+        ${infoRow('Heures hebdomadaires', formatNumberFR(e.horairesHebdo) + ' h')}
         ${infoRow('Forfait', e.forfait)}
         ${infoRow('Jours travaillés', (e.joursTravailles || []).join(', '))}
         ${infoRow('Régime RTT', e.regimeRTT || '—')}
@@ -2410,7 +2410,7 @@ function renderConfidentialEmployeeCard(e, user) {
   return `
     <div class="card">
       <h2>Confidentiel</h2>
-      ${settings.masseSalarialeActivee ? infoRow('Salaire brut mensuel', `${round2(e.salaireBrutMensuel || 0)} €`) : ''}
+      ${settings.masseSalarialeActivee ? infoRow('Salaire brut mensuel', formatCurrencyFR(e.salaireBrutMensuel || 0)) : ''}
       ${settings.suiviGenreActive ? infoRow('Genre', e.genre || '—') : ''}
     </div>
   `;
@@ -2425,13 +2425,13 @@ function renderEmployeeBalances(employee) {
     <div class="balance-grid">
       ${types.map(t => {
         const balance = getLeaveBalance(employee, t, requests);
-        const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : `${balance.disponible} j`;
+        const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
         return `
           <div class="balance-card" style="--type-color:${escapeHtml(t.couleur)}">
             <div class="balance-icon">${escapeHtml(t.icone)}</div>
             <div class="balance-name">${escapeHtml(t.nom)}</div>
             <div class="balance-value">${disponibleLabel}</div>
-            <div class="balance-sub">disponible${balance.enAttente ? ` · ${balance.enAttente} j en attente` : ''}</div>
+            <div class="balance-sub">disponible${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}</div>
           </div>
         `;
       }).join('')}
@@ -2497,8 +2497,8 @@ function openEmployeePrintModal(id) {
 
           <h3>Temps de travail</h3>
           ${infoRow('Temps de travail', e.tempsTravail)}
-          ${infoRow('Pourcentage d\'activité', e.pourcentageActivite + ' %')}
-          ${infoRow('Heures hebdomadaires', e.horairesHebdo + ' h')}
+          ${infoRow('Pourcentage d\'activité', formatPercentFR(e.pourcentageActivite))}
+          ${infoRow('Heures hebdomadaires', formatNumberFR(e.horairesHebdo) + ' h')}
           ${infoRow('Forfait', e.forfait)}
           ${infoRow('Jours travaillés', (e.joursTravailles || []).join(', '))}
         </div>
@@ -2689,7 +2689,7 @@ function renderLeaveRequestRow(r) {
       <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
       <td><span class="badge badge-muted"><span class="type-swatch" style="background:${escapeHtml(type.couleur)}"></span>${escapeHtml(type.icone)} ${escapeHtml(type.nom)}</span></td>
       <td>${periode}</td>
-      <td>${r.nbJours} j</td>
+      <td>${formatDurationFR(r.nbJours)}</td>
       <td>${renderRequestStatutBadge(r)}</td>
       <td class="table-actions">${renderRequestActions(r, type)}</td>
     </tr>
@@ -2766,7 +2766,7 @@ function exportLeaveRequestsCSV() {
     return [
       employee ? `${employee.prenom} ${employee.nom}` : '—',
       type ? type.nom : '—',
-      r.dateDebut, r.dateFin, r.nbJours,
+      r.dateDebut, r.dateFin, formatNumberFR(r.nbJours),
       type && type.paye ? 'Oui' : 'Non',
       r.statut
     ];
@@ -2838,7 +2838,7 @@ function openLeaveAttestationModal(requestId) {
             Seven RH atteste que <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
             (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(employee.poste || 'salarié·e')},
             a bénéficié d'un congé de type <strong>${escapeHtml(type.nom)}</strong> ${periode},
-            soit ${r.nbJours} jour${r.nbJours > 1 ? 's' : ''}.
+            soit ${formatNumberFR(r.nbJours)} jour${r.nbJours > 1 ? 's' : ''}.
           </p>
           <div class="print-signature">
             <span>Fait pour valoir ce que de droit.</span>
@@ -3000,7 +3000,7 @@ function handleAttachmentChange(e) {
   const file = e.target.files[0];
   if (!file) { state.pendingAttachment = null; return; }
   if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    showToast(`Fichier trop volumineux (${(file.size / (1024 * 1024)).toFixed(1)} Mo) — 2 Mo maximum.`, 'error');
+    showToast(`Fichier trop volumineux (${formatNumberFR(file.size / (1024 * 1024), 1)} Mo) — 2 Mo maximum.`, 'error');
     e.target.value = '';
     state.pendingAttachment = null;
     return;
@@ -3024,13 +3024,13 @@ function updateLeaveRequestHints() {
   if (!type || !employeeId) { hint.textContent = ''; return; }
   const employee = DB.getEmployeeById(employeeId);
   const balance = getLeaveBalance(employee, type, DB.getLeaveRequests());
-  const disponibleLabel = balance.disponible === Infinity ? 'illimité' : `${balance.disponible} j`;
+  const disponibleLabel = balance.disponible === Infinity ? 'illimité' : formatDurationFR(balance.disponible);
 
   let nbJoursLabel = '';
   if (dateDebut && dateFin) {
     const demiJournee = demiField.style.display === 'block' ? document.getElementById('f-demiJournee').value : '';
     const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee.joursTravailles);
-    nbJoursLabel = ` · ${nbJours} j décomptés pour cette demande`;
+    nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
   hint.textContent = `Solde disponible : ${disponibleLabel}${nbJoursLabel}${type.justificatifObligatoire ? ' · Justificatif obligatoire pour ce type' : ''}`;
@@ -3161,7 +3161,7 @@ function workflowSelectField(name, label, presets, currentWorkflow) {
 
 function renderLeaveTypeRow(t) {
   const validationLabel = describeWorkflow(t.workflow);
-  const acquisitionLabel = t.illimite ? 'Illimitée' : `${t.acquisition} · ${t.nombreAnnuel} j/an`;
+  const acquisitionLabel = t.illimite ? 'Illimitée' : `${t.acquisition} · ${formatDurationFR(t.nombreAnnuel)}/an`;
 
   return `
     <tr>
@@ -4488,7 +4488,7 @@ function renderTeleworkRequestRow(r) {
     <tr>
       <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
       <td>${periode}</td>
-      <td>${r.nbJours} j</td>
+      <td>${formatDurationFR(r.nbJours)}</td>
       <td>${renderRequestStatutBadge(r)}</td>
       <td class="table-actions">${actions}</td>
     </tr>
@@ -4623,10 +4623,10 @@ function updateTeleworkQuotaHint() {
   let nbJoursLabel = '';
   if (dateFin) {
     const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee.joursTravailles);
-    nbJoursLabel = ` · ${nbJours} j décomptés pour cette demande`;
+    nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
-  hint.textContent = `Quota hebdomadaire : ${quota} j/semaine · déjà ${usedThisWeek} j utilisés cette semaine${nbJoursLabel}`;
+  hint.textContent = `Quota hebdomadaire : ${formatDurationFR(quota)}/semaine · déjà ${formatDurationFR(usedThisWeek)} utilisés cette semaine${nbJoursLabel}`;
 }
 
 /** Semaine (lundi ISO) où la demande [dateDebut, dateFin] ferait dépasser le quota hebdomadaire, en tenant
@@ -4683,7 +4683,7 @@ function submitTeleworkRequestForm(evt) {
   const quota = DB.getSettings().teletravailQuotaSemaine;
   const overQuota = findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota);
   if (overQuota) {
-    showToast(`Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${overQuota.used}/${quota} j).`, 'error');
+    showToast(`Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).`, 'error');
     return;
   }
 
@@ -4831,7 +4831,7 @@ function renderFrais() {
     <div class="view-header-row">
       <div>
         <h1>Notes de frais</h1>
-        <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${total.toFixed(2)} € TTC</p>
+        <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC</p>
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-frais">Exporter CSV</button>
@@ -4882,7 +4882,7 @@ function renderExpenseRow(n) {
       <td>${formatDate(n.date)}</td>
       <td>${escapeHtml(n.categorie)}</td>
       <td>${escapeHtml(n.libelle)}</td>
-      <td>${n.montantTTC.toFixed(2)} €</td>
+      <td>${formatCurrencyFR(n.montantTTC)}</td>
       <td>${renderRequestStatutBadge(n)}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
@@ -4974,9 +4974,9 @@ function exportExpensesCSV() {
       n.date,
       n.categorie,
       n.libelle,
-      computeMontantHT(n.montantTTC, n.tauxTVA).toFixed(2),
-      computeMontantTVA(n.montantTTC, n.tauxTVA).toFixed(2),
-      n.montantTTC.toFixed(2),
+      formatNumberFR(computeMontantHT(n.montantTTC, n.tauxTVA)),
+      formatNumberFR(computeMontantTVA(n.montantTTC, n.tauxTVA)),
+      formatNumberFR(n.montantTTC),
       n.statut
     ];
   });
@@ -5011,7 +5011,7 @@ function openExpenseModal(presetEmployeeId) {
             <div class="form-field">
               <label for="f-tauxTVA">Taux de TVA</label>
               <select class="input" id="f-tauxTVA" name="tauxTVA">
-                ${TVA_RATES.map(t => `<option value="${t}">${t} %</option>`).join('')}
+                ${TVA_RATES.map(t => `<option value="${t}">${formatPercentFR(t)}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -5069,7 +5069,7 @@ function updateExpenseKmHint() {
     hint.textContent = 'Renseignez la distance et la puissance fiscale pour calculer l\'indemnité.';
     return;
   }
-  hint.textContent = `Indemnité kilométrique calculée automatiquement : ${calculateIndemniteKilometrique(distanceKm, puissanceFiscale).toFixed(2)} €`;
+  hint.textContent = `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(calculateIndemniteKilometrique(distanceKm, puissanceFiscale))}`;
 }
 
 function submitExpenseForm(evt) {
@@ -5138,9 +5138,9 @@ function openExpenseDetailModal(id) {
           ${infoRow('Catégorie', n.categorie)}
           ${infoRow('Libellé', n.libelle)}
           ${n.kilometrage ? infoRow('Distance', `${n.kilometrage.distanceKm} km · ${n.kilometrage.puissanceFiscale} CV`) : ''}
-          ${infoRow('Montant HT', ht.toFixed(2) + ' €')}
-          ${infoRow(`TVA (${n.tauxTVA} %)`, tva.toFixed(2) + ' €')}
-          ${infoRow('Montant TTC', n.montantTTC.toFixed(2) + ' €')}
+          ${infoRow('Montant HT', formatCurrencyFR(ht))}
+          ${infoRow(`TVA (${formatPercentFR(n.tauxTVA)})`, formatCurrencyFR(tva))}
+          ${infoRow('Montant TTC', formatCurrencyFR(n.montantTTC))}
           ${infoRow('Statut', n.statut)}
           ${n.commentaire ? infoRow('Commentaire', n.commentaire) : ''}
           ${n.justificatif ? `<div style="margin-top: 12px;"><img src="${escapeHtml(n.justificatif.dataUrl)}" alt="Justificatif" style="max-width: 100%; border-radius: 8px;"></div>` : ''}
@@ -5192,7 +5192,7 @@ function renderTickets() {
     <div class="view-header-row">
       <div>
         <h1>Tickets restaurant</h1>
-        <p class="view-subtitle">${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear} · valeur faciale ${settings.ticketsValeurFaciale.toFixed(2)} € (${settings.ticketsPartEmployeurPct} % employeur)</p>
+        <p class="view-subtitle">${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur)</p>
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary btn-sm" id="btn-tickets-prev">← Précédent</button>
@@ -5204,9 +5204,9 @@ function renderTickets() {
 
     <div class="kpi-grid">
       ${kpiCard('Tickets à émettre', totals.nbTickets, '🍽️')}
-      ${kpiCard('Montant total', totals.montantTotal.toFixed(2) + ' €', '💶')}
-      ${kpiCard('Part employeur', totals.partEmployeur.toFixed(2) + ' €', '🏢')}
-      ${kpiCard('Part salarié', totals.partSalarie.toFixed(2) + ' €', '👤')}
+      ${kpiCard('Montant total', formatCurrencyFR(totals.montantTotal), '💶')}
+      ${kpiCard('Part employeur', formatCurrencyFR(totals.partEmployeur), '🏢')}
+      ${kpiCard('Part salarié', formatCurrencyFR(totals.partSalarie), '👤')}
     </div>
 
     <div class="card table-card">
@@ -5217,9 +5217,9 @@ function renderTickets() {
             <tr>
               <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
               <td>${r.result.nbTickets}</td>
-              <td>${r.result.montantTotal.toFixed(2)} €</td>
-              <td>${r.result.partEmployeur.toFixed(2)} €</td>
-              <td>${r.result.partSalarie.toFixed(2)} €</td>
+              <td>${formatCurrencyFR(r.result.montantTotal)}</td>
+              <td>${formatCurrencyFR(r.result.partEmployeur)}</td>
+              <td>${formatCurrencyFR(r.result.partSalarie)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -5256,9 +5256,9 @@ function exportTicketsCSV() {
   const data = rows.map(r => [
     `${r.employee.prenom} ${r.employee.nom}`,
     r.result.nbTickets,
-    r.result.montantTotal.toFixed(2),
-    r.result.partEmployeur.toFixed(2),
-    r.result.partSalarie.toFixed(2)
+    formatNumberFR(r.result.montantTotal),
+    formatNumberFR(r.result.partEmployeur),
+    formatNumberFR(r.result.partSalarie)
   ]);
   exportRowsToCSV(headers, data, `tickets-restaurant-${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}.csv`);
   DB.logAudit('Export', 'Tickets restaurant', `${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear}`);
@@ -5343,11 +5343,11 @@ function renderExportPaie() {
               <tr>
                 <td>${escapeHtml(r.employee.matricule)}</td>
                 <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
-                ${r.congesParType.map(j => `<td>${j} j</td>`).join('')}
-                <td>${r.teletravailJours} j</td>
+                ${r.congesParType.map(j => `<td>${formatDurationFR(j)}</td>`).join('')}
+                <td>${formatDurationFR(r.teletravailJours)}</td>
                 <td>${r.tickets.nbTickets}</td>
-                <td>${r.tickets.partSalarie.toFixed(2)} €</td>
-                <td>${r.notesRembourser.toFixed(2)} €</td>
+                <td>${formatCurrencyFR(r.tickets.partSalarie)}</td>
+                <td>${formatCurrencyFR(r.notesRembourser)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -5389,11 +5389,11 @@ function exportPaieCSV() {
   ];
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
-    ...r.congesParType,
-    r.teletravailJours,
+    ...r.congesParType.map(formatNumberFR),
+    formatNumberFR(r.teletravailJours),
     r.tickets.nbTickets,
-    r.tickets.partSalarie.toFixed(2),
-    r.notesRembourser.toFixed(2)
+    formatNumberFR(r.tickets.partSalarie),
+    formatNumberFR(r.notesRembourser)
   ]);
   exportRowsToCSV(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`);
   DB.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`);
