@@ -2402,9 +2402,74 @@ function renderEmployeeDetail(id) {
 
       ${renderConfidentialEmployeeCard(e, user)}
 
+      ${renderPermissionsCard(e, user)}
+
       ${renderEmployeeDocumentsCard(e)}
     </div>
   `;
+}
+
+/** Surcharges individuelles (§8) pour les permissions déjà réellement câblées dans l'app — voir
+ * hasPermission() dans data.js. Réservé à qui a la permission GERER_PERMISSIONS (Directeur par
+ * défaut, §9.3) ; personne ne modifie ses propres permissions, pour éviter un auto-verrouillage. */
+function renderPermissionsCard(e, user) {
+  if (!hasPermission(user, PERMISSIONS.GERER_PERMISSIONS)) return '';
+  if (user.id === e.id) {
+    return `
+      <div class="card">
+        <h2>Permissions individuelles</h2>
+        <p class="text-muted">Vous ne pouvez pas modifier vos propres permissions.</p>
+      </div>
+    `;
+  }
+
+  const wired = [
+    { key: PERMISSIONS.VOIR_SALARIES, label: 'Voir les salariés' },
+    { key: PERMISSIONS.VOIR_EQUIPE, label: 'Voir son équipe' },
+    { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
+    { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' }
+  ];
+  const overrides = e.permissionsOverrides || {};
+  const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
+
+  return `
+    <div class="card">
+      <h2>Permissions individuelles</h2>
+      <p class="text-muted">Surcharge le défaut du rôle « ${escapeHtml(ROLE_LABELS[e.role] || e.role)} » pour ce salarié uniquement. Seules les permissions ci-dessous ont un effet réel aujourd'hui ; le reste du catalogue (§8) sera câblé progressivement.</p>
+      <div class="form-grid">
+        ${wired.map(p => {
+          const current = Object.prototype.hasOwnProperty.call(overrides, p.key) ? String(overrides[p.key]) : '';
+          const defaultLabel = roleDefaults.includes(p.key) ? 'autorisé' : 'refusé';
+          return `
+            <div class="form-field">
+              <label for="perm-${p.key}">${escapeHtml(p.label)}</label>
+              <select class="input" id="perm-${p.key}" data-permission-key="${p.key}">
+                <option value="" ${current === '' ? 'selected' : ''}>Par défaut du rôle (${defaultLabel})</option>
+                <option value="true" ${current === 'true' ? 'selected' : ''}>Toujours autorisé</option>
+                <option value="false" ${current === 'false' ? 'selected' : ''}>Toujours refusé</option>
+              </select>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindPermissionsCardEvents(employeeId) {
+  document.querySelectorAll('[data-permission-key]').forEach(select => {
+    select.addEventListener('change', (evt) => {
+      const key = evt.target.dataset.permissionKey;
+      const employee = employeeRepository.getById(employeeId);
+      const overrides = Object.assign({}, employee.permissionsOverrides);
+      if (evt.target.value === '') delete overrides[key];
+      else overrides[key] = evt.target.value === 'true';
+      employeeRepository.update(employeeId, { permissionsOverrides: overrides });
+      DB.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = ${evt.target.value || 'défaut du rôle'}`);
+      showToast('Permission mise à jour.');
+      navigateTo('employee-detail', { currentEmployeeId: employeeId });
+    });
+  });
 }
 
 /** Salaire/genre : données sensibles, réservées au Directeur, et seulement si l'entreprise a activé le suivi correspondant. */
@@ -2538,6 +2603,7 @@ function bindEmployeeDetailEvents() {
   });
   document.getElementById('btn-print-employee-fiche').addEventListener('click', () => openEmployeePrintModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
+  bindPermissionsCardEvents(state.currentEmployeeId);
 
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
