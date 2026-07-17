@@ -2718,12 +2718,18 @@ function renderRequestStatutBadge(r) {
  * Un utilisateur ne peut valider une demande que si c'est actuellement le tour de son rôle
  * dans la chaîne de validation de la demande (`request.workflow[request.etapeIndex]`).
  * RH et Directeur peuvent toujours agir (accès complet) ; un manager uniquement sur son équipe.
+ *
+ * domain: 'absence' (congés/télétravail, défaut) consulte hasPermission (§8, VALIDER_ABSENCE) et
+ * peut donc être surchargé individuellement. 'frais' garde le contrôle par rôle tel quel pour
+ * l'instant — son circuit RH/Comptabilité à plusieurs étages n'a pas encore de mapping fiable
+ * vers une permission unique, à traiter dans un increment dédié plutôt que de risquer une
+ * régression silencieuse ici.
  */
-function canActOnRequestFor(request) {
+function canActOnRequestFor(request, domain = 'absence') {
   const user = DB.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
   if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
-  if (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH) return true;
+  if (domain === 'absence' ? hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) : (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH)) return true;
   const requiredRole = request.workflow[request.etapeIndex];
   if (user.role !== requiredRole) return false;
   if (requiredRole === ROLES.MANAGER) {
@@ -2733,12 +2739,13 @@ function canActOnRequestFor(request) {
   return true;
 }
 
-/** Pour les actions post-validation (ex. Annuler) qui ne dépendent plus de l'étape de workflow. */
-function canManageRequestFor(employeeId) {
+/** Pour les actions post-validation (ex. Annuler) qui ne dépendent plus de l'étape de workflow.
+ * Même logique de domain que canActOnRequestFor ci-dessus. */
+function canManageRequestFor(employeeId, domain = 'absence') {
   const user = DB.getCurrentUser();
   if (!user) return false;
   if (employeeId === user.id) return false; // séparation des tâches : personne ne gère sa propre demande, même RH/Directeur
-  if (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH) return true;
+  if (domain === 'absence' ? hasPermission(user, PERMISSIONS.ANNULER_ABSENCE) : (user.role === ROLES.DIRECTEUR || user.role === ROLES.RH)) return true;
   if (user.role === ROLES.MANAGER) {
     const emp = employeeRepository.getById(employeeId);
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
@@ -4878,8 +4885,8 @@ function renderExpenseRow(n) {
   if (!employee) return '';
 
   const actions = n.statut === 'En attente'
-    ? (canActOnRequestFor(n) ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button><button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : '')
-    : n.statut === 'Remboursé' && canManageRequestFor(n.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : '';
+    ? (canActOnRequestFor(n, 'frais') ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button><button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : '')
+    : n.statut === 'Remboursé' && canManageRequestFor(n.employeeId, 'frais') ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : '';
 
   return `
     <tr>
