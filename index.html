@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seven RH</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <button class="btn-icon" id="btn-theme-toggle" title="Changer de thème"></button>
+
+  <div id="login-root" style="display: none;"></div>
+
+  <div id="app-shell" style="display: none;">
+    <aside id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-mark">7</span>
+        <span class="logo-text">Seven RH</span>
+      </div>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <div id="main-column">
+      <header id="topbar">
+        <div class="topbar-search">
+          <input type="text" id="global-search-input" class="input" placeholder="Rechercher un salarié, une demande, une note de frais... (Ctrl+K)" autocomplete="off">
+          <div id="global-search-results" class="search-results"></div>
+        </div>
+        <div class="topbar-user">
+          <div class="notif-wrapper">
+            <button class="btn-icon notif-bell" id="btn-notifications" title="Notifications">
+              🔔
+              <span class="notif-badge" id="notif-badge" style="display: none;"></span>
+            </button>
+            <div id="notif-panel" class="notif-panel"></div>
+          </div>
+          <div class="user-menu-wrapper">
+            <button class="avatar avatar-initials" id="btn-user-menu" title="Mon compte">RH</button>
+            <div id="user-menu-panel" class="user-menu-panel"></div>
+          </div>
+        </div>
+      </header>
+
+      <main id="view-root"></main>
+    </div>
+  </div>
+
+  <div id="modal-root" role="dialog" aria-modal="true"></div>
+  <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
