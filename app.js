@@ -5543,13 +5543,23 @@ function textField(name, label, value, required, type = 'text') {
   `;
 }
 
+/** Si la valeur actuellement enregistrée ne correspond à aucune option (ex. la liste
+ * paramétrable a été renommée depuis), on l'ajoute quand même comme option sélectionnée
+ * plutôt que de la laisser disparaître silencieusement — sinon un simple "Enregistrer"
+ * sans toucher au champ écrase la donnée d'origine par une valeur vide. */
 function selectField(name, label, options, selectedValue, customOptions) {
   const opts = customOptions || (options || []).map(o => ({ value: o, label: o }));
+  const hasValue = selectedValue !== undefined && selectedValue !== null && selectedValue !== '';
+  const matchesOption = opts.some(o => String(o.value) === String(selectedValue));
+  const staleOption = hasValue && !matchesOption
+    ? `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue)} (valeur actuelle, absente de la liste)</option>`
+    : '';
   return `
     <div class="form-field">
       <label for="f-${name}">${escapeHtml(label)}</label>
       <select class="input" id="f-${name}" name="${name}">
         <option value="">—</option>
+        ${staleOption}
         ${opts.map(o => `<option value="${escapeHtml(o.value)}" ${String(selectedValue) === String(o.value) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
       </select>
     </div>
