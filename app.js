@@ -3638,6 +3638,7 @@ function renderParametres() {
     </div>
     <div class="tabs">
       <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
+      <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
       <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
@@ -3646,6 +3647,7 @@ function renderParametres() {
     </div>
     <div id="parametres-tab-content">
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
+        : state.parametresTab === 'etablissements' ? renderParametresEtablissements()
         : state.parametresTab === 'services' ? renderParametresServices()
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
@@ -3661,6 +3663,7 @@ function bindParametresEvents() {
   });
 
   if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
+  else if (state.parametresTab === 'etablissements') bindParametresEtablissementsEvents();
   else if (state.parametresTab === 'services') bindParametresServicesEvents();
   else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
@@ -3728,6 +3731,135 @@ function bindParametresEntrepriseEvents() {
   });
 
   document.getElementById('btn-new-company').addEventListener('click', () => openOnboardingWizard());
+}
+
+// ---- Sous-vue : Établissements (§12) ----
+
+function renderParametresEtablissements() {
+  const etablissements = etablissementRepository.getAll();
+  return `
+    <div class="view-header-row">
+      <p class="view-subtitle">${etablissements.length} établissement${etablissements.length > 1 ? 's' : ''}</p>
+      <button class="btn btn-primary" id="btn-new-etablissement">+ Nouvel établissement</button>
+    </div>
+    <div class="settings-lists-grid">
+      ${etablissements.map(renderEtablissementCard).join('')}
+    </div>
+  `;
+}
+
+function renderEtablissementCard(etab) {
+  const responsable = etab.responsableId ? employeeRepository.getById(etab.responsableId) : null;
+  return `
+    <div class="card">
+      <div class="view-header-row">
+        <h2>${escapeHtml(etab.nom)}</h2>
+        <div class="detail-header-actions">
+          <button class="btn-link" data-edit-etablissement="${etab.id}">Modifier</button>
+          <button class="btn-link btn-link-danger" data-delete-etablissement="${etab.id}">Supprimer</button>
+        </div>
+      </div>
+      <div class="badge-row" style="margin-bottom: 10px;">
+        ${etab.principal ? '<span class="badge badge-info">Principal</span>' : ''}
+        <span class="badge badge-${etab.actif ? 'success' : 'muted'}">${etab.actif ? 'Actif' : 'Inactif'}</span>
+      </div>
+      ${infoRow('Code interne', etab.codeInterne)}
+      ${infoRow('Adresse', [etab.adresse, etab.codePostal, etab.ville, etab.pays].filter(Boolean).join(', '))}
+      ${infoRow('Email', etab.email)}
+      ${infoRow('Téléphone', etab.telephone)}
+      ${infoRow('Responsable', responsable ? `${responsable.prenom} ${responsable.nom}` : '—')}
+    </div>
+  `;
+}
+
+function bindParametresEtablissementsEvents() {
+  document.getElementById('btn-new-etablissement').addEventListener('click', () => openEtablissementModal(null));
+
+  document.querySelectorAll('[data-edit-etablissement]').forEach(btn => btn.addEventListener('click', () => openEtablissementModal(btn.dataset.editEtablissement)));
+
+  document.querySelectorAll('[data-delete-etablissement]').forEach(btn => btn.addEventListener('click', () => {
+    const etab = etablissementRepository.getById(btn.dataset.deleteEtablissement);
+    openConfirm({
+      title: 'Supprimer cet établissement ?',
+      message: `"${etab.nom}" sera définitivement supprimé.`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      onConfirm: () => {
+        const result = DB.deleteEtablissement(etab.id);
+        if (!result.success) { showToast(result.error, 'error'); return; }
+        showToast('Établissement supprimé.');
+        render();
+      }
+    });
+  }));
+}
+
+function openEtablissementModal(id) {
+  const isEdit = Boolean(id);
+  const etab = isEdit ? etablissementRepository.getById(id) : makeEmptyEtablissement();
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier l\'établissement' : 'Nouvel établissement'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="etablissement-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            ${textField('nom', 'Nom', etab.nom, true)}
+            ${textField('codeInterne', 'Code interne', etab.codeInterne)}
+            ${textField('adresse', 'Adresse', etab.adresse)}
+            ${textField('codePostal', 'Code postal', etab.codePostal)}
+            ${textField('ville', 'Ville', etab.ville)}
+            ${textField('pays', 'Pays', etab.pays)}
+            ${textField('email', 'Email', etab.email, false, 'email')}
+            ${textField('telephone', 'Téléphone', etab.telephone)}
+            ${selectField('responsableId', 'Responsable', null, etab.responsableId, employees.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })))}
+          </div>
+          <div class="form-grid" style="margin-top: 12px;">
+            ${checkboxField('principal', 'Établissement principal', etab.principal)}
+            ${checkboxField('actif', 'Actif', etab.actif)}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('etablissement-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const formData = new FormData(evt.target);
+    const nom = formData.get('nom').trim();
+    if (!nom) return;
+    const data = {
+      nom,
+      codeInterne: formData.get('codeInterne').trim(),
+      adresse: formData.get('adresse').trim(),
+      codePostal: formData.get('codePostal').trim(),
+      ville: formData.get('ville').trim(),
+      pays: formData.get('pays').trim(),
+      email: formData.get('email').trim(),
+      telephone: formData.get('telephone').trim(),
+      responsableId: formData.get('responsableId') || null,
+      principal: formData.get('principal') === 'on',
+      actif: formData.get('actif') === 'on'
+    };
+    if (isEdit) etablissementRepository.update(id, data); else etablissementRepository.create(data);
+    showToast(isEdit ? 'Établissement mis à jour.' : 'Établissement créé.');
+    closeModal();
+    navigateTo('parametres', { parametresTab: 'etablissements' });
+  });
 }
 
 // ---- Sous-vue : Services & équipes ----
