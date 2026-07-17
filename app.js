@@ -5685,6 +5685,10 @@ function openEmployeeModal(id) {
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   const settings = DB.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id);
+  const etablissements = etablissementRepository.getAll();
+  if (!isEdit && !employee.etablissementId) {
+    employee.etablissementId = (etablissements.find(e => e.principal) || etablissements[0] || {}).id || '';
+  }
 
   const html = `
     <div class="modal modal-large">
@@ -5715,6 +5719,7 @@ function openEmployeeModal(id) {
           <fieldset class="form-section">
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
+              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissements.map(e => ({ value: e.id, label: e.nom })))}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
               ${equipeSelectField(employee.service, employee.equipe)}
               ${selectField('poste', 'Poste', settings.postes, employee.poste)}
