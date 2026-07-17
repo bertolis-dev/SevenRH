@@ -55,7 +55,7 @@ function getInitialViewState() {
     view: 'dashboard',
     currentEmployeeId: null,
     search: '',
-    filters: { service: '', statutContrat: '', statut: '', favorisOnly: false },
+    filters: { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false },
     sortBy: 'nom',
     sortDir: 'asc',
     employeesPage: 1,
@@ -1836,6 +1836,7 @@ function getFilteredSortedEmployees() {
       `${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste}`.toLowerCase().includes(term)
     );
   }
+  if (state.filters.etablissementId) list = list.filter(e => e.etablissementId === state.filters.etablissementId);
   if (state.filters.service) list = list.filter(e => e.service === state.filters.service);
   if (state.filters.statutContrat) list = list.filter(e => e.typeContrat === state.filters.statutContrat);
   if (state.filters.statut) list = list.filter(e => e.statut === state.filters.statut);
@@ -1874,6 +1875,10 @@ function renderEmployeesList() {
 
     <div class="toolbar card">
       <input type="text" id="filter-search" class="input" placeholder="Rechercher un nom, un poste, un matricule..." value="${escapeHtml(state.search)}">
+      <select id="filter-etablissement" class="input">
+        <option value="">Tous les établissements</option>
+        ${etablissementRepository.getAll().map(e => `<option value="${e.id}" ${state.filters.etablissementId === e.id ? 'selected' : ''}>${escapeHtml(e.nom)}</option>`).join('')}
+      </select>
       <select id="filter-service" class="input">
         <option value="">Tous les services</option>
         ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.filters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
@@ -2007,6 +2012,11 @@ function bindEmployeesListEvents() {
     document.getElementById('filter-search').setSelectionRange(pos, pos);
   });
 
+  document.getElementById('filter-etablissement').addEventListener('change', (e) => {
+    state.filters.etablissementId = e.target.value;
+    state.employeesPage = 1;
+    render();
+  });
   document.getElementById('filter-service').addEventListener('change', (e) => {
     state.filters.service = e.target.value;
     state.employeesPage = 1;
