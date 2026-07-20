@@ -2683,6 +2683,8 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
     { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
     { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
+    { key: PERMISSIONS.CONTROLER_NOTE_FRAIS, label: 'Contrôler une note de frais (étape non finale du circuit)' },
+    { key: PERMISSIONS.MARQUER_NOTE_REMBOURSEE, label: 'Marquer une note de frais remboursée (étape finale du circuit)' },
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
     { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
@@ -3094,6 +3096,14 @@ function renderRequestStatutBadge(r) {
  * surchargeable individuellement (§8). Le bypass ne concerne que RH/Directeur par défaut :
  * Comptabilité n'a pas VALIDER_NOTE_FRAIS et continue de ne passer qu'à son étage du workflow
  * (`requiredRole === 'comptabilite'`), exactement comme avant.
+ *
+ * Pour 'frais' spécifiquement, une fois l'étape de workflow confirmée (rôle + équipe le cas échéant),
+ * une seconde permission plus fine s'applique SANS élargir l'accès à d'autres étapes : CONTROLER_NOTE_FRAIS
+ * pour toute étape non finale (vérification), MARQUER_NOTE_REMBOURSEE pour la dernière étape (paiement).
+ * Contrairement à VALIDER_NOTE_FRAIS ci-dessus, ces deux permissions ne sont PAS vérifiées avant le
+ * rôle/l'équipe : elles ne font que restreindre davantage un accès déjà accordé par l'étape du workflow,
+ * jamais l'élargir à une autre étape — sinon on recrée le même bypass company-wide déjà corrigé pour
+ * VALIDER_ABSENCE/VALIDER_NOTE_FRAIS chez le manager.
  */
 function canActOnRequestFor(request, domain = 'absence') {
   const user = DB.getCurrentUser();
@@ -3102,6 +3112,10 @@ function canActOnRequestFor(request, domain = 'absence') {
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
   const requiredRole = request.workflow[request.etapeIndex];
   if (user.role !== requiredRole) return false;
+  if (domain === 'frais') {
+    const derniereEtape = request.etapeIndex === request.workflow.length - 1;
+    if (!hasPermission(user, derniereEtape ? PERMISSIONS.MARQUER_NOTE_REMBOURSEE : PERMISSIONS.CONTROLER_NOTE_FRAIS)) return false;
+  }
   if (requiredRole === ROLES.MANAGER) {
     const emp = employeeRepository.getById(request.employeeId);
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
