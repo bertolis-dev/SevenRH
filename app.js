@@ -6349,9 +6349,15 @@ function openEmployeeModal(id) {
   const settings = DB.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id);
   const etablissements = etablissementRepository.getAll();
+  const etablissementsActifs = etablissements.filter(e => e.actif);
   if (!isEdit && !employee.etablissementId) {
-    employee.etablissementId = (etablissements.find(e => e.principal) || etablissements[0] || {}).id || '';
+    employee.etablissementId = (etablissementsActifs.find(e => e.principal) || etablissementsActifs[0] || {}).id || '';
   }
+  // Un établissement désactivé ne doit plus être proposable pour un NOUVEAU rattachement — mais un
+  // salarié déjà rattaché à un établissement entre-temps désactivé garde son affectation visible,
+  // avec son vrai nom (pas le fallback générique "valeur actuelle absente de la liste" de selectField,
+  // qui échouerait ici à afficher autre chose que l'id brut).
+  const etablissementsSelectables = etablissements.filter(e => e.actif || e.id === employee.etablissementId);
 
   const html = `
     <div class="modal modal-large">
@@ -6382,7 +6388,7 @@ function openEmployeeModal(id) {
           <fieldset class="form-section">
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
-              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissements.map(e => ({ value: e.id, label: e.nom })))}
+              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
               ${equipeSelectField(employee.service, employee.equipe)}
               ${selectField('poste', 'Poste', settings.postes, employee.poste)}
