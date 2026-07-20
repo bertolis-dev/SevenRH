@@ -2687,6 +2687,7 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.MARQUER_NOTE_REMBOURSEE, label: 'Marquer une note de frais remboursée (étape finale du circuit)' },
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
+    { key: PERMISSIONS.GERER_ABONNEMENTS, label: 'Voir/gérer l\'abonnement de l\'entreprise' },
     { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
     { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
     { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
@@ -4074,7 +4075,7 @@ function renderParametresEntreprise() {
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
-    ${user.role === ROLES.DIRECTEUR ? renderAbonnementCard() : ''}
+    ${hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS) ? renderAbonnementCard() : ''}
     <div class="card">
       <div class="view-header-row">
         <div>
