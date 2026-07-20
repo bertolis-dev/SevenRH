@@ -3835,6 +3835,7 @@ function bindParametresEvents() {
 function renderParametresEntreprise() {
   const profile = companyRepository.getProfile();
   const settings = DB.getSettings();
+  const user = DB.getCurrentUser();
 
   return `
     <div class="card">
@@ -3852,6 +3853,7 @@ function renderParametresEntreprise() {
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
+    ${user.role === ROLES.DIRECTEUR ? renderAbonnementCard() : ''}
     <div class="card">
       <div class="view-header-row">
         <div>
@@ -3868,6 +3870,33 @@ function renderParametresEntreprise() {
           </div>
         `).join('')}
       </div>
+    </div>
+  `;
+}
+
+/** Aperçu en lecture seule (§36) — la gestion réelle de l'abonnement (changement d'offre,
+ * suspension, facturation) est réservée à l'Administrateur BERTOLIS, pas encore construite. */
+function renderAbonnementCard() {
+  const company = DB.getCurrentCompany();
+  const abo = company.abonnement;
+  if (!abo) return '';
+  const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
+  const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted' }[abo.statut] || 'muted';
+  const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
+  const plafondLabel = offre.nombreSalariesMax === null ? 'illimité' : `${nbSalaries} / ${offre.nombreSalariesMax}`;
+
+  return `
+    <div class="card">
+      <h2>Abonnement</h2>
+      <p class="text-muted">Géré par BERTOLIS, l'éditeur du logiciel (§9.6, §36) — aperçu en lecture seule.</p>
+      <div class="badge-row" style="margin: 8px 0 12px;">
+        <span class="badge badge-info">${escapeHtml(offre.label)}</span>
+        <span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[abo.statut] || abo.statut)}</span>
+      </div>
+      ${infoRow('Périodicité', abo.periodicite === 'annuel' ? 'Annuelle' : 'Mensuelle')}
+      ${infoRow('Date de début', formatDate(abo.dateDebut))}
+      ${infoRow('Date de renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
+      ${infoRow('Salariés actifs', plafondLabel)}
     </div>
   `;
 }

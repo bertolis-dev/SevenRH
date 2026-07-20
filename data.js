@@ -120,6 +120,37 @@ function hasPermission(employee, permissionKey) {
 const TVA_RATES = [20, 10, 5.5, 2.1, 0];
 
 /**
+ * Offres commerciales BERTOLIS (§36) — point de départ configurable, pas une grille tarifaire figée :
+ * BERTOLIS ajuste les plafonds selon ses propres offres commerciales. Seul le plafond de salariés est
+ * suivi pour l'instant (affiché à titre indicatif) ; le blocage réel de fonctionnalités par offre et
+ * la console de gestion BERTOLIS (activer/suspendre une entreprise, facturation) restent à construire.
+ */
+const OFFRES_BERTOLIS = {
+  essai: { label: 'Essai gratuit', nombreSalariesMax: null },
+  essentiel: { label: 'Essentiel', nombreSalariesMax: 25 },
+  professionnel: { label: 'Professionnel', nombreSalariesMax: 100 },
+  premium: { label: 'Premium', nombreSalariesMax: null }
+};
+
+const ABONNEMENT_STATUT_LABELS = {
+  actif: 'Actif',
+  impaye: 'Impayé',
+  suspendu: 'Suspendu',
+  resilie: 'Résilié'
+};
+
+function makeEmptyAbonnement() {
+  return {
+    offre: 'essai', // clé de OFFRES_BERTOLIS
+    periodicite: 'mensuel', // 'mensuel' | 'annuel'
+    statut: 'actif', // voir ABONNEMENT_STATUT_LABELS
+    dateDebut: toISODate(new Date()),
+    dateRenouvellement: '',
+    nombreSalariesMax: OFFRES_BERTOLIS.essai.nombreSalariesMax
+  };
+}
+
+/**
  * Modèles d'export paie (§34). IMPORTANT — ce sont des POINTS DE DÉPART configurables, pas des
  * formats certifiés : Sage/Silae/Cegid/ADP/PayFit ont des specs d'import propriétaires qui varient
  * selon la version et le paramétrage de chaque client, et l'app n'a pas accès à ces specs exactes.
@@ -189,6 +220,7 @@ function makeEmptyCompany() {
     email: '',
     conventionCollective: 'Aucune',
     matriculeSeq: 0,
+    abonnement: null, // §36 — voir makeEmptyAbonnement()/migrateCompanyAbonnement()
     etablissements: [],
     employees: [],
     services: [],
@@ -261,6 +293,14 @@ function migrateLeaveTypeCategories(company) {
   return changed;
 }
 
+/** Ajoute un abonnement par défaut (§36, offre "Essai gratuit") aux entreprises créées avant
+ * l'existence de ce champ. Idempotent : ne touche à rien si l'entreprise a déjà un abonnement. */
+function migrateCompanyAbonnement(company) {
+  if (company.abonnement) return false;
+  company.abonnement = makeEmptyAbonnement();
+  return true;
+}
+
 const DB = {
   /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
   init() {
@@ -276,7 +316,8 @@ const DB = {
     const companies = this.getCompanies();
     const migratedEtablissements = companies.map(c => migrateCompanyEtablissements(c)).some(Boolean);
     const migratedLeaveCategories = companies.map(c => migrateLeaveTypeCategories(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories) this.saveCompanies(companies);
+    const migratedAbonnements = companies.map(c => migrateCompanyAbonnement(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements) this.saveCompanies(companies);
   },
 
   // ---- Multi-entreprise ----
@@ -406,6 +447,7 @@ const DB = {
     });
     company.employees = [adminEmployee];
     migrateCompanyEtablissements(company); // filet de sécurité si `etablissement` est absent/mal formé
+    company.abonnement = makeEmptyAbonnement();
 
     const companies = this.getCompanies();
     companies.push(company);
