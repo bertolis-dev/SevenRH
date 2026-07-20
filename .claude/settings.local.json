@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/Users/tomto/Documents/appli rh/.claude\")",
+      "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command python3 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue)"
+    ]
+  }
+}
