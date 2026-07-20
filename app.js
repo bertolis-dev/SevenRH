@@ -5695,7 +5695,12 @@ function getPaieRows(year, month) {
 }
 
 function renderExportPaie() {
-  const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
+  const settings = DB.getSettings();
+  const modele = settings.exportPaieModele || 'generique';
+  const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
+  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+
+  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
   const rows = getPaieRows(state.paieYear, state.paieMonth);
 
   return `
@@ -5714,6 +5719,23 @@ function renderExportPaie() {
 
     <div class="card">
       <p class="text-muted">Consolide, pour la paie du mois, les congés marqués « export paie » (paramétrable dans Congés → Types), le télétravail, les tickets restaurant et les notes de frais validées à rembourser.</p>
+      <div class="form-grid" style="margin-top: 10px;">
+        <div class="form-field">
+          <label for="f-export-paie-modele">Modèle d'export (§34)</label>
+          <select class="input" id="f-export-paie-modele">
+            ${Object.entries(EXPORT_PAIE_MODELES).map(([key, m]) => `<option value="${key}" ${modele === key ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <p class="text-muted" style="margin-top: 8px;">⚠️ Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel — les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
+      ${modele === 'personnalise' ? `
+        <div class="form-grid" style="margin-top: 12px;">
+          ${checkboxField('paieCol.conges', 'Congés', colonnes.conges)}
+          ${checkboxField('paieCol.teletravail', 'Télétravail', colonnes.teletravail)}
+          ${checkboxField('paieCol.tickets', 'Tickets restaurant', colonnes.tickets)}
+          ${checkboxField('paieCol.frais', 'Notes de frais', colonnes.frais)}
+        </div>
+      ` : ''}
     </div>
 
     <div class="card table-card">
@@ -5724,10 +5746,9 @@ function renderExportPaie() {
               <th>Matricule</th>
               <th>Salarié</th>
               ${leaveTypesExportables.map(t => `<th>${escapeHtml(t.nom)}</th>`).join('')}
-              <th>Télétravail</th>
-              <th>Tickets resto</th>
-              <th>Part salarié tickets</th>
-              <th>Frais à rembourser</th>
+              ${showColonne('teletravail') ? '<th>Télétravail</th>' : ''}
+              ${showColonne('tickets') ? '<th>Tickets resto</th><th>Part salarié tickets</th>' : ''}
+              ${showColonne('frais') ? '<th>Frais à rembourser</th>' : ''}
             </tr>
           </thead>
           <tbody>
@@ -5735,11 +5756,10 @@ function renderExportPaie() {
               <tr>
                 <td>${escapeHtml(r.employee.matricule)}</td>
                 <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
-                ${r.congesParType.map(j => `<td>${formatDurationFR(j)}</td>`).join('')}
-                <td>${formatDurationFR(r.teletravailJours)}</td>
-                <td>${r.tickets.nbTickets}</td>
-                <td>${formatCurrencyFR(r.tickets.partSalarie)}</td>
-                <td>${formatCurrencyFR(r.notesRembourser)}</td>
+                ${showColonne('conges') ? r.congesParType.map(j => `<td>${formatDurationFR(j)}</td>`).join('') : ''}
+                ${showColonne('teletravail') ? `<td>${formatDurationFR(r.teletravailJours)}</td>` : ''}
+                ${showColonne('tickets') ? `<td>${r.tickets.nbTickets}</td><td>${formatCurrencyFR(r.tickets.partSalarie)}</td>` : ''}
+                ${showColonne('frais') ? `<td>${formatCurrencyFR(r.notesRembourser)}</td>` : ''}
               </tr>
             `).join('')}
           </tbody>
@@ -5759,6 +5779,23 @@ function bindExportPaieEvents() {
     render();
   });
   document.getElementById('btn-export-paie').addEventListener('click', exportPaieCSV);
+
+  document.getElementById('f-export-paie-modele').addEventListener('change', (e) => {
+    const settings = DB.getSettings();
+    settings.exportPaieModele = e.target.value;
+    DB.saveSettings(settings);
+    render();
+  });
+
+  ['conges', 'teletravail', 'tickets', 'frais'].forEach(key => {
+    const checkbox = document.getElementById(`f-paieCol.${key}`);
+    if (checkbox) checkbox.addEventListener('change', (e) => {
+      const settings = DB.getSettings();
+      settings.exportPaieColonnes = Object.assign({}, settings.exportPaieColonnes, { [key]: e.target.checked });
+      DB.saveSettings(settings);
+      render();
+    });
+  });
 }
 
 function shiftPaieMonth(delta) {
@@ -5771,24 +5808,46 @@ function shiftPaieMonth(delta) {
   render();
 }
 
+/** csvEscape/exportRowsToCSV (SS17) sont figés sur ";" - reutilisés partout ailleurs dans l'app.
+ * L'export paie a besoin d'un délimiteur configurable par modèle (SS34, EXPORT_PAIE_MODELES),
+ * d'où ces variantes dédiées plutôt qu'un changement du comportement partagé. */
+function csvEscapeWithDelimiter(value, delimiter) {
+  const str = String(value === null || value === undefined ? '' : value);
+  return (str.includes(delimiter) || str.includes('"') || str.includes('\n'))
+    ? '"' + str.replace(/"/g, '""') + '"'
+    : str;
+}
+
+function exportRowsToCSVWithDelimiter(headers, rows, filename, delimiter) {
+  const csv = [headers, ...rows].map(row => row.map(v => csvEscapeWithDelimiter(v, delimiter)).join(delimiter)).join('\r\n');
+  downloadTextFile(csv, filename, 'text/csv;charset=utf-8;');
+}
+
 function exportPaieCSV() {
-  const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
+  const settings = DB.getSettings();
+  const modele = settings.exportPaieModele || 'generique';
+  const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
+  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+  const delimiter = (EXPORT_PAIE_MODELES[modele] || EXPORT_PAIE_MODELES.generique).delimiter;
+
+  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
   const rows = getPaieRows(state.paieYear, state.paieMonth);
   const headers = [
     'Matricule', 'Nom', 'Prénom',
-    ...leaveTypesExportables.map(t => `${t.nom} (jours)`),
-    'Télétravail (jours)', 'Tickets restaurant (nb)', 'Tickets — part salarié (€)', 'Notes de frais à rembourser (€)'
+    ...(showColonne('conges') ? leaveTypesExportables.map(t => `${t.nom} (jours)`) : []),
+    ...(showColonne('teletravail') ? ['Télétravail (jours)'] : []),
+    ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets — part salarié (€)'] : []),
+    ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : [])
   ];
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
-    ...r.congesParType.map(formatNumberFR),
-    formatNumberFR(r.teletravailJours),
-    r.tickets.nbTickets,
-    formatNumberFR(r.tickets.partSalarie),
-    formatNumberFR(r.notesRembourser)
+    ...(showColonne('conges') ? r.congesParType.map(v => formatNumberFR(v)) : []),
+    ...(showColonne('teletravail') ? [formatNumberFR(r.teletravailJours)] : []),
+    ...(showColonne('tickets') ? [r.tickets.nbTickets, formatNumberFR(r.tickets.partSalarie)] : []),
+    ...(showColonne('frais') ? [formatNumberFR(r.notesRembourser)] : [])
   ]);
-  exportRowsToCSV(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`);
-  DB.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`);
+  exportRowsToCSVWithDelimiter(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`, delimiter);
+  DB.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);
 }
 
 // ---------------------------------------------------------------------------

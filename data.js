@@ -119,6 +119,25 @@ function hasPermission(employee, permissionKey) {
 /** Taux de TVA français en vigueur (loi fiscale, non paramétrable par l'entreprise). */
 const TVA_RATES = [20, 10, 5.5, 2.1, 0];
 
+/**
+ * Modèles d'export paie (§34). IMPORTANT — ce sont des POINTS DE DÉPART configurables, pas des
+ * formats certifiés : Sage/Silae/Cegid/ADP/PayFit ont des specs d'import propriétaires qui varient
+ * selon la version et le paramétrage de chaque client, et l'app n'a pas accès à ces specs exactes.
+ * Chaque modèle ne fixe que des conventions courantes et peu risquées (délimiteur), jamais un
+ * mappage de colonnes prétendument garanti — voir le message affiché sur l'écran Export paie.
+ * "personnalise" est le seul mode où les colonnes elles-mêmes sont configurables (voir
+ * settings.exportPaieColonnes).
+ */
+const EXPORT_PAIE_MODELES = {
+  generique: { label: 'Générique (CSV standard)', delimiter: ';' },
+  sage: { label: 'Sage', delimiter: ';' },
+  silae: { label: 'Silae', delimiter: ';' },
+  cegid: { label: 'Cegid', delimiter: ';' },
+  adp: { label: 'ADP', delimiter: ',' },
+  payfit: { label: 'PayFit', delimiter: ';' },
+  personnalise: { label: 'Personnalisé', delimiter: ';' }
+};
+
 // Listes de référence par défaut (modifiables via DB.settings une fois le
 // module Paramètres construit — elles ne sont donc pas figées dans le code).
 const DEFAULT_SETTINGS = {
@@ -145,7 +164,10 @@ const DEFAULT_SETTINGS = {
   // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
   // la masse salariale et le genre restent des données que l'entreprise choisit de suivre ou non.
   masseSalarialeActivee: false,
-  suiviGenreActive: false
+  suiviGenreActive: false,
+  // §34 — voir EXPORT_PAIE_MODELES ; exportPaieColonnes n'est utilisé que si exportPaieModele === 'personnalise'.
+  exportPaieModele: 'generique',
+  exportPaieColonnes: { conges: true, teletravail: true, tickets: true, frais: true }
 };
 
 /**
