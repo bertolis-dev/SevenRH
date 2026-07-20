@@ -224,6 +224,21 @@ function migrateCompanyEtablissements(company) {
   return true;
 }
 
+/** Ajoute `categorie` ('conge' §14 | 'autre' §15) aux types de congés créés avant l'existence de ce
+ * champ. Heuristique par nom pour les 3 types "congés classiques" (congés payés, RTT, ancienneté) ;
+ * tout le reste devient 'autre' par défaut — l'entreprise peut reclasser ensuite depuis Paramètres.
+ * Idempotent : ne touche à rien si un type a déjà une catégorie. */
+function migrateLeaveTypeCategories(company) {
+  const CONGE_NAMES = ['congés payés', 'rtt', 'ancienneté'];
+  let changed = false;
+  (company.leaveTypes || []).forEach(t => {
+    if (t.categorie) return;
+    t.categorie = CONGE_NAMES.includes(t.nom.trim().toLowerCase()) ? 'conge' : 'autre';
+    changed = true;
+  });
+  return changed;
+}
+
 const DB = {
   /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
   init() {
@@ -237,8 +252,9 @@ const DB = {
       if (companies.length) localStorage.setItem(CURRENT_COMPANY_KEY, companies[0].id);
     }
     const companies = this.getCompanies();
-    const migrated = companies.map(c => migrateCompanyEtablissements(c)).some(Boolean);
-    if (migrated) this.saveCompanies(companies);
+    const migratedEtablissements = companies.map(c => migrateCompanyEtablissements(c)).some(Boolean);
+    const migratedLeaveCategories = companies.map(c => migrateLeaveTypeCategories(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories) this.saveCompanies(companies);
   },
 
   // ---- Multi-entreprise ----
@@ -1371,6 +1387,7 @@ function makeEmptyLeaveType() {
     id: null,
     ordre: 0,
     actif: true,
+    categorie: 'conge', // 'conge' (§14 : CP/RTT/ancienneté) | 'autre' (§15 : maladie, maternité, etc.)
     nom: '',
     icone: '🏖️',
     couleur: '#4f46e5',
@@ -1769,26 +1786,26 @@ function getGenderBreakdown(employees) {
 /** Types de congés fournis par défaut (paramétrables ensuite via l'écran Congés). */
 function seedLeaveTypes() {
   const rows = [
-    ['Congés payés', '🏖️', '#2563eb', 25, 'Mensuelle', true, false, ['manager']],
-    ['RTT', '⏱️', '#7c3aed', 12, 'Mensuelle', true, false, ['manager']],
-    ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh']],
-    ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh']],
-    ['Décès', '🕊️', '#4b5563', 5, 'Annuelle', true, true, ['rh']],
-    ['Enfant malade', '🤒', '#f59e0b', 3, 'Annuelle', false, true, ['manager']],
-    ['Ancienneté', '🎖️', '#0891b2', 2, 'Annuelle', true, false, ['manager']],
-    ['Formation', '📚', '#059669', 5, 'Annuelle', true, false, ['manager', 'rh']],
-    ['Naissance / adoption', '👶', '#ec4899', 3, 'Annuelle', true, true, ['rh']],
-    ['Proche aidant', '🤝', '#8b5cf6', 0, 'Illimitée', false, true, ['rh']],
-    ['Sans solde', '🚫', '#6b7280', 0, 'Illimitée', false, false, ['manager', 'directeur']],
-    ['Exceptionnel', '⭐', '#d97706', 3, 'Annuelle', true, false, ['rh']]
+    ['Congés payés', '🏖️', '#2563eb', 25, 'Mensuelle', true, false, ['manager'], 'conge'],
+    ['RTT', '⏱️', '#7c3aed', 12, 'Mensuelle', true, false, ['manager'], 'conge'],
+    ['Ancienneté', '🎖️', '#0891b2', 2, 'Annuelle', true, false, ['manager'], 'conge'],
+    ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh'], 'autre'],
+    ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
+    ['Décès', '🕊️', '#4b5563', 5, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Enfant malade', '🤒', '#f59e0b', 3, 'Annuelle', false, true, ['manager'], 'autre'],
+    ['Formation', '📚', '#059669', 5, 'Annuelle', true, false, ['manager', 'rh'], 'autre'],
+    ['Naissance / adoption', '👶', '#ec4899', 3, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Proche aidant', '🤝', '#8b5cf6', 0, 'Illimitée', false, true, ['rh'], 'autre'],
+    ['Sans solde', '🚫', '#6b7280', 0, 'Illimitée', false, false, ['manager', 'directeur'], 'autre'],
+    ['Exceptionnel', '⭐', '#d97706', 3, 'Annuelle', true, false, ['rh'], 'autre']
   ];
 
   return rows.map((row, i) => {
-    const [nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow] = row;
+    const [nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow, categorie] = row;
     return Object.assign(makeEmptyLeaveType(), {
       id: generateId('lt'),
       ordre: i,
-      nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow,
+      nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow, categorie,
       illimite: acquisition === 'Illimitée'
     });
   });
