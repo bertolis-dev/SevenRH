@@ -1138,6 +1138,11 @@ function syncNotifications() {
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
+  getUpcomingProbationEnds(14).forEach(e => {
+    candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, '📄', 'Fin de période d\'essai proche',
+      `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
+  });
+
   documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
     const daysUntil = Math.round((new Date(d.dateExpiration) - new Date()) / 86400000);
     if (daysUntil > 30) return;
@@ -1708,6 +1713,18 @@ function getUpcomingContractEnds(daysAhead = 60, employees) {
   return employees
     .filter(e => e.dateFinContrat >= todayStr && e.dateFinContrat <= limitStr)
     .sort((a, b) => a.dateFinContrat.localeCompare(b.dateFinContrat))
+    .slice(0, 5);
+}
+
+/** Même principe que getUpcomingContractEnds, pour la fin de période d'essai — champ existant
+ * depuis le début (formulaire + fiche salarié) mais jamais consulté par le moteur de notifications. */
+function getUpcomingProbationEnds(daysAhead = 60, employees) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinPeriodeEssai);
+  const todayStr = toISODate(new Date());
+  const limitStr = toISODate(addDays(new Date(), daysAhead));
+  return employees
+    .filter(e => e.dateFinPeriodeEssai >= todayStr && e.dateFinPeriodeEssai <= limitStr)
+    .sort((a, b) => a.dateFinPeriodeEssai.localeCompare(b.dateFinPeriodeEssai))
     .slice(0, 5);
 }
 
