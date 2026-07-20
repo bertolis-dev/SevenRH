@@ -347,7 +347,7 @@ const DB = {
    * Ne seede pas de salariés de démonstration : seuls les types de congés et le calendrier
    * scolaire standards sont pré-remplis, le reste se construit depuis un catalogue vide.
    */
-  createCompanyFromOnboarding({ profile, conventionCollective, organisation, admin }) {
+  createCompanyFromOnboarding({ profile, conventionCollective, etablissement, organisation, admin }) {
     const company = makeEmptyCompany();
     company.id = generateId('company');
     Object.assign(company, profile, { conventionCollective, matriculeSeq: 1 });
@@ -358,6 +358,13 @@ const DB = {
     });
     company.leaveTypes = seedLeaveTypes();
     company.schoolHolidays = seedSchoolHolidays();
+
+    const etab = Object.assign(makeEmptyEtablissement(), etablissement, {
+      id: generateId('etab'),
+      principal: true,
+      actif: true
+    });
+    company.etablissements = [etab];
 
     const now = new Date().toISOString();
     const adminEmployee = Object.assign(makeEmptyEmployee(), {
@@ -370,12 +377,13 @@ const DB = {
       role: ROLES.DIRECTEUR,
       statut: 'Actif',
       horairesHebdo: organisation.horairesHebdo,
+      etablissementId: etab.id,
       dateEmbauche: toISODate(new Date()),
       dateCreation: now,
       dateModification: now
     });
     company.employees = [adminEmployee];
-    migrateCompanyEtablissements(company);
+    migrateCompanyEtablissements(company); // filet de sécurité si `etablissement` est absent/mal formé
 
     const companies = this.getCompanies();
     companies.push(company);

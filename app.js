@@ -481,13 +481,14 @@ function openChangePasswordModal() {
 // Assistant de première installation — création d'une nouvelle entreprise
 // ---------------------------------------------------------------------------
 
-const ONBOARDING_STEP_TITLES = ['Entreprise', 'Convention', 'Organisation', 'Administrateur', 'Résumé'];
+const ONBOARDING_STEP_TITLES = ['Entreprise', 'Convention', 'Établissement', 'Organisation', 'Administrateur', 'Résumé'];
 
 function openOnboardingWizard() {
   state.onboarding = {
     step: 1,
     profile: { raisonSociale: '', logo: null, siret: '', tva: '', adresse: '', telephone: '', email: '' },
     conventionCollective: 'Aucune',
+    etablissement: { nom: 'Siège', codeInterne: '', adresse: '', codePostal: '', ville: '', pays: 'France', email: '', telephone: '' },
     organisation: { horairesHebdo: 35, teletravailQuotaSemaine: 2, ticketsValeurFaciale: 9, ticketsPartEmployeurPct: 60 },
     admin: { prenom: '', nom: '', email: '', motDePasse: '' }
   };
@@ -498,8 +499,9 @@ function renderOnboardingWizard() {
   const step = state.onboarding.step;
   const stepContent = step === 1 ? renderOnboardingStep1()
     : step === 2 ? renderOnboardingStep2()
-    : step === 3 ? renderOnboardingStep3()
-    : step === 4 ? renderOnboardingStep4()
+    : step === 3 ? renderOnboardingStepEtablissement()
+    : step === 4 ? renderOnboardingStep3()
+    : step === 5 ? renderOnboardingStep4()
     : renderOnboardingStep5();
 
   const html = `
@@ -523,7 +525,7 @@ function renderOnboardingWizard() {
       </div>
       <div class="modal-footer">
         ${step > 1 ? '<button type="button" class="btn btn-secondary" id="btn-onboarding-back">← Précédent</button>' : '<button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>'}
-        ${step < 5 ? '<button type="button" class="btn btn-primary" id="btn-onboarding-next">Suivant →</button>' : '<button type="button" class="btn btn-primary" id="btn-onboarding-finish">Créer l\'entreprise</button>'}
+        ${step < 6 ? '<button type="button" class="btn btn-primary" id="btn-onboarding-next">Suivant →</button>' : '<button type="button" class="btn btn-primary" id="btn-onboarding-finish">Créer l\'entreprise</button>'}
       </div>
     </div>
   `;
@@ -556,6 +558,23 @@ function renderOnboardingStep2() {
   `;
 }
 
+function renderOnboardingStepEtablissement() {
+  const e = state.onboarding.etablissement;
+  return `
+    <p class="text-muted">Cet établissement sera créé comme établissement principal — vous pourrez en ajouter d'autres ensuite depuis Paramètres.</p>
+    <div class="form-grid">
+      ${textField('ob-etab-nom', 'Nom', e.nom, true)}
+      ${textField('ob-etab-code', 'Code interne', e.codeInterne)}
+      ${textField('ob-etab-adresse', 'Adresse', e.adresse)}
+      ${textField('ob-etab-cp', 'Code postal', e.codePostal)}
+      ${textField('ob-etab-ville', 'Ville', e.ville)}
+      ${textField('ob-etab-pays', 'Pays', e.pays)}
+      ${textField('ob-etab-email', 'Email', e.email, false, 'email')}
+      ${textField('ob-etab-telephone', 'Téléphone', e.telephone)}
+    </div>
+  `;
+}
+
 function renderOnboardingStep3() {
   const o = state.onboarding.organisation;
   return `
@@ -583,13 +602,14 @@ function renderOnboardingStep4() {
 }
 
 function renderOnboardingStep5() {
-  const { profile, conventionCollective, organisation, admin } = state.onboarding;
+  const { profile, conventionCollective, etablissement, organisation, admin } = state.onboarding;
   return `
     ${infoRow('Raison sociale', profile.raisonSociale)}
     ${infoRow('Email entreprise', profile.email)}
     ${infoRow('Convention collective', conventionCollective)}
+    ${infoRow('Établissement principal', [etablissement.nom, etablissement.ville].filter(Boolean).join(' · '))}
     ${infoRow('Horaires hebdomadaires', formatNumberFR(organisation.horairesHebdo) + ' h')}
-    ${infoRow('Télétravail', organisation.teletravailQuotaSemaine + ' j/semaine')}
+    ${infoRow('Télétravail', formatDurationFR(organisation.teletravailQuotaSemaine) + '/semaine')}
     ${infoRow('Tickets restaurant', `${formatCurrencyFR(organisation.ticketsValeurFaciale)} (${formatPercentFR(organisation.ticketsPartEmployeurPct)} employeur)`)}
     ${infoRow('Administrateur', `${admin.prenom} ${admin.nom} · ${admin.email}`)}
     <p class="text-muted" style="margin-top: 14px;">En créant l'entreprise, vous serez automatiquement connecté avec ce compte administrateur.</p>
@@ -615,13 +635,26 @@ function saveCurrentOnboardingStep() {
   } else if (step === 2) {
     state.onboarding.conventionCollective = document.getElementById('f-ob-convention').value;
   } else if (step === 3) {
+    const nom = document.getElementById('f-ob-etab-nom').value.trim();
+    if (!nom) return 'Le nom de l\'établissement est obligatoire.';
+    state.onboarding.etablissement = {
+      nom,
+      codeInterne: document.getElementById('f-ob-etab-code').value,
+      adresse: document.getElementById('f-ob-etab-adresse').value,
+      codePostal: document.getElementById('f-ob-etab-cp').value,
+      ville: document.getElementById('f-ob-etab-ville').value,
+      pays: document.getElementById('f-ob-etab-pays').value,
+      email: document.getElementById('f-ob-etab-email').value,
+      telephone: document.getElementById('f-ob-etab-telephone').value
+    };
+  } else if (step === 4) {
     state.onboarding.organisation = {
       horairesHebdo: Number(document.getElementById('f-ob-horaires').value) || 35,
       teletravailQuotaSemaine: Number(document.getElementById('f-ob-teletravail-quota').value) || 0,
       ticketsValeurFaciale: Number(document.getElementById('f-ob-tickets-valeur').value) || 0,
       ticketsPartEmployeurPct: Number(document.getElementById('f-ob-tickets-part').value) || 0
     };
-  } else if (step === 4) {
+  } else if (step === 5) {
     const prenom = document.getElementById('f-ob-admin-prenom').value.trim();
     const nom = document.getElementById('f-ob-admin-nom').value.trim();
     const email = document.getElementById('f-ob-admin-email').value.trim();
@@ -663,8 +696,8 @@ function bindOnboardingWizardEvents() {
 
   const finishBtn = document.getElementById('btn-onboarding-finish');
   if (finishBtn) finishBtn.addEventListener('click', () => {
-    const { profile, conventionCollective, organisation, admin } = state.onboarding;
-    companyRepository.createFromOnboarding({ profile, conventionCollective, organisation, admin });
+    const { profile, conventionCollective, etablissement, organisation, admin } = state.onboarding;
+    companyRepository.createFromOnboarding({ profile, conventionCollective, etablissement, organisation, admin });
     closeModal();
     DB.login(admin.email, admin.motDePasse);
     showApp();
