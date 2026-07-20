@@ -57,6 +57,7 @@ function getInitialViewState() {
     search: '',
     filters: { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false },
     organigrammeFilters: { search: '', etablissementId: '', service: '', equipe: '' },
+    orgCollapsedIds: new Set(), // §12 : replier/déplier les branches — ids de salariés dont les enfants sont masqués
     sortBy: 'nom',
     sortDir: 'asc',
     employeesPage: 1,
@@ -2139,15 +2140,18 @@ function renderOrganigramme() {
 
 function renderOrgNode(employee, childrenOf) {
   const children = childrenOf.get(employee.id) || [];
+  const hasChildren = children.length > 0;
+  const isCollapsed = state.orgCollapsedIds.has(employee.id);
   return `
     <li>
       <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}">
+        ${hasChildren ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
         ${renderAvatar(employee)}
         <div class="org-node-name">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</div>
         <div class="org-node-poste">${escapeHtml(employee.poste || '—')}</div>
         <span class="badge badge-info">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
       </div>
-      ${children.length ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
+      ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
     </li>
   `;
 }
@@ -2155,6 +2159,15 @@ function renderOrgNode(employee, childrenOf) {
 function bindOrganigrammeEvents() {
   document.querySelectorAll('[data-org-employee]').forEach(node => {
     node.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: node.dataset.orgEmployee }));
+  });
+
+  document.querySelectorAll('[data-org-toggle]').forEach(btn => {
+    btn.addEventListener('click', (evt) => {
+      evt.stopPropagation(); // ne doit pas déclencher l'ouverture de la fiche du nœud parent
+      const id = btn.dataset.orgToggle;
+      if (state.orgCollapsedIds.has(id)) state.orgCollapsedIds.delete(id); else state.orgCollapsedIds.add(id);
+      render();
+    });
   });
 
   const searchInput = document.getElementById('org-filter-search');

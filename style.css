@@ -1007,6 +1007,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .org-tree ul li:only-child::before { display: none; }
 
 .org-node {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1025,6 +1026,28 @@ textarea.input { resize: vertical; font-family: inherit; }
 .org-node .avatar { width: 40px; height: 40px; }
 .org-node-name { font-weight: 600; font-size: 13px; text-align: center; margin-top: 2px; }
 .org-node-poste { font-size: 11px; color: var(--color-text-muted); text-align: center; }
+
+/* §12 : replier/déplier les branches — petit bouton en coin, ne doit pas interférer avec le clic
+   sur le nœud (qui ouvre la fiche du salarié) : voir evt.stopPropagation() dans bindOrganigrammeEvents. */
+.org-node-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-muted-soft);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.org-node-toggle:hover { background: var(--color-border); }
 
 /* ---------------------------------------------------------------------
    Notifications (topbar)
