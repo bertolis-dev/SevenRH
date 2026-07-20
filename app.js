@@ -2580,6 +2580,9 @@ function renderEmployeeDetail(id) {
   const canEdit = canEditEmployeeRecord(e);
   const canDelete = canDeleteEmployeeRecord();
   const selfRhBlocked = user.role === ROLES.RH && user.id === e.id;
+  // Auto-service limité (téléphone/adresse uniquement) pour qui n'a pas déjà l'édition complète sur
+  // sa propre fiche — sinon le bouton "Modifier" fait déjà tout, pas besoin d'un second bouton.
+  const canEditCoordonnees = !canEdit && user.id === e.id && hasPermission(user, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES);
 
   return `
     <button class="btn-link" id="btn-back-to-list">← Retour à la liste</button>
@@ -2599,6 +2602,7 @@ function renderEmployeeDetail(id) {
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${DB.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
+        ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
         ${canArchiveEmployeeRecord(e) ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
         ${canDelete ? '<button class="btn btn-danger" id="btn-delete-employee">Supprimer</button>' : ''}
@@ -2680,6 +2684,7 @@ function renderPermissionsCard(e, user) {
   }
 
   const wired = [
+    { key: PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, label: 'Modifier ses propres coordonnées (téléphone/adresse)' },
     { key: PERMISSIONS.VOIR_SALARIES, label: 'Voir les salariés' },
     { key: PERMISSIONS.VOIR_EQUIPE, label: 'Voir son équipe' },
     { key: PERMISSIONS.VOIR_COMPTEURS, label: 'Voir les compteurs de congés d\'un autre salarié' },
@@ -2848,6 +2853,55 @@ function managerNames(managerIds) {
   return names.length ? names.join(', ') : '—';
 }
 
+/** Auto-service limité (§ MODIFIER_PROPRES_COORDONNEES) : seulement téléphone/adresse, jamais le
+ * reste de la fiche (poste, contrat, salaire...) qui reste réservé à MODIFIER_SALARIE/manager. */
+function openCoordonneesModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Modifier mes coordonnées</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="coordonnees-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            ${textField('telephone', 'Téléphone', employee.telephone)}
+            ${textField('adresse.rue', 'Adresse', employee.adresse.rue)}
+            ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
+            ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('coordonnees-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const result = employeeRepository.majCoordonnees(employeeId, {
+      telephone: document.getElementById('f-telephone').value,
+      rue: document.getElementById('f-adresse.rue').value,
+      codePostal: document.getElementById('f-adresse.codePostal').value,
+      ville: document.getElementById('f-adresse.ville').value
+    });
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Coordonnées mises à jour.');
+    closeModal();
+    render();
+  });
+}
+
 // ---- Modale : Fiche salarié imprimable / export PDF ----
 
 function openEmployeePrintModal(id) {
@@ -2929,6 +2983,9 @@ function bindEmployeeDetailEvents() {
 
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
+
+  const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
+  if (editCoordonneesBtn) editCoordonneesBtn.addEventListener('click', () => openCoordonneesModal(state.currentEmployeeId));
 
   document.getElementById('btn-request-leave').addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId, 'conge'));
   document.getElementById('btn-request-telework').addEventListener('click', () => openTeleworkRequestModal(state.currentEmployeeId));

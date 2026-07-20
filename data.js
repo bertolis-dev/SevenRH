@@ -1016,6 +1016,20 @@ const DB = {
     return { success: true };
   },
 
+  /** Auto-service limité (§ MODIFIER_PROPRES_COORDONNEES) : seuls téléphone/adresse sont modifiables
+   * par ce chemin — signature explicite (pas un patch générique) pour qu'il soit structurellement
+   * impossible d'y glisser un autre champ (poste, contrat, salaire...) par erreur plus tard. */
+  majPropresCoordonnees(employeeId, { telephone, rue, codePostal, ville }) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    this.updateEmployee(employeeId, {
+      telephone: telephone || '',
+      adresse: { rue: rue || '', codePostal: codePostal || '', ville: ville || '' }
+    });
+    this.logAudit('Modification', 'Coordonnées', `${employee.prenom} ${employee.nom} (auto-modification)`);
+    return { success: true };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1389,7 +1403,8 @@ const employeeRepository = {
   archive: (id, archived = true) => DB.setArchived(id, archived),
   delete: (id) => DB.deleteEmployee(id),
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
-  ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif)
+  ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
+  majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data)
 };
 
 const leaveRepository = {
