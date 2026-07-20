@@ -301,6 +301,19 @@ function migrateLeaveTypeCategories(company) {
   return changed;
 }
 
+/** Ajoute saisiParSalarie (§15) aux types créés avant l'existence de ce champ — "Maladie" seul
+ * repasse à false par défaut (§24 : "saisis uniquement par le service RH"), le reste garde true
+ * (comportement actuel inchangé) : l'entreprise peut reclasser ensuite depuis Paramètres. */
+function migrateLeaveTypeSaisiParSalarie(company) {
+  let changed = false;
+  (company.leaveTypes || []).forEach(t => {
+    if ('saisiParSalarie' in t) return;
+    t.saisiParSalarie = t.nom.trim().toLowerCase() !== 'maladie';
+    changed = true;
+  });
+  return changed;
+}
+
 /** Ajoute un abonnement par défaut (§36, offre "Essai gratuit") aux entreprises créées avant
  * l'existence de ce champ. Idempotent : ne touche à rien si l'entreprise a déjà un abonnement. */
 function migrateCompanyAbonnement(company) {
@@ -340,7 +353,8 @@ const DB = {
     const migratedEtablissements = companies.map(c => migrateCompanyEtablissements(c)).some(Boolean);
     const migratedLeaveCategories = companies.map(c => migrateLeaveTypeCategories(c)).some(Boolean);
     const migratedAbonnements = companies.map(c => migrateCompanyAbonnement(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements) this.saveCompanies(companies);
+    const migratedSaisiParSalarie = companies.map(c => migrateLeaveTypeSaisiParSalarie(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie) this.saveCompanies(companies);
 
     if (localStorage.getItem(BERTOLIS_ADMINS_KEY) === null) {
       localStorage.setItem(BERTOLIS_ADMINS_KEY, JSON.stringify([
@@ -1565,6 +1579,7 @@ function makeEmptyLeaveType() {
     // Chaîne de validation ordonnée, ex. ['manager','rh'] ou ['rh'] ou ['manager','directeur'] ou [] (aucune validation).
     // Paramétrable par type de congé ; DEFAULT_SETTINGS.workflowCongesDefault sert de modèle pour un nouveau type.
     workflow: ['manager'],
+    saisiParSalarie: true, // §15 : "saisi par le salarié" vs "saisi uniquement par les RH" (ex. arrêts maladie, §24)
     visibleSalarie: true,
     visibleRH: true,
     autoriserDemiJournee: true,
@@ -1971,6 +1986,7 @@ function seedLeaveTypes() {
       id: generateId('lt'),
       ordre: i,
       nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow, categorie,
+      saisiParSalarie: nom.toLowerCase() !== 'maladie', // §24 : arrêts maladie saisis uniquement par les RH
       illimite: acquisition === 'Illimitée'
     });
   });

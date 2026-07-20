@@ -3320,7 +3320,11 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
 
 function openLeaveRequestModal(presetEmployeeId, categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie));
+  // §15/§24 : un type marqué "saisie réservée aux RH" (ex. Maladie) ne doit pas être proposé à qui
+  // n'a pas SAISIR_MALADIE — sinon un salarié pourrait se déclarer lui-même en arrêt maladie alors
+  // que le cahier des charges l'attribue exclusivement au service RH.
+  const canSaisirRestreint = hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE);
+  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) && (t.saisiParSalarie || canSaisirRestreint));
   state.pendingAttachment = null;
 
   const html = `
@@ -3443,6 +3447,14 @@ function submitLeaveRequestForm(evt) {
 
   const employee = employeeRepository.getById(employeeId);
   const type = DB.getLeaveTypeById(typeId);
+
+  // §15/§24 : ne fait pas confiance au seul filtrage du menu déroulant (contournable en modifiant
+  // le DOM) — revérifie ici que l'utilisateur courant a le droit de saisir ce type restreint.
+  if (!type.saisiParSalarie && !hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE)) {
+    showToast(`La saisie du type « ${type.nom} » est réservée aux RH.`, 'error');
+    return;
+  }
+
   const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee.joursTravailles);
 
   if (nbJours <= 0) {
@@ -3616,6 +3628,11 @@ function bindCongesTypesEvents(categorie = 'conge') {
 function openLeaveTypeModal(id, categorie = 'conge') {
   const isEdit = Boolean(id);
   const type = isEdit ? DB.getLeaveTypeById(id) : Object.assign(makeEmptyLeaveType(), { workflow: DB.getSettings().workflowCongesDefault, categorie });
+  // En édition, la catégorie du type lui-même fait foi plutôt que le paramètre reçu — l'appelant
+  // (bouton "Modifier") ne le passait pas toujours correctement, ce qui renvoyait vers le mauvais
+  // écran ("Congés" au lieu d'"Autres absences") après enregistrement. Ne dépend plus du contexte
+  // d'ouverture, seulement de la donnée réelle du type.
+  const effectiveCategorie = isEdit ? type.categorie : categorie;
 
   const html = `
     <div class="modal modal-large">
@@ -3663,6 +3680,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               ${checkboxField('justificatifObligatoire', 'Justificatif obligatoire', type.justificatifObligatoire)}
               ${checkboxField('visibleSalarie', 'Visible par le salarié', type.visibleSalarie)}
               ${checkboxField('visibleRH', 'Visible par les RH', type.visibleRH)}
+              ${checkboxField('saisiParSalarie', 'Le salarié peut créer lui-même une demande (§15)', type.saisiParSalarie)}
               ${checkboxField('autoriserDemiJournee', 'Autoriser la demi-journée', type.autoriserDemiJournee)}
               ${checkboxField('autoriserPlusieursDemandes', 'Autoriser plusieurs demandes simultanées', type.autoriserPlusieursDemandes)}
               ${checkboxField('deduireRTT', 'Déduire du compteur RTT', type.deduireRTT)}
@@ -3686,7 +3704,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, categorie));
+  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie));
 }
 
 function checkboxField(name, label, checked) {
@@ -3704,7 +3722,7 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge') {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
-  const checkboxNames = ['paye', 'justificatifObligatoire', 'visibleSalarie', 'visibleRH', 'autoriserDemiJournee', 'autoriserPlusieursDemandes', 'deduireRTT', 'deduireCP', 'exportPaie', 'actif'];
+  const checkboxNames = ['paye', 'justificatifObligatoire', 'visibleSalarie', 'visibleRH', 'saisiParSalarie', 'autoriserDemiJournee', 'autoriserPlusieursDemandes', 'deduireRTT', 'deduireCP', 'exportPaie', 'actif'];
 
   if (Number(formData.get('nombreAnnuel')) < 0) {
     showToast('Le nombre de jours par an ne peut pas être négatif.', 'error');
