@@ -2690,6 +2690,7 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VOIR_COMPTEURS, label: 'Voir les compteurs de congés d\'un autre salarié' },
     { key: PERMISSIONS.MODIFIER_COMPTEURS, label: 'Ajuster manuellement un compteur de congés' },
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
+    { key: PERMISSIONS.REFUSER_ABSENCE, label: 'Refuser une absence (congé ou télétravail)' },
     { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
     { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
     { key: PERMISSIONS.CONTROLER_NOTE_FRAIS, label: 'Contrôler une note de frais (étape non finale du circuit)' },
@@ -3223,11 +3224,10 @@ function renderRequestStatutBadge(r) {
  * jamais l'élargir à une autre étape — sinon on recrée le même bypass company-wide déjà corrigé pour
  * VALIDER_ABSENCE/VALIDER_NOTE_FRAIS chez le manager.
  */
-function canActOnRequestFor(request, domain = 'absence') {
-  const user = DB.getCurrentUser();
-  if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
-  if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
-  if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
+/** Étape de workflow en cours (rôle courant + équipe le cas échéant + granularité frais), SANS bypass —
+ * factorisé entre canActOnRequestFor (Valider) et canRefuserRequestFor (Refuser) ci-dessous, qui ne
+ * diffèrent que par la permission de bypass consultée avant d'en arriver là. */
+function isCurrentWorkflowStepFor(request, user, domain) {
   const requiredRole = request.workflow[request.etapeIndex];
   if (user.role !== requiredRole) return false;
   if (domain === 'frais') {
@@ -3239,6 +3239,26 @@ function canActOnRequestFor(request, domain = 'absence') {
     return Boolean(emp && (emp.managerIds || []).includes(user.id));
   }
   return true;
+}
+
+function canActOnRequestFor(request, domain = 'absence') {
+  const user = DB.getCurrentUser();
+  if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
+  if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
+  if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
+  return isCurrentWorkflowStepFor(request, user, domain);
+}
+
+/** Refuser une demande (§8) : REFUSER_ABSENCE est une permission distincte de VALIDER_ABSENCE pour
+ * congés/télétravail — un Directeur peut ainsi accorder (ou retirer) le droit de refuser
+ * indépendamment de celui de valider. Pas de permission "refuser une note de frais" distincte au
+ * catalogue : même règle que Valider pour le domaine 'frais'. */
+function canRefuserRequestFor(request, domain = 'absence') {
+  const user = DB.getCurrentUser();
+  if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
+  if (request.employeeId === user.id) return false;
+  if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.REFUSER_ABSENCE)) return true;
+  return isCurrentWorkflowStepFor(request, user, domain);
 }
 
 /** Pour les actions post-validation (ex. Annuler) qui ne dépendent plus de l'étape de workflow.
@@ -3257,10 +3277,10 @@ function canManageRequestFor(employeeId, domain = 'absence') {
 
 function renderRequestActions(r, type) {
   if (r.statut === 'En attente') {
-    return canActOnRequestFor(r) ? `
-      <button class="btn-link" data-approve="${r.id}">Valider</button>
-      <button class="btn-link btn-link-danger" data-refuse="${r.id}">Refuser</button>
-    ` : '';
+    return `
+      ${canActOnRequestFor(r) ? `<button class="btn-link" data-approve="${r.id}">Valider</button>` : ''}
+      ${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse="${r.id}">Refuser</button>` : ''}
+    `;
   }
   if (r.statut === 'Validé') {
     // §24 : "Prolonger l'arrêt" — réservé aux types "saisie réservée RH" (maladie et assimilés,
@@ -5241,7 +5261,7 @@ function renderTeleworkRequestRow(r) {
 
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}`;
   const actions = r.statut === 'En attente'
-    ? (canActOnRequestFor(r) ? `<button class="btn-link" data-approve-tt="${r.id}">Valider</button><button class="btn-link btn-link-danger" data-refuse-tt="${r.id}">Refuser</button>` : '')
+    ? `${canActOnRequestFor(r) ? `<button class="btn-link" data-approve-tt="${r.id}">Valider</button>` : ''}${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse-tt="${r.id}">Refuser</button>` : ''}`
     : r.statut === 'Validé' && canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel-tt="${r.id}">Annuler</button>` : '';
 
   return `
@@ -5633,7 +5653,7 @@ function renderExpenseRow(n) {
   if (!employee) return '';
 
   const actions = n.statut === 'En attente'
-    ? (canActOnRequestFor(n, 'frais') ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button><button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : '')
+    ? `${canActOnRequestFor(n, 'frais') ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button>` : ''}${canRefuserRequestFor(n, 'frais') ? `<button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : ''}`
     : n.statut === 'Remboursé' && canManageRequestFor(n.employeeId, 'frais') ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : '';
 
   return `
