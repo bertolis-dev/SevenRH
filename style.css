@@ -679,10 +679,18 @@ p { margin: 0; line-height: 1.5; }
 }
 
 .balance-card {
+  position: relative;
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--type-color, var(--color-primary));
   border-radius: var(--radius-sm);
   padding: 12px 14px;
+}
+
+.balance-adjust-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 13px;
 }
 
 .balance-icon { font-size: 16px; margin-bottom: 4px; }

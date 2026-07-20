@@ -2651,7 +2651,9 @@ function renderEmployeeDetail(id) {
             <button class="btn btn-secondary btn-sm" id="btn-request-telework">Demander du télétravail</button>
           </div>
         </div>
-        ${renderEmployeeBalances(e)}
+        ${user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)
+          ? renderEmployeeBalances(e, user.id !== e.id && hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS))
+          : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
       </div>
 
       ${renderConfidentialEmployeeCard(e, user)}
@@ -2680,6 +2682,8 @@ function renderPermissionsCard(e, user) {
   const wired = [
     { key: PERMISSIONS.VOIR_SALARIES, label: 'Voir les salariés' },
     { key: PERMISSIONS.VOIR_EQUIPE, label: 'Voir son équipe' },
+    { key: PERMISSIONS.VOIR_COMPTEURS, label: 'Voir les compteurs de congés d\'un autre salarié' },
+    { key: PERMISSIONS.MODIFIER_COMPTEURS, label: 'Ajuster manuellement un compteur de congés' },
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
     { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
     { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
@@ -2752,7 +2756,7 @@ function renderConfidentialEmployeeCard(e, user) {
   `;
 }
 
-function renderEmployeeBalances(employee) {
+function renderEmployeeBalances(employee, canAdjust = false) {
   const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
@@ -2764,15 +2768,65 @@ function renderEmployeeBalances(employee) {
         const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
         return `
           <div class="balance-card" style="--type-color:${escapeHtml(t.couleur)}">
+            ${canAdjust ? `<button type="button" class="btn-link balance-adjust-btn" data-adjust-compteur="${t.id}" title="Ajuster ce compteur">✎</button>` : ''}
             <div class="balance-icon">${escapeHtml(t.icone)}</div>
             <div class="balance-name">${escapeHtml(t.nom)}</div>
             <div class="balance-value">${disponibleLabel}</div>
-            <div class="balance-sub">disponible${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}</div>
+            <div class="balance-sub">disponible${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}${balance.ajustement ? ` · ajustement ${balance.ajustement >= 0 ? '+' : ''}${formatDurationFR(balance.ajustement)}` : ''}</div>
           </div>
         `;
       }).join('')}
     </div>
   `;
+}
+
+function openAjusterCompteurModal(employeeId, typeId) {
+  const employee = employeeRepository.getById(employeeId);
+  const type = DB.getLeaveTypeById(typeId);
+  const current = (employee.compteurs && employee.compteurs[typeId]) || 0;
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Ajuster le compteur — ${escapeHtml(type.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="adjust-compteur-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
+          <div class="form-field">
+            <label for="f-montant">Ajustement (jours, + ou -) *</label>
+            <input class="input" type="number" id="f-montant" name="montant" step="0.5" value="${current}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. reliquat repris de l'ancien SIRH">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('adjust-compteur-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const montant = document.getElementById('f-montant').value;
+    const motif = document.getElementById('f-motif').value;
+    const result = employeeRepository.ajusterCompteur(employeeId, typeId, montant, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Compteur ajusté.');
+    closeModal();
+    render();
+  });
 }
 
 function infoRow(label, value) {
@@ -2876,6 +2930,10 @@ function bindEmployeeDetailEvents() {
 
   document.getElementById('btn-request-leave').addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId, 'conge'));
   document.getElementById('btn-request-telework').addEventListener('click', () => openTeleworkRequestModal(state.currentEmployeeId));
+
+  document.querySelectorAll('[data-adjust-compteur]').forEach(btn => {
+    btn.addEventListener('click', () => openAjusterCompteurModal(state.currentEmployeeId, btn.dataset.adjustCompteur));
+  });
 
   const archiveBtn = document.getElementById('btn-archive-employee');
   if (archiveBtn) archiveBtn.addEventListener('click', () => {

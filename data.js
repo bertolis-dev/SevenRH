@@ -980,6 +980,24 @@ const DB = {
     return { success: true, request: list[index] };
   },
 
+  /** Ajustement manuel du compteur d'un salarié pour un type de congé donné (§ MODIFIER_COMPTEURS) —
+   * s'ajoute (ou se retranche, si négatif) au calcul automatique dans getLeaveBalance(). Remplace la
+   * valeur précédente pour ce type (pas un cumul) : le formulaire affiche toujours l'ajustement courant. */
+  ajusterCompteurConge(employeeId, typeId, montant, motif) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const type = this.getLeaveTypeById(typeId);
+    if (!type) return { success: false, error: 'Type de congé introuvable.' };
+    const value = Number(montant);
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Le montant doit être un nombre.' };
+    }
+    const compteurs = Object.assign({}, employee.compteurs, { [typeId]: value });
+    this.updateEmployee(employeeId, { compteurs });
+    this.logAudit('Modification', 'Compteur congé', `${employee.prenom} ${employee.nom} · ${type.nom} · ajustement ${value >= 0 ? '+' : ''}${formatNumberFR(value)} j${motif ? ' · ' + motif : ''}`);
+    return { success: true };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1351,7 +1369,8 @@ const employeeRepository = {
   create: (data) => DB.addEmployee(data),
   update: (id, patch) => DB.updateEmployee(id, patch),
   archive: (id, archived = true) => DB.setArchived(id, archived),
-  delete: (id) => DB.deleteEmployee(id)
+  delete: (id) => DB.deleteEmployee(id),
+  ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif)
 };
 
 const leaveRepository = {
@@ -1915,16 +1934,21 @@ function calculateAcquisition(employee, leaveType, refDate) {
   return round2(annualAmount * prorata * activityRatio);
 }
 
-/** Solde d'un salarié pour un type de congé : acquis, pris, en attente, disponible. */
+/** Solde d'un salarié pour un type de congé : acquis, pris, en attente, disponible.
+ * `employee.compteurs` (§ MODIFIER_COMPTEURS) porte un ajustement manuel optionnel par type de
+ * congé (jours en plus ou en moins du calcul automatique — ex. reliquat repris d'un ancien SIRH,
+ * correction d'erreur) : voir DB.ajusterCompteurConge(). Champ présent dans le schéma depuis le
+ * début mais jamais lu avant ce câblage. */
 function getLeaveBalance(employee, leaveType, allRequests) {
   const acquis = calculateAcquisition(employee, leaveType);
+  const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
   const requests = allRequests.filter(r =>
     r.employeeId === employee.id && r.typeId === leaveType.id && r.statut !== 'Refusé' && r.statut !== 'Annulé'
   );
   const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
   const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
-  const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente);
-  return { acquis, pris, enAttente, disponible };
+  const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
+  return { acquis, pris, enAttente, disponible, ajustement };
 }
 
 // ---- Indicateurs du tableau de bord Directeur ----
