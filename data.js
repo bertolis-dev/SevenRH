@@ -1197,6 +1197,21 @@ const DB = {
   },
 
   login(email, password) {
+    // §36/§9.6 : une entreprise suspendue ou résiliée par BERTOLIS ne doit plus permettre la
+    // connexion. "Impayé" reste volontairement non bloquant (période de grâce implicite, comme la
+    // plupart des SaaS réels) — seuls suspendu/résilié bloquent. Ne touche à aucun compteur de
+    // tentatives échouées : ce n'est pas un mauvais mot de passe, c'est l'entreprise qui est bloquée.
+    const company = this.getCurrentCompany();
+    const statutAbonnement = company && company.abonnement && company.abonnement.statut;
+    if (statutAbonnement === 'suspendu' || statutAbonnement === 'resilie') {
+      return {
+        success: false,
+        error: statutAbonnement === 'resilie'
+          ? 'Cet abonnement a été résilié. Contactez BERTOLIS pour plus d\'informations.'
+          : 'Cet abonnement est actuellement suspendu. Contactez BERTOLIS pour plus d\'informations.'
+      };
+    }
+
     const list = this.getEmployees();
     const index = list.findIndex(e => e.email.toLowerCase() === (email || '').toLowerCase().trim());
     if (index === -1) return { success: false, error: 'Email ou mot de passe incorrect.' };
