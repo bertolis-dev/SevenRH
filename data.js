@@ -942,6 +942,36 @@ const DB = {
     return list[index];
   },
 
+  /** §24 : "Prolonger l'arrêt" — conserve le lien avec l'arrêt initial (même enregistrement,
+   * pas une nouvelle demande) et garde l'historique de chaque prolongation plutôt que d'écraser
+   * silencieusement l'ancienne date de fin. */
+  prolongerArretMaladie(id, nouvelleDateFin, justificatif) {
+    const list = this.getLeaveRequests();
+    const index = list.findIndex(r => r.id === id);
+    if (index === -1) return { success: false, error: 'Demande introuvable.' };
+    const request = list[index];
+    if (nouvelleDateFin <= request.dateFin) {
+      return { success: false, error: 'La nouvelle date de fin doit être après la date de fin actuelle.' };
+    }
+    const employee = this.getEmployeeById(request.employeeId);
+    const type = this.getLeaveTypeById(request.typeId);
+    const prolongations = (request.prolongations || []).concat([{
+      date: new Date().toISOString(),
+      ancienneDateFin: request.dateFin,
+      nouvelleDateFin,
+      justificatif: justificatif || null
+    }]);
+    list[index] = Object.assign({}, request, {
+      dateFin: nouvelleDateFin,
+      nbJours: computeWorkingDays(request.dateDebut, nouvelleDateFin, false, employee.joursTravailles),
+      prolongations,
+      dateModification: new Date().toISOString()
+    });
+    this.saveLeaveRequests(list);
+    this.logAudit('Modification', 'Prolongation arrêt', `${employee.prenom} ${employee.nom} · ${type.nom} · jusqu'au ${formatDate(nouvelleDateFin)}`);
+    return { success: true, request: list[index] };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1321,7 +1351,8 @@ const leaveRepository = {
   getById: (id) => DB.getLeaveRequestById(id),
   getForEmployee: (employeeId) => DB.getLeaveRequestsForEmployee(employeeId),
   create: (data) => DB.addLeaveRequest(data),
-  update: (id, patch) => DB.updateLeaveRequest(id, patch)
+  update: (id, patch) => DB.updateLeaveRequest(id, patch),
+  prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif)
 };
 
 const teleworkRepository = {

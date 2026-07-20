@@ -3131,12 +3131,65 @@ function renderRequestActions(r, type) {
     ` : '';
   }
   if (r.statut === 'Validé') {
+    // §24 : "Prolonger l'arrêt" — réservé aux types "saisie réservée RH" (maladie et assimilés,
+    // voir SS15) et à qui a la permission PROLONGER_MALADIE.
+    const canProlonger = !type.saisiParSalarie && hasPermission(DB.getCurrentUser(), PERMISSIONS.PROLONGER_MALADIE);
     return `
       <button class="btn-link" data-attestation="${r.id}">Attestation</button>
+      ${canProlonger ? `<button class="btn-link" data-prolonger="${r.id}">Prolonger</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel="${r.id}">Annuler</button>` : ''}
     `;
   }
   return '';
+}
+
+// ---- Modale : Prolonger un arrêt (§24) ----
+
+function openProlongerModal(requestId) {
+  const request = leaveRepository.getById(requestId);
+  const employee = employeeRepository.getById(request.employeeId);
+  const type = DB.getLeaveTypeById(request.typeId);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Prolonger l'arrêt</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="prolonger-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} · ${escapeHtml(type.nom)} · actuellement jusqu'au ${formatDate(request.dateFin)}</p>
+          ${textField('nouvelleDateFin', 'Nouvelle date de fin', '', true, 'date')}
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-prolongation-justificatif">Nouveau justificatif (optionnel)</label>
+            <input class="input" type="file" id="f-prolongation-justificatif">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Prolonger</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  state.pendingAttachment = null;
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('f-prolongation-justificatif').addEventListener('change', handleAttachmentChange);
+  document.getElementById('prolonger-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nouvelleDateFin = document.getElementById('f-nouvelleDateFin').value;
+    const result = leaveRepository.prolonger(requestId, nouvelleDateFin, state.pendingAttachment);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Arrêt prolongé.');
+    closeModal();
+    render();
+  });
 }
 
 function exportLeaveRequestsCSV(categorie = 'conge') {
@@ -3196,6 +3249,10 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   });
   document.querySelectorAll('[data-attestation]').forEach(btn => {
     btn.addEventListener('click', () => openLeaveAttestationModal(btn.dataset.attestation));
+  });
+
+  document.querySelectorAll('[data-prolonger]').forEach(btn => {
+    btn.addEventListener('click', () => openProlongerModal(btn.dataset.prolonger));
   });
 }
 
