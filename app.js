@@ -6243,6 +6243,15 @@ function submitEmployeeForm(evt, id) {
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: id });
   } else {
+    // §36 : plafond de salariés de l'offre BERTOLIS — ne s'applique qu'à la création, pas à
+    // l'édition (modifier un salarié existant ne change pas l'effectif).
+    const abonnement = DB.getCurrentCompany().abonnement;
+    const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
+    const nbActifs = employeeRepository.getAll().filter(e => !e.archive).length;
+    if (offre.nombreSalariesMax !== null && nbActifs >= offre.nombreSalariesMax) {
+      showToast(`Plafond de l'offre « ${offre.label} » atteint (${offre.nombreSalariesMax} salariés). Contactez BERTOLIS pour changer d'offre.`, 'error');
+      return;
+    }
     const created = employeeRepository.create(patch);
     showToast('Salarié créé.');
     closeModal();
