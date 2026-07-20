@@ -90,7 +90,9 @@ function getInitialViewState() {
     planningFilters: { service: '' },
     planningWeekOffset: 0,
     planningYear: new Date().getFullYear(),
-    planningMonth: new Date().getMonth()
+    planningMonth: new Date().getMonth(),
+    auditFilters: { action: '', search: '', dateDebut: '', dateFin: '' },
+    auditPage: 1
   };
 }
 
@@ -4943,24 +4945,51 @@ function bindParametresFeriesEvents() {
 
 // ---- Sous-vue : Journal d'audit (lecture seule) ----
 
+const AUDIT_ACTIONS = ['Création', 'Modification', 'Suppression', 'Validation', 'Refus', 'Annulation', 'Export', 'Connexion', 'Déconnexion'];
+
+/** Le journal complet peut atteindre 2000 entrées (cf. appendAuditLogEntry) : la recherche/les
+ * filtres sont indispensables pour retrouver un événement précis plutôt que de ne montrer que les
+ * 200 plus récents sans aucun moyen d'aller plus loin. */
+function getFilteredAuditLog() {
+  const filters = state.auditFilters;
+  let list = DB.getAuditLog();
+  if (filters.action) list = list.filter(e => e.action === filters.action);
+  if (filters.dateDebut) list = list.filter(e => toISODate(new Date(e.date)) >= filters.dateDebut);
+  if (filters.dateFin) list = list.filter(e => toISODate(new Date(e.date)) <= filters.dateFin);
+  const term = (filters.search || '').trim().toLowerCase();
+  if (term) list = list.filter(e => `${e.entite} ${e.cible} ${e.details || ''}`.toLowerCase().includes(term));
+  return list;
+}
+
 function renderParametresAudit() {
-  const log = DB.getAuditLog();
-  const visible = log.slice(0, 200);
+  const filters = state.auditFilters;
+  const total = DB.getAuditLog().length;
+  const log = getFilteredAuditLog();
+  const { pageItems, totalPages, page, pageStart } = paginate(log, 'auditPage');
 
   return `
     <div class="card table-card">
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Journal d'audit</h2>
-          <p class="text-muted">${log.length} événement${log.length > 1 ? 's' : ''} enregistré${log.length > 1 ? 's' : ''}</p>
+          <p class="text-muted">${log.length} événement${log.length > 1 ? 's' : ''} sur ${total} au total</p>
         </div>
         <button class="btn btn-secondary btn-sm" id="btn-export-audit">Exporter CSV</button>
       </div>
-      ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun événement pour le moment.</p></div>` : `
+      <div class="toolbar card" style="margin: 12px 20px 0;">
+        <input type="text" id="audit-filter-search" class="input" placeholder="Rechercher (entité, cible, détails)..." value="${escapeHtml(filters.search)}">
+        <select id="audit-filter-action" class="input">
+          <option value="">Toutes les actions</option>
+          ${AUDIT_ACTIONS.map(a => `<option value="${a}" ${filters.action === a ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+        <input type="date" id="audit-filter-date-debut" class="input" value="${escapeHtml(filters.dateDebut)}" title="Depuis le">
+        <input type="date" id="audit-filter-date-fin" class="input" value="${escapeHtml(filters.dateFin)}" title="Jusqu'au">
+      </div>
+      ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun événement ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th></tr></thead>
           <tbody>
-            ${visible.map(entry => `
+            ${pageItems.map(entry => `
               <tr>
                 <td>${formatDateTime(entry.date)}</td>
                 <td>${auditActionBadge(entry.action)}</td>
@@ -4970,7 +4999,7 @@ function renderParametresAudit() {
             `).join('')}
           </tbody>
         </table>
-        ${log.length > visible.length ? `<p class="text-muted" style="padding: 12px 20px;">Affichage limité aux ${visible.length} événements les plus récents (${log.length} au total).</p>` : ''}
+        ${renderPaginationControls(page, totalPages, pageStart, pageItems.length, log.length)}
       `}
     </div>
   `;
@@ -4983,10 +5012,39 @@ function auditActionBadge(action) {
 
 function bindParametresAuditEvents() {
   document.getElementById('btn-export-audit').addEventListener('click', exportAuditLogCSV);
+
+  document.getElementById('audit-filter-search').addEventListener('input', (e) => {
+    state.auditFilters.search = e.target.value;
+    state.auditPage = 1;
+    render();
+    document.getElementById('audit-filter-search').focus();
+    const pos = e.target.selectionStart;
+    document.getElementById('audit-filter-search').setSelectionRange(pos, pos);
+  });
+  document.getElementById('audit-filter-action').addEventListener('change', (e) => {
+    state.auditFilters.action = e.target.value;
+    state.auditPage = 1;
+    render();
+  });
+  document.getElementById('audit-filter-date-debut').addEventListener('change', (e) => {
+    state.auditFilters.dateDebut = e.target.value;
+    state.auditPage = 1;
+    render();
+  });
+  document.getElementById('audit-filter-date-fin').addEventListener('change', (e) => {
+    state.auditFilters.dateFin = e.target.value;
+    state.auditPage = 1;
+    render();
+  });
+
+  const prevBtn = document.getElementById('btn-page-prev');
+  if (prevBtn) prevBtn.addEventListener('click', () => { state.auditPage -= 1; render(); });
+  const nextBtn = document.getElementById('btn-page-next');
+  if (nextBtn) nextBtn.addEventListener('click', () => { state.auditPage += 1; render(); });
 }
 
 function exportAuditLogCSV() {
-  const log = DB.getAuditLog();
+  const log = getFilteredAuditLog();
   const headers = ['Date', 'Action', 'Entité', 'Cible', 'Détails'];
   const rows = log.map(e => [formatDateTime(e.date), e.action, e.entite, e.cible, e.details]);
   exportRowsToCSV(headers, rows, 'journal-audit.csv');
