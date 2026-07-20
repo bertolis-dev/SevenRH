@@ -109,7 +109,7 @@ const NAV_ITEMS = [
   { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'] },
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'] },
-  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'] },
+  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT] },
   { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE] },
   { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] }
 ];
@@ -2693,6 +2693,8 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
     { key: PERMISSIONS.GERER_ABONNEMENTS, label: 'Voir/gérer l\'abonnement de l\'entreprise' },
     { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
+    { key: PERMISSIONS.CALCULER_TICKETS_RESTAURANT, label: 'Accéder aux tickets restaurant' },
+    { key: PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, label: 'Corriger manuellement les tickets restaurant' },
     { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
     { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
     { key: PERMISSIONS.ARCHIVER_SALARIE, label: 'Archiver un salarié' },
@@ -5882,6 +5884,7 @@ function getTicketsRows() {
 function renderTickets() {
   const settings = DB.getSettings();
   const rows = getTicketsRows();
+  const canCorriger = hasPermission(DB.getCurrentUser(), PERMISSIONS.CORRIGER_TICKETS_RESTAURANT);
   const totals = rows.reduce((acc, r) => ({
     nbTickets: acc.nbTickets + r.result.nbTickets,
     montantTotal: acc.montantTotal + r.result.montantTotal,
@@ -5912,21 +5915,73 @@ function renderTickets() {
 
     <div class="card table-card">
       <table class="table">
-        <thead><tr><th>Salarié</th><th>Tickets</th><th>Montant total</th><th>Part employeur</th><th>Part salarié</th></tr></thead>
+        <thead><tr><th>Salarié</th><th>Tickets</th><th>Montant total</th><th>Part employeur</th><th>Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
               <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
-              <td>${r.result.nbTickets}</td>
+              <td>${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
               <td>${formatCurrencyFR(r.result.montantTotal)}</td>
               <td>${formatCurrencyFR(r.result.partEmployeur)}</td>
               <td>${formatCurrencyFR(r.result.partSalarie)}</td>
+              ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
         </tbody>
       </table>
     </div>
   `;
+}
+
+function openCorrigerTicketsModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  const year = state.ticketsYear;
+  const month = state.ticketsMonth;
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const current = (employee.ticketsAjustements && employee.ticketsAjustements[monthKey]) || 0;
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Corriger les tickets — ${MONTH_NAMES[month]} ${year}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="corriger-tickets-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.</p>
+          <div class="form-field">
+            <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
+            <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. jour férié local non reconnu">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('corriger-tickets-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const delta = document.getElementById('f-delta').value;
+    const motif = document.getElementById('f-motif').value;
+    const result = employeeRepository.ajusterTickets(employeeId, year, month, delta, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Correction enregistrée.');
+    closeModal();
+    render();
+  });
 }
 
 function bindTicketsEvents() {
@@ -5939,6 +5994,10 @@ function bindTicketsEvents() {
     render();
   });
   document.getElementById('btn-export-tickets').addEventListener('click', exportTicketsCSV);
+
+  document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
+    btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.corrigerTickets));
+  });
 }
 
 function shiftTicketsMonth(delta) {

@@ -118,7 +118,10 @@ const DEFAULT_ROLE_PERMISSIONS = {
   comptabilite: [
     PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
     PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL,
-    PERMISSIONS.CONTROLER_NOTE_FRAIS, PERMISSIONS.MARQUER_NOTE_REMBOURSEE
+    PERMISSIONS.CONTROLER_NOTE_FRAIS, PERMISSIONS.MARQUER_NOTE_REMBOURSEE,
+    // Sans CORRIGER_TICKETS_RESTAURANT : la Comptabilité consulte/exporte les tickets restaurant mais
+    // ne corrige pas manuellement le calcul (réservé à RH/Directeur, cf. les compteurs de congés).
+    PERMISSIONS.CALCULER_TICKETS_RESTAURANT
   ],
   directeur: Object.values(PERMISSIONS)
 };
@@ -998,6 +1001,21 @@ const DB = {
     return { success: true };
   },
 
+  /** Correction manuelle du nombre de tickets restaurant d'un salarié pour un mois donné
+   * (§ CORRIGER_TICKETS_RESTAURANT) — remplace la correction précédente pour ce mois (pas un cumul). */
+  ajusterTicketsRestaurant(employeeId, year, month, delta, motif) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const value = Number(delta);
+    if (!Number.isInteger(value)) {
+      return { success: false, error: 'La correction doit être un nombre entier de tickets.' };
+    }
+    const ticketsAjustements = Object.assign({}, employee.ticketsAjustements, { [ticketsMonthKey(year, month)]: value });
+    this.updateEmployee(employeeId, { ticketsAjustements });
+    this.logAudit('Modification', 'Tickets restaurant', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · correction ${value >= 0 ? '+' : ''}${value}${motif ? ' · ' + motif : ''}`);
+    return { success: true };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1370,7 +1388,8 @@ const employeeRepository = {
   update: (id, patch) => DB.updateEmployee(id, patch),
   archive: (id, archived = true) => DB.setArchived(id, archived),
   delete: (id) => DB.deleteEmployee(id),
-  ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif)
+  ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
+  ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif)
 };
 
 const leaveRepository = {
@@ -1475,6 +1494,7 @@ function makeEmptyEmployee() {
     genre: '',
 
     compteurs: {},
+    ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
     dateCreation: null,
     dateModification: null,
 
@@ -1765,6 +1785,11 @@ function calculateIndemniteKilometrique(distanceKm, puissanceFiscale) {
  * des seules données réelles : jours travaillés, congés validés, télétravail validé et
  * jours fériés. Aucune saisie manuelle — uniquement paramétrable via les réglages.
  */
+/** Clé de mois utilisée par employee.ticketsAjustements (§ CORRIGER_TICKETS_RESTAURANT), ex. "2026-07". */
+function ticketsMonthKey(year, month) {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
 function calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = toISODate(new Date());
@@ -1796,10 +1821,16 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
     nbTickets += 1;
   }
 
+  // Correction manuelle (§ CORRIGER_TICKETS_RESTAURANT) : ex. jour férié local non reconnu par le
+  // calcul standard, déplacement professionnel sans droit à ticket... Remplace, n'ajoute pas, une
+  // éventuelle correction précédente pour ce même mois — voir DB.ajusterTicketsRestaurant().
+  const ajustement = (employee.ticketsAjustements && employee.ticketsAjustements[ticketsMonthKey(year, month)]) || 0;
+  nbTickets = Math.max(0, nbTickets + ajustement);
+
   const montantTotal = round2(nbTickets * settings.ticketsValeurFaciale);
   const partEmployeur = round2(montantTotal * settings.ticketsPartEmployeurPct / 100);
   const partSalarie = round2(montantTotal - partEmployeur);
-  return { nbTickets, montantTotal, partEmployeur, partSalarie };
+  return { nbTickets, montantTotal, partEmployeur, partSalarie, ajustement };
 }
 
 /**
