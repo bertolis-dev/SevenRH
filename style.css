@@ -159,6 +159,18 @@ p { margin: 0; line-height: 1.5; }
 
 .topbar-title { font-weight: 600; font-size: 14px; color: var(--color-text-muted); }
 
+/* Console BERTOLIS (§9.6) — écran séparé de l'app-shell salarié, pas de sidebar. */
+.bertolis-topbar {
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.bertolis-main { max-width: 1100px; margin: 0 auto; padding: 28px; }
+
 .topbar-search { position: relative; flex: 1; max-width: 480px; min-width: 0; }
 .topbar-search .input { width: 100%; }
 

@@ -137,7 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
   bindNotificationEvents();
   bindUserMenuEvents();
 
-  if (DB.isLoggedIn()) {
+  if (DB.isBertolisLoggedIn()) {
+    showBertolisConsole();
+  } else if (DB.isLoggedIn()) {
     showApp();
   } else {
     showLogin();
@@ -146,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showLogin() {
   document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('bertolis-root').style.display = 'none';
   document.getElementById('login-root').style.display = 'flex';
   // Remet le bouton de thème en position flottante (coin haut-droit) : il n'y a pas de topbar sur l'écran de connexion.
   const themeToggle = document.getElementById('btn-theme-toggle');
@@ -159,6 +162,7 @@ function showLogin() {
 function showApp() {
   Object.assign(state, getInitialViewState());
   document.getElementById('login-root').style.display = 'none';
+  document.getElementById('bertolis-root').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
   renderSidebar();
   renderUserMenuButton();
@@ -168,6 +172,84 @@ function showApp() {
   themeToggle.classList.add('theme-toggle-inline');
   document.querySelector('.topbar-user').prepend(themeToggle);
   navigateTo('dashboard');
+}
+
+/** Console BERTOLIS (§9.6, §36) — écran totalement séparé de l'app-shell salarié : pas de sidebar,
+ * pas de vues métier, uniquement la liste des entreprises clientes et la gestion des abonnements. */
+function showBertolisConsole() {
+  document.getElementById('login-root').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('bertolis-root').style.display = 'block';
+  renderBertolisConsole();
+}
+
+function renderBertolisConsole() {
+  const admin = DB.getCurrentBertolisAdmin();
+  const companies = DB.getAllCompaniesForBertolis();
+  const root = document.getElementById('bertolis-root');
+
+  root.innerHTML = `
+    <header class="bertolis-topbar">
+      <div class="login-logo"><span class="logo-mark">7</span> Seven RH <span class="badge badge-info">Console BERTOLIS</span></div>
+      <div>
+        <span class="text-muted">${escapeHtml(admin.prenom)} ${escapeHtml(admin.nom)}</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-bertolis-logout" style="margin-left: 10px;">Déconnexion</button>
+      </div>
+    </header>
+    <main class="bertolis-main">
+      <div class="view-header">
+        <h1>Entreprises clientes</h1>
+        <p class="view-subtitle">${companies.length} entreprise${companies.length > 1 ? 's' : ''} · aperçu limité aux métadonnées d'abonnement (§9.6 : aucune donnée RH sensible n'est accessible depuis cette console)</p>
+      </div>
+      <div class="card table-card">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Entreprise</th>
+              <th>Offre</th>
+              <th>Statut</th>
+              <th>Salariés</th>
+              <th>Établissements</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${companies.map(c => {
+              const offre = OFFRES_BERTOLIS[c.abonnement.offre] || OFFRES_BERTOLIS.essai;
+              const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted' }[c.abonnement.statut] || 'muted';
+              return `
+                <tr>
+                  <td>${escapeHtml(c.raisonSociale)}</td>
+                  <td>${escapeHtml(offre.label)}</td>
+                  <td><span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[c.abonnement.statut] || c.abonnement.statut)}</span></td>
+                  <td>${c.nombreSalaries}${offre.nombreSalariesMax !== null ? ` / ${offre.nombreSalariesMax}` : ''}</td>
+                  <td>${c.nombreEtablissements}</td>
+                  <td class="table-actions">
+                    <select class="input" data-bertolis-statut="${c.id}" style="width: auto;">
+                      ${Object.keys(ABONNEMENT_STATUT_LABELS).map(s => `<option value="${s}" ${c.abonnement.statut === s ? 'selected' : ''}>${escapeHtml(ABONNEMENT_STATUT_LABELS[s])}</option>`).join('')}
+                    </select>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  `;
+
+  document.getElementById('btn-bertolis-logout').addEventListener('click', () => {
+    DB.bertolisLogout();
+    showLogin();
+  });
+
+  document.querySelectorAll('[data-bertolis-statut]').forEach(select => {
+    select.addEventListener('change', (e) => {
+      DB.updateCompanyAbonnementStatut(e.target.dataset.bertolisStatut, e.target.value);
+      showToast('Statut de l\'abonnement mis à jour.');
+      renderBertolisConsole();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +264,8 @@ function renderLoginScreen() {
     root.innerHTML = renderForgotPasswordView();
   } else if (state.authView === 'reset') {
     root.innerHTML = renderResetPasswordView();
+  } else if (state.authView === 'bertolis') {
+    root.innerHTML = renderBertolisLoginView();
   } else {
     root.innerHTML = renderLoginView();
   }
@@ -227,6 +311,33 @@ function renderLoginView() {
           </button>
         `).join('')}
       </div>
+
+      <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
+    </div>
+  `;
+}
+
+/** Écran de connexion séparé de celui des salariés d'entreprise (§9.6) — voir
+ * DB.bertolisLogin()/showBertolisConsole(). */
+function renderBertolisLoginView() {
+  return `
+    <div class="login-card">
+      <div class="login-logo"><span class="logo-mark">7</span> Seven RH <span class="badge badge-info">BERTOLIS</span></div>
+      <h1>Accès éditeur</h1>
+      <p class="text-muted">Réservé à l'équipe BERTOLIS — gestion des entreprises clientes et des abonnements (§9.6). Ce n'est pas un compte salarié.</p>
+      <form id="bertolis-login-form">
+        <div class="form-field">
+          <label for="f-bertolis-email">Email</label>
+          <input class="input" type="email" id="f-bertolis-email" required autocomplete="username">
+        </div>
+        <div class="form-field">
+          <label for="f-bertolis-password">Mot de passe</label>
+          <input class="input" type="password" id="f-bertolis-password" required autocomplete="current-password">
+        </div>
+        ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Se connecter</button>
+      </form>
+      <button type="button" class="btn-link" id="btn-back-to-login">← Retour à la connexion</button>
     </div>
   `;
 }
@@ -325,6 +436,27 @@ function bindLoginScreenEvents() {
     state.authError = '';
     state.pendingReset = null;
     renderLoginScreen();
+  });
+
+  const bertolisBtn = document.getElementById('btn-bertolis-login');
+  if (bertolisBtn) bertolisBtn.addEventListener('click', () => {
+    state.authView = 'bertolis';
+    state.authError = '';
+    renderLoginScreen();
+  });
+
+  const bertolisForm = document.getElementById('bertolis-login-form');
+  if (bertolisForm) bertolisForm.addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const email = document.getElementById('f-bertolis-email').value;
+    const password = document.getElementById('f-bertolis-password').value;
+    const result = DB.bertolisLogin(email, password);
+    if (!result.success) {
+      state.authError = result.error;
+      renderLoginScreen();
+      return;
+    }
+    showBertolisConsole();
   });
 
   const backBtn = document.getElementById('btn-back-to-login');

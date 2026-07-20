@@ -12,6 +12,14 @@ const SESSION_KEY = 'sevenrh_session';
 const NOTIF_STORAGE_LIMIT = 500; // même logique que le Journal d'audit (borné à 2000) : évite une croissance illimitée du blob localStorage au fil des années
 
 /**
+ * Administrateur BERTOLIS (§9.6) — l'éditeur du logiciel, PAS un salarié d'une entreprise cliente.
+ * Stocké hors de ROOT_KEY (aucune entreprise ne le "possède") avec sa propre clé de session, pour
+ * qu'un accès BERTOLIS ne puisse jamais se confondre avec une session salarié d'entreprise.
+ */
+const BERTOLIS_ADMINS_KEY = 'sevenrh_bertolis_admins';
+const BERTOLIS_SESSION_KEY = 'sevenrh_bertolis_session';
+
+/**
  * Rôles disponibles et niveau d'accès associé. IMPORTANT — ceci est une simulation
  * de rôles côté navigateur, pas un vrai contrôle d'accès serveur : toute personne
  * ouvrant les outils de développement peut lire/modifier localStorage directement.
@@ -301,6 +309,21 @@ function migrateCompanyAbonnement(company) {
   return true;
 }
 
+/** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
+ * session) et toute action qui cible une entreprise précise sans que ce soit "l'entreprise
+ * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
+function appendAuditLogEntry(company, action, entite, cible, details) {
+  const list = company.auditLog || [];
+  list.push({
+    id: generateId('log'),
+    date: new Date().toISOString(),
+    action, entite,
+    cible: cible || '',
+    details: details || ''
+  });
+  company.auditLog = list.length > 2000 ? list.slice(list.length - 2000) : list;
+}
+
 const DB = {
   /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
   init() {
@@ -318,6 +341,69 @@ const DB = {
     const migratedLeaveCategories = companies.map(c => migrateLeaveTypeCategories(c)).some(Boolean);
     const migratedAbonnements = companies.map(c => migrateCompanyAbonnement(c)).some(Boolean);
     if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements) this.saveCompanies(companies);
+
+    if (localStorage.getItem(BERTOLIS_ADMINS_KEY) === null) {
+      localStorage.setItem(BERTOLIS_ADMINS_KEY, JSON.stringify([
+        { id: generateId('bertolis'), prenom: 'Admin', nom: 'BERTOLIS', email: 'admin@bertolis.fr', motDePasse: 'Bertolis1234' }
+      ]));
+    }
+  },
+
+  // ---- Administrateur BERTOLIS (§9.6) — hors périmètre entreprise, voir BERTOLIS_ADMINS_KEY ----
+
+  getBertolisAdmins() {
+    try { return JSON.parse(localStorage.getItem(BERTOLIS_ADMINS_KEY) || '[]'); }
+    catch (err) { return []; }
+  },
+
+  bertolisLogin(email, password) {
+    const admin = this.getBertolisAdmins().find(a => a.email.toLowerCase() === (email || '').toLowerCase().trim());
+    if (!admin || admin.motDePasse !== password) return { success: false, error: 'Email ou mot de passe incorrect.' };
+    sessionStorage.setItem(BERTOLIS_SESSION_KEY, JSON.stringify({ adminId: admin.id }));
+    return { success: true, admin };
+  },
+
+  bertolisLogout() {
+    sessionStorage.removeItem(BERTOLIS_SESSION_KEY);
+  },
+
+  getCurrentBertolisAdmin() {
+    let session;
+    try { session = JSON.parse(sessionStorage.getItem(BERTOLIS_SESSION_KEY) || 'null'); }
+    catch (err) { return null; }
+    if (!session) return null;
+    return this.getBertolisAdmins().find(a => a.id === session.adminId) || null;
+  },
+
+  isBertolisLoggedIn() {
+    return this.getCurrentBertolisAdmin() !== null;
+  },
+
+  /** §9.6 : l'administrateur BERTOLIS ne doit JAMAIS consulter librement les données RH sensibles
+   * des clients — ce résumé n'expose donc que des métadonnées (nom, offre, statut, effectif compté,
+   * jamais la liste des salariés ni leurs données). */
+  getAllCompaniesForBertolis() {
+    return this.getCompanies().map(c => ({
+      id: c.id,
+      raisonSociale: c.raisonSociale,
+      abonnement: c.abonnement || makeEmptyAbonnement(),
+      nombreSalaries: c.employees.filter(e => !e.archive).length,
+      nombreEtablissements: (c.etablissements || []).length
+    }));
+  },
+
+  /** Seule action de gestion construite pour l'instant (§36 : activer/suspendre/résilier). Journalisée
+   * dans le journal d'audit DE L'ENTREPRISE CONCERNÉE, pas un journal BERTOLIS séparé — pour rester
+   * "visible par le client" (§9.6), même si ce n'est pas un accès aux données RH à proprement parler. */
+  updateCompanyAbonnementStatut(companyId, statut) {
+    const companies = this.getCompanies();
+    const company = companies.find(c => c.id === companyId);
+    if (!company) return { success: false, error: 'Entreprise introuvable.' };
+    company.abonnement = Object.assign({}, company.abonnement, { statut });
+    appendAuditLogEntry(company, 'Modification', 'Abonnement',
+      `Statut changé en « ${ABONNEMENT_STATUT_LABELS[statut] || statut} »`, 'Par l\'administrateur BERTOLIS');
+    this.saveCompanies(companies);
+    return { success: true };
   },
 
   // ---- Multi-entreprise ----
@@ -995,15 +1081,7 @@ const DB = {
   /** Historique borné (2000 entrées) pour ne pas saturer le localStorage indéfiniment. */
   logAudit(action, entite, cible, details) {
     const company = this.getCurrentCompany();
-    const list = company.auditLog;
-    list.push({
-      id: generateId('log'),
-      date: new Date().toISOString(),
-      action, entite,
-      cible: cible || '',
-      details: details || ''
-    });
-    company.auditLog = list.length > 2000 ? list.slice(list.length - 2000) : list;
+    appendAuditLogEntry(company, action, entite, cible, details);
     this.saveCurrentCompany(company);
   },
 
