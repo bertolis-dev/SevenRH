@@ -64,6 +64,9 @@ function getInitialViewState() {
     congesTab: 'demandes',
     congesFilters: { employeeId: '', typeId: '', statut: '' },
     congesPage: 1,
+    autresAbsencesTab: 'demandes',
+    autresAbsencesFilters: { employeeId: '', typeId: '', statut: '' },
+    autresAbsencesPage: 1,
     pendingAttachment: null,
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
@@ -100,6 +103,7 @@ const NAV_ITEMS = [
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE] },
   { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'] },
   { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'] },
+  { key: 'autres-absences', label: 'Autres absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'] },
   { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
   { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'] },
   { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'] },
@@ -1171,6 +1175,10 @@ function render() {
     case 'conges':
       root.innerHTML = renderConges();
       bindCongesEvents();
+      break;
+    case 'autres-absences':
+      root.innerHTML = renderAutresAbsences();
+      bindAutresAbsencesEvents();
       break;
     case 'calendrier':
       root.innerHTML = renderCalendrier();
@@ -2698,7 +2706,7 @@ function bindEmployeeDetailEvents() {
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
 
-  document.getElementById('btn-request-leave').addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId));
+  document.getElementById('btn-request-leave').addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId, 'conge'));
   document.getElementById('btn-request-telework').addEventListener('click', () => openTeleworkRequestModal(state.currentEmployeeId));
 
   const archiveBtn = document.getElementById('btn-archive-employee');
@@ -2744,14 +2752,14 @@ function renderConges() {
   return `
     <div class="view-header">
       <h1>Congés</h1>
-      <p class="view-subtitle">Demandes, validations et types de congés paramétrables</p>
+      <p class="view-subtitle">Demandes, validations et types de congés payés/RTT/ancienneté (§14)</p>
     </div>
     <div class="tabs">
       <button class="tab ${state.congesTab === 'demandes' ? 'active' : ''}" data-conges-tab="demandes">Demandes</button>
       <button class="tab ${state.congesTab === 'types' ? 'active' : ''}" data-conges-tab="types">Types de congés</button>
     </div>
     <div id="conges-tab-content">
-      ${state.congesTab === 'types' ? renderCongesTypes() : renderCongesDemandes()}
+      ${state.congesTab === 'types' ? renderCongesTypes('conge') : renderCongesDemandes('conge')}
     </div>
   `;
 }
@@ -2765,29 +2773,70 @@ function bindCongesEvents() {
   });
 
   if (state.congesTab === 'types') {
-    bindCongesTypesEvents();
+    bindCongesTypesEvents('conge');
   } else {
-    bindCongesDemandesEvents();
+    bindCongesDemandesEvents('conge');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vue : Autres absences (§15) — même moteur que Congés, filtré par categorie
+// ---------------------------------------------------------------------------
+
+function renderAutresAbsences() {
+  return `
+    <div class="view-header">
+      <h1>Autres absences</h1>
+      <p class="view-subtitle">Maladie, événements familiaux et autres absences paramétrables (§15)</p>
+    </div>
+    <div class="tabs">
+      <button class="tab ${state.autresAbsencesTab === 'demandes' ? 'active' : ''}" data-autres-absences-tab="demandes">Demandes</button>
+      <button class="tab ${state.autresAbsencesTab === 'types' ? 'active' : ''}" data-autres-absences-tab="types">Types d'absence</button>
+    </div>
+    <div id="conges-tab-content">
+      ${state.autresAbsencesTab === 'types' ? renderCongesTypes('autre') : renderCongesDemandes('autre')}
+    </div>
+  `;
+}
+
+function bindAutresAbsencesEvents() {
+  document.querySelectorAll('[data-autres-absences-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.autresAbsencesTab = btn.dataset.autresAbsencesTab;
+      render();
+    });
+  });
+
+  if (state.autresAbsencesTab === 'types') {
+    bindCongesTypesEvents('autre');
+  } else {
+    bindCongesDemandesEvents('autre');
   }
 }
 
 // ---- Sous-vue : Demandes ----
 
-function getFilteredLeaveRequests() {
-  let list = leaveRepository.getAll();
+function getFilteredLeaveRequests(categorie = 'conge') {
+  const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
+  let list = leaveRepository.getAll().filter(r => {
+    const type = DB.getLeaveTypeById(r.typeId);
+    return type && type.categorie === categorie;
+  });
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(r => visibleIds.includes(r.employeeId));
-  if (state.congesFilters.employeeId) list = list.filter(r => r.employeeId === state.congesFilters.employeeId);
-  if (state.congesFilters.typeId) list = list.filter(r => r.typeId === state.congesFilters.typeId);
-  if (state.congesFilters.statut) list = list.filter(r => r.statut === state.congesFilters.statut);
+  if (filters.employeeId) list = list.filter(r => r.employeeId === filters.employeeId);
+  if (filters.typeId) list = list.filter(r => r.typeId === filters.typeId);
+  if (filters.statut) list = list.filter(r => r.statut === filters.statut);
   return list;
 }
 
-function renderCongesDemandes() {
+function renderCongesDemandes(categorie = 'conge') {
+  const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
+  const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
   const employees = getScopedEmployeesForFilters();
-  const types = DB.getLeaveTypes();
-  const requests = getFilteredLeaveRequests();
-  const { pageItems, totalPages, page, pageStart } = paginate(requests, 'congesPage');
+  const types = DB.getLeaveTypes().filter(t => t.categorie === categorie);
+  const requests = getFilteredLeaveRequests(categorie);
+  const { pageItems, totalPages, page, pageStart } = paginate(requests, pageKey);
 
   return `
     <div class="view-header-row">
@@ -2801,15 +2850,15 @@ function renderCongesDemandes() {
     <div class="toolbar card">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
-        ${employees.map(e => `<option value="${e.id}" ${state.congesFilters.employeeId === e.id ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+        ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
       </select>
       <select id="conges-filter-type" class="input">
         <option value="">Tous les types</option>
-        ${types.map(t => `<option value="${t.id}" ${state.congesFilters.typeId === t.id ? 'selected' : ''}>${escapeHtml(t.nom)}</option>`).join('')}
+        ${types.map(t => `<option value="${t.id}" ${filters.typeId === t.id ? 'selected' : ''}>${escapeHtml(t.nom)}</option>`).join('')}
       </select>
       <select id="conges-filter-statut" class="input">
         <option value="">Tous les statuts</option>
-        ${['En attente', 'Validé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${state.congesFilters.statut === s ? 'selected' : ''}>${s}</option>`).join('')}
+        ${['En attente', 'Validé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${filters.statut === s ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
     </div>
 
@@ -2925,8 +2974,8 @@ function renderRequestActions(r, type) {
   return '';
 }
 
-function exportLeaveRequestsCSV() {
-  const requests = getFilteredLeaveRequests();
+function exportLeaveRequestsCSV(categorie = 'conge') {
+  const requests = getFilteredLeaveRequests(categorie);
   const headers = ['Salarié', 'Type', 'Début', 'Fin', 'Jours', 'Payé', 'Statut'];
   const rows = requests.map(r => {
     const employee = employeeRepository.getById(r.employeeId);
@@ -2939,34 +2988,37 @@ function exportLeaveRequestsCSV() {
       r.statut
     ];
   });
-  exportRowsToCSV(headers, rows, 'conges.csv');
-  DB.logAudit('Export', 'Demandes de congé', `${requests.length} ligne${requests.length > 1 ? 's' : ''}`);
+  exportRowsToCSV(headers, rows, categorie === 'conge' ? 'conges.csv' : 'autres-absences.csv');
+  DB.logAudit('Export', categorie === 'conge' ? 'Demandes de congé' : 'Demandes d\'autre absence', `${requests.length} ligne${requests.length > 1 ? 's' : ''}`);
 }
 
-function bindCongesDemandesEvents() {
-  document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal());
-  document.getElementById('btn-export-conges').addEventListener('click', exportLeaveRequestsCSV);
+function bindCongesDemandesEvents(categorie = 'conge') {
+  const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
+  const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
+
+  document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
+  document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
 
   document.getElementById('conges-filter-employee').addEventListener('change', (e) => {
-    state.congesFilters.employeeId = e.target.value;
-    state.congesPage = 1;
+    filters.employeeId = e.target.value;
+    state[pageKey] = 1;
     render();
   });
   document.getElementById('conges-filter-type').addEventListener('change', (e) => {
-    state.congesFilters.typeId = e.target.value;
-    state.congesPage = 1;
+    filters.typeId = e.target.value;
+    state[pageKey] = 1;
     render();
   });
   document.getElementById('conges-filter-statut').addEventListener('change', (e) => {
-    state.congesFilters.statut = e.target.value;
-    state.congesPage = 1;
+    filters.statut = e.target.value;
+    state[pageKey] = 1;
     render();
   });
 
   const congesPrevBtn = document.getElementById('btn-page-prev');
-  if (congesPrevBtn) congesPrevBtn.addEventListener('click', () => { state.congesPage -= 1; render(); });
+  if (congesPrevBtn) congesPrevBtn.addEventListener('click', () => { state[pageKey] -= 1; render(); });
   const congesNextBtn = document.getElementById('btn-page-next');
-  if (congesNextBtn) congesNextBtn.addEventListener('click', () => { state.congesPage += 1; render(); });
+  if (congesNextBtn) congesNextBtn.addEventListener('click', () => { state[pageKey] += 1; render(); });
 
   document.querySelectorAll('[data-approve]').forEach(btn => {
     btn.addEventListener('click', () => handleApproveRequest(btn.dataset.approve));
@@ -3101,22 +3153,22 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
   return selectField('employeeId', 'Salarié', null, presetEmployeeId || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
 }
 
-function openLeaveRequestModal(presetEmployeeId) {
+function openLeaveRequestModal(presetEmployeeId, categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
+  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie));
   state.pendingAttachment = null;
 
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>Nouvelle demande de congé</h2>
+        <h2>${categorie === 'autre' ? 'Nouvelle demande d\'absence' : 'Nouvelle demande de congé'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
       </div>
       <form id="leave-request-form">
         <div class="modal-body">
           <div class="form-grid">
             ${employeeFieldForRequest(presetEmployeeId, employees)}
-            ${selectField('typeId', 'Type de congé', null, '', types.map(t => ({ value: t.id, label: `${t.icone} ${t.nom}` })))}
+            ${selectField('typeId', categorie === 'autre' ? 'Type d\'absence' : 'Type de congé', null, '', types.map(t => ({ value: t.id, label: `${t.icone} ${t.nom}` })))}
             ${textField('dateDebut', 'Date de début', '', true, 'date')}
             ${textField('dateFin', 'Date de fin', '', true, 'date')}
           </div>
@@ -3254,19 +3306,22 @@ function submitLeaveRequestForm(evt) {
     justificatif: state.pendingAttachment
   });
 
-  showToast('Demande de congé envoyée.');
+  showToast('Demande envoyée.');
   closeModal();
-  navigateTo('conges', { congesTab: 'demandes' });
+  if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
+  else navigateTo('autres-absences', { autresAbsencesTab: 'demandes' });
 }
 
 // ---- Sous-vue : Types de congés ----
 
-function renderCongesTypes() {
-  const types = DB.getLeaveTypes();
+function renderCongesTypes(categorie = 'conge') {
+  const types = DB.getLeaveTypes().filter(t => t.categorie === categorie);
+  const noun = categorie === 'conge' ? 'de congé' : 'd\'absence';
+  const plural = types.length > 1 ? 's' : '';
 
   return `
     <div class="view-header-row">
-      <p class="view-subtitle">${types.length} type${types.length > 1 ? 's' : ''} de congé configuré${types.length > 1 ? 's' : ''}</p>
+      <p class="view-subtitle">${types.length} type${plural} ${noun} configuré${plural}</p>
       <button class="btn btn-primary" id="btn-new-leave-type">+ Nouveau type</button>
     </div>
     <div class="card table-card">
@@ -3353,8 +3408,8 @@ function renderLeaveTypeRow(t) {
   `;
 }
 
-function bindCongesTypesEvents() {
-  document.getElementById('btn-new-leave-type').addEventListener('click', () => openLeaveTypeModal(null));
+function bindCongesTypesEvents(categorie = 'conge') {
+  document.getElementById('btn-new-leave-type').addEventListener('click', () => openLeaveTypeModal(null, categorie));
 
   document.querySelectorAll('[data-edit-type]').forEach(btn => btn.addEventListener('click', () => openLeaveTypeModal(btn.dataset.editType)));
   document.querySelectorAll('[data-duplicate-type]').forEach(btn => btn.addEventListener('click', () => {
@@ -3393,9 +3448,9 @@ function bindCongesTypesEvents() {
 
 // ---- Modale : Type de congé (création / édition) ----
 
-function openLeaveTypeModal(id) {
+function openLeaveTypeModal(id, categorie = 'conge') {
   const isEdit = Boolean(id);
-  const type = isEdit ? DB.getLeaveTypeById(id) : Object.assign(makeEmptyLeaveType(), { workflow: DB.getSettings().workflowCongesDefault });
+  const type = isEdit ? DB.getLeaveTypeById(id) : Object.assign(makeEmptyLeaveType(), { workflow: DB.getSettings().workflowCongesDefault, categorie });
 
   const html = `
     <div class="modal modal-large">
@@ -3466,7 +3521,7 @@ function openLeaveTypeModal(id) {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id));
+  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, categorie));
 }
 
 function checkboxField(name, label, checked) {
@@ -3480,7 +3535,7 @@ function checkboxField(name, label, checked) {
   `;
 }
 
-function submitLeaveTypeForm(evt, id) {
+function submitLeaveTypeForm(evt, id, categorie = 'conge') {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
@@ -3508,11 +3563,13 @@ function submitLeaveTypeForm(evt, id) {
     DB.updateLeaveType(id, patch);
     showToast('Type de congé mis à jour.');
   } else {
+    patch.categorie = categorie;
     DB.addLeaveType(patch);
     showToast('Type de congé créé.');
   }
   closeModal();
-  navigateTo('conges', { congesTab: 'types' });
+  if (categorie === 'conge') navigateTo('conges', { congesTab: 'types' });
+  else navigateTo('autres-absences', { autresAbsencesTab: 'types' });
 }
 
 // ---------------------------------------------------------------------------
