@@ -3706,6 +3706,11 @@ function submitLeaveRequestForm(evt) {
     }
   }
 
+  if (hasActiveRequestOverlap(teleworkRepository.getAll(), employeeId, dateDebut, dateFin)) {
+    showToast('Ce salarié a déjà une demande de télétravail active sur cette période.', 'error');
+    return;
+  }
+
   leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, nbJours,
     commentaire: formData.get('commentaire') || '',
@@ -5494,6 +5499,18 @@ function updateTeleworkQuotaHint() {
   hint.textContent = `Quota hebdomadaire : ${formatDurationFR(quota)}/semaine · déjà ${formatDurationFR(usedThisWeek)} utilisés cette semaine${nbJoursLabel}`;
 }
 
+/** Chevauchement actif (statut Validé ou En attente, comme le contrôle autoriserPlusieursDemandes)
+ * entre [dateDebut, dateFin] et une demande existante d'un AUTRE domaine (congé/absence <-> télétravail)
+ * pour le même salarié — on ne peut pas être à la fois en congé/absence et en télétravail le même jour.
+ * Le télétravail n'a pas de notion de demi-journée : la présence d'un congé ce jour-là, même en
+ * demi-journée, suffit à bloquer un télétravail (forcément journée entière) sur cette même date, et
+ * réciproquement. Utilisé par submitLeaveRequestForm et submitTeleworkRequestForm. */
+function hasActiveRequestOverlap(requests, employeeId, dateDebut, dateFin) {
+  return requests.some(r =>
+    r.employeeId === employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
+    r.dateDebut <= dateFin && r.dateFin >= dateDebut);
+}
+
 /** Semaine (lundi ISO) où la demande [dateDebut, dateFin] ferait dépasser le quota hebdomadaire, en tenant
  * compte des demandes déjà actives (Validé/En attente) ; ne compte que les jours travaillés de l'employé,
  * comme nbJours. Retourne null si aucun dépassement. */
@@ -5549,6 +5566,11 @@ function submitTeleworkRequestForm(evt) {
   const overQuota = findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota);
   if (overQuota) {
     showToast(`Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).`, 'error');
+    return;
+  }
+
+  if (hasActiveRequestOverlap(leaveRepository.getAll(), employeeId, dateDebut, dateFin)) {
+    showToast('Ce salarié a déjà une demande de congé/absence active sur cette période.', 'error');
     return;
   }
 
