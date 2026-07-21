@@ -1696,7 +1696,12 @@ function getTicketsCostTrend(employees) {
 
 function getUpcomingBirthdays(daysAhead = 60, employees) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateNaissance);
-  const today = new Date();
+  const now = new Date();
+  // Comparé à minuit (pas l'instant courant) : sinon, le jour de son anniversaire, `next` (calculé à
+  // minuit) est toujours "avant" `today` (l'heure qu'il est déjà) dès la première seconde passée
+  // minuit, ce qui le fait passer directement à l'année suivante — l'employé ne serait jamais détecté
+  // "aujourd'hui", et daysUntil serait faussé (fraction de journée) pour tous les autres cas aussi.
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
       const birth = new Date(e.dateNaissance);
@@ -3681,6 +3686,19 @@ function submitLeaveRequestForm(evt) {
   // le DOM) — revérifie ici que l'utilisateur courant a le droit de saisir ce type restreint.
   if (!type.saisiParSalarie && !hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE)) {
     showToast(`La saisie du type « ${type.nom} » est réservée aux RH.`, 'error');
+    return;
+  }
+
+  // Une demande hors de la période d'emploi fausserait le solde : calculateAcquisition borne déjà
+  // l'acquisition à [dateEmbauche, dateDepart], mais getLeaveBalance somme TOUTES les demandes
+  // Validé/En attente sans cette même borne — un congé avant l'embauche (ou après le départ) se
+  // déduirait d'un solde qui n'a jamais pu l'acquérir.
+  if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+    showToast(`La date de début ne peut pas être avant la date d'embauche (${formatDate(employee.dateEmbauche)}).`, 'error');
+    return;
+  }
+  if (employee.dateDepart && dateFin > employee.dateDepart) {
+    showToast(`La date de fin ne peut pas être après la date de départ (${formatDate(employee.dateDepart)}).`, 'error');
     return;
   }
 
@@ -6213,13 +6231,20 @@ function exportTicketsCSV() {
 // ---------------------------------------------------------------------------
 
 function getPaieRows(year, month) {
-  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthStart = `${monthStr}-01`;
+  const monthEnd = toISODate(new Date(year, month + 1, 0));
+  // Filtre sur la période d'emploi DU MOIS EXPORTÉ, pas sur le statut actuel du salarié : un export
+  // paie peut porter sur un mois passé, où un salarié aujourd'hui "Inactif"/déjà parti était encore
+  // présent — le filtrer sur son statut live lui aurait fait perdre toutes ses données de ce mois-là
+  // (congés, télétravail, notes de frais), pas seulement les jours après son départ.
+  const employees = employeeRepository.getAll().filter(e =>
+    !e.archive && e.dateEmbauche && e.dateEmbauche <= monthEnd && (!e.dateDepart || e.dateDepart >= monthStart));
   const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
   const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
   const settings = DB.getSettings();
-  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
   return employees.map(e => {
     const congesParType = leaveTypesExportables.map(t =>
@@ -6291,7 +6316,7 @@ function renderExportPaie() {
     </div>
 
     <div class="card table-card">
-      ${rows.length === 0 ? `<div class="empty-state"><div class="empty-icon">📤</div><p>Aucun salarié actif à exporter.</p></div>` : `
+      ${rows.length === 0 ? `<div class="empty-state"><div class="empty-icon">📤</div><p>Aucun salarié à exporter pour ce mois.</p></div>` : `
         <table class="table">
           <thead>
             <tr>
