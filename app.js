@@ -74,6 +74,7 @@ function getInitialViewState() {
     parametresFeriesYear: new Date().getFullYear(),
     teletravailTab: 'demandes',
     teletravailFilters: { employeeId: '', statut: '' },
+    teletravailPage: 1,
     teletravailWeekOffset: 0,
     fraisFilters: { employeeId: '', categorie: '', statut: '' },
     fraisPage: 1,
@@ -5301,6 +5302,7 @@ function getFilteredTeleworkRequests() {
 function renderTeletravailDemandes() {
   const employees = getScopedEmployeesForFilters();
   const requests = getFilteredTeleworkRequests();
+  const { pageItems, totalPages, page, pageStart } = paginate(requests, 'teletravailPage');
 
   return `
     <div class="view-header-row">
@@ -5323,8 +5325,9 @@ function renderTeletravailDemandes() {
       ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">💻</div><p>Aucune demande de télétravail.</p></div>` : `
         <table class="table">
           <thead><tr><th>Salarié</th><th>Période</th><th>Jours</th><th>Statut</th><th></th></tr></thead>
-          <tbody>${requests.map(renderTeleworkRequestRow).join('')}</tbody>
+          <tbody>${pageItems.map(renderTeleworkRequestRow).join('')}</tbody>
         </table>
+        ${renderPaginationControls(page, totalPages, pageStart, pageItems.length, requests.length)}
       `}
     </div>
   `;
@@ -5355,12 +5358,19 @@ function bindTeletravailDemandesEvents() {
 
   document.getElementById('tt-filter-employee').addEventListener('change', (e) => {
     state.teletravailFilters.employeeId = e.target.value;
+    state.teletravailPage = 1;
     render();
   });
   document.getElementById('tt-filter-statut').addEventListener('change', (e) => {
     state.teletravailFilters.statut = e.target.value;
+    state.teletravailPage = 1;
     render();
   });
+
+  const ttPrevBtn = document.getElementById('btn-page-prev');
+  if (ttPrevBtn) ttPrevBtn.addEventListener('click', () => { state.teletravailPage -= 1; render(); });
+  const ttNextBtn = document.getElementById('btn-page-next');
+  if (ttNextBtn) ttNextBtn.addEventListener('click', () => { state.teletravailPage += 1; render(); });
 
   document.querySelectorAll('[data-approve-tt]').forEach(btn => btn.addEventListener('click', () => handleApproveTelework(btn.dataset.approveTt)));
   document.querySelectorAll('[data-refuse-tt]').forEach(btn => btn.addEventListener('click', () => handleRefuseTelework(btn.dataset.refuseTt)));
