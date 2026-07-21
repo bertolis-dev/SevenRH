@@ -964,6 +964,16 @@ const DB = {
     if (nouvelleDateFin <= request.dateFin) {
       return { success: false, error: 'La nouvelle date de fin doit être après la date de fin actuelle.' };
     }
+    // Les jours nouvellement couverts par la prolongation doivent subir le même contrôle qu'à la
+    // création (cf. hasActiveRequestOverlap côté app.js) : sans ce contrôle, un télétravail approuvé
+    // APRÈS la création de l'arrêt (donc jamais vérifié contre lui) pourrait rester en conflit silencieux
+    // une fois l'arrêt prolongé sur cette même date.
+    const conflictingTelework = this.getTeleworkRequests().some(r =>
+      r.employeeId === request.employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
+      r.dateDebut <= nouvelleDateFin && r.dateFin >= request.dateFin);
+    if (conflictingTelework) {
+      return { success: false, error: 'Cette prolongation chevauche une demande de télétravail active pour ce salarié. Traitez-la d\'abord.' };
+    }
     const employee = this.getEmployeeById(request.employeeId);
     const type = this.getLeaveTypeById(request.typeId);
     const prolongations = (request.prolongations || []).concat([{
