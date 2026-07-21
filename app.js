@@ -539,6 +539,7 @@ function renderUserMenuPanel() {
       <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
     </div>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
+    <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
   `;
 
@@ -546,10 +547,51 @@ function renderUserMenuPanel() {
     document.getElementById('user-menu-panel').classList.remove('open');
     openChangePasswordModal();
   });
+  document.getElementById('btn-export-my-data').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    exportMyDataRGPD();
+  });
   document.getElementById('btn-logout').addEventListener('click', () => {
     DB.logout();
     showLogin();
   });
+}
+
+/** Droit d'accès/portabilité RGPD : export en libre-service de toutes les données personnelles
+ * du salarié connecté (sa fiche + ses demandes de congé/télétravail/notes de frais/documents),
+ * en format structuré lisible par machine (JSON). Exclut les champs de sécurité (mot de passe,
+ * historique de verrouillage, surcharges de permissions) et le contenu binaire des pièces jointes
+ * (juste leur nom) pour garder l'export lisible — ce ne sont pas des données que l'export RGPD
+ * doit exposer ou qui apportent une valeur dans ce format. */
+function exportMyDataRGPD() {
+  const user = DB.getCurrentUser();
+  const employee = employeeRepository.getById(user.id);
+  const { motDePasse, resetToken, tentativesEchouees, verrouille, permissionsOverrides, ...salarie } = employee;
+
+  const data = {
+    exportGenereLe: formatDateTime(new Date().toISOString()),
+    salarie,
+    conges: leaveRepository.getForEmployee(user.id),
+    teletravail: teleworkRepository.getForEmployee(user.id),
+    notesDeFrais: expenseRepository.getForEmployee(user.id).map(({ justificatif, ...n }) => n),
+    documents: documentRepository.getForEmployee(user.id).map(d => ({
+      categorie: d.categorie, nom: d.nom, dateExpiration: d.dateExpiration,
+      fichierJoint: d.fichier ? d.fichier.nom : null
+    }))
+  };
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mes-donnees-${employee.matricule || employee.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  DB.logAudit('Export', 'Données personnelles (RGPD)', `${employee.prenom} ${employee.nom} (auto-export)`);
+  showToast('Vos données ont été téléchargées.');
 }
 
 function openChangePasswordModal() {
