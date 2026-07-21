@@ -2690,11 +2690,73 @@ function renderEmployeeDetail(id) {
 
       ${renderConfidentialEmployeeCard(e, user)}
 
+      ${renderCompteCard(e, user)}
+
       ${renderPermissionsCard(e, user)}
 
       ${renderEmployeeDocumentsCard(e)}
     </div>
   `;
+}
+
+/** § GERER_UTILISATEURS : déverrouillage de compte et réinitialisation de mot de passe par un
+ * administrateur — jamais sur sa propre fiche (on gère son propre mot de passe via le menu
+ * utilisateur, DB.changePassword, qui exige de connaître l'ancien). */
+function renderCompteCard(e, user) {
+  if (!hasPermission(user, PERMISSIONS.GERER_UTILISATEURS) || user.id === e.id) return '';
+  return `
+    <div class="card">
+      <h2>Compte</h2>
+      <div class="badge-row" style="margin-bottom: 10px;">
+        <span class="badge badge-${e.verrouille ? 'warning' : 'success'}">${e.verrouille ? 'Verrouillé' : 'Actif'}</span>
+        ${e.tentativesEchouees ? `<span class="text-muted">${e.tentativesEchouees} tentative${e.tentativesEchouees > 1 ? 's' : ''} échouée${e.tentativesEchouees > 1 ? 's' : ''}</span>` : ''}
+      </div>
+      <div class="detail-header-actions">
+        ${e.verrouille ? '<button class="btn btn-secondary btn-sm" id="btn-deverrouiller-compte">Déverrouiller le compte</button>' : ''}
+        <button class="btn btn-secondary btn-sm" id="btn-forcer-mot-de-passe">Réinitialiser le mot de passe</button>
+      </div>
+    </div>
+  `;
+}
+
+function openForcerMotDePasseModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Réinitialiser le mot de passe</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="forcer-mdp-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — communiquez ce nouveau mot de passe au salarié par un autre moyen que cette application.</p>
+          <div class="form-field">
+            <label for="f-nouveau-mdp">Nouveau mot de passe (6 caractères minimum) *</label>
+            <input class="input" type="text" id="f-nouveau-mdp" name="nouveauMotDePasse" minlength="6" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Réinitialiser</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('forcer-mdp-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const result = employeeRepository.forcerMotDePasse(employeeId, document.getElementById('f-nouveau-mdp').value);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Mot de passe réinitialisé.');
+    closeModal();
+    render();
+  });
 }
 
 /** Surcharges individuelles (§8) pour les permissions déjà réellement câblées dans l'app — voir
@@ -2726,6 +2788,7 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
     { key: PERMISSIONS.GERER_ABONNEMENTS, label: 'Voir/gérer l\'abonnement de l\'entreprise' },
+    { key: PERMISSIONS.GERER_UTILISATEURS, label: 'Déverrouiller un compte / réinitialiser un mot de passe' },
     { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
     { key: PERMISSIONS.CALCULER_TICKETS_RESTAURANT, label: 'Accéder aux tickets restaurant' },
     { key: PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, label: 'Corriger manuellement les tickets restaurant' },
@@ -3009,6 +3072,16 @@ function bindEmployeeDetailEvents() {
   document.getElementById('btn-print-employee-fiche').addEventListener('click', () => openEmployeePrintModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
+
+  const deverrouillerBtn = document.getElementById('btn-deverrouiller-compte');
+  if (deverrouillerBtn) deverrouillerBtn.addEventListener('click', () => {
+    const result = employeeRepository.deverrouillerCompte(state.currentEmployeeId);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Compte déverrouillé.');
+    render();
+  });
+  const forcerMdpBtn = document.getElementById('btn-forcer-mot-de-passe');
+  if (forcerMdpBtn) forcerMdpBtn.addEventListener('click', () => openForcerMotDePasseModal(state.currentEmployeeId));
 
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));

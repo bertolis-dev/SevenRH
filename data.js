@@ -1040,6 +1040,31 @@ const DB = {
     return { success: true };
   },
 
+  /** § GERER_UTILISATEURS : débloque un compte verrouillé (5 tentatives échouées, cf. login()) sans
+   * changer son mot de passe — utile quand le salarié se souvient de son mot de passe mais a été
+   * bloqué par erreur (ex. faute de frappe répétée). */
+  deverrouillerCompte(employeeId) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    this.updateEmployee(employeeId, { verrouille: false, tentativesEchouees: 0 });
+    this.logAudit('Modification', 'Compte', `${employee.prenom} ${employee.nom} (déverrouillé)`);
+    return { success: true };
+  },
+
+  /** § GERER_UTILISATEURS : un RH/Directeur impose un nouveau mot de passe sans connaître l'ancien
+   * (contrairement à changePassword, en libre-service) — débloque aussi le compte au passage, comme
+   * resetPasswordWithToken (même effet final, chemin différent : ici pas de token, action directe). */
+  forcerNouveauMotDePasse(employeeId, newPassword) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' };
+    }
+    this.updateEmployee(employeeId, { motDePasse: newPassword, resetToken: null, tentativesEchouees: 0, verrouille: false });
+    this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom} (réinitialisé par un administrateur)`);
+    return { success: true };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1414,7 +1439,9 @@ const employeeRepository = {
   delete: (id) => DB.deleteEmployee(id),
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
   ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
-  majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data)
+  majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
+  deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
+  forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword)
 };
 
 const leaveRepository = {
