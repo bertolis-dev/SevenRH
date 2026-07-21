@@ -2051,11 +2051,11 @@ function calculateAbsenteeismRate(employees, leaveRequests, leaveTypes, year) {
 
 function getAgePyramidBuckets(employees) {
   const buckets = [
-    { label: '< 25 ans', min: 0, max: 24, hommes: 0, femmes: 0, total: 0 },
-    { label: '25-34 ans', min: 25, max: 34, hommes: 0, femmes: 0, total: 0 },
-    { label: '35-44 ans', min: 35, max: 44, hommes: 0, femmes: 0, total: 0 },
-    { label: '45-54 ans', min: 45, max: 54, hommes: 0, femmes: 0, total: 0 },
-    { label: '55 ans et +', min: 55, max: 999, hommes: 0, femmes: 0, total: 0 }
+    { label: '< 25 ans', min: 0, max: 24, hommes: 0, femmes: 0, autres: 0, total: 0 },
+    { label: '25-34 ans', min: 25, max: 34, hommes: 0, femmes: 0, autres: 0, total: 0 },
+    { label: '35-44 ans', min: 35, max: 44, hommes: 0, femmes: 0, autres: 0, total: 0 },
+    { label: '45-54 ans', min: 45, max: 54, hommes: 0, femmes: 0, autres: 0, total: 0 },
+    { label: '55 ans et +', min: 55, max: 999, hommes: 0, femmes: 0, autres: 0, total: 0 }
   ];
   employees.filter(e => e.statut === 'Actif' && e.dateNaissance).forEach(e => {
     const age = calculateAge(e.dateNaissance);
@@ -2065,6 +2065,9 @@ function getAgePyramidBuckets(employees) {
     bucket.total += 1;
     if (e.genre === 'Homme') bucket.hommes += 1;
     else if (e.genre === 'Femme') bucket.femmes += 1;
+    // "Autre" et genre non renseigné : comptés dans total (toujours) et ici, pour que la vue par
+    // genre (§ renderAgePyramidSVG) ne les fasse pas disparaître silencieusement du graphique.
+    else bucket.autres += 1;
   });
   return buckets;
 }
@@ -2073,11 +2076,15 @@ function getGenderBreakdown(employees) {
   const actifs = employees.filter(e => e.statut === 'Actif');
   const hommes = actifs.filter(e => e.genre === 'Homme').length;
   const femmes = actifs.filter(e => e.genre === 'Femme').length;
-  const nonRenseigne = actifs.length - hommes - femmes;
+  const autre = actifs.filter(e => e.genre === 'Autre').length;
+  const nonRenseigne = actifs.length - hommes - femmes - autre;
   const rows = [
     { label: 'Hommes', value: hommes, color: '#2563eb' },
     { label: 'Femmes', value: femmes, color: '#db2777' }
   ];
+  // Distingue "Autre" (choix explicite du salarié) de "Non renseigné" (champ jamais rempli) —
+  // les confondre sous une même étiquette effacerait un choix explicite de l'intéressé.
+  if (autre > 0) rows.push({ label: 'Autre', value: autre, color: '#7c3aed' });
   if (nonRenseigne > 0) rows.push({ label: 'Non renseigné', value: nonRenseigne, color: '#94a3b8' });
   return rows;
 }

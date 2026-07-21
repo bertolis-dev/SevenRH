@@ -1849,7 +1849,7 @@ function renderAgePyramidSVG(buckets, splitByGender) {
     return renderBarChartSVG(data);
   }
 
-  if (buckets.every(b => b.hommes === 0 && b.femmes === 0)) return emptyChartMessage();
+  if (buckets.every(b => b.hommes === 0 && b.femmes === 0 && b.autres === 0)) return emptyChartMessage();
 
   const width = 520;
   const barHeight = 20;
@@ -1865,12 +1865,15 @@ function renderAgePyramidSVG(buckets, splitByGender) {
     const y = gap + i * (barHeight + gap);
     const wH = Math.max((b.hommes / maxValue) * sideWidth, b.hommes > 0 ? 2 : 0);
     const wF = Math.max((b.femmes / maxValue) * sideWidth, b.femmes > 0 ? 2 : 0);
+    // La pyramide n'a que 2 côtés (hommes/femmes) : plutôt que de faire disparaître silencieusement
+    // les salariés "Autre"/non renseigné (cf. audit), leur nombre est annoté sur l'étiquette centrale.
+    const centerLabel = `${b.label}${b.autres ? ` · +${b.autres} autre${b.autres > 1 ? 's' : ''}` : ''}`;
     return `
       <rect x="${centerLeft - wH}" y="${y}" width="${wH}" height="${barHeight}" rx="4" fill="#2563eb" />
       <text x="${centerLeft - wH - 6}" y="${y + barHeight / 2 + 4}" text-anchor="end" class="chart-value">${b.hommes || ''}</text>
       <rect x="${centerRight}" y="${y}" width="${wF}" height="${barHeight}" rx="4" fill="#db2777" />
       <text x="${centerRight + wF + 6}" y="${y + barHeight / 2 + 4}" class="chart-value">${b.femmes || ''}</text>
-      <text x="${width / 2}" y="${y + barHeight / 2 + 4}" text-anchor="middle" class="chart-label">${escapeHtml(b.label)}</text>
+      <text x="${width / 2}" y="${y + barHeight / 2 + 4}" text-anchor="middle" class="chart-label">${escapeHtml(centerLabel)}</text>
     `;
   }).join('');
 
