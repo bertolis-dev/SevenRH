@@ -5098,9 +5098,18 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   return { icon: '🏢', level: 'office', title: 'Présent' };
 }
 
-function getPlanningEmployees() {
+/** Un salarié a-t-il été en poste à un moment quelconque de [periodStart, periodEnd] (dates ISO) ?
+ * Utilisé partout où l'on peut naviguer vers une période PASSÉE (export paie, tickets restaurant,
+ * plannings) — filtrer sur le statut ACTUEL du salarié y ferait disparaître à tort quelqu'un parti
+ * (ou pas encore arrivé) qui était pourtant bien présent durant la période affichée. */
+function isEmployedDuringPeriod(employee, periodStart, periodEnd) {
+  return Boolean(employee.dateEmbauche) && employee.dateEmbauche <= periodEnd &&
+    (!employee.dateDepart || employee.dateDepart >= periodStart);
+}
+
+function getPlanningEmployees(periodStart, periodEnd) {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  let employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, periodStart, periodEnd));
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   if (state.planningFilters.service) employees = employees.filter(e => e.service === state.planningFilters.service);
   return employees;
@@ -5136,7 +5145,7 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
 
 function renderPlanningSemaine() {
   const weekDates = getWeekDates(state.planningWeekOffset);
-  const employees = getPlanningEmployees();
+  const employees = getPlanningEmployees(toISODate(weekDates[0]), toISODate(weekDates[6]));
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
 
@@ -5171,7 +5180,7 @@ function renderPlanningMois() {
   const year = state.planningYear;
   const month = state.planningMonth;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const employees = getPlanningEmployees();
+  const employees = getPlanningEmployees(`${year}-${String(month + 1).padStart(2, '0')}-01`, toISODate(new Date(year, month, daysInMonth)));
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
 
@@ -5205,7 +5214,7 @@ function renderPlanningMois() {
 /** Vue année : nombre de jours de congé validés par mois (le détail jour par jour n'a pas de sens sur 365 colonnes). */
 function renderPlanningAnnee() {
   const year = state.planningYear;
-  const employees = getPlanningEmployees();
+  const employees = getPlanningEmployees(`${year}-01-01`, `${year}-12-31`);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
 
   return `
@@ -5608,7 +5617,7 @@ function getWeekDates(weekOffset) {
 function renderTeletravailPlanning() {
   const weekDates = getWeekDates(state.teletravailWeekOffset);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  let employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, toISODate(weekDates[0]), toISODate(weekDates[6])));
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
@@ -6072,14 +6081,22 @@ function openExpenseDetailModal(id) {
 // ---------------------------------------------------------------------------
 
 function getTicketsRows() {
-  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const year = state.ticketsYear;
+  const month = state.ticketsMonth;
+  const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const monthEnd = toISODate(new Date(year, month + 1, 0));
+  // Même bug que l'export paie (cf. getPaieRows) : on peut naviguer vers un mois passé, donc filtrer
+  // sur le statut ACTUEL du salarié lui ferait perdre tous ses tickets d'un mois où il était encore
+  // présent — calculateTicketsRestaurant borne déjà correctement le calcul lui-même, mais encore
+  // faut-il que le salarié atteigne cette fonction.
+  const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
   const settings = DB.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
 
   return employees.map(e => ({
     employee: e,
-    result: calculateTicketsRestaurant(e, state.ticketsYear, state.ticketsMonth, leaveRequests, teleworkRequests, settings)
+    result: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings)
   }));
 }
 
@@ -6238,8 +6255,7 @@ function getPaieRows(year, month) {
   // paie peut porter sur un mois passé, où un salarié aujourd'hui "Inactif"/déjà parti était encore
   // présent — le filtrer sur son statut live lui aurait fait perdre toutes ses données de ce mois-là
   // (congés, télétravail, notes de frais), pas seulement les jours après son départ.
-  const employees = employeeRepository.getAll().filter(e =>
-    !e.archive && e.dateEmbauche && e.dateEmbauche <= monthEnd && (!e.dateDepart || e.dateDepart >= monthStart));
+  const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
   const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
