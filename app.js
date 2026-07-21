@@ -1643,7 +1643,7 @@ function renderDashboardDirecteur() {
   const masseSalariale = settings.masseSalarialeActivee
     ? actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)
     : null;
-  const ageBuckets = getAgePyramidBuckets(employees);
+  const ageBuckets = settings.suiviAgeActive ? getAgePyramidBuckets(employees) : null;
   const genderBreakdown = settings.suiviGenreActive ? getGenderBreakdown(employees) : null;
 
   return `
@@ -1670,7 +1670,9 @@ function renderDashboardDirecteur() {
     </div>
 
     <div class="dashboard-grid">
-      ${chartCard('Pyramide des âges', genderBreakdown ? 'Par tranche d\'âge, hommes/femmes' : 'Par tranche d\'âge', renderAgePyramidSVG(ageBuckets, !!genderBreakdown))}
+      ${ageBuckets
+        ? chartCard('Pyramide des âges', genderBreakdown ? 'Par tranche d\'âge, hommes/femmes' : 'Par tranche d\'âge', renderAgePyramidSVG(ageBuckets, !!genderBreakdown))
+        : chartCard('Pyramide des âges', '<p class="text-muted">Suivi désactivé dans les paramètres.</p>')}
       ${genderBreakdown ? chartCard('Répartition Hommes / Femmes', genderBreakdown.every(d => d.value === 0)
         ? emptyChartMessage()
         : renderDonutChartSVG(genderBreakdown.filter(d => d.value > 0)) + chartLegend(genderBreakdown.filter(d => d.value > 0)))
@@ -4784,6 +4786,9 @@ function renderParametresListes() {
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Suivre la répartition Hommes / Femmes</label>
         </div>
+        <div class="form-field form-field-checkbox">
+          <label><input type="checkbox" id="f-suivi-age" ${settings.suiviAgeActive ? 'checked' : ''}> Suivre la pyramide des âges</label>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -4855,6 +4860,12 @@ function bindParametresListesEvents() {
   document.getElementById('f-suivi-genre').addEventListener('change', (e) => {
     const settings = DB.getSettings();
     settings.suiviGenreActive = e.target.checked;
+    DB.saveSettings(settings);
+    showToast('Réglage mis à jour.');
+  });
+  document.getElementById('f-suivi-age').addEventListener('change', (e) => {
+    const settings = DB.getSettings();
+    settings.suiviAgeActive = e.target.checked;
     DB.saveSettings(settings);
     showToast('Réglage mis à jour.');
   });

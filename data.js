@@ -212,9 +212,11 @@ const DEFAULT_SETTINGS = {
   workflowFrais: ['manager', 'comptabilite'],
   categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Visite médicale', 'Habilitation', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
   // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
-  // la masse salariale et le genre restent des données que l'entreprise choisit de suivre ou non.
+  // la masse salariale, le genre et la pyramide des âges restent des données que l'entreprise
+  // choisit de suivre ou non (cf. l'avertissement affiché juste au-dessus de ces cases à cocher).
   masseSalarialeActivee: false,
   suiviGenreActive: false,
+  suiviAgeActive: false,
   // §34 — voir EXPORT_PAIE_MODELES ; exportPaieColonnes n'est utilisé que si exportPaieModele === 'personnalise'.
   exportPaieModele: 'generique',
   exportPaieColonnes: { conges: true, teletravail: true, tickets: true, frais: true }
