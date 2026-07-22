@@ -3510,7 +3510,11 @@ function openRegulariserModal(requestId) {
   const request = leaveRepository.getById(requestId);
   const employee = employeeRepository.getById(request.employeeId);
   const currentType = DB.getLeaveTypeById(request.typeId);
-  const typesMemeCategorie = DB.getLeaveTypes().filter(t => t.actif && t.categorie === currentType.categorie);
+  // Inclut le type ACTUEL même s'il a été désactivé depuis (sinon le select retombe sur le fallback
+  // générique de selectField, qui affiche l'id brut plutôt qu'un nom lisible — même bug déjà corrigé
+  // pour les établissements désactivés).
+  const typesMemeCategorie = DB.getLeaveTypes().filter(t =>
+    t.categorie === currentType.categorie && (t.actif || t.id === currentType.id));
 
   const html = `
     <div class="modal modal-small">
@@ -3521,7 +3525,7 @@ function openRegulariserModal(requestId) {
       <form id="regulariser-form">
         <div class="modal-body">
           <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
-          ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.nom })))}
+          ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.actif ? t.nom : `${t.nom} (désactivé)` })))}
           <div class="form-grid" style="margin-top: 12px;">
             ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
             ${textField('dateFin', 'Date de fin', request.dateFin, true, 'date')}
