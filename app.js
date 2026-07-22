@@ -2659,6 +2659,10 @@ function renderEmployeeDetail(id) {
   // Auto-service limité (téléphone/adresse uniquement) pour qui n'a pas déjà l'édition complète sur
   // sa propre fiche — sinon le bouton "Modifier" fait déjà tout, pas besoin d'un second bouton.
   const canEditCoordonnees = !canEdit && user.id === e.id && hasPermission(user, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES);
+  // § VOIR_INFOS_CONTRACTUELLES : scope restreint à convention collective/statut pro/dates de fin
+  // de contrat et de période d'essai — PAS type de contrat/date d'embauche/ancienneté, que
+  // exportEmployeesCSV (cf. son commentaire) déclare déjà explicitement non confidentiels.
+  const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   return `
     <button class="btn-link" id="btn-back-to-list">← Retour à la liste</button>
@@ -2671,7 +2675,7 @@ function renderEmployeeDetail(id) {
         <div class="badge-row">
           ${renderContratBadge(e.typeContrat)}
           ${renderStatutBadge(e.statut)}
-          <span class="badge badge-info">${escapeHtml(e.statutPro)}</span>
+          ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
         </div>
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Directeur peut modifier votre propre fiche.</p>' : ''}
       </div>
@@ -2704,13 +2708,13 @@ function renderEmployeeDetail(id) {
         ${infoRow('Équipe', e.equipe)}
         ${infoRow('Poste', e.poste)}
         ${infoRow('Manager(s)', managerNames(e.managerIds))}
-        ${infoRow('Convention collective', e.conventionCollective)}
-        ${infoRow('Statut professionnel', e.statutPro)}
+        ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
+        ${canSeeContractuel ? infoRow('Statut professionnel', e.statutPro) : ''}
         ${infoRow('Type de contrat', e.typeContrat)}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
-        ${e.typeContrat === 'CDD' || e.typeContrat === 'Intérim' ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
-        ${e.dateFinPeriodeEssai ? infoRow('Fin de période d\'essai', formatDate(e.dateFinPeriodeEssai)) : ''}
+        ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
+        ${canSeeContractuel && e.dateFinPeriodeEssai ? infoRow('Fin de période d\'essai', formatDate(e.dateFinPeriodeEssai)) : ''}
       </div>
 
       <div class="card">
@@ -2834,6 +2838,7 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.CONTROLER_NOTE_FRAIS, label: 'Contrôler une note de frais (étape non finale du circuit)' },
     { key: PERMISSIONS.MARQUER_NOTE_REMBOURSEE, label: 'Marquer une note de frais remboursée (étape finale du circuit)' },
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
+    { key: PERMISSIONS.VOIR_INFOS_CONTRACTUELLES, label: 'Voir la convention collective/statut pro/dates de fin de contrat et d\'essai' },
     { key: PERMISSIONS.GERER_PARAMETRES, label: 'Gérer les paramètres' },
     { key: PERMISSIONS.GERER_ABONNEMENTS, label: 'Voir/gérer l\'abonnement de l\'entreprise' },
     { key: PERMISSIONS.GERER_UTILISATEURS, label: 'Déverrouiller un compte / réinitialiser un mot de passe' },
@@ -3047,6 +3052,8 @@ function openCoordonneesModal(employeeId) {
 function openEmployeePrintModal(id) {
   const e = employeeRepository.getById(id);
   const age = calculateAge(e.dateNaissance);
+  const user = DB.getCurrentUser();
+  const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   const html = `
     <div class="modal modal-large">
@@ -3075,8 +3082,8 @@ function openEmployeePrintModal(id) {
           ${infoRow('Équipe', e.equipe)}
           ${infoRow('Poste', e.poste)}
           ${infoRow('Manager(s)', managerNames(e.managerIds))}
-          ${infoRow('Convention collective', e.conventionCollective)}
-          ${infoRow('Statut professionnel', e.statutPro)}
+          ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
+          ${canSeeContractuel ? infoRow('Statut professionnel', e.statutPro) : ''}
           ${infoRow('Type de contrat', e.typeContrat)}
           ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
           ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
