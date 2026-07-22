@@ -3445,6 +3445,7 @@ function renderRequestActions(r, type) {
     return `
       <button class="btn-link" data-attestation="${r.id}">Attestation</button>
       ${canProlonger ? `<button class="btn-link" data-prolonger="${r.id}">Prolonger</button>` : ''}
+      ${canManageRequestFor(r.employeeId) ? `<button class="btn-link" data-regulariser="${r.id}">Régulariser</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel="${r.id}">Annuler</button>` : ''}
     `;
   }
@@ -3495,6 +3496,73 @@ function openProlongerModal(requestId) {
     const result = leaveRepository.prolonger(requestId, nouvelleDateFin, state.pendingAttachment);
     if (!result.success) { showToast(result.error, 'error'); return; }
     showToast('Arrêt prolongé.');
+    closeModal();
+    render();
+  });
+}
+
+/** Régularisation (§ demandée en cours de session) d'une demande déjà validée : corrige le type
+ * et/ou les dates après coup (erreur de saisie, ou pour formaliser ce qui s'est réellement passé),
+ * réservée à qui peut déjà gérer la demande (même contrôle que "Annuler"). Le type proposé reste
+ * dans la MÊME catégorie (congé ou autre absence) que le type actuel — changer de catégorie via
+ * une régularisation mélangerait des règles de saisie différentes (§15) sans raison claire. */
+function openRegulariserModal(requestId) {
+  const request = leaveRepository.getById(requestId);
+  const employee = employeeRepository.getById(request.employeeId);
+  const currentType = DB.getLeaveTypeById(request.typeId);
+  const typesMemeCategorie = DB.getLeaveTypes().filter(t => t.actif && t.categorie === currentType.categorie);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Régulariser la demande</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="regulariser-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
+          ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.nom })))}
+          <div class="form-grid" style="margin-top: 12px;">
+            ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
+            ${textField('dateFin', 'Date de fin', request.dateFin, true, 'date')}
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-demiJournee">Demi-journée (si date de début = date de fin)</label>
+            <select class="input" id="f-demiJournee" name="demiJournee">
+              <option value="">Journée entière</option>
+              <option value="matin" ${request.demiJournee === 'matin' ? 'selected' : ''}>Matin</option>
+              <option value="apres-midi" ${request.demiJournee === 'apres-midi' ? 'selected' : ''}>Après-midi</option>
+            </select>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif de la régularisation</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. erreur de saisie initiale, absence reclassée">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Régulariser</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('regulariser-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const typeId = document.getElementById('f-typeId').value;
+    const dateDebut = document.getElementById('f-dateDebut').value;
+    const dateFin = document.getElementById('f-dateFin').value;
+    const demiJournee = dateDebut === dateFin ? (document.getElementById('f-demiJournee').value || null) : null;
+    const motif = document.getElementById('f-motif').value;
+    const result = leaveRepository.regulariser(requestId, { typeId, dateDebut, dateFin, demiJournee, motif });
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Demande régularisée.');
     closeModal();
     render();
   });
@@ -3561,6 +3629,9 @@ function bindCongesDemandesEvents(categorie = 'conge') {
 
   document.querySelectorAll('[data-prolonger]').forEach(btn => {
     btn.addEventListener('click', () => openProlongerModal(btn.dataset.prolonger));
+  });
+  document.querySelectorAll('[data-regulariser]').forEach(btn => {
+    btn.addEventListener('click', () => openRegulariserModal(btn.dataset.regulariser));
   });
 }
 
@@ -5679,9 +5750,9 @@ function updateTeleworkQuotaHint() {
  * Le télétravail n'a pas de notion de demi-journée : la présence d'un congé ce jour-là, même en
  * demi-journée, suffit à bloquer un télétravail (forcément journée entière) sur cette même date, et
  * réciproquement. Utilisé par submitLeaveRequestForm et submitTeleworkRequestForm. */
-function hasActiveRequestOverlap(requests, employeeId, dateDebut, dateFin) {
+function hasActiveRequestOverlap(requests, employeeId, dateDebut, dateFin, excludeRequestId) {
   return requests.some(r =>
-    r.employeeId === employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
+    r.id !== excludeRequestId && r.employeeId === employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
     r.dateDebut <= dateFin && r.dateFin >= dateDebut);
 }
 
@@ -5693,8 +5764,9 @@ function hasActiveRequestOverlap(requests, employeeId, dateDebut, dateFin) {
  * complémentaires (matin + après-midi) d'une même date isolée — cas réel qu'un blocage brut
  * casserait. Toute demande qui s'étend sur plusieurs jours, ou une demi-journée qui chevauche une
  * journée entière, reste un conflit direct. */
-function hasConflictingLeaveRequest(employeeId, typeId, dateDebut, dateFin, demiJournee) {
+function hasConflictingLeaveRequest(employeeId, typeId, dateDebut, dateFin, demiJournee, excludeRequestId) {
   return leaveRepository.getAll().some(r => {
+    if (r.id === excludeRequestId) return false;
     if (r.employeeId !== employeeId) return false;
     if (r.typeId === typeId) return false;
     if (r.statut === 'Refusé' || r.statut === 'Annulé') return false;

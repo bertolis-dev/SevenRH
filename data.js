@@ -995,6 +995,74 @@ const DB = {
     return { success: true, request: list[index] };
   },
 
+  /** Régularisation d'une demande de congé/absence déjà VALIDÉE (typiquement pour corriger une
+   * erreur de saisie ou refléter ce qui s'est réellement passé) : corrige type et/ou dates SUR LE
+   * MÊME enregistrement (comme prolongerArretMaladie ci-dessus), en conservant l'historique de
+   * chaque régularisation plutôt que d'écraser silencieusement l'ancienne valeur. Repasse par les
+   * mêmes contrôles qu'à la création (période d'emploi, chevauchement congé/congé conscient des
+   * demi-journées, chevauchement congé/télétravail) — répliqués ici plutôt que d'appeler les
+   * fonctions équivalentes d'app.js, pour ne pas faire dépendre la couche données de la couche UI. */
+  regulariserDemande(id, { typeId, dateDebut, dateFin, demiJournee, motif }) {
+    const list = this.getLeaveRequests();
+    const index = list.findIndex(r => r.id === id);
+    if (index === -1) return { success: false, error: 'Demande introuvable.' };
+    const request = list[index];
+    const type = this.getLeaveTypeById(typeId);
+    if (!type) return { success: false, error: 'Type de congé introuvable.' };
+    if (!dateDebut || !dateFin || dateFin < dateDebut) {
+      return { success: false, error: 'La date de fin ne peut pas être avant la date de début.' };
+    }
+    const employee = this.getEmployeeById(request.employeeId);
+    if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+      return { success: false, error: `La date de début ne peut pas être avant la date d'embauche (${formatDate(employee.dateEmbauche)}).` };
+    }
+    if (employee.dateDepart && dateFin > employee.dateDepart) {
+      return { success: false, error: `La date de fin ne peut pas être après la date de départ (${formatDate(employee.dateDepart)}).` };
+    }
+
+    const demi = demiJournee || null;
+    const bothSingleDay = dateDebut === dateFin;
+    // Conflit sauf si les deux sont des demi-journées complémentaires sur une même date isolée
+    // (même logique que hasConflictingLeaveRequest côté app.js).
+    const isConflict = (r) => {
+      if (!(r.dateDebut <= dateFin && r.dateFin >= dateDebut)) return false;
+      const sameSingleDay = bothSingleDay && r.dateDebut === r.dateFin;
+      if (!sameSingleDay) return true;
+      if (!demi || !r.demiJournee) return true;
+      return demi === r.demiJournee;
+    };
+    const hasCongeConflict = list.some(r =>
+      r.id !== id && r.employeeId === request.employeeId && r.typeId !== typeId &&
+      r.statut !== 'Refusé' && r.statut !== 'Annulé' && isConflict(r));
+    if (hasCongeConflict) {
+      return { success: false, error: 'Ces nouvelles dates chevauchent une autre demande de congé/absence active de ce salarié.' };
+    }
+    const hasTeleworkConflict = this.getTeleworkRequests().some(r =>
+      r.employeeId === request.employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
+      r.dateDebut <= dateFin && r.dateFin >= dateDebut);
+    if (hasTeleworkConflict) {
+      return { success: false, error: 'Ces nouvelles dates chevauchent une demande de télétravail active de ce salarié.' };
+    }
+
+    const ancienType = this.getLeaveTypeById(request.typeId);
+    const regularisations = (request.regularisations || []).concat([{
+      date: new Date().toISOString(),
+      ancienType: ancienType ? ancienType.nom : '—',
+      ancienneDateDebut: request.dateDebut,
+      ancienneDateFin: request.dateFin,
+      motif: motif || ''
+    }]);
+    list[index] = Object.assign({}, request, {
+      typeId, dateDebut, dateFin, demiJournee: demi,
+      nbJours: computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee.joursTravailles),
+      regularisations,
+      dateModification: new Date().toISOString()
+    });
+    this.saveLeaveRequests(list);
+    this.logAudit('Modification', 'Régularisation congé', `${employee.prenom} ${employee.nom} · ${ancienType ? ancienType.nom : '—'} → ${type.nom} · ${formatDate(dateDebut)}${dateDebut !== dateFin ? ' au ' + formatDate(dateFin) : ''}`);
+    return { success: true, request: list[index] };
+  },
+
   /** Ajustement manuel du compteur d'un salarié pour un type de congé donné (§ MODIFIER_COMPTEURS) —
    * s'ajoute (ou se retranche, si négatif) au calcul automatique dans getLeaveBalance(). Remplace la
    * valeur précédente pour ce type (pas un cumul) : le formulaire affiche toujours l'ajustement courant. */
@@ -1452,7 +1520,8 @@ const leaveRepository = {
   getForEmployee: (employeeId) => DB.getLeaveRequestsForEmployee(employeeId),
   create: (data) => DB.addLeaveRequest(data),
   update: (id, patch) => DB.updateLeaveRequest(id, patch),
-  prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif)
+  prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif),
+  regulariser: (id, patch) => DB.regulariserDemande(id, patch)
 };
 
 const teleworkRepository = {
