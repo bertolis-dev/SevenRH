@@ -1189,7 +1189,10 @@ function syncNotifications() {
   });
 
   documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
-    const daysUntil = Math.round((new Date(d.dateExpiration) - new Date()) / 86400000);
+    // Comparer au même format des deux côtés (date-only, via toISODate) plutôt qu'à l'instant
+    // courant — sinon la fraction de journée déjà écoulée décale daysUntil d'un jour selon l'heure
+    // qu'il est (même bug que celui corrigé sur getUpcomingBirthdays cette session).
+    const daysUntil = Math.round((new Date(d.dateExpiration) - new Date(toISODate(new Date()))) / 86400000);
     if (daysUntil > 30) return;
     const employee = employeeRepository.getById(d.employeeId);
     if (!employee) return;
@@ -2449,7 +2452,8 @@ function canManageDocumentsFor() {
 
 function documentExpirationInfo(dateExpiration) {
   if (!dateExpiration) return null;
-  const daysUntil = Math.round((new Date(dateExpiration) - new Date()) / 86400000);
+  // Même correction que syncNotifications : comparer au format date-only des deux côtés.
+  const daysUntil = Math.round((new Date(dateExpiration) - new Date(toISODate(new Date()))) / 86400000);
   if (daysUntil < 0) return { label: `Expiré le ${formatDate(dateExpiration)}`, level: 'danger' };
   if (daysUntil <= 30) return { label: `Expire le ${formatDate(dateExpiration)}`, level: 'warning' };
   return { label: `Expire le ${formatDate(dateExpiration)}`, level: 'muted' };
