@@ -3855,6 +3855,13 @@ function submitLeaveRequestForm(evt) {
     }
   }
 
+  // On ne peut pas être sur deux congés/absences de TYPES DIFFÉRENTS en même temps (ex. RTT et congés
+  // payés le même jour) — sauf demi-journées complémentaires, gérées par hasConflictingLeaveRequest.
+  if (hasConflictingLeaveRequest(employeeId, typeId, dateDebut, dateFin, demiJournee)) {
+    showToast('Ce salarié a déjà une autre demande de congé/absence active sur cette période.', 'error');
+    return;
+  }
+
   if (hasActiveRequestOverlap(teleworkRepository.getAll(), employeeId, dateDebut, dateFin)) {
     showToast('Ce salarié a déjà une demande de télétravail active sur cette période.', 'error');
     return;
@@ -5676,6 +5683,27 @@ function hasActiveRequestOverlap(requests, employeeId, dateDebut, dateFin) {
   return requests.some(r =>
     r.employeeId === employeeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
     r.dateDebut <= dateFin && r.dateFin >= dateDebut);
+}
+
+/** Chevauchement entre DEUX congés/absences de TYPES DIFFÉRENTS pour le même salarié — distinct du
+ * contrôle autoriserPlusieursDemandes (qui ne compare que les demandes du MÊME type, et dont le
+ * réglage par type doit rester seul maître sur ce cas : exclu ici via `typeId !== r.typeId`, sinon
+ * on écraserait un autoriserPlusieursDemandes=true explicitement configuré par l'admin). On ne peut
+ * pas être à la fois en RTT et en congés payés le même jour, sauf sur des demi-journées
+ * complémentaires (matin + après-midi) d'une même date isolée — cas réel qu'un blocage brut
+ * casserait. Toute demande qui s'étend sur plusieurs jours, ou une demi-journée qui chevauche une
+ * journée entière, reste un conflit direct. */
+function hasConflictingLeaveRequest(employeeId, typeId, dateDebut, dateFin, demiJournee) {
+  return leaveRepository.getAll().some(r => {
+    if (r.employeeId !== employeeId) return false;
+    if (r.typeId === typeId) return false;
+    if (r.statut === 'Refusé' || r.statut === 'Annulé') return false;
+    if (!(r.dateDebut <= dateFin && r.dateFin >= dateDebut)) return false;
+    const bothSingleDay = r.dateDebut === r.dateFin && dateDebut === dateFin;
+    if (!bothSingleDay) return true;
+    if (!demiJournee || !r.demiJournee) return true;
+    return demiJournee === r.demiJournee;
+  });
 }
 
 /** Semaine (lundi ISO) où la demande [dateDebut, dateFin] ferait dépasser le quota hebdomadaire, en tenant
