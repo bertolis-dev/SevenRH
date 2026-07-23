@@ -96,27 +96,45 @@ function getInitialViewState() {
     auditPage: 1,
     calendrierVue: 'entreprise', // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
     horairesView: 'semaine', // Sprint SIRH premium §3 : 'jour' | 'semaine' | 'mois'
-    horairesDay: toISODate(new Date())
+    horairesDay: toISODate(new Date()),
+    planningVue: 'equipe' // Sprint SIRH premium §5 : 'equipe' | 'personnel' — même principe que calendrierVue
   };
 }
 
 const state = getInitialViewState();
 
-// roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais
-// affiché et filtré comme "Mon équipe" (voir renderEmployeesList).
+/** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
+ * comme "Mon équipe" (voir renderEmployeesList).
+ *
+ * Sprint SIRH premium §5 : "Personnel" (mes propres congés/planning/calendrier/notes de frais) vs
+ * "Équipe" (planning/calendrier équipe, ce qui reste à valider) — un même écran (`key`) peut
+ * apparaître deux fois avec un `label` et un `navParams` différents (ex. "Mon calendrier" vs
+ * "Calendrier équipe" pointent tous deux vers 'calendrier', juste avec calendrierVue différent) ;
+ * voir renderSidebar()/navigateTo() pour la résolution. `group` est purement un indice d'affichage
+ * (regroupement visuel) — n'affecte jamais qui voit quoi, ça reste `roles`/`permissions` seuls. */
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Tableau de bord', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
-  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE] },
-  { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'] },
-  { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'] },
-  { key: 'autres-absences', label: 'Autres absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'] },
-  { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
-  { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'] },
-  { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'] },
-  { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
-  { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'] },
-  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT] },
-  { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE] },
+
+  // ---- Personnel ----
+  { key: 'planning', label: 'Mon planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' } },
+  { key: 'calendrier', label: 'Mon calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' } },
+  { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  { key: 'autres-absences', label: 'Autres absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
+
+  // ---- Équipe ----
+  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
+  { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe' },
+  { key: 'planning', label: 'Planning équipe', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { planningVue: 'equipe' } },
+  { key: 'calendrier', label: 'Calendrier équipe', icon: '📅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { calendrierVue: 'entreprise' } },
+  { key: 'conges', label: 'Congés à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } } },
+  { key: 'teletravail', label: 'Télétravail à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } } },
+  { key: 'frais', label: 'Notes de frais à valider', icon: '✅', roles: ['manager', 'rh', 'directeur', 'comptabilite'], group: 'equipe', navParams: { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } } },
+  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
+  { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
+
   { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] }
 ];
 
@@ -1346,24 +1364,70 @@ function navigateTo(view, params = {}) {
 // Sidebar
 // ---------------------------------------------------------------------------
 
+function navParamValueMatches(actual, expected) {
+  if (expected && typeof expected === 'object') {
+    return actual && typeof actual === 'object' && Object.keys(expected).every(k => actual[k] === expected[k]);
+  }
+  return actual === expected;
+}
+
+/** Un item est actif s'il pointe vers l'écran courant ET, s'il porte un navParams (cas des entrées
+ * dupliquées "Mon calendrier"/"Calendrier équipe" etc., §5), que ce navParams correspond bien à
+ * l'état courant. Un item SANS navParams (ex. "Congés", entrée générique de l'écran) reste actif
+ * sauf si un "raccourci" du même écran (ex. "Congés à valider") correspond exactement à l'état
+ * courant — sinon les deux s'allumeraient en même temps quand le filtre du raccourci est actif. */
+function isNavItemActive(item, allItems) {
+  if (state.view !== item.key) return false;
+  if (item.navParams) {
+    return Object.keys(item.navParams).every(k => navParamValueMatches(state[k], item.navParams[k]));
+  }
+  const moreSpecificSiblingActive = allItems.some(other => other !== item && other.key === item.key && other.navParams &&
+    Object.keys(other.navParams).every(k => navParamValueMatches(state[k], other.navParams[k])));
+  return !moreSpecificSiblingActive;
+}
+
 function renderSidebar() {
   const user = DB.getCurrentUser();
   if (!user) return;
   const items = navItemsForRole(user);
   const nav = document.getElementById('sidebar-nav');
 
-  nav.innerHTML = items.map(item => {
+  const renderItem = (item, index) => {
     const label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
     return `
-    <button class="nav-item ${state.view === item.key ? 'active' : ''}" data-view="${item.key}" aria-label="${escapeHtml(label)}">
+    <button class="nav-item ${isNavItemActive(item, items) ? 'active' : ''}" data-nav-index="${index}" aria-label="${escapeHtml(label)}">
       <span class="nav-icon">${item.icon}</span>
       <span class="nav-label">${escapeHtml(label)}</span>
     </button>
   `;
-  }).join('');
+  };
+
+  // Sprint SIRH premium §5 : regroupement visuel "Personnel"/"Équipe" — seulement si le rôle a
+  // vraiment les deux (un salarié n'a que des items "personnel" → liste plate, comportement inchangé).
+  const withIndex = items.map((item, index) => ({ item, index }));
+  const showGroups = items.some(i => i.group === 'personnel') && items.some(i => i.group === 'equipe');
+
+  if (showGroups) {
+    const dashboard = withIndex.filter(x => !x.item.group && x.item.key === 'dashboard');
+    const personnel = withIndex.filter(x => x.item.group === 'personnel');
+    const equipe = withIndex.filter(x => x.item.group === 'equipe');
+    const reste = withIndex.filter(x => !x.item.group && x.item.key !== 'dashboard');
+    nav.innerHTML =
+      dashboard.map(x => renderItem(x.item, x.index)).join('') +
+      '<div class="nav-section-label">Personnel</div>' +
+      personnel.map(x => renderItem(x.item, x.index)).join('') +
+      '<div class="nav-section-label">Équipe</div>' +
+      equipe.map(x => renderItem(x.item, x.index)).join('') +
+      reste.map(x => renderItem(x.item, x.index)).join('');
+  } else {
+    nav.innerHTML = withIndex.map(x => renderItem(x.item, x.index)).join('');
+  }
 
   nav.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => navigateTo(btn.dataset.view));
+    btn.addEventListener('click', () => {
+      const item = items[Number(btn.dataset.navIndex)];
+      navigateTo(item.key, item.navParams || {});
+    });
   });
 }
 
@@ -5447,7 +5511,10 @@ function isEmployedDuringPeriod(employee, periodStart, periodEnd) {
 }
 
 function getPlanningEmployees(periodStart, periodEnd) {
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  const user = DB.getCurrentUser();
+  // Sprint SIRH premium §5 : "Mon planning" (espace Personnel) restreint à l'utilisateur courant
+  // seul, quel que soit son rôle — même principe que calendrierVue (§2).
+  const visibleIds = (user.role !== ROLES.SALARIE && state.planningVue === 'personnel') ? [user.id] : getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, periodStart, periodEnd));
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   if (state.planningFilters.service) employees = employees.filter(e => e.service === state.planningFilters.service);
@@ -5459,6 +5526,10 @@ function renderPlanning() {
     <div class="view-header">
       <h1>Planning</h1>
       <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail — congés et télétravail validés</p>
+    </div>
+    <div class="tabs" style="margin-bottom: 10px;">
+      <button class="tab ${state.planningVue !== 'personnel' ? 'active' : ''}" data-planning-vue="equipe">Planning équipe</button>
+      <button class="tab ${state.planningVue === 'personnel' ? 'active' : ''}" data-planning-vue="personnel">Mon planning</button>
     </div>
     <div class="tabs">
       <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
@@ -5858,6 +5929,9 @@ function openHorairesModal(employeeId) {
 function bindPlanningEvents() {
   document.querySelectorAll('[data-planning-view]').forEach(btn => {
     btn.addEventListener('click', () => { state.planningView = btn.dataset.planningView; render(); });
+  });
+  document.querySelectorAll('[data-planning-vue]').forEach(btn => {
+    btn.addEventListener('click', () => { state.planningVue = btn.dataset.planningVue; render(); });
   });
 
   document.getElementById('planning-filter-service').addEventListener('change', (e) => {
