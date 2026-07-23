@@ -1491,6 +1491,7 @@ function render() {
   switch (state.view) {
     case 'dashboard':
       root.innerHTML = renderDashboard();
+      bindDashboardEvents();
       break;
     case 'employees':
       root.innerHTML = renderEmployeesList();
@@ -1553,6 +1554,82 @@ function render() {
 // Vue : Tableau de bord (aperçu, module complet à venir)
 // ---------------------------------------------------------------------------
 
+/** Sprint SIRH premium §9 : tableau de bord personnalisable — chaque widget peut être masqué par
+ * l'utilisateur courant. Stocké sur SA PROPRE fiche employé (dashboardWidgetsMasques), pas au
+ * niveau entreprise : deux RH peuvent avoir des préférences différentes. Défaut = liste vide = tout
+ * visible, lu défensivement partout (même principe que typesAbsenceDesactives, §1 — pas de
+ * migration nécessaire). */
+const DASHBOARD_WIDGETS = {
+  actionCenter: { label: "Centre d'action", roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
+  kpis: { label: 'Indicateurs clés (KPI)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
+  charts: { label: 'Graphiques (services, contrats, congés, tickets)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
+  echeances: { label: 'Anniversaires & fins de contrat', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
+  presence: { label: 'Présence du jour', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
+  indicateursDirection: { label: 'Indicateurs Direction (avancé)', roles: [ROLES.DIRECTEUR] },
+  soldes: { label: 'Mes soldes de congés', roles: [ROLES.SALARIE] },
+  mesDemandes: { label: 'Mes demandes (en attente / à venir)', roles: [ROLES.SALARIE] },
+  shortcuts: { label: 'Raccourcis', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR, ROLES.SALARIE] }
+};
+
+function isDashboardWidgetVisible(user, widgetId) {
+  return !(user.dashboardWidgetsMasques || []).includes(widgetId);
+}
+
+function widgetsForRole(role) {
+  return Object.entries(DASHBOARD_WIDGETS).filter(([, w]) => w.roles.includes(role)).map(([id, w]) => ({ id, label: w.label }));
+}
+
+function renderDashboardCustomizeButton() {
+  return `<button class="btn btn-secondary btn-sm" id="btn-customize-dashboard">🧩 Personnaliser</button>`;
+}
+
+function bindDashboardEvents() {
+  const btn = document.getElementById('btn-customize-dashboard');
+  if (btn) btn.addEventListener('click', openDashboardCustomizeModal);
+}
+
+function openDashboardCustomizeModal() {
+  const user = DB.getCurrentUser();
+  const widgets = widgetsForRole(user.role);
+  const hidden = user.dashboardWidgetsMasques || [];
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Personnaliser le tableau de bord</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="dashboard-customize-form">
+        <div class="modal-body">
+          <p class="text-muted">Décochez les blocs que vous ne souhaitez pas voir sur votre tableau de bord.</p>
+          <div class="form-grid">
+            ${widgets.map(w => checkboxField(`widget-${w.id}`, w.label, !hidden.includes(w.id))).join('')}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('dashboard-customize-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const dashboardWidgetsMasques = widgets.filter(w => !document.getElementById(`f-widget-${w.id}`).checked).map(w => w.id);
+    DB.updateEmployee(user.id, { dashboardWidgetsMasques });
+    closeModal();
+    showToast('Tableau de bord personnalisé.');
+    render();
+  });
+}
+
 /** Le tableau de bord est différent par rôle : vue personnelle (Salarié), vue équipe (Manager), vue entreprise (RH/Comptabilité), vue entreprise + indicateurs avancés (Directeur). */
 function renderDashboard() {
   const user = DB.getCurrentUser();
@@ -1594,9 +1671,11 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const contractEnds = getUpcomingContractEnds(60, employees);
 
   const user = DB.getCurrentUser();
-  const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role);
+  const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
+  const isVisible = (widgetId) => isDashboardWidgetVisible(user, widgetId);
 
   return `
+    ${isVisible('kpis') ? `
     <div class="kpi-grid">
       ${kpiCard('Salariés actifs', actifs.length, '👥')}
       ${kpiCard('Contrats CDI', cdi, '📄')}
@@ -1607,7 +1686,9 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${kpiCard('Notes de frais en attente', notesEnAttente.length, '🧾')}
       ${kpiCard('Tickets restaurant ce mois', ticketsCeMois, '🍽️')}
     </div>
+    ` : ''}
 
+    ${isVisible('charts') ? `
     <div class="dashboard-grid">
       ${chartCard('Répartition par service', serviceBreakdown.length === 0
         ? emptyChartMessage()
@@ -1620,11 +1701,14 @@ function renderOperationalDashboardBody(employees, employeeIds) {
         : renderBarChartSVG(congesParType))}
       ${chartCard('Coût tickets restaurant', 'Part employeur, 6 derniers mois', renderLineChartSVG(ticketsCostTrend))}
     </div>
+    ` : ''}
 
+    ${isVisible('echeances') ? `
     <div class="dashboard-grid">
       ${renderUpcomingBirthdaysCard(birthdays)}
       ${renderUpcomingContractEndsCard(contractEnds)}
     </div>
+    ` : ''}
 
     ${showPresenceCard ? renderPresenceCard() : ''}
   `;
@@ -1712,28 +1796,36 @@ function renderDashboardShortcuts() {
 
 function renderDashboardRH() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const user = DB.getCurrentUser();
   return `
-    <div class="view-header">
-      <h1>Tableau de bord</h1>
-      <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
+    <div class="view-header-row">
+      <div>
+        <h1>Tableau de bord</h1>
+        <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
+      </div>
+      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
     </div>
-    ${renderDashboardActionCenter(employees, null)}
+    ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
-    ${renderDashboardShortcuts()}
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
   `;
 }
 
 function renderDashboardManager() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const employees = employeeRepository.getAll().filter(e => !e.archive && visibleIds.includes(e.id));
+  const user = DB.getCurrentUser();
   return `
-    <div class="view-header">
-      <h1>Tableau de bord</h1>
-      <p class="view-subtitle">Vue d'ensemble de votre équipe</p>
+    <div class="view-header-row">
+      <div>
+        <h1>Tableau de bord</h1>
+        <p class="view-subtitle">Vue d'ensemble de votre équipe</p>
+      </div>
+      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
     </div>
-    ${renderDashboardActionCenter(employees, visibleIds)}
+    ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, visibleIds) : ''}
     ${renderOperationalDashboardBody(employees, visibleIds)}
-    ${renderDashboardShortcuts()}
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
   `;
 }
 
@@ -1754,9 +1846,12 @@ function renderDashboardSalarie(user) {
     .slice(0, 5);
 
   return `
-    <div class="view-header">
-      <h1>Bonjour ${escapeHtml(user.prenom)}</h1>
-      <p class="view-subtitle">Votre espace personnel</p>
+    <div class="view-header-row">
+      <div>
+        <h1>Bonjour ${escapeHtml(user.prenom)}</h1>
+        <p class="view-subtitle">Votre espace personnel</p>
+      </div>
+      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
     </div>
 
     <div class="kpi-grid">
@@ -1765,11 +1860,14 @@ function renderDashboardSalarie(user) {
       ${kpiCard('Ancienneté', calculateAnciennete(user.dateEmbauche), '🎂')}
     </div>
 
+    ${isDashboardWidgetVisible(user, 'soldes') ? `
     <div class="card">
       <h2>Mes soldes de congés</h2>
       ${renderEmployeeBalances(user)}
     </div>
+    ` : ''}
 
+    ${isDashboardWidgetVisible(user, 'mesDemandes') ? `
     <div class="dashboard-grid">
       <div class="card">
         <h2>Mes demandes en attente</h2>
@@ -1798,7 +1896,9 @@ function renderDashboardSalarie(user) {
         `}
       </div>
     </div>
+    ` : ''}
 
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? `
     <div class="card">
       <h2>Raccourcis</h2>
       <button class="btn btn-primary" data-nav="conges">Demander un congé</button>
@@ -1807,6 +1907,7 @@ function renderDashboardSalarie(user) {
       <button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>
       <button class="btn btn-secondary" data-nav="calendrier">Voir le calendrier</button>
     </div>
+    ` : ''}
   `;
 }
 
@@ -1835,14 +1936,19 @@ function renderDashboardDirecteur() {
   const ageBuckets = settings.suiviAgeActive ? getAgePyramidBuckets(employees) : null;
   const genderBreakdown = settings.suiviGenreActive ? getGenderBreakdown(employees) : null;
 
+  const user = DB.getCurrentUser();
   return `
-    <div class="view-header">
-      <h1>Tableau de bord</h1>
-      <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
+    <div class="view-header-row">
+      <div>
+        <h1>Tableau de bord</h1>
+        <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
+      </div>
+      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
     </div>
-    ${renderDashboardActionCenter(employees, null)}
+    ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
 
+    ${isDashboardWidgetVisible(user, 'indicateursDirection') ? `
     <div class="view-header" style="margin-top: 8px;">
       <h2 style="margin:0;">Indicateurs Direction</h2>
       <p class="view-subtitle">Pilotage RH avancé</p>
@@ -1868,8 +1974,9 @@ function renderDashboardDirecteur() {
         : renderDonutChartSVG(genderBreakdown.filter(d => d.value > 0)) + chartLegend(genderBreakdown.filter(d => d.value > 0)))
         : chartCard('Répartition Hommes / Femmes', '<p class="text-muted">Suivi désactivé dans les paramètres.</p>')}
     </div>
+    ` : ''}
 
-    ${renderDashboardShortcuts()}
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
   `;
 }
 
