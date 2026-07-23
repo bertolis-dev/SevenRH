@@ -300,16 +300,32 @@ function migrateCompanyEtablissements(company) {
 }
 
 /** Ajoute `categorie` ('conge' §14 | 'autre' §15) aux types de congés créés avant l'existence de ce
- * champ. Heuristique par nom pour les 3 types "congés classiques" (congés payés, RTT, ancienneté) ;
- * tout le reste devient 'autre' par défaut — l'entreprise peut reclasser ensuite depuis Paramètres.
- * Idempotent : ne touche à rien si un type a déjà une catégorie. */
+ * champ. Heuristique par nom pour les 2 types "congés classiques" (congés payés, RTT) ; tout le
+ * reste (dont ancienneté, cf. migrateAncienneteVersAutresAbsences) devient 'autre' par défaut —
+ * l'entreprise peut reclasser ensuite depuis Paramètres. Idempotent : ne touche à rien si un type a
+ * déjà une catégorie. */
 function migrateLeaveTypeCategories(company) {
-  const CONGE_NAMES = ['congés payés', 'rtt', 'ancienneté'];
+  const CONGE_NAMES = ['congés payés', 'rtt'];
   let changed = false;
   (company.leaveTypes || []).forEach(t => {
     if (t.categorie) return;
     t.categorie = CONGE_NAMES.includes(t.nom.trim().toLowerCase()) ? 'conge' : 'autre';
     changed = true;
+  });
+  return changed;
+}
+
+/** Évolution Sprint SIRH premium (§1) : le menu "Congés" ne doit plus contenir QUE congés payés/RTT
+ * — "Ancienneté" bascule dans "Autres absences", pour les entreprises déjà créées avant ce
+ * changement (la nouvelle valeur par défaut de seedLeaveTypes() couvre les nouvelles entreprises).
+ * Idempotent : ne change que le type "Ancienneté" encore classé 'conge'. */
+function migrateAncienneteVersAutresAbsences(company) {
+  let changed = false;
+  (company.leaveTypes || []).forEach(t => {
+    if (t.nom.trim().toLowerCase() === 'ancienneté' && t.categorie === 'conge') {
+      t.categorie = 'autre';
+      changed = true;
+    }
   });
   return changed;
 }
@@ -367,7 +383,8 @@ const DB = {
     const migratedLeaveCategories = companies.map(c => migrateLeaveTypeCategories(c)).some(Boolean);
     const migratedAbonnements = companies.map(c => migrateCompanyAbonnement(c)).some(Boolean);
     const migratedSaisiParSalarie = companies.map(c => migrateLeaveTypeSaisiParSalarie(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie) this.saveCompanies(companies);
+    const migratedAnciennete = companies.map(c => migrateAncienneteVersAutresAbsences(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete) this.saveCompanies(companies);
 
     if (localStorage.getItem(BERTOLIS_ADMINS_KEY) === null) {
       localStorage.setItem(BERTOLIS_ADMINS_KEY, JSON.stringify([
@@ -2192,7 +2209,7 @@ function seedLeaveTypes() {
   const rows = [
     ['Congés payés', '🏖️', '#2563eb', 25, 'Mensuelle', true, false, ['manager'], 'conge'],
     ['RTT', '⏱️', '#7c3aed', 12, 'Mensuelle', true, false, ['manager'], 'conge'],
-    ['Ancienneté', '🎖️', '#0891b2', 2, 'Annuelle', true, false, ['manager'], 'conge'],
+    ['Ancienneté', '🎖️', '#0891b2', 2, 'Annuelle', true, false, ['manager'], 'autre'],
     ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh'], 'autre'],
     ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
     ['Décès', '🕊️', '#4b5563', 5, 'Annuelle', true, true, ['rh'], 'autre'],
