@@ -94,7 +94,9 @@ function getInitialViewState() {
     planningMonth: new Date().getMonth(),
     auditFilters: { action: '', search: '', dateDebut: '', dateFin: '' },
     auditPage: 1,
-    calendrierVue: 'entreprise' // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
+    calendrierVue: 'entreprise', // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
+    horairesView: 'semaine', // Sprint SIRH premium §3 : 'jour' | 'semaine' | 'mois'
+    horairesDay: toISODate(new Date())
   };
 }
 
@@ -5641,7 +5643,21 @@ function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
   return { heures, label: `${formatNumberFR(heures)} h${onTelework ? ' 💻' : ''}`, level: onTelework ? 'remote' : 'office' };
 }
 
+/** Sprint SIRH premium §3 : "Créer trois vues : Jour / Semaine / Mois" pour le planning d'horaires
+ * — sous-onglets propres au planning Horaires (indépendants des onglets Semaine/Mois/Année du
+ * planning d'absences, qui restent inchangés). */
 function renderPlanningHoraires() {
+  return `
+    <div class="tabs" style="margin-bottom: 12px;">
+      <button class="tab ${state.horairesView === 'jour' ? 'active' : ''}" data-horaires-view="jour">Jour</button>
+      <button class="tab ${state.horairesView === 'mois' ? 'active' : ''}" data-horaires-view="mois">Mois</button>
+      <button class="tab ${state.horairesView !== 'jour' && state.horairesView !== 'mois' ? 'active' : ''}" data-horaires-view="semaine">Semaine</button>
+    </div>
+    ${state.horairesView === 'jour' ? renderHorairesJour() : state.horairesView === 'mois' ? renderHorairesMois() : renderHorairesSemaine()}
+  `;
+}
+
+function renderHorairesSemaine() {
   const weekDates = getWeekDates(state.planningWeekOffset);
   const employees = getPlanningEmployees(toISODate(weekDates[0]), toISODate(weekDates[6]));
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
@@ -5684,6 +5700,103 @@ function renderPlanningHoraires() {
                 </tr>
               `;
             }).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+/** Vue Jour : le détail heure par heure (matin/après-midi) n'a de sens que sur UNE seule date à la
+ * fois — la vue Semaine ne montre qu'un total agrégé par jour, celle-ci montre les vraies plages
+ * horaires. */
+function renderHorairesJour() {
+  const dateStr = state.horairesDay;
+  const date = new Date(dateStr);
+  const weekday = WEEKDAY_LABELS[(date.getDay() + 6) % 7];
+  const employees = getPlanningEmployees(dateStr, dateStr);
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const groups = groupEmployeesByService(employees);
+
+  return `
+    <div class="view-header-row">
+      <p class="view-subtitle">${formatDate(dateStr)}</p>
+      <div class="calendar-nav">
+        <button class="btn btn-secondary btn-sm" id="btn-horaires-day-prev">← Précédent</button>
+        <button class="btn btn-secondary btn-sm" id="btn-horaires-day-today">Aujourd'hui</button>
+        <button class="btn btn-secondary btn-sm" id="btn-horaires-day-next">Suivant →</button>
+      </div>
+    </div>
+    <div class="card table-card">
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table">
+          <thead><tr><th>Salarié</th><th>Matin</th><th>Après-midi</th><th>Total</th></tr></thead>
+          <tbody>
+            ${groups.map(g => `
+              <tr class="planning-service-header"><td colspan="4">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+              ${g.employees.map(e => {
+                const travaille = (e.joursTravailles || []).includes(weekday);
+                if (!travaille) return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
+                const info = computeDailyHours(e, dateStr, leaveRequests, teleworkRequests);
+                if (info.level === 'leave') return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3">🏖️ Congé</td></tr>`;
+                return `
+                  <tr>
+                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' 💻' : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                    <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
+                    <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
+                    <td><strong>${formatNumberFR(info.heures)} h</strong></td>
+                  </tr>
+                `;
+              }).join('')}
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+/** Vue Mois : même principe que le planning d'absences Mois, mais les cellules montrent des heures
+ * (ou l'icône congé/non-travaillé) plutôt qu'un statut, avec un total mensuel par salarié. */
+function renderHorairesMois() {
+  const year = state.planningYear;
+  const month = state.planningMonth;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const employees = getPlanningEmployees(`${year}-${String(month + 1).padStart(2, '0')}-01`, toISODate(new Date(year, month, daysInMonth)));
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const groups = groupEmployeesByService(employees);
+  const totalMois = (e) => Array.from({ length: daysInMonth }, (_, i) =>
+    computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests).heures).reduce((a, b) => a + b, 0);
+
+  return `
+    <div class="view-header-row">
+      <p class="view-subtitle">${MONTH_NAMES[month]} ${year} — total automatique des heures</p>
+      <div class="calendar-nav">
+        <button class="btn btn-secondary btn-sm" id="btn-planning-month-prev">← Précédent</button>
+        <button class="btn btn-secondary btn-sm" id="btn-planning-month-today">Ce mois-ci</button>
+        <button class="btn btn-secondary btn-sm" id="btn-planning-month-next">Suivant →</button>
+      </div>
+    </div>
+    <div class="card table-card">
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table">
+          <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>
+            ${groups.map(g => `
+              <tr class="planning-service-header"><td colspan="${daysInMonth + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+              ${g.employees.map(e => `
+                <tr>
+                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                  ${Array.from({ length: daysInMonth }, (_, i) => {
+                    const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
+                    return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? '🏖️' : formatNumberFR(info.heures)}</td>`;
+                  }).join('')}
+                  <td><strong>${formatNumberFR(totalMois(e))} h</strong></td>
+                </tr>
+              `).join('')}
+            `).join('')}
           </tbody>
         </table>
       `}
@@ -5752,15 +5865,34 @@ function bindPlanningEvents() {
     render();
   });
 
-  if (state.planningView === 'semaine' || state.planningView === 'horaires') {
+  const horairesSemaineActive = state.planningView === 'horaires' && state.horairesView !== 'jour' && state.horairesView !== 'mois';
+  if (state.planningView === 'semaine' || horairesSemaineActive) {
     document.getElementById('btn-planning-week-prev').addEventListener('click', () => { state.planningWeekOffset -= 1; render(); });
     document.getElementById('btn-planning-week-next').addEventListener('click', () => { state.planningWeekOffset += 1; render(); });
     document.getElementById('btn-planning-week-today').addEventListener('click', () => { state.planningWeekOffset = 0; render(); });
   }
   if (state.planningView === 'horaires') {
+    document.querySelectorAll('[data-horaires-view]').forEach(btn => {
+      btn.addEventListener('click', () => { state.horairesView = btn.dataset.horairesView; render(); });
+    });
     document.querySelectorAll('[data-edit-horaires]').forEach(btn => {
       btn.addEventListener('click', () => openHorairesModal(btn.dataset.editHoraires));
     });
+    if (state.horairesView === 'jour') {
+      document.getElementById('btn-horaires-day-prev').addEventListener('click', () => { state.horairesDay = toISODate(addDays(new Date(state.horairesDay), -1)); render(); });
+      document.getElementById('btn-horaires-day-next').addEventListener('click', () => { state.horairesDay = toISODate(addDays(new Date(state.horairesDay), 1)); render(); });
+      document.getElementById('btn-horaires-day-today').addEventListener('click', () => { state.horairesDay = toISODate(new Date()); render(); });
+    }
+    if (state.horairesView === 'mois') {
+      document.getElementById('btn-planning-month-prev').addEventListener('click', () => { shiftPlanningMonth(-1); });
+      document.getElementById('btn-planning-month-next').addEventListener('click', () => { shiftPlanningMonth(1); });
+      document.getElementById('btn-planning-month-today').addEventListener('click', () => {
+        const now = new Date();
+        state.planningYear = now.getFullYear();
+        state.planningMonth = now.getMonth();
+        render();
+      });
+    }
   }
   if (state.planningView === 'mois') {
     document.getElementById('btn-planning-month-prev').addEventListener('click', () => { shiftPlanningMonth(-1); });
