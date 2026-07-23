@@ -3941,6 +3941,15 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
+  // Sprint SIRH premium §1 : "Seuls RH/Manager/Directeur peuvent créer une absence dans le passé
+  // [...] Les salariés ne peuvent jamais modifier une période antérieure à aujourd'hui." — la
+  // création couvre aussi la saisie initiale, pas seulement la modification d'une demande existante
+  // (déjà couverte par canManageRequestFor, qui exclut systématiquement le demandeur lui-même).
+  if (DB.getCurrentUser().role === ROLES.SALARIE && dateDebut < toISODate(new Date())) {
+    showToast('Vous ne pouvez pas saisir une absence dont la date de début est déjà passée.', 'error');
+    return;
+  }
+
   const employee = employeeRepository.getById(employeeId);
   const type = DB.getLeaveTypeById(typeId);
 
