@@ -1580,6 +1580,72 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   `;
 }
 
+/** Sprint SIRH premium §7 : centre d'action cliquable du tableau de bord — chaque ligne pointe vers
+ * l'écran concerné avec le filtre "En attente" déjà présélectionné (mêmes navParams que les
+ * raccourcis sidebar équipe, §5, pour rester cohérent). `employeeIds` = null (RH/Directeur, toute
+ * l'entreprise) ou liste restreinte (équipe d'un manager) — même convention que
+ * renderOperationalDashboardBody. Une ligne n'apparaît que si elle a effectivement quelque chose à
+ * signaler (liste vide = pas de bruit), sauf "Préparation de paie" qui reste visible même à 0
+ * anomalie pour confirmer explicitement que la paie est prête. */
+function renderDashboardActionCenter(employees, employeeIds) {
+  const user = DB.getCurrentUser();
+  // Congés/télétravail/contrats : seuls manager/RH/directeur valident ou gèrent des contrats — la
+  // comptabilité (qui tombe aussi sur renderDashboardRH) n'a ni ces écrans ni ces entrées sidebar
+  // (§5), un item cliquable ici la ramènerait juste vers le dashboard sans rien ouvrir.
+  const managesEquipe = [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role);
+
+  const items = [];
+
+  if (managesEquipe) {
+    let congesEnAttente = leaveRepository.getAll().filter(r => r.statut === 'En attente');
+    let teletravailEnAttente = teleworkRepository.getAll().filter(r => r.statut === 'En attente');
+    if (employeeIds) {
+      congesEnAttente = congesEnAttente.filter(r => employeeIds.includes(r.employeeId));
+      teletravailEnAttente = teletravailEnAttente.filter(r => employeeIds.includes(r.employeeId));
+    }
+    const contractEnds = getUpcomingContractEnds(60, employees);
+    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'conges', navParams: { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } } });
+    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'teletravail', navParams: { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } } });
+    if (contractEnds.length) items.push({ icon: '📄', label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
+  }
+
+  let fraisEnAttente = expenseRepository.getAll().filter(n => n.statut === 'En attente');
+  if (employeeIds) fraisEnAttente = fraisEnAttente.filter(n => employeeIds.includes(n.employeeId));
+  if (fraisEnAttente.length) items.push({ icon: '🧾', label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } } });
+
+  if (hasPermission(user, PERMISSIONS.EXPORTER_PAIE)) {
+    const now = new Date();
+    const bloquantes = getPaieAnomalies(now.getFullYear(), now.getMonth()).filter(a => a.severity === 'bloquante');
+    items.push(bloquantes.length
+      ? { icon: '🚫', label: `${bloquantes.length} anomalie${bloquantes.length > 1 ? 's' : ''} bloquante${bloquantes.length > 1 ? 's' : ''} avant l'export paie`, nav: 'export-paie', navParams: { paieTab: 'preparation' } }
+      : { icon: '📤', label: `Préparation de paie : aucune anomalie ce mois-ci`, nav: 'export-paie', navParams: { paieTab: 'preparation' } });
+  }
+
+  if (hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT)) {
+    const now = new Date();
+    const totalTickets = employees.filter(e => e.statut === 'Actif')
+      .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRepository.getAll(), teleworkRepository.getAll(), DB.getSettings()).nbTickets, 0);
+    items.push({ icon: '🍽️', label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
+  }
+
+  if (!items.length) return '';
+
+  return `
+    <div class="card action-center">
+      <h2>Centre d'action</h2>
+      <div class="action-center-list">
+        ${items.map(i => `
+          <button type="button" class="action-center-item" data-nav="${i.nav}" data-nav-params='${escapeHtml(JSON.stringify(i.navParams))}'>
+            <span class="action-center-icon">${i.icon}</span>
+            <span class="action-center-label">${escapeHtml(i.label)}</span>
+            <span class="action-center-arrow">→</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderDashboardShortcuts() {
   return `
     <div class="card">
@@ -1601,6 +1667,7 @@ function renderDashboardRH() {
       <h1>Tableau de bord</h1>
       <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
     </div>
+    ${renderDashboardActionCenter(employees, null)}
     ${renderOperationalDashboardBody(employees, null)}
     ${renderDashboardShortcuts()}
   `;
@@ -1614,6 +1681,7 @@ function renderDashboardManager() {
       <h1>Tableau de bord</h1>
       <p class="view-subtitle">Vue d'ensemble de votre équipe</p>
     </div>
+    ${renderDashboardActionCenter(employees, visibleIds)}
     ${renderOperationalDashboardBody(employees, visibleIds)}
     ${renderDashboardShortcuts()}
   `;
@@ -1722,6 +1790,7 @@ function renderDashboardDirecteur() {
       <h1>Tableau de bord</h1>
       <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
     </div>
+    ${renderDashboardActionCenter(employees, null)}
     ${renderOperationalDashboardBody(employees, null)}
 
     <div class="view-header" style="margin-top: 8px;">
@@ -7655,7 +7724,7 @@ function showToast(message, type = 'success') {
 
 document.addEventListener('click', (e) => {
   const navBtn = e.target.closest('[data-nav]');
-  if (navBtn) navigateTo(navBtn.dataset.nav);
+  if (navBtn) navigateTo(navBtn.dataset.nav, navBtn.dataset.navParams ? JSON.parse(navBtn.dataset.navParams) : {});
 });
 
 // ---------------------------------------------------------------------------

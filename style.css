@@ -1008,6 +1008,31 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .mini-list-item:last-child { border-bottom: none; }
 
+/* Sprint SIRH premium §7 : centre d'action du tableau de bord */
+.action-center-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+
+.action-center-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.action-center-item:hover { background: var(--color-muted-soft); border-color: var(--color-primary); }
+.action-center-icon { font-size: 18px; }
+.action-center-label { flex: 1; }
+.action-center-arrow { color: var(--color-text-muted); }
+
 /* ---------------------------------------------------------------------
    Organigramme — arbre hiérarchique en CSS pur (lignes de connexion via ::before/::after)
    --------------------------------------------------------------------- */
