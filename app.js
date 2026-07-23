@@ -83,6 +83,7 @@ function getInitialViewState() {
     notifTab: 'non-lues',
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
+    paieTab: 'preparation', // Sprint SIRH premium §6 : préparation/anomalies affichée par défaut, avant l'export
     authView: 'login', // 'login' | 'forgot' | 'reset'
     authError: '',
     pendingReset: null, // { token, employeeName } après une demande de réinitialisation
@@ -133,7 +134,7 @@ const NAV_ITEMS = [
   { key: 'teletravail', label: 'Télétravail à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } } },
   { key: 'frais', label: 'Notes de frais à valider', icon: '✅', roles: ['manager', 'rh', 'directeur', 'comptabilite'], group: 'equipe', navParams: { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } } },
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
-  { key: 'export-paie', label: 'Export paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
+  { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
 
   { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] }
 ];
@@ -6980,18 +6981,26 @@ function getPaieRows(year, month) {
   // présent — le filtrer sur son statut live lui aurait fait perdre toutes ses données de ce mois-là
   // (congés, télétravail, notes de frais), pas seulement les jours après son départ.
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
-  const leaveTypesExportables = DB.getLeaveTypes().filter(t => t.exportPaie);
+  const leaveTypes = DB.getLeaveTypes();
+  const leaveTypesExportables = leaveTypes.filter(t => t.exportPaie);
+  // Sprint SIRH premium §6 (Préparation de paie) : buckets fixes par nom de type, indépendants du
+  // réglage "export paie" par type — le récapitulatif doit montrer les vraies données de congés/RTT/
+  // maladie même si RH n'a pas coché ces types pour la colonne CSV (même principe que
+  // calculateAbsenteeismRate, qui identifie déjà "Maladie" par son nom).
+  const congesPayesTypeIds = leaveTypes.filter(t => t.nom === 'Congés payés').map(t => t.id);
+  const rttTypeIds = leaveTypes.filter(t => t.nom === 'RTT').map(t => t.id);
+  const maladieTypeIds = leaveTypes.filter(t => t.nom === 'Maladie').map(t => t.id);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
   const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
   const settings = DB.getSettings();
 
   return employees.map(e => {
-    const congesParType = leaveTypesExportables.map(t =>
-      leaveRequests
-        .filter(r => r.employeeId === e.id && r.typeId === t.id)
-        .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e.joursTravailles), 0)
-    );
+    const sumTypeIdsInMonth = (typeIds) => leaveRequests
+      .filter(r => r.employeeId === e.id && typeIds.includes(r.typeId))
+      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e.joursTravailles), 0);
+
+    const congesParType = leaveTypesExportables.map(t => sumTypeIdsInMonth([t.id]));
 
     const teletravailJours = teleworkRequests
       .filter(r => r.employeeId === e.id)
@@ -7006,34 +7015,186 @@ function getPaieRows(year, month) {
       congesParType,
       teletravailJours,
       tickets: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings),
-      notesRembourser
+      notesRembourser,
+      congesPayesJours: sumTypeIdsInMonth(congesPayesTypeIds),
+      rttJours: sumTypeIdsInMonth(rttTypeIds),
+      maladieJours: sumTypeIdsInMonth(maladieTypeIds)
     };
   });
 }
 
-function renderExportPaie() {
-  const settings = DB.getSettings();
-  const modele = settings.exportPaieModele || 'generique';
-  const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
-  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+/** Sprint SIRH premium §6 : anomalies à vérifier avant de lancer l'export paie du mois — Bloquantes
+ * (fausserait un calcul de paie : solde négatif, dates hors période contractuelle), Avertissements
+ * (risque qualité/légal mais qui ne fausse rien : justificatif manquant, données administratives
+ * incomplètes), Informations (à connaître, pas une erreur : contrat qui se termine ce mois-ci). */
+function getPaieAnomalies(year, month) {
+  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthStart = `${monthStr}-01`;
+  const monthEnd = toISODate(new Date(year, month + 1, 0));
+  const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
+  const leaveTypes = DB.getLeaveTypes();
+  const allLeaveRequests = leaveRepository.getAll();
+  const validLeaveRequests = allLeaveRequests.filter(r => r.statut === 'Validé');
+  const validTeleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
 
-  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
+  const isWithinEmploymentPeriod = (e, dateDebut, dateFin) =>
+    Boolean(e.dateEmbauche) && dateDebut >= e.dateEmbauche && (!e.dateDepart || dateFin <= e.dateDepart);
+  // "Absence incohérente"/"justificatif manquant" ne portent que sur les demandes qui chevauchent le
+  // mois affiché : sans ça, une vieille donnée jamais corrigée resterait signalée indéfiniment sur
+  // TOUS les mois futurs, noyant l'écran de préparation dans du bruit sans rapport avec la paie en cours.
+  const overlapsMonth = (dateDebut, dateFin) => dateDebut <= monthEnd && dateFin >= monthStart;
+
+  const anomalies = [];
+  employees.forEach(e => {
+    leaveTypes.filter(t => t.categorie === 'conge' && t.acquisition !== 'Illimitée').forEach(t => {
+      const balance = getLeaveBalance(e, t, allLeaveRequests);
+      if (balance.disponible < 0) {
+        anomalies.push({ severity: 'bloquante', type: 'compteur_negatif', employee: e, message: `Solde "${t.nom}" négatif : ${formatDurationFR(balance.disponible)}` });
+      }
+    });
+
+    [...validLeaveRequests, ...validTeleworkRequests].filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
+      if (!isWithinEmploymentPeriod(e, r.dateDebut, r.dateFin)) {
+        anomalies.push({ severity: 'bloquante', type: 'absence_incoherente', employee: e, message: `Demande du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)} en dehors de la période contractuelle` });
+      }
+    });
+
+    validLeaveRequests.filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
+      const type = leaveTypes.find(t => t.id === r.typeId);
+      if (type && type.justificatifObligatoire && !r.justificatif) {
+        anomalies.push({ severity: 'avertissement', type: 'justificatif_manquant', employee: e, message: `Justificatif manquant pour "${type.nom}" du ${formatDate(r.dateDebut)}` });
+      }
+    });
+
+    const champsManquants = [];
+    if (!e.numeroSecu) champsManquants.push('n° sécurité sociale');
+    if (!e.salaireBrutMensuel) champsManquants.push('salaire brut mensuel');
+    if (!e.matricule) champsManquants.push('matricule');
+    if (champsManquants.length) {
+      anomalies.push({ severity: 'avertissement', type: 'donnees_incompletes', employee: e, message: `Données manquantes : ${champsManquants.join(', ')}` });
+    }
+
+    if (e.dateDepart && e.dateDepart >= monthStart && e.dateDepart <= monthEnd) {
+      anomalies.push({ severity: 'information', type: 'contrat_termine', employee: e, message: `Contrat terminé le ${formatDate(e.dateDepart)} — dernier mois de paie` });
+    }
+  });
+
+  return anomalies;
+}
+
+/** Sprint SIRH premium §6 : "Préparation de paie" — étape de relecture des anomalies avant
+ * l'export, désormais un onglet de l'écran existant (state.paieTab) plutôt qu'un nouvel écran, pour
+ * rester sur le même point d'entrée sidebar/permission (EXPORTER_PAIE) déjà en place. Le bouton
+ * "Exporter CSV" de l'onglet Export reste volontairement TOUJOURS actif même s'il existe des
+ * anomalies bloquantes : un blocage technique dur serait risqué en production (faux positif un jour
+ * de paie) — la relecture est mise en avant (onglet par défaut, bannière), pas mécaniquement forcée. */
+function renderExportPaie() {
   const rows = getPaieRows(state.paieYear, state.paieMonth);
+  const tab = state.paieTab || 'preparation';
 
   return `
     <div class="view-header-row">
       <div>
-        <h1>Export paie</h1>
+        <h1>Préparation de paie</h1>
         <p class="view-subtitle">${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · ${rows.length} salarié${rows.length > 1 ? 's' : ''}</p>
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary btn-sm" id="btn-paie-prev">← Précédent</button>
         <button class="btn btn-secondary btn-sm" id="btn-paie-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-paie-next">Suivant →</button>
-        <button class="btn btn-secondary" id="btn-export-paie">Exporter CSV</button>
+        ${tab === 'export' ? '<button class="btn btn-secondary" id="btn-export-paie">Exporter CSV</button>' : ''}
       </div>
     </div>
+    <div class="tabs" style="margin-bottom: 10px;">
+      <button class="tab ${tab === 'preparation' ? 'active' : ''}" data-paie-tab="preparation">Préparation &amp; anomalies</button>
+      <button class="tab ${tab === 'export' ? 'active' : ''}" data-paie-tab="export">Export CSV</button>
+    </div>
+    ${tab === 'export' ? renderExportPaieExportTab(rows) : renderExportPaiePreparationTab(rows)}
+  `;
+}
 
+function renderPaieAnomalyBadges(anomaliesForEmployee) {
+  if (!anomaliesForEmployee.length) return '<span class="text-muted">—</span>';
+  const counts = { bloquante: 0, avertissement: 0, information: 0 };
+  anomaliesForEmployee.forEach(a => counts[a.severity]++);
+  return [
+    counts.bloquante ? `<span class="badge badge-danger">${counts.bloquante} bloquante${counts.bloquante > 1 ? 's' : ''}</span>` : '',
+    counts.avertissement ? `<span class="badge badge-warning">${counts.avertissement} avert.</span>` : '',
+    counts.information ? `<span class="badge badge-info">${counts.information} info</span>` : ''
+  ].filter(Boolean).join(' ');
+}
+
+function renderExportPaiePreparationTab(rows) {
+  const anomalies = getPaieAnomalies(state.paieYear, state.paieMonth);
+  const bloquantes = anomalies.filter(a => a.severity === 'bloquante');
+  const avertissements = anomalies.filter(a => a.severity === 'avertissement');
+  const informations = anomalies.filter(a => a.severity === 'information');
+
+  const anomalySection = (title, list, badgeClass) => !list.length ? '' : `
+    <div class="card" style="margin-bottom: 12px;">
+      <h3 style="margin-bottom: 8px;">${title} <span class="badge ${badgeClass}">${list.length}</span></h3>
+      <ul class="anomaly-list">
+        ${list.map(a => `<li><strong>${escapeHtml(a.employee.prenom)} ${escapeHtml(a.employee.nom)}</strong> — ${escapeHtml(a.message)}</li>`).join('')}
+      </ul>
+    </div>
+  `;
+
+  return `
+    ${!anomalies.length ? `
+      <div class="card" style="text-align: center; padding: 24px;">
+        <div style="font-size: 32px;">✅</div>
+        <p>Aucune anomalie détectée pour ${MONTH_NAMES[state.paieMonth]} ${state.paieYear}. Prêt pour l'export.</p>
+      </div>
+    ` : `
+      ${anomalySection('🚫 Bloquantes — à corriger avant export', bloquantes, 'badge-danger')}
+      ${anomalySection('⚠️ Avertissements', avertissements, 'badge-warning')}
+      ${anomalySection('ℹ️ Informations', informations, 'badge-info')}
+    `}
+
+    <div class="card table-card">
+      <h3 style="padding: 14px 14px 0;">Récapitulatif par salarié</h3>
+      ${!rows.length ? `<div class="empty-state"><div class="empty-icon">🧾</div><p>Aucun salarié pour ce mois.</p></div>` : `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Salarié</th>
+              <th>Congés payés</th>
+              <th>RTT</th>
+              <th>Maladie</th>
+              <th>Télétravail</th>
+              <th>Notes de frais</th>
+              <th>Tickets restaurant</th>
+              <th>Anomalies</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
+                <td>${formatDurationFR(r.congesPayesJours)}</td>
+                <td>${formatDurationFR(r.rttJours)}</td>
+                <td>${formatDurationFR(r.maladieJours)}</td>
+                <td>${formatDurationFR(r.teletravailJours)}</td>
+                <td>${formatCurrencyFR(r.notesRembourser)}</td>
+                <td>${r.tickets.nbTickets}</td>
+                <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+function renderExportPaieExportTab(rows) {
+  const settings = DB.getSettings();
+  const modele = settings.exportPaieModele || 'generique';
+  const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
+  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
+
+  return `
     <div class="card">
       <p class="text-muted">Consolide, pour la paie du mois, les congés marqués « export paie » (paramétrable dans Congés → Types), le télétravail, les tickets restaurant et les notes de frais validées à rembourser.</p>
       <div class="form-grid" style="margin-top: 10px;">
@@ -7095,9 +7256,16 @@ function bindExportPaieEvents() {
     state.paieMonth = now.getMonth();
     render();
   });
-  document.getElementById('btn-export-paie').addEventListener('click', exportPaieCSV);
 
-  document.getElementById('f-export-paie-modele').addEventListener('change', (e) => {
+  document.querySelectorAll('[data-paie-tab]').forEach(btn => {
+    btn.addEventListener('click', () => { state.paieTab = btn.dataset.paieTab; render(); });
+  });
+
+  const exportBtn = document.getElementById('btn-export-paie');
+  if (exportBtn) exportBtn.addEventListener('click', exportPaieCSV);
+
+  const modeleSelect = document.getElementById('f-export-paie-modele');
+  if (modeleSelect) modeleSelect.addEventListener('change', (e) => {
     const settings = DB.getSettings();
     settings.exportPaieModele = e.target.value;
     DB.saveSettings(settings);
