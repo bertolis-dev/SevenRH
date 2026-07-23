@@ -5455,13 +5455,14 @@ function getPlanningEmployees(periodStart, periodEnd) {
 function renderPlanning() {
   return `
     <div class="view-header">
-      <h1>Planning des absences</h1>
-      <p class="view-subtitle">Vue d'ensemble par semaine, mois ou année — congés et télétravail validés</p>
+      <h1>Planning</h1>
+      <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail — congés et télétravail validés</p>
     </div>
     <div class="tabs">
       <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
       <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
       <button class="tab ${state.planningView === 'annee' ? 'active' : ''}" data-planning-view="annee">Année</button>
+      <button class="tab ${state.planningView === 'horaires' ? 'active' : ''}" data-planning-view="horaires">Horaires</button>
     </div>
     <div class="toolbar card">
       <select id="planning-filter-service" class="input">
@@ -5470,7 +5471,10 @@ function renderPlanning() {
       </select>
     </div>
     <div id="planning-content">
-      ${state.planningView === 'mois' ? renderPlanningMois() : state.planningView === 'annee' ? renderPlanningAnnee() : renderPlanningSemaine()}
+      ${state.planningView === 'mois' ? renderPlanningMois()
+        : state.planningView === 'annee' ? renderPlanningAnnee()
+        : state.planningView === 'horaires' ? renderPlanningHoraires()
+        : renderPlanningSemaine()}
     </div>
   `;
 }
@@ -5612,6 +5616,132 @@ function renderPlanningAnnee() {
   `;
 }
 
+/** Sprint SIRH premium §3 : différence en heures entre deux horaires "HH:MM". */
+function timeRangeToHours(debut, fin) {
+  if (!debut || !fin) return 0;
+  const [dh, dm] = debut.split(':').map(Number);
+  const [fh, fm] = fin.split(':').map(Number);
+  return Math.max(0, (fh * 60 + fm - (dh * 60 + dm)) / 60);
+}
+
+/** Heures planifiées d'un salarié pour une date donnée : 0 si jour non travaillé ou congé validé,
+ * sinon somme des horaires matin+après-midi (identiques chaque jour travaillé, cf.
+ * employee.horaireMatinDebut etc.) — le télétravail reste travaillé (mêmes horaires), juste signalé
+ * différemment à l'affichage. */
+function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
+  const weekday = WEEKDAY_LABELS[(new Date(dateStr).getDay() + 6) % 7];
+  if (!(employee.joursTravailles || []).includes(weekday)) return { heures: 0, label: '—', level: 'off' };
+
+  const onLeave = leaveRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+  if (onLeave) return { heures: 0, label: '🏖️', level: 'leave' };
+
+  const heures = round2(timeRangeToHours(employee.horaireMatinDebut, employee.horaireMatinFin) +
+    timeRangeToHours(employee.horaireApresMidiDebut, employee.horaireApresMidiFin));
+  const onTelework = teleworkRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+  return { heures, label: `${formatNumberFR(heures)} h${onTelework ? ' 💻' : ''}`, level: onTelework ? 'remote' : 'office' };
+}
+
+function renderPlanningHoraires() {
+  const weekDates = getWeekDates(state.planningWeekOffset);
+  const employees = getPlanningEmployees(toISODate(weekDates[0]), toISODate(weekDates[6]));
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const groups = groupEmployeesByService(employees);
+  const totalSemaine = (e) => weekDates.reduce((sum, d) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0);
+
+  return `
+    <div class="view-header-row">
+      <p class="view-subtitle">Semaine du ${formatDate(toISODate(weekDates[0]))} au ${formatDate(toISODate(weekDates[6]))} — total automatique des heures</p>
+      <div class="calendar-nav">
+        <button class="btn btn-secondary btn-sm" id="btn-planning-week-prev">← Précédente</button>
+        <button class="btn btn-secondary btn-sm" id="btn-planning-week-today">Cette semaine</button>
+        <button class="btn btn-secondary btn-sm" id="btn-planning-week-next">Suivante →</button>
+      </div>
+    </div>
+    <div class="card table-card">
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table">
+          <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>
+            ${groups.map(g => {
+              const serviceTotal = g.employees.reduce((sum, e) => sum + totalSemaine(e), 0);
+              return `
+                <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+                ${g.employees.map(e => `
+                  <tr>
+                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                    ${weekDates.map(d => {
+                      const info = computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests);
+                      return `<td class="planning-cell planning-${info.level}">${info.label}</td>`;
+                    }).join('')}
+                    <td><strong>${formatNumberFR(totalSemaine(e))} h</strong></td>
+                  </tr>
+                `).join('')}
+                <tr class="planning-summary-row">
+                  <td>Total ${escapeHtml(g.service)}</td>
+                  ${weekDates.map(d => `<td>${formatNumberFR(g.employees.reduce((sum, e) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0))} h</td>`).join('')}
+                  <td><strong>${formatNumberFR(serviceTotal)} h</strong></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+function openHorairesModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Horaires — ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="horaires-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            ${textField('horaireMatinDebut', 'Matin — début', employee.horaireMatinDebut || '09:00', true, 'time')}
+            ${textField('horaireMatinFin', 'Matin — fin', employee.horaireMatinFin || '12:00', true, 'time')}
+            ${textField('horaireApresMidiDebut', 'Après-midi — début', employee.horaireApresMidiDebut || '13:00', true, 'time')}
+            ${textField('horaireApresMidiFin', 'Après-midi — fin', employee.horaireApresMidiFin || '17:00', true, 'time')}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('horaires-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const patch = {
+      horaireMatinDebut: document.getElementById('f-horaireMatinDebut').value,
+      horaireMatinFin: document.getElementById('f-horaireMatinFin').value,
+      horaireApresMidiDebut: document.getElementById('f-horaireApresMidiDebut').value,
+      horaireApresMidiFin: document.getElementById('f-horaireApresMidiFin').value
+    };
+    if (timeRangeToHours(patch.horaireMatinDebut, patch.horaireMatinFin) <= 0 && timeRangeToHours(patch.horaireApresMidiDebut, patch.horaireApresMidiFin) <= 0) {
+      showToast('Les horaires doivent représenter au moins une plage valide.', 'error');
+      return;
+    }
+    employeeRepository.update(employeeId, patch);
+    DB.logAudit('Modification', 'Horaires', `${employee.prenom} ${employee.nom}`);
+    showToast('Horaires mis à jour.');
+    closeModal();
+    render();
+  });
+}
+
 function bindPlanningEvents() {
   document.querySelectorAll('[data-planning-view]').forEach(btn => {
     btn.addEventListener('click', () => { state.planningView = btn.dataset.planningView; render(); });
@@ -5622,11 +5752,17 @@ function bindPlanningEvents() {
     render();
   });
 
-  if (state.planningView === 'semaine') {
+  if (state.planningView === 'semaine' || state.planningView === 'horaires') {
     document.getElementById('btn-planning-week-prev').addEventListener('click', () => { state.planningWeekOffset -= 1; render(); });
     document.getElementById('btn-planning-week-next').addEventListener('click', () => { state.planningWeekOffset += 1; render(); });
     document.getElementById('btn-planning-week-today').addEventListener('click', () => { state.planningWeekOffset = 0; render(); });
-  } else if (state.planningView === 'mois') {
+  }
+  if (state.planningView === 'horaires') {
+    document.querySelectorAll('[data-edit-horaires]').forEach(btn => {
+      btn.addEventListener('click', () => openHorairesModal(btn.dataset.editHoraires));
+    });
+  }
+  if (state.planningView === 'mois') {
     document.getElementById('btn-planning-month-prev').addEventListener('click', () => { shiftPlanningMonth(-1); });
     document.getElementById('btn-planning-month-next').addEventListener('click', () => { shiftPlanningMonth(1); });
     document.getElementById('btn-planning-month-today').addEventListener('click', () => {
@@ -6940,6 +7076,13 @@ function openEmployeeModal(id) {
               ${textField('horairesHebdo', 'Heures hebdomadaires', employee.horairesHebdo, false, 'number')}
               ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait)}
               ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT)}
+            </div>
+            <p class="text-muted" style="margin-top: 14px;">Horaires (identiques chaque jour travaillé) — utilisés par le Planning (§3).</p>
+            <div class="form-grid">
+              ${textField('horaireMatinDebut', 'Matin — début', employee.horaireMatinDebut || '09:00', false, 'time')}
+              ${textField('horaireMatinFin', 'Matin — fin', employee.horaireMatinFin || '12:00', false, 'time')}
+              ${textField('horaireApresMidiDebut', 'Après-midi — début', employee.horaireApresMidiDebut || '13:00', false, 'time')}
+              ${textField('horaireApresMidiFin', 'Après-midi — fin', employee.horaireApresMidiFin || '17:00', false, 'time')}
             </div>
           </fieldset>
 

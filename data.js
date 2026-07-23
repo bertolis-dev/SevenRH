@@ -1624,6 +1624,12 @@ function makeEmptyEmployee() {
     forfait: 'Aucun',
     regimeRTT: '',
     joursTravailles: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'],
+    // Sprint SIRH premium §3 : horaires matin/après-midi, identiques chaque jour travaillé pour
+    // l'instant (pas de variante par jour de la semaine — cf. renderPlanningHoraires).
+    horaireMatinDebut: '09:00',
+    horaireMatinFin: '12:00',
+    horaireApresMidiDebut: '13:00',
+    horaireApresMidiFin: '17:00',
 
     statut: 'Actif',
     dateDepart: '',
