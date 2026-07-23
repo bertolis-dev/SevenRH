@@ -4400,7 +4400,7 @@ function getCalendarDayInfo(dateStr, sharedData) {
     .map(r => {
       const emp = employees.find(e => e.id === r.employeeId);
       const type = leaveTypes.find(t => t.id === r.typeId);
-      return emp && type ? { emp, type } : null;
+      return emp && type ? { emp, type, statut: r.statut } : null;
     })
     .filter(Boolean);
 
@@ -4410,7 +4410,10 @@ function getCalendarDayInfo(dateStr, sharedData) {
 
   const teletravail = teleworkRequests
     .filter(r => dateStr >= r.dateDebut && dateStr <= r.dateFin)
-    .map(r => employees.find(e => e.id === r.employeeId))
+    .map(r => {
+      const emp = employees.find(e => e.id === r.employeeId);
+      return emp ? { emp, statut: r.statut } : null;
+    })
     .filter(Boolean);
 
   const ferie = publicHolidays.find(h => h.date === dateStr) || null;
@@ -4432,9 +4435,19 @@ function renderCalendarCell(cell, sharedData) {
   if (info.ferie) classes.push('holiday');
   if (info.vacances) classes.push('school-holiday');
 
+  // Sprint SIRH premium §2 : "Les demandes non validées doivent être visibles [...] facilement
+  // identifiables" — séparées des demandes validées dans un badge distinct, semi-transparent
+  // (cf. .calendar-badge-pending), plutôt que mélangées sans distinction dans le même badge.
+  const congesValides = info.conges.filter(c => c.statut === 'Validé');
+  const congesEnAttente = info.conges.filter(c => c.statut !== 'Validé');
+  const teletravailValide = info.teletravail.filter(t => t.statut === 'Validé');
+  const teletravailEnAttente = info.teletravail.filter(t => t.statut !== 'Validé');
+
   const badges = [
-    info.conges.length ? calendarBadge('🏖️', info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}`)) : '',
-    info.teletravail.length ? calendarBadge('💻', info.teletravail.map(e => `${e.prenom} ${e.nom}`)) : '',
+    congesValides.length ? calendarBadge('🏖️', congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}`)) : '',
+    congesEnAttente.length ? calendarBadge('🏖️', congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom} (en attente)`), true) : '',
+    teletravailValide.length ? calendarBadge('💻', teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
+    teletravailEnAttente.length ? calendarBadge('💻', teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
     info.anniversaires.length ? calendarBadge('🎂', info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
     info.arrivees.length ? calendarBadge('🎉', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
     info.departs.length ? calendarBadge('👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
@@ -4452,9 +4465,9 @@ function renderCalendarCell(cell, sharedData) {
   `;
 }
 
-function calendarBadge(icon, names) {
+function calendarBadge(icon, names, pending = false) {
   return `
-    <span class="calendar-badge">
+    <span class="calendar-badge${pending ? ' calendar-badge-pending' : ''}" ${pending ? 'title="En attente de validation"' : ''}>
       ${icon}${names.length > 1 ? names.length : ''}
       <span class="calendar-tooltip">${names.map(escapeHtml).join('<br>')}</span>
     </span>
@@ -5374,7 +5387,10 @@ function exportAuditLogCSV() {
 // Vue : Planning des absences (semaine / mois / année, tous types confondus)
 // ---------------------------------------------------------------------------
 
-/** Statut d'un salarié à une date donnée, tous types d'absence confondus (congé ou télétravail). */
+/** Statut d'un salarié à une date donnée, tous types d'absence confondus (congé ou télétravail).
+ * Sprint SIRH premium §2 : `leaveRequests`/`teleworkRequests` peuvent désormais inclure des demandes
+ * "En attente" (pas seulement "Validé") — `pending: true` permet à l'affichage de les distinguer
+ * visuellement (semi-transparent) plutôt que de les rendre invisibles comme avant. */
 function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   const weekday = WEEKDAY_LABELS[(new Date(dateStr).getDay() + 6) % 7];
   if (!(employee.joursTravailles || []).includes(weekday)) {
@@ -5384,11 +5400,15 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   const onLeave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
   if (onLeave) {
     const type = DB.getLeaveTypeById(onLeave.typeId);
-    return { icon: type ? type.icone : '🏖️', level: 'leave', title: type ? type.nom : 'Congé' };
+    const pending = onLeave.statut !== 'Validé';
+    return { icon: type ? type.icone : '🏖️', level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending };
   }
 
   const onTelework = teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-  if (onTelework) return { icon: '💻', level: 'remote', title: 'Télétravail' };
+  if (onTelework) {
+    const pending = onTelework.statut !== 'Validé';
+    return { icon: '💻', level: 'remote', title: `Télétravail${pending ? ' (en attente)' : ''}`, pending };
+  }
 
   return { icon: '🏢', level: 'office', title: 'Présent' };
 }
@@ -5435,14 +5455,16 @@ function renderPlanning() {
 
 function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
-  return `<td class="planning-cell planning-${status.level}" title="${escapeHtml(status.title)}">${status.icon}</td>`;
+  return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}" title="${escapeHtml(status.title)}">${status.icon}</td>`;
 }
 
 function renderPlanningSemaine() {
   const weekDates = getWeekDates(state.planningWeekOffset);
   const employees = getPlanningEmployees(toISODate(weekDates[0]), toISODate(weekDates[6]));
-  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
-  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  // Sprint SIRH premium §2 : les demandes en attente doivent rester visibles (semi-transparentes,
+  // cf. getStatusForDate/renderPlanningStatusCell), pas totalement absentes du planning.
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
 
   return `
     <div class="view-header-row">
@@ -5476,8 +5498,8 @@ function renderPlanningMois() {
   const month = state.planningMonth;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const employees = getPlanningEmployees(`${year}-${String(month + 1).padStart(2, '0')}-01`, toISODate(new Date(year, month, daysInMonth)));
-  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
-  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
 
   return `
     <div class="view-header-row">

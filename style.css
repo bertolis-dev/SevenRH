@@ -840,6 +840,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .calendar-badge:hover .calendar-tooltip { opacity: 1; }
 
+/* Sprint SIRH premium §2 : demande non validée — visible mais visuellement distincte (semi-transparente, bordure en pointillés) d'une demande déjà validée. */
+.calendar-badge-pending {
+  opacity: 0.55;
+  border-style: dashed;
+  background: transparent;
+}
+
 /* ---------------------------------------------------------------------
    Paramètres — listes de référence
    --------------------------------------------------------------------- */
