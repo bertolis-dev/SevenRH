@@ -93,7 +93,8 @@ function getInitialViewState() {
     planningYear: new Date().getFullYear(),
     planningMonth: new Date().getMonth(),
     auditFilters: { action: '', search: '', dateDebut: '', dateFin: '' },
-    auditPage: 1
+    auditPage: 1,
+    calendrierVue: 'entreprise' // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
   };
 }
 
@@ -4303,9 +4304,17 @@ const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 function renderCalendrier() {
   const cells = buildMonthGridCells(state.calendarYear, state.calendarMonth);
   const settings = DB.getSettings();
+  const user = DB.getCurrentUser();
+  // Sprint SIRH premium §2 : "Créer un calendrier spécifique pour RH/Managers/Directeur [...] leurs
+  // propres congés, leurs événements personnels, leurs validations" — un salarié voit déjà
+  // uniquement son propre calendrier par défaut (getVisibleEmployeeIdsForCurrentUser), donc le
+  // bascule n'a de sens que pour les rôles qui voient plus large (équipe pour un manager, toute
+  // l'entreprise pour RH/Directeur/Comptabilité).
+  const hasWiderView = user.role !== ROLES.SALARIE;
+  const vuePersonnelle = hasWiderView && state.calendrierVue === 'personnel';
 
   // Récupérés une seule fois pour toute la grille plutôt qu'à chaque cellule (~35-42 fois) — mesuré : 128ms -> ~15ms pour 300 salariés.
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  const visibleIds = vuePersonnelle ? [user.id] : getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const leaveTypes = DB.getLeaveTypes();
@@ -4328,6 +4337,13 @@ function renderCalendrier() {
         <button class="btn btn-secondary btn-sm" id="btn-cal-next">Suivant →</button>
       </div>
     </div>
+
+    ${hasWiderView ? `
+      <div class="tabs" style="margin-bottom: 12px;">
+        <button class="tab ${state.calendrierVue !== 'personnel' ? 'active' : ''}" data-calendrier-vue="entreprise">${user.role === ROLES.MANAGER ? 'Calendrier équipe' : 'Calendrier entreprise'}</button>
+        <button class="tab ${state.calendrierVue === 'personnel' ? 'active' : ''}" data-calendrier-vue="personnel">Mon calendrier</button>
+      </div>
+    ` : ''}
 
     <div class="card calendar-legend">
       <span class="legend-item">🏖️ Congé</span>
@@ -4358,6 +4374,12 @@ function bindCalendrierEvents() {
     state.calendarYear = now.getFullYear();
     state.calendarMonth = now.getMonth();
     render();
+  });
+  document.querySelectorAll('[data-calendrier-vue]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.calendrierVue = btn.dataset.calendrierVue;
+      render();
+    });
   });
 }
 
