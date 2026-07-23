@@ -957,10 +957,25 @@ function bindGlobalEvents() {
 // Recherche globale (topbar) — instantanée, tous modules, avec favoris
 // ---------------------------------------------------------------------------
 
+/** Sprint SIRH premium §8 : sections de Paramètres indexées pour la recherche globale — un item par
+ * onglet plutôt que par champ individuel (rester simple : la recherche amène sur le bon onglet,
+ * pas jusqu'au champ précis). `permission` optionnelle pour les onglets eux-mêmes restreints
+ * (Journal d'audit) au-delà du GERER_PARAMETRES déjà requis pour l'écran Paramètres. */
+const PARAMETRES_SEARCH_SECTIONS = [
+  { label: 'Entreprise', tab: 'entreprise', keywords: ['société', 'raison sociale', 'siret'] },
+  { label: 'Établissements', tab: 'etablissements', keywords: ['site', 'agence', 'adresse'] },
+  { label: 'Services & équipes', tab: 'services', keywords: ['service', 'équipe', 'organisation'] },
+  { label: 'Listes de référence', tab: 'listes', keywords: ['types de congés', 'catégories de frais', 'postes'] },
+  { label: 'Vacances scolaires', tab: 'vacances', keywords: ['zone', 'scolaire'] },
+  { label: 'Jours fériés', tab: 'feries', keywords: ['férié', 'jour chômé'] },
+  { label: "Journal d'audit", tab: 'audit', keywords: ['audit', 'historique', 'log'], permission: PERMISSIONS.VOIR_JOURNAL_AUDIT }
+];
+
 function performGlobalSearch(term) {
   const q = term.trim().toLowerCase();
   if (!q) return [];
   const results = [];
+  const user = DB.getCurrentUser();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
@@ -1021,6 +1036,41 @@ function performGlobalSearch(term) {
       });
     }
   });
+
+  // Sprint SIRH premium §8 : services/équipes/paramètres — mêmes écrans que la navigation normale
+  // (Organigramme réservé manager/RH/directeur, Paramètres réservé GERER_PARAMETRES), pour ne
+  // jamais faire remonter un résultat de recherche vers un écran que l'utilisateur ne peut pas ouvrir.
+  if ([ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role)) {
+    serviceRepository.getAll().forEach(s => {
+      if (s.nom.toLowerCase().includes(q)) {
+        results.push({
+          icon: '🏢',
+          label: s.nom,
+          sublabel: 'Service',
+          nav: 'organigramme',
+          params: { organigrammeFilters: { search: '', etablissementId: '', service: s.nom, equipe: '' } }
+        });
+      }
+      (s.equipes || []).forEach(eq => {
+        if (eq.nom.toLowerCase().includes(q)) {
+          results.push({
+            icon: '🧑‍🤝‍🧑',
+            label: eq.nom,
+            sublabel: `Équipe · ${s.nom}`,
+            nav: 'organigramme',
+            params: { organigrammeFilters: { search: '', etablissementId: '', service: s.nom, equipe: eq.nom } }
+          });
+        }
+      });
+    });
+  }
+
+  if (hasPermission(user, PERMISSIONS.GERER_PARAMETRES)) {
+    PARAMETRES_SEARCH_SECTIONS
+      .filter(s => !s.permission || hasPermission(user, s.permission))
+      .filter(s => s.label.toLowerCase().includes(q) || s.keywords.some(k => k.includes(q)))
+      .forEach(s => results.push({ icon: '⚙️', label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
+  }
 
   return results.slice(0, 8);
 }
