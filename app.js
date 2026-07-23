@@ -2740,6 +2740,8 @@ function renderEmployeeDetail(id) {
           : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
       </div>
 
+      ${renderTypesAbsenceCard(e, user)}
+
       ${renderConfidentialEmployeeCard(e, user)}
 
       ${renderCompteCard(e, user)}
@@ -2749,6 +2751,49 @@ function renderEmployeeDetail(id) {
       ${renderEmployeeDocumentsCard(e)}
     </div>
   `;
+}
+
+/** Sprint SIRH premium §1 : liste blanche par salarié des types d'absence actifs/visibles au
+ * niveau entreprise — décocher un type ici l'empêche de le demander lui-même, même si l'entreprise
+ * l'autorise en général (ex. "Télétravail" ou "Congé sans solde" désactivés pour un salarié précis).
+ * Réutilise canEditEmployeeRecord (MODIFIER_SALARIE) plutôt que d'inventer une nouvelle permission —
+ * le catalogue des 31 du §8 reste fermé. */
+function renderTypesAbsenceCard(e, user) {
+  if (!canEditEmployeeRecord(e)) return '';
+  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
+  if (types.length === 0) return '';
+  const desactives = new Set(e.typesAbsenceDesactives || []);
+  return `
+    <div class="card">
+      <h2>Types d'absences autorisés</h2>
+      <p class="text-muted">Décochez un type pour empêcher ce salarié de le demander lui-même, même si l'entreprise l'autorise en général.</p>
+      <div class="form-grid checkbox-grid">
+        ${types.map(t => `
+          <div class="form-field form-field-checkbox">
+            <label>
+              <input type="checkbox" data-type-absence-autorise="${t.id}" ${desactives.has(t.id) ? '' : 'checked'}>
+              ${escapeHtml(t.icone)} ${escapeHtml(t.nom)}
+            </label>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindTypesAbsenceCardEvents(employeeId) {
+  document.querySelectorAll('[data-type-absence-autorise]').forEach(checkbox => {
+    checkbox.addEventListener('change', (evt) => {
+      const typeId = evt.target.dataset.typeAbsenceAutorise;
+      const employee = employeeRepository.getById(employeeId);
+      const desactives = new Set(employee.typesAbsenceDesactives || []);
+      if (evt.target.checked) desactives.delete(typeId); else desactives.add(typeId);
+      employeeRepository.update(employeeId, { typesAbsenceDesactives: [...desactives] });
+      const type = DB.getLeaveTypeById(typeId);
+      DB.logAudit('Modification', 'Types d\'absence autorisés', `${employee.prenom} ${employee.nom} · ${type.nom} ${evt.target.checked ? 'autorisé' : 'désactivé'}`);
+      showToast('Mis à jour.');
+    });
+  });
 }
 
 /** § GERER_UTILISATEURS : déverrouillage de compte et réinitialisation de mot de passe par un
@@ -3127,6 +3172,7 @@ function bindEmployeeDetailEvents() {
   document.getElementById('btn-print-employee-fiche').addEventListener('click', () => openEmployeePrintModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
+  bindTypesAbsenceCardEvents(state.currentEmployeeId);
 
   const deverrouillerBtn = document.getElementById('btn-deverrouiller-compte');
   if (deverrouillerBtn) deverrouillerBtn.addEventListener('click', () => {
@@ -3764,7 +3810,17 @@ function openLeaveRequestModal(presetEmployeeId, categorie) {
   // n'a pas SAISIR_MALADIE — sinon un salarié pourrait se déclarer lui-même en arrêt maladie alors
   // que le cahier des charges l'attribue exclusivement au service RH.
   const canSaisirRestreint = hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE);
-  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) && (t.saisiParSalarie || canSaisirRestreint));
+  const currentUser = DB.getCurrentUser();
+  // Sprint SIRH premium §1 : un salarié (uniquement en libre-service sur SA PROPRE fiche — jamais
+  // un manager/RH créant une demande pour le compte d'un tiers, qui agit à titre administratif, cf.
+  // le même principe que le contournement SAISIR_MALADIE ci-dessus) ne peut demander que les types
+  // que l'entreprise ET sa propre fiche autorisent (cf. renderTypesAbsenceCard).
+  const typesDesactivesPourSoi = currentUser.role === ROLES.SALARIE
+    ? new Set(currentUser.typesAbsenceDesactives || [])
+    : new Set();
+  const types = DB.getLeaveTypes().filter(t =>
+    t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) &&
+    (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id));
   state.pendingAttachment = null;
 
   const html = `
@@ -3892,6 +3948,14 @@ function submitLeaveRequestForm(evt) {
   // le DOM) — revérifie ici que l'utilisateur courant a le droit de saisir ce type restreint.
   if (!type.saisiParSalarie && !hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE)) {
     showToast(`La saisie du type « ${type.nom} » est réservée aux RH.`, 'error');
+    return;
+  }
+
+  // Sprint SIRH premium §1 : même principe — ne fait pas confiance au seul filtrage du menu
+  // déroulant pour la liste blanche de types autorisés par salarié.
+  const currentUser = DB.getCurrentUser();
+  if (currentUser.role === ROLES.SALARIE && (currentUser.typesAbsenceDesactives || []).includes(typeId)) {
+    showToast(`Le type « ${type.nom} » n'est pas autorisé pour votre profil.`, 'error');
     return;
   }
 
