@@ -5475,6 +5475,21 @@ function renderPlanning() {
   `;
 }
 
+/** Sprint SIRH premium §2 : "Regrouper automatiquement les salariés par service" — le filtre
+ * planning-filter-service permet toujours de se concentrer sur un seul service, mais la vue par
+ * défaut ("Tous les services") doit regrouper visuellement plutôt que lister à plat. Tri
+ * alphabétique par nom de service, "Sans service" en dernier. */
+function groupEmployeesByService(employees) {
+  const groups = {};
+  employees.forEach(e => {
+    const key = e.service || 'Sans service';
+    (groups[key] = groups[key] || []).push(e);
+  });
+  return Object.keys(groups)
+    .sort((a, b) => (a === 'Sans service') - (b === 'Sans service') || a.localeCompare(b))
+    .map(service => ({ service, employees: groups[service] }));
+}
+
 function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}" title="${escapeHtml(status.title)}">${status.icon}</td>`;
@@ -5502,11 +5517,14 @@ function renderPlanningSemaine() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}</tr></thead>
           <tbody>
-            ${employees.map(e => `
-              <tr>
-                <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
-              </tr>
+            ${groupEmployeesByService(employees).map(g => `
+              <tr class="planning-service-header"><td colspan="${weekDates.length + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+              ${g.employees.map(e => `
+                <tr>
+                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
+                  ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
+                </tr>
+              `).join('')}
             `).join('')}
           </tbody>
         </table>
@@ -5537,11 +5555,14 @@ function renderPlanningMois() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
           <tbody>
-            ${employees.map(e => `
-              <tr>
-                <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
-                ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
-              </tr>
+            ${groupEmployeesByService(employees).map(g => `
+              <tr class="planning-service-header"><td colspan="${daysInMonth + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+              ${g.employees.map(e => `
+                <tr>
+                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
+                  ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
+                </tr>
+              `).join('')}
             `).join('')}
           </tbody>
         </table>

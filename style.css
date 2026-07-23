@@ -920,6 +920,15 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-top: 2px solid var(--color-border);
 }
 
+/* Sprint SIRH premium §2 : regroupement automatique du planning par service */
+.planning-service-header td {
+  background: var(--color-surface-alt, var(--color-muted-soft));
+  font-weight: 600;
+  font-size: 13px;
+  text-align: left;
+  padding-top: 10px;
+}
+
 /* ---------------------------------------------------------------------
    Dashboard — graphiques SVG faits maison et listes pratiques
    --------------------------------------------------------------------- */
