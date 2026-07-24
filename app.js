@@ -4922,6 +4922,44 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge') {
 const MONTH_NAMES = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
+/** Sprint SIRH premium §2 : "Calendrier des valideurs / Créer un calendrier spécifique pour RH/
+ * Managers/Directeur. Ce calendrier affiche : leurs propres congés ; leurs événements personnels ;
+ * leurs validations." — "Mon calendrier" couvre déjà les 2 premiers points pour tout le monde ;
+ * cette carte ajoute le 3e (validations en attente), visible uniquement pour les rôles concernés en
+ * vue personnelle. Mêmes navParams que le Centre d'action (§7)/les raccourcis sidebar (§5) — un seul
+ * endroit où ces filtres sont définis (NAVPARAMS_*). */
+function renderCalendrierValidationsCard(user) {
+  if (![ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role)) return '';
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  const pendingFor = (repo) => {
+    const list = repo.getAll().filter(r => r.statut === 'En attente');
+    return visibleIds ? list.filter(r => visibleIds.includes(r.employeeId)) : list;
+  };
+  const congesEnAttente = pendingFor(leaveRepository).length;
+  const teletravailEnAttente = pendingFor(teleworkRepository).length;
+  const fraisEnAttente = pendingFor(expenseRepository).length;
+  if (!congesEnAttente && !teletravailEnAttente && !fraisEnAttente) return '';
+
+  const item = (count, label, nav, navParams) => !count ? '' : `
+    <button type="button" class="action-center-item" data-nav="${nav}" data-nav-params='${escapeHtml(JSON.stringify(navParams))}'>
+      <span class="action-center-icon">✅</span>
+      <span class="action-center-label">${count} ${label}${count > 1 ? 's' : ''} en attente de validation</span>
+      <span class="action-center-arrow">→</span>
+    </button>
+  `;
+
+  return `
+    <div class="card action-center" style="margin-bottom: 16px;">
+      <h2>Vos validations</h2>
+      <div class="action-center-list">
+        ${item(congesEnAttente, 'demande de congé', 'conges', NAVPARAMS_CONGES_A_VALIDER)}
+        ${item(teletravailEnAttente, 'demande de télétravail', 'teletravail', NAVPARAMS_TELETRAVAIL_A_VALIDER)}
+        ${item(fraisEnAttente, 'note de frais', 'frais', NAVPARAMS_FRAIS_A_VALIDER)}
+      </div>
+    </div>
+  `;
+}
+
 /** Sprint SIRH premium §2 : factorisé hors de renderCalendrier() pour que openCalendarDayModal()
  * (§4, reprise) puisse recalculer le même `sharedData` pour une seule date sans dupliquer cette
  * logique de périmètre/scope. */
@@ -4975,6 +5013,8 @@ function renderCalendrier() {
         <button class="tab ${state.calendrierVue === 'personnel' ? 'active' : ''}" data-calendrier-vue="personnel">Mon calendrier</button>
       </div>
     ` : ''}
+
+    ${hasWiderView && state.calendrierVue === 'personnel' ? renderCalendrierValidationsCard(user) : ''}
 
     <div class="card calendar-legend">
       <span class="legend-item">🏖️ Congé</span>
