@@ -2071,15 +2071,19 @@ function advanceWorkflow(request, finalStatut) {
   const now = new Date().toISOString();
   const workflow = request.workflow || [];
   const nextIndex = request.etapeIndex + 1;
+  const roleActuel = ROLE_LABELS[workflow[request.etapeIndex]] || workflow[request.etapeIndex];
 
   if (nextIndex < workflow.length) {
-    const roleActuel = ROLE_LABELS[workflow[request.etapeIndex]] || workflow[request.etapeIndex];
     const roleSuivant = ROLE_LABELS[workflow[nextIndex]] || workflow[nextIndex];
     historique.push({ date: now, action: `Validé par ${roleActuel}, en attente de ${roleSuivant}` });
     return { statut: 'En attente', etapeIndex: nextIndex, historique };
   }
 
-  historique.push({ date: now, action: finalStatut });
+  // §11 : le sprint liste explicitement "Validation manager" PUIS "Validation RH" comme étapes
+  // distinctes de la timeline — l'étape finale doit donc nommer le rôle qui l'a validée, pas
+  // seulement le statut générique ("Validé"/"Remboursé"), sinon on ne distingue plus qui a fait
+  // cette dernière validation dans l'historique.
+  historique.push({ date: now, action: roleActuel ? `${finalStatut} (par ${roleActuel})` : finalStatut });
   return { statut: finalStatut, etapeIndex: -1, historique };
 }
 
