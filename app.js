@@ -955,7 +955,7 @@ const HELP_CONTENT = {
   },
   planning: {
     title: 'Planning',
-    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`
+    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service — une case de congé/télétravail validé se glisse-dépose vers un autre jour du même salarié pour déplacer toute la période), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`
   },
   teletravail: {
     title: 'Télétravail',
@@ -6090,13 +6090,13 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   if (onLeave) {
     const type = DB.getLeaveTypeById(onLeave.typeId);
     const pending = onLeave.statut !== 'Validé';
-    return { icon: type ? type.icone : '🏖️', level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending };
+    return { icon: type ? type.icone : '🏖️', level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
   }
 
   const onTelework = teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
   if (onTelework) {
     const pending = onTelework.statut !== 'Validé';
-    return { icon: '💻', level: 'remote', title: `Télétravail${pending ? ' (en attente)' : ''}`, pending };
+    return { icon: '💻', level: 'remote', title: `Télétravail${pending ? ' (en attente)' : ''}`, pending, requestId: onTelework.id, requestType: 'telework' };
   }
 
   return { icon: '🏢', level: 'office', title: 'Présent' };
@@ -6168,9 +6168,19 @@ function groupEmployeesByService(employees) {
     .map(service => ({ service, employees: groups[service] }));
 }
 
+/** Sprint SIRH premium §3 : "modification par glisser-déposer" — une case de congé/télétravail
+ * VALIDÉ (jamais une case en attente, ni "Présent"/"Non travaillé"/"Repos" : rien à déplacer) devient
+ * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
+ * n'a pas besoin d'avoir un statut particulier — la validation métier existante, réutilisée telle
+ * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair). */
 function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
-  return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}" title="${escapeHtml(status.title)}">${status.icon}</td>`;
+  const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
+  return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}"
+    title="${escapeHtml(status.title)}"
+    data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
+    ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
+  >${status.icon}</td>`;
 }
 
 function renderPlanningSemaine() {
@@ -6582,6 +6592,81 @@ function bindPlanningEvents() {
     document.getElementById('btn-planning-year-prev').addEventListener('click', () => { state.planningYear -= 1; render(); });
     document.getElementById('btn-planning-year-next').addEventListener('click', () => { state.planningYear += 1; render(); });
   }
+
+  // Sprint SIRH premium §3 : "modification par glisser-déposer" — uniquement les vues Semaine/Mois
+  // (celles qui affichent une case par jour via renderPlanningStatusCell) ; Année/Horaires n'ont pas
+  // de case "un salarié, un jour" de ce type.
+  if (state.planningView === 'semaine' || state.planningView === 'mois') bindPlanningDragEvents();
+}
+
+/** Sprint SIRH premium §3 : glisser une case de congé/télétravail VALIDÉ (renderPlanningStatusCell
+ * ne rend draggable que celles-là) vers une autre case du MÊME salarié déplace toute la période
+ * (en conservant sa durée) de "delta" jours, où delta = date cible - date de la case source. Réutilise
+ * leaveRepository.regulariser (déjà validé/testé, §régularisation) pour les congés et
+ * moveTeleworkRequest (même niveau de validation, écrit pour cette fonctionnalité) pour le
+ * télétravail — aucune nouvelle règle métier inventée, juste un nouveau point d'entrée vers les
+ * règles existantes. */
+function bindPlanningDragEvents() {
+  let dragData = null;
+
+  document.querySelectorAll('.planning-cell[data-drag-request-id]').forEach(cell => {
+    cell.addEventListener('dragstart', (e) => {
+      dragData = {
+        requestId: cell.dataset.dragRequestId,
+        requestType: cell.dataset.dragRequestType,
+        employeeId: cell.dataset.dragEmployee,
+        dateStr: cell.dataset.dragDate
+      };
+      e.dataTransfer.effectAllowed = 'move';
+      cell.classList.add('planning-cell-dragging');
+    });
+    cell.addEventListener('dragend', () => cell.classList.remove('planning-cell-dragging'));
+  });
+
+  document.querySelectorAll('.planning-cell[data-drop-employee]').forEach(cell => {
+    cell.addEventListener('dragover', (e) => {
+      if (!dragData || cell.dataset.dropEmployee !== dragData.employeeId) return;
+      e.preventDefault();
+      cell.classList.add('planning-cell-drop-target');
+    });
+    cell.addEventListener('dragleave', () => cell.classList.remove('planning-cell-drop-target'));
+    cell.addEventListener('drop', (e) => {
+      e.preventDefault();
+      cell.classList.remove('planning-cell-drop-target');
+      if (!dragData || cell.dataset.dropEmployee !== dragData.employeeId) return;
+      const targetDate = cell.dataset.dropDate;
+      if (targetDate === dragData.dateStr) return;
+      handlePlanningDrop(dragData, targetDate);
+      dragData = null;
+    });
+  });
+}
+
+function handlePlanningDrop(dragData, targetDate) {
+  const deltaJours = daysBetween(new Date(dragData.dateStr), new Date(targetDate));
+
+  if (dragData.requestType === 'leave') {
+    const request = leaveRepository.getById(dragData.requestId);
+    if (!request) return;
+    const nouvelleDateDebut = toISODate(addDays(new Date(request.dateDebut), deltaJours));
+    const nouvelleDateFin = toISODate(addDays(new Date(request.dateFin), deltaJours));
+    const result = leaveRepository.regulariser(dragData.requestId, {
+      typeId: request.typeId, dateDebut: nouvelleDateDebut, dateFin: nouvelleDateFin,
+      demiJournee: request.demiJournee, motif: 'Déplacé par glisser-déposer (Planning)'
+    });
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Demande déplacée.');
+    render();
+  } else if (dragData.requestType === 'telework') {
+    const request = teleworkRepository.getById(dragData.requestId);
+    if (!request) return;
+    const nouvelleDateDebut = toISODate(addDays(new Date(request.dateDebut), deltaJours));
+    const nouvelleDateFin = toISODate(addDays(new Date(request.dateFin), deltaJours));
+    const result = moveTeleworkRequest(dragData.requestId, nouvelleDateDebut, nouvelleDateFin);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Télétravail déplacé.');
+    render();
+  }
 }
 
 function shiftPlanningMonth(delta) {
@@ -6879,7 +6964,7 @@ function hasConflictingLeaveRequest(employeeId, typeId, dateDebut, dateFin, demi
 /** Semaine (lundi ISO) où la demande [dateDebut, dateFin] ferait dépasser le quota hebdomadaire, en tenant
  * compte des demandes déjà actives (Validé/En attente) ; ne compte que les jours travaillés de l'employé,
  * comme nbJours. Retourne null si aucun dépassement. */
-function findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota) {
+function findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota, excludeRequestId) {
   const workedDays = employee.joursTravailles && employee.joursTravailles.length ? employee.joursTravailles : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   const usageByWeek = {};
@@ -6892,13 +6977,64 @@ function findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quo
     }
   };
 
+  // excludeRequestId : la demande qu'on est en train de déplacer (§3, glisser-déposer) ne doit pas
+  // se compter elle-même deux fois (une fois à son ancienne date via getAll(), une fois à sa nouvelle
+  // date via l'appel tally(dateDebut, dateFin) ci-dessous).
   teleworkRepository.getAll()
-    .filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'))
+    .filter(r => r.employeeId === employeeId && r.id !== excludeRequestId && (r.statut === 'Validé' || r.statut === 'En attente'))
     .forEach(r => tally(r.dateDebut, r.dateFin));
   tally(dateDebut, dateFin);
 
   const overWeek = Object.entries(usageByWeek).find(([, count]) => count > quota);
   return overWeek ? { weekStart: overWeek[0], used: overWeek[1] } : null;
+}
+
+/** Sprint SIRH premium §3 : déplace une demande de télétravail validée par glisser-déposer (Planning
+ * Semaine/Mois) — mêmes règles de validation que submitTeleworkRequestForm (période d'emploi, jour
+ * travaillé, chevauchement congé/autre télétravail, quota hebdomadaire), pas de raccourci. Pas
+ * d'équivalent "régulariser" pour le télétravail (contrairement aux congés, §régularisation) : cette
+ * fonction en tient lieu, sous une forme bornée au strict nécessaire pour le déplacement. */
+function moveTeleworkRequest(id, nouvelleDateDebut, nouvelleDateFin) {
+  const request = teleworkRepository.getById(id);
+  if (!request) return { success: false, error: 'Demande introuvable.' };
+  const employee = employeeRepository.getById(request.employeeId);
+  if (!employee) return { success: false, error: 'Salarié introuvable.' };
+
+  if (nouvelleDateFin < nouvelleDateDebut) {
+    return { success: false, error: 'La date de fin ne peut pas être avant la date de début.' };
+  }
+  if (employee.dateEmbauche && nouvelleDateDebut < employee.dateEmbauche) {
+    return { success: false, error: `La date de début ne peut pas être avant la date d'embauche (${formatDate(employee.dateEmbauche)}).` };
+  }
+  if (employee.dateDepart && nouvelleDateFin > employee.dateDepart) {
+    return { success: false, error: `La date de fin ne peut pas être après la date de départ (${formatDate(employee.dateDepart)}).` };
+  }
+
+  const nbJours = computeWorkingDays(nouvelleDateDebut, nouvelleDateFin, false, employee.joursTravailles);
+  if (nbJours <= 0) {
+    return { success: false, error: 'La période cible ne comporte aucun jour travaillé.' };
+  }
+
+  const quota = DB.getSettings().teletravailQuotaSemaine;
+  const overQuota = findTeleworkWeekOverQuota(request.employeeId, nouvelleDateDebut, nouvelleDateFin, employee, quota, id);
+  if (overQuota) {
+    return { success: false, error: `Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).` };
+  }
+
+  if (hasActiveRequestOverlap(leaveRepository.getAll(), request.employeeId, nouvelleDateDebut, nouvelleDateFin)) {
+    return { success: false, error: 'Ce salarié a déjà une demande de congé/absence active sur cette période.' };
+  }
+  if (hasActiveRequestOverlap(teleworkRepository.getAll(), request.employeeId, nouvelleDateDebut, nouvelleDateFin, id)) {
+    return { success: false, error: 'Ce salarié a déjà une autre demande de télétravail active sur cette période.' };
+  }
+
+  const historique = (request.historique || []).concat([{
+    date: new Date().toISOString(),
+    action: `Déplacé (glisser-déposer) : ${formatDate(request.dateDebut)}${request.dateDebut !== request.dateFin ? ' → ' + formatDate(request.dateFin) : ''} devient ${formatDate(nouvelleDateDebut)}${nouvelleDateDebut !== nouvelleDateFin ? ' → ' + formatDate(nouvelleDateFin) : ''}`
+  }]);
+  teleworkRepository.update(id, { dateDebut: nouvelleDateDebut, dateFin: nouvelleDateFin, nbJours, historique });
+  DB.logAudit('Modification', 'Télétravail déplacé (glisser-déposer)', `${employee.prenom} ${employee.nom} · ${formatDate(nouvelleDateDebut)}${nouvelleDateDebut !== nouvelleDateFin ? ' au ' + formatDate(nouvelleDateFin) : ''}`);
+  return { success: true };
 }
 
 function submitTeleworkRequestForm(evt) {

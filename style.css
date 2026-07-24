@@ -934,6 +934,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-remote { background: var(--color-info-soft); }
 .planning-office { background: var(--color-success-soft); }
 
+/* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
+.planning-cell[draggable="true"] { cursor: grab; }
+.planning-cell-dragging { opacity: 0.4; }
+.planning-cell-drop-target { outline: 2px dashed var(--color-primary); outline-offset: -2px; }
+
 .planning-summary-row td {
   background: var(--color-muted-soft);
   font-size: 13px;
