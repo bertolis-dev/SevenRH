@@ -923,76 +923,125 @@ function bindOnboardingWizardEvents() {
 }
 
 /** Sprint SIRH premium §12 : Centre d'aide contextuel — une entrée par écran (clé = state.view,
- * mêmes clés que NAV_ITEMS), texte court décrivant CE QUI EST RÉELLEMENT construit sur cet écran
- * plutôt qu'une doc générique. Pas d'entrée par rôle : le contenu est le même pour tout le monde,
- * chacun ne voit de toute façon que les écrans auxquels il a accès. */
+ * mêmes clés que NAV_ITEMS), 3 parties comme demandé (explication ; FAQ ; bonnes pratiques),
+ * décrivant CE QUI EST RÉELLEMENT construit sur cet écran plutôt qu'une doc générique. Pas
+ * d'entrée par rôle : le contenu est le même pour tout le monde, chacun ne voit de toute façon que
+ * les écrans auxquels il a accès. `faq`/`bonnesPratiques` optionnels (pas tous les écrans n'ont
+ * matière à FAQ/conseils utiles) — openHelpModal() masque une section vide plutôt que d'afficher un
+ * titre suivi de rien. */
 const HELP_CONTENT = {
   dashboard: {
     title: 'Tableau de bord',
     body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Directeur voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
-           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`
+           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`,
+    faq: [
+      { q: 'Un bloc masqué est-il perdu ?', r: 'Non, "Personnaliser" ne fait que le masquer sur votre compte — aucune donnée n\'est supprimée, et vous pouvez le réafficher à tout moment.' },
+      { q: 'Pourquoi je ne vois pas le Centre d\'action ?', r: 'Il n\'apparaît que pour les rôles Manager/RH/Directeur, et seulement s\'il y a au moins un élément à signaler (aucun bruit si tout est à jour).' }
+    ],
+    bonnesPratiques: ['Passez par le Centre d\'action plutôt que par la recherche pour traiter vos demandes en attente — les filtres sont déjà appliqués.', 'Consultez la Préparation de paie depuis son raccourci ici avant chaque export, pas seulement le jour de la paie.']
   },
   employees: {
     title: 'Salariés',
-    body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Directeur, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`
+    body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Directeur, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`,
+    faq: [{ q: 'Pourquoi certains salariés n\'apparaissent pas ?', r: 'Un manager ne voit que son équipe. Un salarié archivé n\'apparaît plus par défaut — utilisez le filtre de statut pour le retrouver.' }],
+    bonnesPratiques: ['Utilisez les filtres établissement/service avant de chercher un nom : la liste peut être longue sur une grande entreprise.']
   },
   organigramme: {
     title: 'Organigramme',
-    body: `<p>Arbre hiérarchique basé sur les rattachements managers de chaque salarié. Filtrez par établissement/service/équipe, repliez/dépliez les branches, cliquez une personne pour ouvrir sa fiche.</p>`
+    body: `<p>Arbre hiérarchique basé sur les rattachements managers de chaque salarié. Filtrez par établissement/service/équipe, repliez/dépliez les branches, cliquez une personne pour ouvrir sa fiche.</p>`,
+    faq: [{ q: 'Un salarié apparaît au mauvais endroit ?', r: 'L\'arbre suit strictement le champ "Manager(s)" de la fiche salarié — corrigez-le depuis sa fiche, l\'organigramme se met à jour automatiquement.' }]
   },
   conges: {
     title: 'Congés',
     body: `<p>Onglet <strong>Demandes</strong> : créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
-           <p>Onglet <strong>Types de congés</strong> (RH/Directeur) : créez/modifiez les types (congés payés, RTT...), leurs règles d'acquisition, workflow de validation et justificatif obligatoire.</p>`
+           <p>Onglet <strong>Types de congés</strong> (RH/Directeur) : créez/modifiez les types (congés payés, RTT...), leurs règles d'acquisition, workflow de validation et justificatif obligatoire.</p>`,
+    faq: [
+      { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée — seuls Manager/RH/Directeur le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
+      { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer — l\'historique garde la trace de la correction et le motif.' }
+    ],
+    bonnesPratiques: ['Enregistrez en brouillon dès que les dates ne sont pas encore certaines, plutôt que d\'attendre d\'avoir toutes les informations pour ouvrir le formulaire.', 'Vérifiez le solde affiché dans le formulaire avant de valider une demande d\'équipe — un compteur négatif remontera de toute façon en Préparation de paie.']
   },
   'autres-absences': {
     title: 'Autres absences',
-    body: `<p>Même moteur que Congés (demandes, validation, historique, brouillons), pour les absences hors congés payés/RTT : maladie, événements familiaux, et tout autre type paramétrable dans l'onglet Types. Un salarié peut être autorisé/restreint à certains types spécifiquement depuis sa fiche.</p>`
+    body: `<p>Même moteur que Congés (demandes, validation, historique, brouillons), pour les absences hors congés payés/RTT : maladie, événements familiaux, et tout autre type paramétrable dans l'onglet Types. Un salarié peut être autorisé/restreint à certains types spécifiquement depuis sa fiche.</p>`,
+    faq: [{ q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche — un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' }],
+    bonnesPratiques: ['Cochez "Justificatif obligatoire" sur les types qui légalement en exigent un (arrêt maladie...) — cela remonte comme anomalie en Préparation de paie si oublié.']
   },
   calendrier: {
     title: 'Calendrier',
-    body: `<p>Bascule <strong>Mon calendrier</strong> / <strong>Calendrier équipe</strong> (visible si vous encadrez une équipe). Les congés/absences/télétravail validés s'affichent avec leur icône de type ; les demandes encore en attente apparaissent en semi-transparent avec un badge distinct.</p>`
+    body: `<p>Bascule <strong>Mon calendrier</strong> / <strong>Calendrier équipe</strong> (visible si vous encadrez une équipe). Les congés/absences/télétravail validés s'affichent avec leur icône de type ; les demandes encore en attente apparaissent en semi-transparent avec un badge distinct. Cliquez un jour pour voir le détail complet (qui, quel type, statut).</p>`,
+    faq: [{ q: 'Quelle différence avec le Planning ?', r: 'Le Calendrier est une vue mensuelle classique (comme un agenda) ; le Planning affiche les salariés en lignes/jours en colonnes, pour comparer rapidement toute une équipe et corriger par glisser-déposer.' }]
   },
   planning: {
     title: 'Planning',
-    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service — une case de congé/télétravail validé se glisse-dépose vers un autre jour du même salarié pour déplacer toute la période), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`
+    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service — une case de congé/télétravail validé se glisse-dépose vers un autre jour du même salarié pour déplacer toute la période), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`,
+    faq: [
+      { q: 'Pourquoi je ne peux pas glisser une case ?', r: 'Seule une case de congé/télétravail déjà VALIDÉ peut être déplacée — une demande en attente doit d\'abord être validée.' },
+      { q: 'Le glisser-déposer est refusé, pourquoi ?', r: 'Les mêmes règles qu\'à la création s\'appliquent (chevauchement, quota télétravail hebdomadaire, période contractuelle) — le message affiché indique la règle précise en cause.' }
+    ],
+    bonnesPratiques: ['Utilisez la vue Mois pour repérer un déséquilibre de service en un coup d\'œil, puis la vue Semaine pour ajuster au jour près.']
   },
   teletravail: {
     title: 'Télétravail',
-    body: `<p>Onglet <strong>Demandes</strong> : créez/validez le télétravail, avec un quota hebdomadaire configurable (Paramètres) qui bloque une demande en dépassement. Onglet <strong>Planning</strong> : vue hebdomadaire de qui est en télétravail.</p>`
+    body: `<p>Onglet <strong>Demandes</strong> : créez/validez le télétravail, avec un quota hebdomadaire configurable (Paramètres) qui bloque une demande en dépassement. Onglet <strong>Planning</strong> : vue hebdomadaire de qui est en télétravail.</p>`,
+    faq: [{ q: 'Le quota semble faux ?', r: 'Il se recalcule par semaine ISO (lundi à dimanche) en cumulant toutes les demandes Validées/En attente de cette semaine, pas seulement la demande en cours de saisie.' }]
   },
   frais: {
     title: 'Notes de frais',
-    body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le workflow de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`
+    body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le workflow de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`,
+    faq: [{ q: 'Comment fonctionne le calcul kilométrique ?', r: 'Indiquez la distance et la puissance fiscale du véhicule : le montant est calculé automatiquement selon le barème, vous n\'avez rien à saisir manuellement.' }],
+    bonnesPratiques: ['Joignez toujours le justificatif dès la création de la note — une note validée sans justificatif ressort comme anomalie avant l\'export de paie.']
   },
   'mes-documents': {
     title: 'Mes documents',
-    body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service.</p>`
+    body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service.</p>`,
+    faq: [{ q: 'Un document semble manquant ?', r: 'Seuls les documents que RH a explicitement partagés avec vous apparaissent ici — contactez RH s\'il en manque un.' }]
   },
   tickets: {
     title: 'Tickets restaurant',
-    body: `<p>Calcul automatique du nombre de tickets par salarié selon ses jours travaillés du mois, déduction faite des congés/télétravail validés. Un ajustement manuel ponctuel reste possible par salarié si besoin.</p>`
+    body: `<p>Calcul automatique du nombre de tickets par salarié selon ses jours travaillés du mois, déduction faite des congés/télétravail validés. Un ajustement manuel ponctuel reste possible par salarié si besoin.</p>`,
+    faq: [{ q: 'Pourquoi le nombre semble faux pour un salarié ?', r: 'Vérifiez ses jours travaillés (fiche salarié) et ses congés/télétravail validés du mois — le calcul se base uniquement sur ces deux éléments, pas sur une saisie manuelle.' }]
   },
   'export-paie': {
     title: 'Préparation de paie',
-    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié.</p>
-           <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais) au format de votre logiciel de paie.</p>`
+    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié (Congés payés/RTT/Maladie/Télétravail/Notes de frais/<strong>Variables</strong>/Tickets restaurant — le bouton ✎ sur la colonne Variables permet de saisir une prime ou un autre élément ponctuel du mois).</p>
+           <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais, variables) au format de votre logiciel de paie.</p>`,
+    faq: [
+      { q: 'Une anomalie "Bloquante" empêche-t-elle l\'export ?', r: 'Non, le bouton "Exporter CSV" reste actif volontairement (un blocage technique dur serait risqué un jour de paie) — mais une anomalie bloquante doit être corrigée avant de considérer l\'export fiable.' },
+      { q: 'Que signifie "comptabilisé dans les congés" pour un type ?', r: 'Défini sur le type dans Paramètres > Types d\'absences (case "Déduire du compteur RTT/CP") : les jours de ce type viennent en plus s\'imputer sur le compteur RTT ou congés payés du salarié.' },
+      { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) — saisissez le montant du mois via le bouton ✎ sur la colonne Variables du récapitulatif.' }
+    ],
+    bonnesPratiques: ['Ouvrez cet écran systématiquement avant l\'export, pas seulement quand une anomalie est suspectée — l\'onglet par défaut est volontairement "Préparation" et non "Export".']
   },
   parametres: {
     title: 'Paramètres',
-    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés — même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`
+    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés — même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`,
+    faq: [{ q: 'Un salarié voit un type d\'absence que je viens de désactiver ?', r: 'La désactivation empêche les NOUVELLES demandes sur ce type mais préserve l\'historique des demandes déjà créées — normal, ce n\'est pas un bug.' }],
+    bonnesPratiques: ['Désactivez un type plutôt que de le supprimer si des demandes existantes s\'y réfèrent encore — la suppression est destinée aux types jamais utilisés.']
   }
 };
 
 function openHelpModal() {
   const help = HELP_CONTENT[state.view] || { title: 'Aide', body: '<p class="text-muted">Aucune aide spécifique n\'est disponible pour cet écran.</p>' };
+  const faqSection = help.faq && help.faq.length ? `
+    <div class="help-section">
+      <div class="search-section-label" style="padding-left: 0;">FAQ</div>
+      ${help.faq.map(item => `<p><strong>${escapeHtml(item.q)}</strong><br>${escapeHtml(item.r)}</p>`).join('')}
+    </div>
+  ` : '';
+  const bonnesPratiquesSection = help.bonnesPratiques && help.bonnesPratiques.length ? `
+    <div class="help-section">
+      <div class="search-section-label" style="padding-left: 0;">Bonnes pratiques</div>
+      <ul class="help-tips">${help.bonnesPratiques.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')}</ul>
+    </div>
+  ` : '';
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>❓ ${escapeHtml(help.title)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
       </div>
-      <div class="modal-body">${help.body}</div>
+      <div class="modal-body">${help.body}${faqSection}${bonnesPratiquesSection}</div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
       </div>
@@ -7781,7 +7830,11 @@ function getPaieRows(year, month) {
       notesRembourser,
       congesPayesJours: sumTypeIdsInMonth(congesPayesTypeIds),
       rttJours: sumTypeIdsInMonth(rttTypeIds),
-      maladieJours: sumTypeIdsInMonth(maladieTypeIds)
+      maladieJours: sumTypeIdsInMonth(maladieTypeIds),
+      // Sprint SIRH premium §6 : "Variables" du récapitulatif — saisie manuelle par mois (aucun
+      // module ne les calcule automatiquement, cf. DB.ajusterVariablesPaie), même principe que
+      // ticketsAjustements.
+      variablesMontant: (e.variablesPaie && e.variablesPaie[`${year}-${String(month + 1).padStart(2, '0')}`]) || 0
     };
   });
 }
@@ -7930,6 +7983,7 @@ function renderExportPaiePreparationTab(rows) {
               <th>Maladie</th>
               <th>Télétravail</th>
               <th>Notes de frais</th>
+              <th>Variables</th>
               <th>Tickets restaurant</th>
               <th>Anomalies</th>
             </tr>
@@ -7943,6 +7997,7 @@ function renderExportPaiePreparationTab(rows) {
                 <td>${formatDurationFR(r.maladieJours)}</td>
                 <td>${formatDurationFR(r.teletravailJours)}</td>
                 <td>${formatCurrencyFR(r.notesRembourser)}</td>
+                <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">✎</button></td>
                 <td>${r.tickets.nbTickets}</td>
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
@@ -7994,6 +8049,7 @@ function renderExportPaieExportTab(rows) {
               ${showColonne('teletravail') ? '<th>Télétravail</th>' : ''}
               ${showColonne('tickets') ? '<th>Tickets resto</th><th>Part salarié tickets</th>' : ''}
               ${showColonne('frais') ? '<th>Frais à rembourser</th>' : ''}
+              <th>Variables</th>
             </tr>
           </thead>
           <tbody>
@@ -8005,6 +8061,7 @@ function renderExportPaieExportTab(rows) {
                 ${showColonne('teletravail') ? `<td>${formatDurationFR(r.teletravailJours)}</td>` : ''}
                 ${showColonne('tickets') ? `<td>${r.tickets.nbTickets}</td><td>${formatCurrencyFR(r.tickets.partSalarie)}</td>` : ''}
                 ${showColonne('frais') ? `<td>${formatCurrencyFR(r.notesRembourser)}</td>` : ''}
+                <td>${formatCurrencyFR(r.variablesMontant)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -8048,6 +8105,64 @@ function bindExportPaieEvents() {
       render();
     });
   });
+
+  document.querySelectorAll('[data-adjust-variables]').forEach(btn => {
+    btn.addEventListener('click', () => openVariablesPaieModal(btn.dataset.adjustVariables));
+  });
+}
+
+/** Sprint SIRH premium §6 : "Variables" du récapitulatif de paie — aucun module ne les calcule
+ * (primes/heures sup ponctuelles), saisie manuelle par mois, même modale que "Corriger les tickets"
+ * (openCorrigerTicketsModal) mais un montant en euros plutôt qu'un nombre entier de tickets. */
+function openVariablesPaieModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  const year = state.paieYear;
+  const month = state.paieMonth;
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const current = (employee.variablesPaie && employee.variablesPaie[monthKey]) || 0;
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Variables de paie — ${MONTH_NAMES[month]} ${year}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="variables-paie-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — primes, heures supplémentaires ou autre élément variable ponctuel pour ce mois (€). Remplace le montant précédemment saisi pour ce même mois.</p>
+          <div class="form-field">
+            <label for="f-montant">Montant (€) *</label>
+            <input class="input" type="number" id="f-montant" name="montant" step="0.01" value="${current}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. prime exceptionnelle">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('variables-paie-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const montant = document.getElementById('f-montant').value;
+    const motif = document.getElementById('f-motif').value;
+    const result = employeeRepository.ajusterVariables(employeeId, year, month, montant, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Variables de paie enregistrées.');
+    closeModal();
+    render();
+  });
 }
 
 function shiftPaieMonth(delta) {
@@ -8089,14 +8204,16 @@ function exportPaieCSV() {
     ...(showColonne('conges') ? leaveTypesExportables.map(t => `${t.nom} (jours)`) : []),
     ...(showColonne('teletravail') ? ['Télétravail (jours)'] : []),
     ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets — part salarié (€)'] : []),
-    ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : [])
+    ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : []),
+    'Variables (€)' // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
   ];
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
     ...(showColonne('conges') ? r.congesParType.map(v => formatNumberFR(v)) : []),
     ...(showColonne('teletravail') ? [formatNumberFR(r.teletravailJours)] : []),
     ...(showColonne('tickets') ? [r.tickets.nbTickets, formatNumberFR(r.tickets.partSalarie)] : []),
-    ...(showColonne('frais') ? [formatNumberFR(r.notesRembourser)] : [])
+    ...(showColonne('frais') ? [formatNumberFR(r.notesRembourser)] : []),
+    formatNumberFR(r.variablesMontant)
   ]);
   exportRowsToCSVWithDelimiter(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`, delimiter);
   DB.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);

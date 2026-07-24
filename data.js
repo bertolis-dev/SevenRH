@@ -1118,6 +1118,23 @@ const DB = {
     return { success: true };
   },
 
+  /** Sprint SIRH premium §6 : "Variables" du récapitulatif de Préparation de paie (primes, heures
+   * supplémentaires...) — aucun module dédié n'existe pour les calculer automatiquement, saisie
+   * manuelle par mois, même principe que ajusterTicketsRestaurant ci-dessus (remplace la valeur du
+   * mois, pas un cumul). */
+  ajusterVariablesPaie(employeeId, year, month, montant, motif) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const value = Number(montant);
+    if (!Number.isFinite(value)) {
+      return { success: false, error: 'Le montant doit être un nombre.' };
+    }
+    const variablesPaie = Object.assign({}, employee.variablesPaie, { [ticketsMonthKey(year, month)]: value });
+    this.updateEmployee(employeeId, { variablesPaie });
+    this.logAudit('Modification', 'Variables de paie', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · ${formatCurrencyFR(value)}${motif ? ' · ' + motif : ''}`);
+    return { success: true };
+  },
+
   /** Auto-service limité (§ MODIFIER_PROPRES_COORDONNEES) : seuls téléphone/adresse sont modifiables
    * par ce chemin — signature explicite (pas un patch générique) pour qu'il soit structurellement
    * impossible d'y glisser un autre champ (poste, contrat, salaire...) par erreur plus tard. */
@@ -1569,6 +1586,7 @@ const employeeRepository = {
   delete: (id) => DB.deleteEmployee(id),
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
   ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
+  ajusterVariables: (employeeId, year, month, montant, motif) => DB.ajusterVariablesPaie(employeeId, year, month, montant, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword)
@@ -1691,6 +1709,7 @@ function makeEmptyEmployee() {
 
     compteurs: {},
     ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
+    variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes, heures sup...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
     typesAbsenceDesactives: [], // Sprint SIRH premium SS1 : ids de types actifs/visibles au niveau entreprise
                                  // mais explicitement désactivés pour CE salarié (liste blanche par défaut : vide = tout ce que l'entreprise autorise)
     dateCreation: null,
