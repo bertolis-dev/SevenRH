@@ -4862,8 +4862,10 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge') {
 const MONTH_NAMES = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-function renderCalendrier() {
-  const cells = buildMonthGridCells(state.calendarYear, state.calendarMonth);
+/** Sprint SIRH premium §2 : factorisé hors de renderCalendrier() pour que openCalendarDayModal()
+ * (§4, reprise) puisse recalculer le même `sharedData` pour une seule date sans dupliquer cette
+ * logique de périmètre/scope. */
+function buildCalendarSharedData(cells) {
   const settings = DB.getSettings();
   const user = DB.getCurrentUser();
   // Sprint SIRH premium §2 : "Créer un calendrier spécifique pour RH/Managers/Directeur [...] leurs
@@ -4884,7 +4886,15 @@ function renderCalendrier() {
   const schoolHolidays = DB.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getFrenchPublicHolidays(y));
-  const sharedData = { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone };
+  return { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone };
+}
+
+function renderCalendrier() {
+  const cells = buildMonthGridCells(state.calendarYear, state.calendarMonth);
+  const sharedData = buildCalendarSharedData(cells);
+  const settings = DB.getSettings();
+  const user = DB.getCurrentUser();
+  const hasWiderView = user.role !== ROLES.SALARIE;
 
   return `
     <div class="view-header-row">
@@ -4941,6 +4951,9 @@ function bindCalendrierEvents() {
       state.calendrierVue = btn.dataset.calendrierVue;
       render();
     });
+  });
+  document.querySelectorAll('[data-calendar-day]').forEach(cell => {
+    cell.addEventListener('click', () => openCalendarDayModal(cell.dataset.calendarDay));
   });
 }
 
@@ -5036,8 +5049,15 @@ function renderCalendarCell(cell, sharedData) {
     info.departs.length ? calendarBadge('👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
   ].join('');
 
+  // §4 (reprise) : le survol des badges (.calendar-tooltip) reste utile sur desktop mais est
+  // inutilisable au tactile et cache vite plusieurs infos à la fois sur un jour chargé — une case
+  // avec du contenu est en plus rendue cliquable (clavier/tactile inclus, cf. le gestionnaire
+  // role="button" générique déjà en place) pour ouvrir le détail complet du jour dans une modale.
+  const hasContent = Boolean(badges || info.ferie || info.vacances);
+
   return `
-    <div class="${classes.join(' ')}">
+    <div class="${classes.join(' ')}${hasContent ? ' calendar-cell-clickable' : ''}"
+      ${hasContent ? `role="button" tabindex="0" data-calendar-day="${dateStr}" aria-label="Détail du ${escapeHtml(formatDate(dateStr))}"` : ''}>
       <div class="calendar-cell-header">
         <span class="calendar-day-number">${cell.date.getDate()}</span>
       </div>
@@ -5055,6 +5075,53 @@ function calendarBadge(icon, names, pending = false) {
       <span class="calendar-tooltip">${names.map(escapeHtml).join('<br>')}</span>
     </span>
   `;
+}
+
+/** Sprint SIRH premium §4 (reprise) : détail complet d'un jour du calendrier, dans une modale plutôt
+ * qu'au survol (.calendar-tooltip) — accessible au clavier/tactile, et lisible même quand plusieurs
+ * catégories d'évènements se superposent le même jour (un badge par catégorie devient vite illisible
+ * une fois qu'il y a beaucoup de monde). Recalcule son propre `sharedData` (une seule date, donc bon
+ * marché) via buildCalendarSharedData plutôt que de dépendre d'un état capturé au rendu précédent. */
+function openCalendarDayModal(dateStr) {
+  const sharedData = buildCalendarSharedData([{ date: new Date(dateStr) }]);
+  const info = getCalendarDayInfo(dateStr, sharedData);
+
+  const sections = [
+    { label: 'Congés / absences', items: info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.icone} ${c.type.nom}${c.statut !== 'Validé' ? ' (en attente)' : ''}`) },
+    { label: 'Télétravail', items: info.teletravail.map(t => `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}`) },
+    { label: 'Anniversaires', items: info.anniversaires.map(e => `🎂 ${e.prenom} ${e.nom}`) },
+    { label: 'Arrivées', items: info.arrivees.map(e => `🎉 ${e.prenom} ${e.nom}`) },
+    { label: 'Départs', items: info.departs.map(e => `👋 ${e.prenom} ${e.nom}`) }
+  ].filter(s => s.items.length);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${escapeHtml(formatDate(dateStr))}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        ${info.ferie ? `<span class="badge badge-danger" style="margin-bottom: 10px;">${escapeHtml(info.ferie.label)}</span>` : ''}
+        ${info.vacances ? `<span class="badge badge-info" style="margin-bottom: 10px;">🎒 ${escapeHtml(info.vacances.nom)}</span>` : ''}
+        ${sections.length === 0 ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
+          <div style="margin-bottom: 14px;">
+            <div class="search-section-label" style="padding-left: 0;">${escapeHtml(s.label)}</div>
+            <div class="mini-list">
+              ${s.items.map(i => `<div class="mini-list-item"><span>${escapeHtml(i)}</span></div>`).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
 // ---------------------------------------------------------------------------
@@ -6084,7 +6151,7 @@ function renderPlanningSemaine() {
         <button class="btn btn-secondary btn-sm" id="btn-planning-week-next">Suivante →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}</tr></thead>
@@ -6122,7 +6189,7 @@ function renderPlanningMois() {
         <button class="btn btn-secondary btn-sm" id="btn-planning-month-next">Suivant →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
@@ -6157,7 +6224,7 @@ function renderPlanningAnnee() {
         <button class="btn btn-secondary btn-sm" id="btn-planning-year-next">${year + 1} →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${MONTH_NAMES.map(m => `<th>${m.slice(0, 3)}</th>`).join('')}<th>Total</th></tr></thead>
@@ -6240,7 +6307,7 @@ function renderHorairesSemaine() {
         <button class="btn btn-secondary btn-sm" id="btn-planning-week-next">Suivante →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}<th>Total</th></tr></thead>
@@ -6294,7 +6361,7 @@ function renderHorairesJour() {
         <button class="btn btn-secondary btn-sm" id="btn-horaires-day-next">Suivant →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th><th>Matin</th><th>Après-midi</th><th>Total</th></tr></thead>
@@ -6345,7 +6412,7 @@ function renderHorairesMois() {
         <button class="btn btn-secondary btn-sm" id="btn-planning-month-next">Suivant →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}<th>Total</th></tr></thead>
@@ -6864,7 +6931,7 @@ function renderTeletravailPlanning() {
         <button class="btn btn-secondary btn-sm" id="btn-week-next">Suivante →</button>
       </div>
     </div>
-    <div class="card table-card">
+    <div class="card table-card planning-scroll-card">
       <table class="table planning-table">
         <thead>
           <tr>

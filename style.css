@@ -808,6 +808,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .calendar-cell.holiday { background: var(--color-danger-soft); }
 .calendar-cell.school-holiday:not(.holiday) { background: var(--color-info-soft); }
 
+/* §4 (reprise) : case cliquable pour ouvrir le détail du jour (openCalendarDayModal) — uniquement
+ * quand la case a du contenu (cf. hasContent dans renderCalendarCell). */
+.calendar-cell-clickable { cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.calendar-cell-clickable:hover { border-color: var(--color-primary); }
+
 .calendar-cell-header { display: flex; justify-content: space-between; }
 .calendar-day-number { font-size: 13px; font-weight: 600; }
 
@@ -943,6 +948,35 @@ textarea.input { resize: vertical; font-family: inherit; }
   text-align: left;
   padding-top: 10px;
 }
+
+/* §4 (reprise) : grilles Planning/Horaires/Télétravail — beaucoup de colonnes (jours d'un mois) et
+ * potentiellement beaucoup de lignes (salariés) ; sans repère fixe, on perd de vue à qui/quel jour
+ * correspond une cellule dès qu'on scrolle. `max-height` borne la carte pour que le scroll ait lieu
+ * DANS la carte (donc que `position: sticky` ait un vrai ancêtre défilant) plutôt que sur la page. */
+.planning-scroll-card { max-height: 70vh; overflow: auto; }
+
+.planning-scroll-card .planning-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 3;
+}
+
+.planning-scroll-card .planning-table th:first-child,
+.planning-scroll-card .planning-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  z-index: 2;
+}
+
+/* La cellule d'angle (coin haut-gauche) doit rester au-dessus des deux autres groupes de cellules sticky. */
+.planning-scroll-card .planning-table thead th:first-child { z-index: 4; }
+
+/* Sans ça, les lignes de regroupement par service (fond distinct) laissent transparaître ce fond
+ * à travers la première colonne sticky, qui retomberait sinon sur le fond de carte par défaut. */
+.planning-scroll-card .planning-service-header td:first-child { background: var(--color-surface-alt, var(--color-muted-soft)); }
+.planning-scroll-card .planning-summary-row td:first-child { background: var(--color-muted-soft); }
 
 /* ---------------------------------------------------------------------
    Dashboard — graphiques SVG faits maison et listes pratiques
