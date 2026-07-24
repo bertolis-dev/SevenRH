@@ -654,6 +654,11 @@ const DB = {
     this.saveTeleworkRequests(this.getTeleworkRequests().filter(r => r.employeeId !== id));
     this.saveExpenses(this.getExpenses().filter(n => n.employeeId !== id));
     this.saveDocuments(this.getDocuments().filter(d => d.employeeId !== id));
+    // Sprint SIRH premium §10 : un brouillon appartient à son ownerId (qui a commencé la saisie),
+    // mais peut aussi cibler un AUTRE salarié via champs.employeeId (un manager brouillonnant pour
+    // un tiers) — un id fantôme dans l'un ou l'autre laisserait un brouillon inutilisable (repris,
+    // son sélecteur de salarié ne proposerait plus personne de valide) traîner indéfiniment.
+    this.saveBrouillons(this.getBrouillons().filter(b => b.ownerId !== id && (!b.champs || b.champs.employeeId !== id)));
 
     const company = this.getCurrentCompany();
     if (company.favorites && !Array.isArray(company.favorites)) {

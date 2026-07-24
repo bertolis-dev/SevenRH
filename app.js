@@ -607,6 +607,15 @@ function exportMyDataRGPD() {
     documents: documentRepository.getForEmployee(user.id).map(d => ({
       categorie: d.categorie, nom: d.nom, dateExpiration: d.dateExpiration,
       fichierJoint: d.fichier ? d.fichier.nom : null
+    })),
+    // Sprint SIRH premium §10 : les brouillons de demandes sont aussi des données personnelles
+    // (l'utilisateur les a saisies, même si jamais envoyées) — même exclusion du contenu binaire de
+    // la pièce jointe (juste son nom) que pour les notes de frais/documents ci-dessus.
+    brouillons: draftRepository.getForOwner(user.id).map(b => ({
+      type: b.type,
+      champs: b.champs && b.champs.justificatif ? { ...b.champs, justificatif: b.champs.justificatif.nom } : b.champs,
+      dateCreation: b.dateCreation,
+      dateModification: b.dateModification
     }))
   };
 
