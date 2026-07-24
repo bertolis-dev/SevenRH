@@ -2158,6 +2158,14 @@ function calculateAcquisition(employee, leaveType, refDate) {
   return round2(annualAmount * prorata * activityRatio);
 }
 
+/** Ids des types de congé/absence portant EXACTEMENT ce nom — utilisé partout où un calcul doit
+ * s'ancrer sur un type "connu" (RTT/Congés payés/Maladie) plutôt que sur un id, qui varie d'une
+ * entreprise à l'autre. Un seul endroit pour cet idiome, repris par calculateAbsenteeismRate,
+ * getLeaveBalance et getPaieRows (app.js) — auparavant recopié séparément à chacun de ces 3 sites. */
+function getLeaveTypeIdsByName(leaveTypes, nom) {
+  return leaveTypes.filter(t => t.nom === nom).map(t => t.id);
+}
+
 /** Solde d'un salarié pour un type de congé : acquis, pris, en attente, disponible.
  * `employee.compteurs` (§ MODIFIER_COMPTEURS) porte un ajustement manuel optionnel par type de
  * congé (jours en plus ou en moins du calcul automatique — ex. reliquat repris d'un ancien SIRH,
@@ -2172,15 +2180,21 @@ function calculateAcquisition(employee, leaveType, refDate) {
  * par NOM de type ("RTT"/"Congés payés"), pas par id, pour rester robuste si l'entreprise recrée ses
  * types. Sans danger pour les entreprises existantes : ces cases étant restées sans effet jusqu'ici,
  * aucune n'a pu être cochée avec une attente réelle — tout type où elles restent décochées (le cas
- * par défaut) voit son calcul strictement inchangé. */
-function getLeaveBalance(employee, leaveType, allRequests) {
+ * par défaut) voit son calcul strictement inchangé.
+ *
+ * `allLeaveTypes` est optionnel : un appelant qui itère déjà sur DB.getLeaveTypes() (ex.
+ * getPaieAnomalies, renderEmployeeBalances) doit le passer pour éviter de re-fetch/re-trier la
+ * liste complète à CHAQUE appel — sinon on retombe sur DB.getLeaveTypes() comme avant. Doit rester
+ * la liste COMPLÈTE (pas une liste déjà filtrée par actif/visibleSalarie) : un type "autre absence"
+ * désactivé depuis doit quand même compter dans l'historique du solde. */
+function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes) {
   const acquis = calculateAcquisition(employee, leaveType);
   const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
 
   const deducteurField = leaveType.nom === 'RTT' ? 'deduireRTT' : leaveType.nom === 'Congés payés' ? 'deduireCP' : null;
   const typeIds = new Set([leaveType.id]);
   if (deducteurField) {
-    DB.getLeaveTypes().filter(t => t.id !== leaveType.id && t[deducteurField]).forEach(t => typeIds.add(t.id));
+    (allLeaveTypes || DB.getLeaveTypes()).filter(t => t.id !== leaveType.id && t[deducteurField]).forEach(t => typeIds.add(t.id));
   }
 
   const requests = allRequests.filter(r =>
@@ -2223,7 +2237,7 @@ function calculateTurnoverRate(employees, refDate) {
 
 /** Simplification : les arrêts maladie validés servent de proxy à l'absentéisme, rapportés aux jours ouvrés théoriques de l'effectif actif. */
 function calculateAbsenteeismRate(employees, leaveRequests, leaveTypes, year) {
-  const maladieTypeIds = leaveTypes.filter(t => t.nom === 'Maladie').map(t => t.id);
+  const maladieTypeIds = getLeaveTypeIdsByName(leaveTypes, 'Maladie');
   if (!maladieTypeIds.length) return 0;
   const actifsIds = new Set(employees.filter(e => e.statut === 'Actif').map(e => e.id));
   const joursAbsence = leaveRequests

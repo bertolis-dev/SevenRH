@@ -105,6 +105,13 @@ function getInitialViewState() {
 
 const state = getInitialViewState();
 
+/** Sprint SIRH premium §5/§7 : navParams "aller aux demandes en attente" — partagés entre l'entrée
+ * de sidebar équipe (NAV_ITEMS) et le Centre d'action du tableau de bord (renderDashboardActionCenter),
+ * pour que les deux points d'entrée vers le même filtre ne puissent pas silencieusement diverger. */
+const NAVPARAMS_CONGES_A_VALIDER = { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } };
+const NAVPARAMS_TELETRAVAIL_A_VALIDER = { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
+const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
+
 /** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
  * comme "Mon équipe" (voir renderEmployeesList).
  *
@@ -131,9 +138,9 @@ const NAV_ITEMS = [
   { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe' },
   { key: 'planning', label: 'Planning équipe', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { planningVue: 'equipe' } },
   { key: 'calendrier', label: 'Calendrier équipe', icon: '📅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { calendrierVue: 'entreprise' } },
-  { key: 'conges', label: 'Congés à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } } },
-  { key: 'teletravail', label: 'Télétravail à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } } },
-  { key: 'frais', label: 'Notes de frais à valider', icon: '✅', roles: ['manager', 'rh', 'directeur', 'comptabilite'], group: 'equipe', navParams: { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } } },
+  { key: 'conges', label: 'Congés à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: NAVPARAMS_CONGES_A_VALIDER },
+  { key: 'teletravail', label: 'Télétravail à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER },
+  { key: 'frais', label: 'Notes de frais à valider', icon: '✅', roles: ['manager', 'rh', 'directeur', 'comptabilite'], group: 'equipe', navParams: NAVPARAMS_FRAIS_A_VALIDER },
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
   { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
 
@@ -1813,25 +1820,26 @@ function renderDashboardActionCenter(employees, employeeIds) {
   // comptabilité (qui tombe aussi sur renderDashboardRH) n'a ni ces écrans ni ces entrées sidebar
   // (§5), un item cliquable ici la ramènerait juste vers le dashboard sans rien ouvrir.
   const managesEquipe = [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role);
+  // "En attente", éventuellement restreint à l'équipe visible (employeeIds) — même filtre répété
+  // pour congés/télétravail/frais, factorisé une seule fois ici.
+  const pendingFor = (repo) => {
+    const list = repo.getAll().filter(r => r.statut === 'En attente');
+    return employeeIds ? list.filter(r => employeeIds.includes(r.employeeId)) : list;
+  };
 
   const items = [];
 
   if (managesEquipe) {
-    let congesEnAttente = leaveRepository.getAll().filter(r => r.statut === 'En attente');
-    let teletravailEnAttente = teleworkRepository.getAll().filter(r => r.statut === 'En attente');
-    if (employeeIds) {
-      congesEnAttente = congesEnAttente.filter(r => employeeIds.includes(r.employeeId));
-      teletravailEnAttente = teletravailEnAttente.filter(r => employeeIds.includes(r.employeeId));
-    }
+    const congesEnAttente = pendingFor(leaveRepository);
+    const teletravailEnAttente = pendingFor(teleworkRepository);
     const contractEnds = getUpcomingContractEnds(60, employees);
-    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'conges', navParams: { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } } });
-    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'teletravail', navParams: { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } } });
+    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER });
+    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'teletravail', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     if (contractEnds.length) items.push({ icon: '📄', label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
   }
 
-  let fraisEnAttente = expenseRepository.getAll().filter(n => n.statut === 'En attente');
-  if (employeeIds) fraisEnAttente = fraisEnAttente.filter(n => employeeIds.includes(n.employeeId));
-  if (fraisEnAttente.length) items.push({ icon: '🧾', label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } } });
+  const fraisEnAttente = pendingFor(expenseRepository);
+  if (fraisEnAttente.length) items.push({ icon: '🧾', label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
 
   if (hasPermission(user, PERMISSIONS.EXPORTER_PAIE)) {
     const now = new Date();
@@ -1843,8 +1851,14 @@ function renderDashboardActionCenter(employees, employeeIds) {
 
   if (hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT)) {
     const now = new Date();
+    // Récupérés une seule fois avant la boucle : sinon chaque salarié actif re-fetch/re-trie
+    // l'intégralité des congés/télétravail de l'entreprise pour rien (calculateTicketsRestaurant
+    // n'a besoin que de filtrer ces mêmes listes, déjà identiques à chaque itération).
+    const leaveRequests = leaveRepository.getAll();
+    const teleworkRequests = teleworkRepository.getAll();
+    const settings = DB.getSettings();
     const totalTickets = employees.filter(e => e.statut === 'Actif')
-      .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRepository.getAll(), teleworkRepository.getAll(), DB.getSettings()).nbTickets, 0);
+      .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
     items.push({ icon: '🍽️', label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
   }
 
@@ -3334,14 +3348,17 @@ function renderConfidentialEmployeeCard(e, user) {
 }
 
 function renderEmployeeBalances(employee, canAdjust = false) {
-  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
+  // Liste complète (pas seulement les types actifs/visibles ci-dessous) : getLeaveBalance en a besoin
+  // pour retrouver les types "deduireRTT/CP" même désactivés depuis, sans re-fetch à chaque type.
+  const allLeaveTypes = DB.getLeaveTypes();
+  const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
   const requests = leaveRepository.getAll();
   return `
     <div class="balance-grid">
       ${types.map(t => {
-        const balance = getLeaveBalance(employee, t, requests);
+        const balance = getLeaveBalance(employee, t, requests, allLeaveTypes);
         const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
         return `
           <div class="balance-card" style="--type-color:${escapeHtml(t.couleur)}">
@@ -3931,6 +3948,17 @@ function openRequestHistoryModal(request) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
+/** Bouton "Historique" réutilisé identiquement par Congés/Autres absences, Télétravail et Notes de
+ * frais (un seul `data-history`, un seul point de câblage — les 3 écrans ne rendent jamais leurs
+ * lignes en même temps, donc aucun risque de collision d'attribut entre eux). `repo` est le
+ * repository dont dépendent les lignes affichées (leaveRepository/teleworkRepository/
+ * expenseRepository), pour retrouver la bonne demande par id. */
+function bindHistoryButtons(repo) {
+  document.querySelectorAll('[data-history]').forEach(btn => {
+    btn.addEventListener('click', () => openRequestHistoryModal(repo.getById(btn.dataset.history)));
+  });
+}
+
 // ---- Modale : Prolonger un arrêt (§24) ----
 
 function openProlongerModal(requestId) {
@@ -4117,9 +4145,7 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   document.querySelectorAll('[data-regulariser]').forEach(btn => {
     btn.addEventListener('click', () => openRegulariserModal(btn.dataset.regulariser));
   });
-  document.querySelectorAll('[data-history]').forEach(btn => {
-    btn.addEventListener('click', () => openRequestHistoryModal(leaveRepository.getById(btn.dataset.history)));
-  });
+  bindHistoryButtons(leaveRepository);
 }
 
 // ---- Modale : Attestation de congé (imprimable / export PDF) ----
@@ -4218,6 +4244,18 @@ function handleCancelRequest(id) {
   });
 }
 
+/** Sprint SIRH premium §10 : les 3 modales de demande (congé/absence, télétravail, note de frais)
+ * peuvent s'ouvrir sur un brouillon repris — beginDraftEdit()/finalizeDraftEdit() portent les 2
+ * lignes autrement copiées-collées dans chacune des 3 modales (au open) et chacun des 3 submit
+ * handlers (au succès), pour que "reprendre un brouillon" reste un seul mécanisme à faire évoluer. */
+function beginDraftEdit(draft) {
+  state.editingDraftId = draft ? draft.id : null;
+}
+
+function finalizeDraftEdit() {
+  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
+}
+
 /** Sprint SIRH premium §10 : enregistre l'état ACTUEL du formulaire comme brouillon, sans aucune
  * validation (un brouillon peut être incomplet par définition — c'est tout l'intérêt). `extra`
  * porte les champs qui ne sont pas de simples <input name="…"> (catégorie congé/absence, pièce
@@ -4228,9 +4266,8 @@ function saveDraftFromForm(form, type, extra) {
   const champs = {};
   for (const [key, value] of formData.entries()) champs[key] = value;
   Object.assign(champs, extra || {});
-  if (state.editingDraftId) draftRepository.delete(state.editingDraftId);
+  finalizeDraftEdit();
   draftRepository.create({ ownerId: DB.getCurrentUser().id, type, champs });
-  state.editingDraftId = null;
   closeModal();
   showToast('Brouillon enregistré.');
   render();
@@ -4340,7 +4377,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
     (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id));
   const champs = (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
-  state.editingDraftId = draft ? draft.id : null;
+  beginDraftEdit(draft);
 
   const html = `
     <div class="modal">
@@ -4545,7 +4582,7 @@ function submitLeaveRequestForm(evt) {
     justificatif: state.pendingAttachment
   });
 
-  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
+  finalizeDraftEdit();
   showToast('Demande envoyée.');
   closeModal();
   if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
@@ -6543,7 +6580,7 @@ function renderTeleworkRequestRow(r) {
       <td>${formatDurationFR(r.nbJours)}</td>
       <td>${renderRequestStatutBadge(r)}</td>
       <td class="table-actions">
-        <button class="btn-link" data-history-tt="${r.id}">Historique</button>
+        <button class="btn-link" data-history="${r.id}">Historique</button>
         ${actions}
       </td>
     </tr>
@@ -6573,7 +6610,7 @@ function bindTeletravailDemandesEvents() {
   document.querySelectorAll('[data-approve-tt]').forEach(btn => btn.addEventListener('click', () => handleApproveTelework(btn.dataset.approveTt)));
   document.querySelectorAll('[data-refuse-tt]').forEach(btn => btn.addEventListener('click', () => handleRefuseTelework(btn.dataset.refuseTt)));
   document.querySelectorAll('[data-cancel-tt]').forEach(btn => btn.addEventListener('click', () => handleCancelTelework(btn.dataset.cancelTt)));
-  document.querySelectorAll('[data-history-tt]').forEach(btn => btn.addEventListener('click', () => openRequestHistoryModal(teleworkRepository.getById(btn.dataset.historyTt))));
+  bindHistoryButtons(teleworkRepository);
 }
 
 function handleApproveTelework(id) {
@@ -6621,7 +6658,7 @@ function handleCancelTelework(id) {
 function openTeleworkRequestModal(presetEmployeeId, draft) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const champs = (draft && draft.champs) || {};
-  state.editingDraftId = draft ? draft.id : null;
+  beginDraftEdit(draft);
 
   const html = `
     <div class="modal">
@@ -6798,7 +6835,7 @@ function submitTeleworkRequestForm(evt) {
 
   teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
-  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
+  finalizeDraftEdit();
   showToast('Demande de télétravail envoyée.');
   closeModal();
   navigateTo('teletravail', { teletravailTab: 'demandes' });
@@ -6998,7 +7035,7 @@ function renderExpenseRow(n) {
       <td>${renderRequestStatutBadge(n)}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
-        <button class="btn-link" data-history-nf="${n.id}">Historique</button>
+        <button class="btn-link" data-history="${n.id}">Historique</button>
         ${actions}
       </td>
     </tr>
@@ -7035,7 +7072,7 @@ function bindFraisEvents() {
   document.querySelectorAll('[data-approve-nf]').forEach(btn => btn.addEventListener('click', () => handleApproveExpense(btn.dataset.approveNf)));
   document.querySelectorAll('[data-refuse-nf]').forEach(btn => btn.addEventListener('click', () => handleRefuseExpense(btn.dataset.refuseNf)));
   document.querySelectorAll('[data-cancel-nf]').forEach(btn => btn.addEventListener('click', () => handleCancelExpense(btn.dataset.cancelNf)));
-  document.querySelectorAll('[data-history-nf]').forEach(btn => btn.addEventListener('click', () => openRequestHistoryModal(expenseRepository.getById(btn.dataset.historyNf))));
+  bindHistoryButtons(expenseRepository);
 }
 
 function handleApproveExpense(id) {
@@ -7106,7 +7143,7 @@ function openExpenseModal(presetEmployeeId, draft) {
   const settings = DB.getSettings();
   const champs = (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
-  state.editingDraftId = draft ? draft.id : null;
+  beginDraftEdit(draft);
 
   const html = `
     <div class="modal">
@@ -7234,7 +7271,7 @@ function submitExpenseForm(evt) {
     justificatif: state.pendingAttachment
   });
 
-  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
+  finalizeDraftEdit();
   showToast('Note de frais envoyée.');
   closeModal();
   navigateTo('frais');
@@ -7471,9 +7508,9 @@ function getPaieRows(year, month) {
   // réglage "export paie" par type — le récapitulatif doit montrer les vraies données de congés/RTT/
   // maladie même si RH n'a pas coché ces types pour la colonne CSV (même principe que
   // calculateAbsenteeismRate, qui identifie déjà "Maladie" par son nom).
-  const congesPayesTypeIds = leaveTypes.filter(t => t.nom === 'Congés payés').map(t => t.id);
-  const rttTypeIds = leaveTypes.filter(t => t.nom === 'RTT').map(t => t.id);
-  const maladieTypeIds = leaveTypes.filter(t => t.nom === 'Maladie').map(t => t.id);
+  const congesPayesTypeIds = getLeaveTypeIdsByName(leaveTypes, 'Congés payés');
+  const rttTypeIds = getLeaveTypeIdsByName(leaveTypes, 'RTT');
+  const maladieTypeIds = getLeaveTypeIdsByName(leaveTypes, 'Maladie');
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
   const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
@@ -7527,17 +7564,21 @@ function getPaieAnomalies(year, month) {
   // mois affiché : sans ça, une vieille donnée jamais corrigée resterait signalée indéfiniment sur
   // TOUS les mois futurs, noyant l'écran de préparation dans du bruit sans rapport avec la paie en cours.
   const overlapsMonth = (dateDebut, dateFin) => dateDebut <= monthEnd && dateFin >= monthStart;
+  // Hoistés hors de la boucle par salarié : ne dépendent pas de `e`, recalculer/reconcaténer à
+  // chaque itération serait du travail identique refait pour rien.
+  const congeTypesFinis = leaveTypes.filter(t => t.categorie === 'conge' && t.acquisition !== 'Illimitée');
+  const validLeaveAndTeleworkRequests = validLeaveRequests.concat(validTeleworkRequests);
 
   const anomalies = [];
   employees.forEach(e => {
-    leaveTypes.filter(t => t.categorie === 'conge' && t.acquisition !== 'Illimitée').forEach(t => {
-      const balance = getLeaveBalance(e, t, allLeaveRequests);
+    congeTypesFinis.forEach(t => {
+      const balance = getLeaveBalance(e, t, allLeaveRequests, leaveTypes);
       if (balance.disponible < 0) {
         anomalies.push({ severity: 'bloquante', type: 'compteur_negatif', employee: e, message: `Solde "${t.nom}" négatif : ${formatDurationFR(balance.disponible)}` });
       }
     });
 
-    [...validLeaveRequests, ...validTeleworkRequests].filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
+    validLeaveAndTeleworkRequests.filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
       if (!isWithinEmploymentPeriod(e, r.dateDebut, r.dateFin)) {
         anomalies.push({ severity: 'bloquante', type: 'absence_incoherente', employee: e, message: `Demande du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)} en dehors de la période contractuelle` });
       }
