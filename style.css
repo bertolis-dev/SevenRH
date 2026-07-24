@@ -1033,6 +1033,30 @@ textarea.input { resize: vertical; font-family: inherit; }
 .action-center-label { flex: 1; }
 .action-center-arrow { color: var(--color-text-muted); }
 
+/* Sprint SIRH premium §11 : timeline "Historique" d'une demande (congé/télétravail/note de frais) */
+.timeline { display: flex; flex-direction: column; gap: 2px; }
+
+.timeline-item {
+  position: relative;
+  padding: 8px 0 8px 20px;
+  border-left: 2px solid var(--color-border);
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.timeline-item:last-child { border-left-color: transparent; }
+.timeline-date { font-size: 12px; }
+.timeline-label { font-size: 14px; margin-top: 2px; }
+
 /* ---------------------------------------------------------------------
    Organigramme — arbre hiérarchique en CSS pur (lignes de connexion via ::before/::after)
    --------------------------------------------------------------------- */

@@ -3775,8 +3775,10 @@ function canManageRequestFor(employeeId, domain = 'absence') {
 }
 
 function renderRequestActions(r, type) {
+  const historyBtn = `<button class="btn-link" data-history="${r.id}">Historique</button>`;
   if (r.statut === 'En attente') {
     return `
+      ${historyBtn}
       ${canActOnRequestFor(r) ? `<button class="btn-link" data-approve="${r.id}">Valider</button>` : ''}
       ${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse="${r.id}">Refuser</button>` : ''}
     `;
@@ -3786,13 +3788,62 @@ function renderRequestActions(r, type) {
     // voir SS15) et à qui a la permission PROLONGER_MALADIE.
     const canProlonger = !type.saisiParSalarie && hasPermission(DB.getCurrentUser(), PERMISSIONS.PROLONGER_MALADIE);
     return `
+      ${historyBtn}
       <button class="btn-link" data-attestation="${r.id}">Attestation</button>
       ${canProlonger ? `<button class="btn-link" data-prolonger="${r.id}">Prolonger</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link" data-regulariser="${r.id}">Régulariser</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel="${r.id}">Annuler</button>` : ''}
     `;
   }
-  return '';
+  return historyBtn;
+}
+
+/** Sprint SIRH premium §11 : Historique — fusionne `historique` (création/étapes de validation du
+ * workflow/refus/annulation, déjà alimenté à chaque action) et `regularisations` (rectifications
+ * après validation, § régularisation) en une seule timeline chronologique, lecture seule. Le
+ * télétravail et les notes de frais n'ont pas de mécanisme de régularisation — `regularisations` y
+ * est simplement absent/vide, la fusion le gère nativement sans code spécifique par type. */
+function buildRequestTimeline(request) {
+  const entries = [
+    ...(request.historique || []).map(h => ({ date: h.date, label: h.action })),
+    ...(request.regularisations || []).map(r => ({
+      date: r.date,
+      label: `Rectifiée : ${r.ancienType} du ${formatDate(r.ancienneDateDebut)}${r.ancienneDateDebut !== r.ancienneDateFin ? ' au ' + formatDate(r.ancienneDateFin) : ''}${r.motif ? ' — ' + r.motif : ''}`
+    }))
+  ];
+  return entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function openRequestHistoryModal(request) {
+  const timeline = buildRequestTimeline(request);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Historique de la demande</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        ${timeline.length === 0 ? '<p class="text-muted">Aucun historique disponible.</p>' : `
+          <div class="timeline">
+            ${timeline.map(e => `
+              <div class="timeline-item">
+                <div class="timeline-date text-muted">${formatDateTime(e.date)}</div>
+                <div class="timeline-label">${escapeHtml(e.label)}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
 // ---- Modale : Prolonger un arrêt (§24) ----
@@ -3980,6 +4031,9 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   });
   document.querySelectorAll('[data-regulariser]').forEach(btn => {
     btn.addEventListener('click', () => openRegulariserModal(btn.dataset.regulariser));
+  });
+  document.querySelectorAll('[data-history]').forEach(btn => {
+    btn.addEventListener('click', () => openRequestHistoryModal(leaveRepository.getById(btn.dataset.history)));
   });
 }
 
@@ -6403,7 +6457,10 @@ function renderTeleworkRequestRow(r) {
       <td>${periode}</td>
       <td>${formatDurationFR(r.nbJours)}</td>
       <td>${renderRequestStatutBadge(r)}</td>
-      <td class="table-actions">${actions}</td>
+      <td class="table-actions">
+        <button class="btn-link" data-history-tt="${r.id}">Historique</button>
+        ${actions}
+      </td>
     </tr>
   `;
 }
@@ -6431,6 +6488,7 @@ function bindTeletravailDemandesEvents() {
   document.querySelectorAll('[data-approve-tt]').forEach(btn => btn.addEventListener('click', () => handleApproveTelework(btn.dataset.approveTt)));
   document.querySelectorAll('[data-refuse-tt]').forEach(btn => btn.addEventListener('click', () => handleRefuseTelework(btn.dataset.refuseTt)));
   document.querySelectorAll('[data-cancel-tt]').forEach(btn => btn.addEventListener('click', () => handleCancelTelework(btn.dataset.cancelTt)));
+  document.querySelectorAll('[data-history-tt]').forEach(btn => btn.addEventListener('click', () => openRequestHistoryModal(teleworkRepository.getById(btn.dataset.historyTt))));
 }
 
 function handleApproveTelework(id) {
@@ -6855,6 +6913,7 @@ function renderExpenseRow(n) {
       <td>${renderRequestStatutBadge(n)}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
+        <button class="btn-link" data-history-nf="${n.id}">Historique</button>
         ${actions}
       </td>
     </tr>
@@ -6891,6 +6950,7 @@ function bindFraisEvents() {
   document.querySelectorAll('[data-approve-nf]').forEach(btn => btn.addEventListener('click', () => handleApproveExpense(btn.dataset.approveNf)));
   document.querySelectorAll('[data-refuse-nf]').forEach(btn => btn.addEventListener('click', () => handleRefuseExpense(btn.dataset.refuseNf)));
   document.querySelectorAll('[data-cancel-nf]').forEach(btn => btn.addEventListener('click', () => handleCancelExpense(btn.dataset.cancelNf)));
+  document.querySelectorAll('[data-history-nf]').forEach(btn => btn.addEventListener('click', () => openRequestHistoryModal(expenseRepository.getById(btn.dataset.historyNf))));
 }
 
 function handleApproveExpense(id) {
