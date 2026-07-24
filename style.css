@@ -236,8 +236,8 @@ p { margin: 0; line-height: 1.5; }
 }
 
 #view-root {
-  padding: 28px;
-  max-width: 1200px;
+  padding: 28px 32px;
+  max-width: 1440px;
   width: 100%;
   min-width: 0;
   margin: 0 auto;
@@ -278,9 +278,9 @@ p { margin: 0; line-height: 1.5; }
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 22px 24px;
   box-shadow: var(--shadow-sm);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   min-width: 0;
 }
 
@@ -377,7 +377,7 @@ p { margin: 0; line-height: 1.5; }
    --------------------------------------------------------------------- */
 
 .input {
-  padding: 9px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 14px;
@@ -419,8 +419,8 @@ p { margin: 0; line-height: 1.5; }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .form-field { display: flex; flex-direction: column; gap: 6px; }
@@ -453,14 +453,14 @@ p { margin: 0; line-height: 1.5; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-muted);
-  padding: 14px 20px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   user-select: none;
 }
 
 .table td {
-  padding: 14px 20px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--color-border);
   font-size: 14px;
 }
@@ -793,10 +793,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .calendar-cell {
-  min-height: 96px;
+  min-height: 112px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 6px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
