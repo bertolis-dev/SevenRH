@@ -905,7 +905,92 @@ function bindOnboardingWizardEvents() {
   });
 }
 
+/** Sprint SIRH premium §12 : Centre d'aide contextuel — une entrée par écran (clé = state.view,
+ * mêmes clés que NAV_ITEMS), texte court décrivant CE QUI EST RÉELLEMENT construit sur cet écran
+ * plutôt qu'une doc générique. Pas d'entrée par rôle : le contenu est le même pour tout le monde,
+ * chacun ne voit de toute façon que les écrans auxquels il a accès. */
+const HELP_CONTENT = {
+  dashboard: {
+    title: 'Tableau de bord',
+    body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Directeur voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
+           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`
+  },
+  employees: {
+    title: 'Salariés',
+    body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Directeur, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`
+  },
+  organigramme: {
+    title: 'Organigramme',
+    body: `<p>Arbre hiérarchique basé sur les rattachements managers de chaque salarié. Filtrez par établissement/service/équipe, repliez/dépliez les branches, cliquez une personne pour ouvrir sa fiche.</p>`
+  },
+  conges: {
+    title: 'Congés',
+    body: `<p>Onglet <strong>Demandes</strong> : créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
+           <p>Onglet <strong>Types de congés</strong> (RH/Directeur) : créez/modifiez les types (congés payés, RTT...), leurs règles d'acquisition, workflow de validation et justificatif obligatoire.</p>`
+  },
+  'autres-absences': {
+    title: 'Autres absences',
+    body: `<p>Même moteur que Congés (demandes, validation, historique, brouillons), pour les absences hors congés payés/RTT : maladie, événements familiaux, et tout autre type paramétrable dans l'onglet Types. Un salarié peut être autorisé/restreint à certains types spécifiquement depuis sa fiche.</p>`
+  },
+  calendrier: {
+    title: 'Calendrier',
+    body: `<p>Bascule <strong>Mon calendrier</strong> / <strong>Calendrier équipe</strong> (visible si vous encadrez une équipe). Les congés/absences/télétravail validés s'affichent avec leur icône de type ; les demandes encore en attente apparaissent en semi-transparent avec un badge distinct.</p>`
+  },
+  planning: {
+    title: 'Planning',
+    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`
+  },
+  teletravail: {
+    title: 'Télétravail',
+    body: `<p>Onglet <strong>Demandes</strong> : créez/validez le télétravail, avec un quota hebdomadaire configurable (Paramètres) qui bloque une demande en dépassement. Onglet <strong>Planning</strong> : vue hebdomadaire de qui est en télétravail.</p>`
+  },
+  frais: {
+    title: 'Notes de frais',
+    body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le workflow de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`
+  },
+  'mes-documents': {
+    title: 'Mes documents',
+    body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service.</p>`
+  },
+  tickets: {
+    title: 'Tickets restaurant',
+    body: `<p>Calcul automatique du nombre de tickets par salarié selon ses jours travaillés du mois, déduction faite des congés/télétravail validés. Un ajustement manuel ponctuel reste possible par salarié si besoin.</p>`
+  },
+  'export-paie': {
+    title: 'Préparation de paie',
+    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié.</p>
+           <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais) au format de votre logiciel de paie.</p>`
+  },
+  parametres: {
+    title: 'Paramètres',
+    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`
+  }
+};
+
+function openHelpModal() {
+  const help = HELP_CONTENT[state.view] || { title: 'Aide', body: '<p class="text-muted">Aucune aide spécifique n\'est disponible pour cet écran.</p>' };
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>❓ ${escapeHtml(help.title)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">${help.body}</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+}
+
 function bindGlobalEvents() {
+  document.getElementById('btn-help').addEventListener('click', openHelpModal);
+
   const modalRoot = document.getElementById('modal-root');
   modalRoot.addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
