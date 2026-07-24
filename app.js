@@ -72,6 +72,7 @@ function getInitialViewState() {
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
     parametresTab: 'listes',
+    parametresTypesCategorie: 'conge', // Sprint SIRH premium §1 : sous-onglet de Paramètres > Types d'absences
     parametresFeriesYear: new Date().getFullYear(),
     teletravailTab: 'demandes',
     teletravailFilters: { employeeId: '', statut: '' },
@@ -979,7 +980,7 @@ const HELP_CONTENT = {
   },
   parametres: {
     title: 'Paramètres',
-    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`
+    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés — même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`
   }
 };
 
@@ -1067,7 +1068,8 @@ const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Entreprise', tab: 'entreprise', keywords: ['société', 'raison sociale', 'siret'] },
   { label: 'Établissements', tab: 'etablissements', keywords: ['site', 'agence', 'adresse'] },
   { label: 'Services & équipes', tab: 'services', keywords: ['service', 'équipe', 'organisation'] },
-  { label: 'Listes de référence', tab: 'listes', keywords: ['types de congés', 'catégories de frais', 'postes'] },
+  { label: "Types d'absences", tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés'] },
+  { label: 'Listes de référence', tab: 'listes', keywords: ['catégories de frais', 'postes'] },
   { label: 'Vacances scolaires', tab: 'vacances', keywords: ['zone', 'scolaire'] },
   { label: 'Jours fériés', tab: 'feries', keywords: ['férié', 'jour chômé'] },
   { label: "Journal d'audit", tab: 'audit', keywords: ['audit', 'historique', 'log'], permission: PERMISSIONS.VOIR_JOURNAL_AUDIT }
@@ -5153,12 +5155,13 @@ function renderParametres() {
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
-      <p class="view-subtitle">Listes de référence, vacances scolaires, jours fériés et journal d'audit</p>
+      <p class="view-subtitle">Entreprise, types d'absences, listes de référence, vacances scolaires, jours fériés et journal d'audit</p>
     </div>
     <div class="tabs">
       <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
       <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
       <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
+      <button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
@@ -5168,12 +5171,38 @@ function renderParametres() {
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
         : state.parametresTab === 'etablissements' ? renderParametresEtablissements()
         : state.parametresTab === 'services' ? renderParametresServices()
+        : state.parametresTab === 'types-absences' ? renderParametresTypesAbsences()
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
         : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
         : renderParametresListes()}
     </div>
   `;
+}
+
+/** Sprint SIRH premium §1 : le prompt d'origine demandait la gestion des types d'absences
+ * "dans les paramètres RH" — jusqu'ici construite uniquement sous les onglets "Types" de Congés/
+ * Autres absences (§1 déjà livré, fonctionnellement complet, mais au mauvais endroit). Corrigé en
+ * réutilisant TEL QUEL renderCongesTypes()/bindCongesTypesEvents() (déjà génériques par catégorie)
+ * comme nouveau point d'entrée sous Paramètres, sans dupliquer cette logique ni retirer les onglets
+ * "Types" existants (qui restent un raccourci valide depuis l'écran Congés/Autres absences). */
+function renderParametresTypesAbsences() {
+  const categorie = state.parametresTypesCategorie || 'conge';
+  return `
+    <div class="tabs" style="margin-bottom: 14px;">
+      <button class="tab ${categorie === 'conge' ? 'active' : ''}" data-parametres-types-categorie="conge">Congés payés / RTT</button>
+      <button class="tab ${categorie === 'autre' ? 'active' : ''}" data-parametres-types-categorie="autre">Autres absences</button>
+    </div>
+    ${renderCongesTypes(categorie)}
+  `;
+}
+
+function bindParametresTypesAbsencesEvents() {
+  const categorie = state.parametresTypesCategorie || 'conge';
+  document.querySelectorAll('[data-parametres-types-categorie]').forEach(btn => {
+    btn.addEventListener('click', () => { state.parametresTypesCategorie = btn.dataset.parametresTypesCategorie; render(); });
+  });
+  bindCongesTypesEvents(categorie);
 }
 
 function bindParametresEvents() {
@@ -5184,6 +5213,7 @@ function bindParametresEvents() {
   if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
   else if (state.parametresTab === 'etablissements') bindParametresEtablissementsEvents();
   else if (state.parametresTab === 'services') bindParametresServicesEvents();
+  else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
   else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
   else if (state.parametresTab === 'audit') bindParametresAuditEvents();
