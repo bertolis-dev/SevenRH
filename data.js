@@ -2423,3 +2423,62 @@ function seedEmployees() {
 
   return employees;
 }
+
+/**
+ * ===========================================================================
+ * Sprint SIRH premium §13/§14 — Architecture préparée, PAS implémentée
+ * ===========================================================================
+ * Ces deux sections du sprint demandent explicitement de préparer le terrain
+ * sans construire les fonctionnalités elles-mêmes. Ce qui suit documente OÙ et
+ * COMMENT elles s'intégreraient dans l'architecture actuelle, pour qu'une
+ * implémentation future n'ait pas à redécouvrir ces points d'ancrage.
+ *
+ * ---- §13 : IA (préparation) — pistes à coût maîtrisé, aucune clé API/appel réseau existant ----
+ *
+ * 1. Détection d'anomalies enrichie (Préparation de paie, §6) : getPaieAnomalies() dans app.js
+ *    retourne déjà une liste structurée { severity, type, employee, message }. Un modèle pourrait
+ *    s'y greffer en AJOUTANT des entrées (ex. schéma horaire inhabituel d'un salarié par rapport à
+ *    son historique) sans toucher au format existant ni aux 3 catégories de sévérité déjà utilisées
+ *    par l'UI (badges, sections Bloquantes/Avertissements/Informations).
+ * 2. Recherche en langage naturel (Recherche globale, §8) : performGlobalSearch(term) fait déjà du
+ *    matching par sous-chaîne sur plusieurs entités (salariés/congés/télétravail/frais/services/
+ *    paramètres). Une version IA remplacerait uniquement l'étape de matching interne par un appel à
+ *    un modèle qui reformule `term` en filtres structurés, en réutilisant la MÊME forme de résultat
+ *    ({ icon, label, sublabel, nav, params }) pour ne rien changer côté rendu/navigation.
+ * 3. Résumés (ex. un résumé en une phrase du Centre d'action §7, ou de la fiche salarié) :
+ *    fonctionnerait en lecture seule sur des données déjà calculées (renderDashboardActionCenter,
+ *    getPaieRows) — jamais de génération qui modifierait des données métier.
+ * 4. Aide à la rédaction (champs commentaire/motif des demandes congé/télétravail/frais, §
+ *    régularisation) : suggestion de texte optionnelle dans les modales existantes
+ *    (openLeaveRequestModal/openTeleworkRequestModal/openExpenseModal), jamais auto-soumise.
+ *
+ * Dénominateur commun : dans les 4 cas, l'IA resterait un service STATELESS et OPTIONNEL branché en
+ * périphérie d'une fonction existante (entrée = données déjà en mémoire, sortie = même format que
+ * ce que la fonction produit aujourd'hui) — jamais une dépendance dans le chemin critique (une panne
+ * du service IA ne doit jamais bloquer la préparation de paie, la recherche simple ou l'envoi d'une
+ * demande). Le jour venu : un point d'entrée unique (ex. `AI.suggest(kind, payload)`) à ajouter dans
+ * data.js, avec un flag de configuration (Paramètres) pour l'activer/désactiver par entreprise —
+ * cohérent avec le fait que `settings` porte déjà tous les autres réglages activables (§ suivi âge/
+ * genre, masse salariale...).
+ *
+ * ---- §14 : Modules futurs — architecture à anticiper, sans construire ----
+ *
+ * - Entretiens annuels : nouvelle entité au même niveau que leaveRequests/teleworkRequests/expenses
+ *   (un repository dédié suivant EXACTEMENT le même patron que leaveRepository/expenseRepository —
+ *   getAll/getById/getForEmployee/create/update), un nouveau NAV_ITEMS avec sa propre permission
+ *   dans PERMISSIONS (catalogue §8 existant), un statut/workflow réutilisant advanceWorkflow/
+ *   refuseRequest/cancelRequest (déjà génériques, pas spécifiques aux congés).
+ * - Gestion des temps (pointage) : le sprint (§ Planning/Horaires, déjà construit) a déjà posé les
+ *   horaireMatinDebut/Fin + horaireApresMidiDebut/Fin par salarié et computeDailyHours() — un vrai
+ *   pointage ajouterait une entité "relevés" comparés à ces horaires théoriques, sans redéfinir la
+ *   notion d'horaire elle-même.
+ * - API publique : la couche repository (employeeRepository/leaveRepository/...) est déjà l'unique
+ *   point de passage entre les vues et le stockage (voir le commentaire au-dessus de leur
+ *   définition) — une API REST future implémenterait ces mêmes méthodes côté serveur sans que
+ *   app.js ait à changer d'appelant, seulement la couche data.js changerait de backend
+ *   (localStorage → HTTP).
+ * - Application mobile : consommerait la même API publique ci-dessus ; aucune UI de ce dépôt n'a
+ *   vocation à être réutilisée telle quelle (vanilla JS + rendu chaîne de caractères, pas de
+ *   composants), mais le modèle de données et les règles métier (data.js) sont déjà la seule source
+ *   de vérité et n'auraient pas à être dupliqués.
+ */
