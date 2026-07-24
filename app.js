@@ -5026,8 +5026,6 @@ function renderCalendrier() {
       <span class="legend-item"><span class="legend-swatch legend-school"></span> Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})</span>
     </div>
 
-    ${hasWiderView && state.calendrierVue !== 'personnel' ? renderCalendrierEquipeGrid(sharedData) : ''}
-
     <div class="card calendar-card">
       <div class="calendar-grid calendar-grid-header">
         ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
@@ -5035,43 +5033,6 @@ function renderCalendrier() {
       <div class="calendar-grid">
         ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
       </div>
-    </div>
-  `;
-}
-
-/** Sprint SIRH premium §2 : "Calendrier équipe / Les salariés sont affichés en lignes. Les jours en
- * colonnes. Regrouper automatiquement les salariés par service." — demandé littéralement sous
- * Calendrier, distinct du calendrier mensuel classique déjà là (conservé en dessous pour le détail
- * jour par jour/clic). Réutilise TEL QUEL groupEmployeesByService/getStatusForDate/
- * renderPlanningStatusCell (Planning, §3) plutôt que de dupliquer cette logique — ce qui active
- * gratuitement le glisser-déposer d'une case de congé/télétravail validé (§3) ici aussi, cf.
- * bindPlanningDragEvents() rappelée depuis bindCalendrierEvents(). */
-function renderCalendrierEquipeGrid(sharedData) {
-  const year = state.calendarYear;
-  const month = state.calendarMonth;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const groups = groupEmployeesByService(sharedData.employees);
-  const leaveRequests = sharedData.leaveRequests;
-  const teleworkRequests = sharedData.teleworkRequests;
-
-  return `
-    <div class="card table-card planning-scroll-card" style="margin-bottom: 16px;">
-      ${sharedData.employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
-        <table class="table planning-table">
-          <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
-          <tbody>
-            ${groups.map(g => `
-              <tr class="planning-service-header"><td colspan="${daysInMonth + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-              ${g.employees.map(e => `
-                <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
-                  ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
-                </tr>
-              `).join('')}
-            `).join('')}
-          </tbody>
-        </table>
-      `}
     </div>
   `;
 }
@@ -5094,10 +5055,6 @@ function bindCalendrierEvents() {
   document.querySelectorAll('[data-calendar-day]').forEach(cell => {
     cell.addEventListener('click', () => openCalendarDayModal(cell.dataset.calendarDay));
   });
-
-  // §2 (reprise) : la grille équipe (lignes/colonnes) réutilise renderPlanningStatusCell (§3), donc
-  // aussi son glisser-déposer — même liaison que bindPlanningEvents pour les vues Planning.
-  if (document.querySelector('.planning-cell')) bindPlanningDragEvents();
 }
 
 function shiftCalendarMonth(delta) {
