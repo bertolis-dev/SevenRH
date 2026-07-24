@@ -2162,12 +2162,29 @@ function calculateAcquisition(employee, leaveType, refDate) {
  * `employee.compteurs` (§ MODIFIER_COMPTEURS) porte un ajustement manuel optionnel par type de
  * congé (jours en plus ou en moins du calcul automatique — ex. reliquat repris d'un ancien SIRH,
  * correction d'erreur) : voir DB.ajusterCompteurConge(). Champ présent dans le schéma depuis le
- * début mais jamais lu avant ce câblage. */
+ * début mais jamais lu avant ce câblage.
+ *
+ * Sprint SIRH premium §1 ("comptabilisé dans les congés") : `deduireRTT`/`deduireCP` existent sur
+ * chaque type depuis le tout début (case à cocher "Déduire du compteur RTT/CP" déjà visible dans le
+ * formulaire de type) mais n'étaient jamais lus nulle part — un type marqué ainsi (typiquement une
+ * "autre absence" comme un congé sans solde ponctuel) vient maintenant EN PLUS s'imputer sur le
+ * compteur RTT et/ou congés payés du salarié quand on calcule LE SOLDE DE CE COMPTEUR-LÀ. Identifié
+ * par NOM de type ("RTT"/"Congés payés"), pas par id, pour rester robuste si l'entreprise recrée ses
+ * types. Sans danger pour les entreprises existantes : ces cases étant restées sans effet jusqu'ici,
+ * aucune n'a pu être cochée avec une attente réelle — tout type où elles restent décochées (le cas
+ * par défaut) voit son calcul strictement inchangé. */
 function getLeaveBalance(employee, leaveType, allRequests) {
   const acquis = calculateAcquisition(employee, leaveType);
   const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
+
+  const deducteurField = leaveType.nom === 'RTT' ? 'deduireRTT' : leaveType.nom === 'Congés payés' ? 'deduireCP' : null;
+  const typeIds = new Set([leaveType.id]);
+  if (deducteurField) {
+    DB.getLeaveTypes().filter(t => t.id !== leaveType.id && t[deducteurField]).forEach(t => typeIds.add(t.id));
+  }
+
   const requests = allRequests.filter(r =>
-    r.employeeId === employee.id && r.typeId === leaveType.id && r.statut !== 'Refusé' && r.statut !== 'Annulé'
+    r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé'
   );
   const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
   const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
