@@ -8169,7 +8169,7 @@ function bindExportPaieEvents() {
   });
 
   const exportBtn = document.getElementById('btn-export-paie');
-  if (exportBtn) exportBtn.addEventListener('click', exportPaieCSV);
+  if (exportBtn) exportBtn.addEventListener('click', handleExportPaieClick);
 
   const modeleSelect = document.getElementById('f-export-paie-modele');
   if (modeleSelect) modeleSelect.addEventListener('change', (e) => {
@@ -8271,6 +8271,24 @@ function csvEscapeWithDelimiter(value, delimiter) {
 function exportRowsToCSVWithDelimiter(headers, rows, filename, delimiter) {
   const csv = [headers, ...rows].map(row => row.map(v => csvEscapeWithDelimiter(v, delimiter)).join(delimiter)).join('\r\n');
   downloadTextFile(csv, filename, 'text/csv;charset=utf-8;');
+}
+
+/** Sprint SIRH premium §6 : "Ce module doit être obligatoire avant tout export." — un blocage
+ * technique dur du bouton reste risqué (faux positif un jour de paie, cf. commentaire de
+ * renderExportPaie), mais laisser l'export totalement silencieux ne rend pas la consultation des
+ * anomalies bloquantes "obligatoire" pour autant. Compromis : une confirmation explicite s'affiche
+ * s'il reste des anomalies bloquantes pour le mois exporté — l'utilisateur DOIT la voir et
+ * l'acquitter, mais garde la main s'il juge que c'est un faux positif. */
+function handleExportPaieClick() {
+  const bloquantes = getPaieAnomalies(state.paieYear, state.paieMonth).filter(a => a.severity === 'bloquante');
+  if (!bloquantes.length) { exportPaieCSV(); return; }
+  openConfirm({
+    title: 'Anomalies bloquantes non corrigées',
+    message: `${bloquantes.length} anomalie${bloquantes.length > 1 ? 's' : ''} bloquante${bloquantes.length > 1 ? 's' : ''} pour ${MONTH_NAMES[state.paieMonth]} ${state.paieYear} (voir l'onglet "Préparation & anomalies"). Exporter quand même ?`,
+    confirmLabel: 'Exporter quand même',
+    danger: true,
+    onConfirm: exportPaieCSV
+  });
 }
 
 function exportPaieCSV() {
