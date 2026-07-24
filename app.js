@@ -68,6 +68,7 @@ function getInitialViewState() {
     autresAbsencesFilters: { employeeId: '', typeId: '', statut: '' },
     autresAbsencesPage: 1,
     pendingAttachment: null,
+    editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
     parametresTab: 'listes',
@@ -3629,6 +3630,8 @@ function renderCongesDemandes(categorie = 'conge') {
       </div>
     </div>
 
+    ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
+
     <div class="toolbar card">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -3936,6 +3939,7 @@ function bindCongesDemandesEvents(categorie = 'conge') {
 
   document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
   document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
+  bindDraftsCardEvents((draft) => openLeaveRequestModal(undefined, categorie, draft));
 
   document.getElementById('conges-filter-employee').addEventListener('change', (e) => {
     filters.employeeId = e.target.value;
@@ -4075,6 +4079,82 @@ function handleCancelRequest(id) {
   });
 }
 
+/** Sprint SIRH premium §10 : enregistre l'état ACTUEL du formulaire comme brouillon, sans aucune
+ * validation (un brouillon peut être incomplet par définition — c'est tout l'intérêt). `extra`
+ * porte les champs qui ne sont pas de simples <input name="…"> (catégorie congé/absence, pièce
+ * jointe déjà lue en dataURL via state.pendingAttachment). Un brouillon en cours de reprise
+ * (state.editingDraftId) est écrasé plutôt que dupliqué. */
+function saveDraftFromForm(form, type, extra) {
+  const formData = new FormData(form);
+  const champs = {};
+  for (const [key, value] of formData.entries()) champs[key] = value;
+  Object.assign(champs, extra || {});
+  if (state.editingDraftId) draftRepository.delete(state.editingDraftId);
+  draftRepository.create({ ownerId: DB.getCurrentUser().id, type, champs });
+  state.editingDraftId = null;
+  closeModal();
+  showToast('Brouillon enregistré.');
+  render();
+}
+
+/** Sprint SIRH premium §10 : carte "Mes brouillons", réutilisée par Congés/Autres absences,
+ * Télétravail et Notes de frais — ne montre que les brouillons de L'UTILISATEUR COURANT (peu
+ * importe pour qui la demande est destinée, cf. saveDraftFromForm) et du type demandé. Pas de carte
+ * du tout si la liste est vide, pour ne jamais ajouter de bruit à un écran qui n'en a pas besoin. */
+function renderDraftsCard(type) {
+  const drafts = draftRepository.getForOwner(DB.getCurrentUser().id, type);
+  if (!drafts.length) return '';
+  return `
+    <div class="card">
+      <h2>Mes brouillons</h2>
+      <div class="mini-list">
+        ${drafts.map(d => `
+          <div class="mini-list-item">
+            <span>${draftSummaryLabel(d)} <span class="text-muted">· modifié le ${formatDate(d.dateModification)}</span></span>
+            <span class="table-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-draft-resume="${d.id}">Reprendre</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-draft-delete="${d.id}">Supprimer</button>
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function draftSummaryLabel(draft) {
+  const c = draft.champs || {};
+  if (draft.type === 'conge' || draft.type === 'autre-absence') {
+    const type = c.typeId ? DB.getLeaveTypeById(c.typeId) : null;
+    return `${type ? escapeHtml(type.icone) + ' ' + escapeHtml(type.nom) : 'Type non choisi'}${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
+  }
+  if (draft.type === 'teletravail') {
+    return `💻 Télétravail${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
+  }
+  if (draft.type === 'frais') {
+    return `🧾 ${escapeHtml(c.libelle || c.categorie || 'Note de frais')}${c.montantTTC ? ' · ' + formatCurrencyFR(Number(c.montantTTC)) : ''}`;
+  }
+  return 'Brouillon';
+}
+
+function bindDraftsCardEvents(resumeHandler) {
+  document.querySelectorAll('[data-draft-resume]').forEach(btn => {
+    btn.addEventListener('click', () => resumeHandler(draftRepository.getById(btn.dataset.draftResume)));
+  });
+  document.querySelectorAll('[data-draft-delete]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const draftId = btn.dataset.draftDelete;
+      openConfirm({
+        title: 'Supprimer ce brouillon ?',
+        message: 'Cette action est irréversible.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => { draftRepository.delete(draftId); showToast('Brouillon supprimé.'); render(); }
+      });
+    });
+  });
+}
+
 // ---- Modale : Nouvelle demande de congé ----
 
 /**
@@ -4098,7 +4178,11 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
   return selectField('employeeId', 'Salarié', null, presetEmployeeId || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
 }
 
-function openLeaveRequestModal(presetEmployeeId, categorie) {
+/** Sprint SIRH premium §10 : `draft` (optionnel) = brouillon repris via "Reprendre" dans la liste
+ * "Mes brouillons" — préremplit le formulaire et fait passer le futur submit en mode "convertir le
+ * brouillon" (state.editingDraftId) plutôt que "créer depuis zéro" ; supprimé automatiquement une
+ * fois la demande réellement envoyée. */
+function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   // §15/§24 : un type marqué "saisie réservée aux RH" (ex. Maladie) ne doit pas être proposé à qui
   // n'a pas SAISIR_MALADIE — sinon un salarié pourrait se déclarer lui-même en arrêt maladie alors
@@ -4115,7 +4199,9 @@ function openLeaveRequestModal(presetEmployeeId, categorie) {
   const types = DB.getLeaveTypes().filter(t =>
     t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) &&
     (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id));
-  state.pendingAttachment = null;
+  const champs = (draft && draft.champs) || {};
+  state.pendingAttachment = champs.justificatif || null;
+  state.editingDraftId = draft ? draft.id : null;
 
   const html = `
     <div class="modal">
@@ -4126,31 +4212,33 @@ function openLeaveRequestModal(presetEmployeeId, categorie) {
       <form id="leave-request-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId, employees)}
-            ${selectField('typeId', categorie === 'autre' ? 'Type d\'absence' : 'Type de congé', null, '', types.map(t => ({ value: t.id, label: `${t.icone} ${t.nom}` })))}
-            ${textField('dateDebut', 'Date de début', '', true, 'date')}
-            ${textField('dateFin', 'Date de fin', '', true, 'date')}
+            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
+            ${selectField('typeId', categorie === 'autre' ? 'Type d\'absence' : 'Type de congé', null, champs.typeId || '', types.map(t => ({ value: t.id, label: `${t.icone} ${t.nom}` })))}
+            ${textField('dateDebut', 'Date de début', champs.dateDebut || '', true, 'date')}
+            ${textField('dateFin', 'Date de fin', champs.dateFin || '', true, 'date')}
           </div>
           <div class="form-field" id="field-demi-journee" style="margin-top:14px; display:none;">
             <label>Demi-journée</label>
             <select class="input" id="f-demiJournee" name="demiJournee">
-              <option value="">Journée complète</option>
-              <option value="matin">Matin</option>
-              <option value="apres-midi">Après-midi</option>
+              <option value="" ${!champs.demiJournee ? 'selected' : ''}>Journée complète</option>
+              <option value="matin" ${champs.demiJournee === 'matin' ? 'selected' : ''}>Matin</option>
+              <option value="apres-midi" ${champs.demiJournee === 'apres-midi' ? 'selected' : ''}>Après-midi</option>
             </select>
           </div>
           <div class="form-field" style="margin-top:14px;">
             <label for="f-commentaire">Commentaire</label>
-            <textarea class="input" id="f-commentaire" name="commentaire" rows="2"></textarea>
+            <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
           </div>
           <div class="form-field" style="margin-top:14px;">
             <label for="f-justificatif">Pièce justificative (optionnel)</label>
             <input class="input" type="file" id="f-justificatif">
+            ${champs.justificatif ? `<p class="text-muted" style="margin-top:4px;">Fichier repris du brouillon : ${escapeHtml(champs.justificatif.nom)}</p>` : ''}
           </div>
           <p class="text-muted" id="leave-balance-hint" style="margin-top:12px;"></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>
           <button type="submit" class="btn btn-primary">Envoyer la demande</button>
         </div>
       </form>
@@ -4165,6 +4253,9 @@ function openLeaveRequestModal(presetEmployeeId, categorie) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('f-justificatif').addEventListener('change', handleAttachmentChange);
   document.getElementById('leave-request-form').addEventListener('submit', submitLeaveRequestForm);
+  document.getElementById('btn-save-draft').addEventListener('click', () => {
+    saveDraftFromForm(document.getElementById('leave-request-form'), categorie === 'autre' ? 'autre-absence' : 'conge', { categorie: categorie || 'conge', justificatif: state.pendingAttachment });
+  });
 
   ['f-employeeId', 'f-typeId', 'f-dateDebut', 'f-dateFin'].forEach(fieldId => {
     const el = document.getElementById(fieldId);
@@ -4315,6 +4406,7 @@ function submitLeaveRequestForm(evt) {
     justificatif: state.pendingAttachment
   });
 
+  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
   showToast('Demande envoyée.');
   closeModal();
   if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
@@ -6271,6 +6363,8 @@ function renderTeletravailDemandes() {
       <button class="btn btn-primary" id="btn-new-telework-request">+ Nouvelle demande</button>
     </div>
 
+    ${renderDraftsCard('teletravail')}
+
     <div class="toolbar card">
       <select id="tt-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -6316,6 +6410,7 @@ function renderTeleworkRequestRow(r) {
 
 function bindTeletravailDemandesEvents() {
   document.getElementById('btn-new-telework-request').addEventListener('click', () => openTeleworkRequestModal());
+  bindDraftsCardEvents((draft) => openTeleworkRequestModal(undefined, draft));
 
   document.getElementById('tt-filter-employee').addEventListener('change', (e) => {
     state.teletravailFilters.employeeId = e.target.value;
@@ -6380,8 +6475,10 @@ function handleCancelTelework(id) {
 
 // ---- Modale : Nouvelle demande de télétravail ----
 
-function openTeleworkRequestModal(presetEmployeeId) {
+function openTeleworkRequestModal(presetEmployeeId, draft) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const champs = (draft && draft.champs) || {};
+  state.editingDraftId = draft ? draft.id : null;
 
   const html = `
     <div class="modal">
@@ -6392,18 +6489,19 @@ function openTeleworkRequestModal(presetEmployeeId) {
       <form id="telework-request-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId, employees)}
-            ${textField('dateDebut', 'Date de début', '', true, 'date')}
-            ${textField('dateFin', 'Date de fin', '', true, 'date')}
+            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
+            ${textField('dateDebut', 'Date de début', champs.dateDebut || '', true, 'date')}
+            ${textField('dateFin', 'Date de fin', champs.dateFin || '', true, 'date')}
           </div>
           <div class="form-field" style="margin-top: 14px;">
             <label for="f-commentaire">Commentaire</label>
-            <textarea class="input" id="f-commentaire" name="commentaire" rows="2"></textarea>
+            <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
           </div>
           <p class="text-muted" id="telework-quota-hint" style="margin-top: 12px;"></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>
           <button type="submit" class="btn btn-primary">Envoyer la demande</button>
         </div>
       </form>
@@ -6417,6 +6515,9 @@ function openTeleworkRequestModal(presetEmployeeId) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('telework-request-form').addEventListener('submit', submitTeleworkRequestForm);
+  document.getElementById('btn-save-draft').addEventListener('click', () => {
+    saveDraftFromForm(document.getElementById('telework-request-form'), 'teletravail');
+  });
 
   ['f-employeeId', 'f-dateDebut', 'f-dateFin'].forEach(fieldId => {
     document.getElementById(fieldId).addEventListener('change', updateTeleworkQuotaHint);
@@ -6554,6 +6655,7 @@ function submitTeleworkRequestForm(evt) {
 
   teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
+  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
   showToast('Demande de télétravail envoyée.');
   closeModal();
   navigateTo('teletravail', { teletravailTab: 'demandes' });
@@ -6704,6 +6806,8 @@ function renderFrais() {
       </div>
     </div>
 
+    ${renderDraftsCard('frais')}
+
     <div class="toolbar card">
       <select id="frais-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -6760,6 +6864,7 @@ function renderExpenseRow(n) {
 function bindFraisEvents() {
   document.getElementById('btn-new-expense').addEventListener('click', () => openExpenseModal());
   document.getElementById('btn-export-frais').addEventListener('click', exportExpensesCSV);
+  bindDraftsCardEvents((draft) => openExpenseModal(undefined, draft));
 
   document.getElementById('frais-filter-employee').addEventListener('change', (e) => {
     state.fraisFilters.employeeId = e.target.value;
@@ -6851,10 +6956,12 @@ function exportExpensesCSV() {
 
 // ---- Modale : Nouvelle note de frais ----
 
-function openExpenseModal(presetEmployeeId) {
+function openExpenseModal(presetEmployeeId, draft) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const settings = DB.getSettings();
-  state.pendingAttachment = null;
+  const champs = (draft && draft.champs) || {};
+  state.pendingAttachment = champs.justificatif || null;
+  state.editingDraftId = draft ? draft.id : null;
 
   const html = `
     <div class="modal">
@@ -6865,39 +6972,41 @@ function openExpenseModal(presetEmployeeId) {
       <form id="expense-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId, employees)}
-            ${selectField('categorie', 'Catégorie', settings.categoriesFrais, settings.categoriesFrais[0])}
-            ${textField('date', 'Date de la dépense', '', true, 'date')}
-            ${textField('libelle', 'Libellé', '', true)}
+            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
+            ${selectField('categorie', 'Catégorie', settings.categoriesFrais, champs.categorie || settings.categoriesFrais[0])}
+            ${textField('date', 'Date de la dépense', champs.date || '', true, 'date')}
+            ${textField('libelle', 'Libellé', champs.libelle || '', true)}
           </div>
 
           <div class="form-grid" id="expense-standard-fields" style="margin-top: 14px;">
-            ${textField('montantTTC', 'Montant TTC (€)', '', false, 'number')}
+            ${textField('montantTTC', 'Montant TTC (€)', champs.montantTTC || '', false, 'number')}
             <div class="form-field">
               <label for="f-tauxTVA">Taux de TVA</label>
               <select class="input" id="f-tauxTVA" name="tauxTVA">
-                ${TVA_RATES.map(t => `<option value="${t}">${formatPercentFR(t)}</option>`).join('')}
+                ${TVA_RATES.map(t => `<option value="${t}" ${champs.tauxTVA !== undefined && Number(champs.tauxTVA) === t ? 'selected' : ''}>${formatPercentFR(t)}</option>`).join('')}
               </select>
             </div>
           </div>
 
           <div class="form-grid" id="expense-km-fields" style="margin-top: 14px; display: none;">
-            ${textField('distanceKm', 'Distance (km, aller-retour inclus)', '', false, 'number')}
-            ${textField('puissanceFiscale', 'Puissance fiscale (CV)', '', false, 'number')}
+            ${textField('distanceKm', 'Distance (km, aller-retour inclus)', champs.distanceKm || '', false, 'number')}
+            ${textField('puissanceFiscale', 'Puissance fiscale (CV)', champs.puissanceFiscale || '', false, 'number')}
           </div>
           <p class="text-muted" id="expense-km-hint" style="margin-top: 8px;"></p>
 
           <div class="form-field" style="margin-top: 14px;">
             <label for="f-commentaire">Commentaire</label>
-            <textarea class="input" id="f-commentaire" name="commentaire" rows="2"></textarea>
+            <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
           </div>
           <div class="form-field" style="margin-top: 14px;">
             <label for="f-justificatif">Justificatif (optionnel)</label>
             <input class="input" type="file" id="f-justificatif">
+            ${champs.justificatif ? `<p class="text-muted" style="margin-top:4px;">Fichier repris du brouillon : ${escapeHtml(champs.justificatif.nom)}</p>` : ''}
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>
           <button type="submit" class="btn btn-primary">Envoyer la note</button>
         </div>
       </form>
@@ -6915,6 +7024,9 @@ function openExpenseModal(presetEmployeeId) {
   document.getElementById('f-distanceKm').addEventListener('input', updateExpenseKmHint);
   document.getElementById('f-puissanceFiscale').addEventListener('input', updateExpenseKmHint);
   document.getElementById('expense-form').addEventListener('submit', submitExpenseForm);
+  document.getElementById('btn-save-draft').addEventListener('click', () => {
+    saveDraftFromForm(document.getElementById('expense-form'), 'frais', { justificatif: state.pendingAttachment });
+  });
 
   updateExpenseCategoryFields();
 }
@@ -6977,6 +7089,7 @@ function submitExpenseForm(evt) {
     justificatif: state.pendingAttachment
   });
 
+  if (state.editingDraftId) { draftRepository.delete(state.editingDraftId); state.editingDraftId = null; }
   showToast('Note de frais envoyée.');
   closeModal();
   navigateTo('frais');

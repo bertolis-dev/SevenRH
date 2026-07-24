@@ -1250,6 +1250,44 @@ const DB = {
     return list[index];
   },
 
+  // ---- Sprint SIRH premium §10 : brouillons de demandes (congé/absence, télétravail, note de
+  // frais) — `company.brouillons` ajouté après le lancement initial, lu défensivement (`|| []`,
+  // même principe que `documents`) plutôt que migré, aucune entreprise existante n'en a besoin
+  // avant la première sauvegarde d'un brouillon. `ownerId` = qui a commencé la saisie (pas
+  // forcément `champs.employeeId` : un manager peut brouillonner une demande pour un tiers) — sert
+  // à scoper "Mes brouillons" à la bonne personne.
+
+  getBrouillons() {
+    return (this.getCurrentCompany().brouillons || []).slice().sort((a, b) => new Date(b.dateModification) - new Date(a.dateModification));
+  },
+
+  saveBrouillons(list) {
+    const company = this.getCurrentCompany();
+    company.brouillons = list;
+    this.saveCurrentCompany(company);
+  },
+
+  getBrouillonById(id) {
+    return this.getBrouillons().find(b => b.id === id) || null;
+  },
+
+  getBrouillonsForOwner(ownerId, type) {
+    return this.getBrouillons().filter(b => b.ownerId === ownerId && (!type || b.type === type));
+  },
+
+  addBrouillon(data) {
+    const list = this.getBrouillons();
+    const now = new Date().toISOString();
+    const brouillon = Object.assign({ id: generateId('draft'), dateCreation: now, dateModification: now }, data);
+    list.push(brouillon);
+    this.saveBrouillons(list);
+    return brouillon;
+  },
+
+  deleteBrouillon(id) {
+    this.saveBrouillons(this.getBrouillons().filter(b => b.id !== id));
+  },
+
   // ---- Coffre-fort documents RH ----
 
   getDocuments() {
@@ -1555,6 +1593,13 @@ const expenseRepository = {
   getForEmployee: (employeeId) => DB.getExpensesForEmployee(employeeId),
   create: (data) => DB.addExpense(data),
   update: (id, patch) => DB.updateExpense(id, patch)
+};
+
+const draftRepository = {
+  getById: (id) => DB.getBrouillonById(id),
+  getForOwner: (ownerId, type) => DB.getBrouillonsForOwner(ownerId, type),
+  create: (data) => DB.addBrouillon(data),
+  delete: (id) => DB.deleteBrouillon(id)
 };
 
 const documentRepository = {
