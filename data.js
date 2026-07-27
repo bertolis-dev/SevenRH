@@ -485,9 +485,13 @@ const DB = {
    * la prochaine écriture réussie renverra l'état local complet). */
   _pushInBackground(promise) {
     promise.catch(err => {
-      let detail = err;
-      try { detail = JSON.stringify(err, Object.getOwnPropertyNames(Object(err))); } catch (e) { /* ignore */ }
-      console.error('Échec de synchronisation Supabase :', detail);
+      console.error(
+        'Échec de synchronisation Supabase :',
+        'type=' + typeof err,
+        'ctor=' + (err && err.constructor && err.constructor.name),
+        'toString=' + String(err),
+        'keys=' + (err ? Object.keys(err).join(',') : '')
+      );
       if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : vos modifications restent enregistrées localement mais n\'ont pas encore été envoyées au serveur.');
     });
   },
