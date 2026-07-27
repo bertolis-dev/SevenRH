@@ -610,11 +610,23 @@ const DB = {
     return this.getCurrentCompany().employees;
   },
 
+  /** Ne pousse vers Supabase QUE les salariés réellement ajoutés/modifiés (pas toute la liste
+   * visible localement) : le cache d'un manager contient aussi les fiches de son équipe qu'il ne
+   * peut que LIRE, pas écrire — un renvoi intégral de la liste violerait la sécurité (RLS) même
+   * quand seul SON PROPRE salarié a changé. Voir le plan de migration, limite du cache optimiste. */
   saveEmployees(list) {
     const company = this.getCurrentCompany();
+    const previous = company.employees;
     company.employees = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushEmployees(list, company.id));
+    const added = list.filter(e => !previous.some(p => p.id === e.id));
+    const modified = list.filter(e => {
+      const old = previous.find(p => p.id === e.id);
+      return old && JSON.stringify(old) !== JSON.stringify(e);
+    });
+    const removedIds = previous.filter(p => !list.some(e => e.id === p.id)).map(p => p.id);
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushEmployees({ added, modified }, company.id));
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('employees', id, company.id)));
   },
 
   getEmployeeById(id) {
@@ -956,11 +968,24 @@ const DB = {
     return this.getCurrentCompany().leaveRequests.slice().sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
   },
 
+  /** Même logique que saveEmployees : ne pousser que ce qui a changé — le cache local contient
+   * aussi les demandes des collègues (lecture seule pour la plupart des rôles), et certaines de ces
+   * entrées sont des versions "redactées" (calendrier général, voir supabase-client.js) qui ne
+   * doivent JAMAIS être renvoyées comme si c'étaient des demandes complètes. */
   saveLeaveRequests(list) {
     const company = this.getCurrentCompany();
+    const previous = company.leaveRequests;
     company.leaveRequests = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushLeaveRequests(list, company.id));
+    const added = list.filter(r => !r._redacted && !previous.some(p => p.id === r.id));
+    const modified = list.filter(r => {
+      if (r._redacted) return false;
+      const old = previous.find(p => p.id === r.id);
+      return old && JSON.stringify(old) !== JSON.stringify(r);
+    });
+    const removedIds = previous.filter(p => !p._redacted && !list.some(r => r.id === p.id)).map(p => p.id);
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushLeaveRequests({ added, modified }, company.id));
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('leave_requests', id, company.id)));
   },
 
   getLeaveRequestById(id) {
@@ -1206,9 +1231,18 @@ const DB = {
 
   saveTeleworkRequests(list) {
     const company = this.getCurrentCompany();
+    const previous = company.teleworkRequests;
     company.teleworkRequests = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushTeleworkRequests(list, company.id));
+    const added = list.filter(r => !r._redacted && !previous.some(p => p.id === r.id));
+    const modified = list.filter(r => {
+      if (r._redacted) return false;
+      const old = previous.find(p => p.id === r.id);
+      return old && JSON.stringify(old) !== JSON.stringify(r);
+    });
+    const removedIds = previous.filter(p => !p._redacted && !list.some(r => r.id === p.id)).map(p => p.id);
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushTeleworkRequests({ added, modified }, company.id));
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('telework_requests', id, company.id)));
   },
 
   getTeleworkRequestById(id) {
@@ -1256,9 +1290,17 @@ const DB = {
 
   saveExpenses(list) {
     const company = this.getCurrentCompany();
+    const previous = company.expenses;
     company.expenses = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushExpenses(list, company.id));
+    const added = list.filter(e => !previous.some(p => p.id === e.id));
+    const modified = list.filter(e => {
+      const old = previous.find(p => p.id === e.id);
+      return old && JSON.stringify(old) !== JSON.stringify(e);
+    });
+    const removedIds = previous.filter(p => !list.some(e => e.id === p.id)).map(p => p.id);
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushExpenses({ added, modified }, company.id));
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('expenses', id, company.id)));
   },
 
   getExpenseById(id) {

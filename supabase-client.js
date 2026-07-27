@@ -294,6 +294,41 @@ async function syncTable(tableName, rows, toRowFn, companyId) {
   if (deleteError) throw deleteError;
 }
 
+/** Contrairement à syncTable (resync complet d'une liste, adapté aux tables où tout le monde a le
+ * même niveau d'accès en lecture ET en écriture — types de congés, établissements...), ces deux
+ * fonctions ne touchent QUE les lignes fournies, sans jamais supprimer par omission. Indispensable
+ * pour les entités où le cache local d'un utilisateur contient aussi des données visibles mais non
+ * modifiables par lui (l'équipe d'un manager, le calendrier général...) : renvoyer "tout ce qui est
+ * visible" y déclencherait une violation RLS sur des lignes qu'il n'a pas le droit d'écrire, même
+ * inchangées. Voir DB.saveEmployees/saveLeaveRequests/saveTeleworkRequests/saveExpenses (data.js).
+ *
+ * insert et update sont volontairement SÉPARÉS (jamais un upsert unique) : Postgres exige de
+ * satisfaire à la fois la policy INSERT et la policy UPDATE pour un "INSERT ... ON CONFLICT DO
+ * UPDATE", même quand la ligne existe déjà et qu'il s'agit clairement d'une modification — un
+ * manager qui n'a pas le droit de CRÉER un salarié se voyait donc bloqué en voulant juste modifier
+ * sa propre fiche existante. */
+async function insertRows(tableName, rows, toRowFn, companyId) {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from(tableName).insert(rows.map(r => toRowFn(r, companyId)));
+  if (error) throw error;
+}
+
+async function updateRows(tableName, rows, toRowFn, companyId) {
+  if (rows.length === 0) return;
+  const results = await Promise.all(rows.map(r => {
+    const row = toRowFn(r, companyId);
+    const { id, company_id, ...patch } = row;
+    return supabase.from(tableName).update(patch).eq('id', id).eq('company_id', company_id);
+  }));
+  const failed = results.find(res => res.error);
+  if (failed) throw failed.error;
+}
+
+async function deleteRow(tableName, id, companyId) {
+  const { error } = await supabase.from(tableName).delete().eq('id', id).eq('company_id', companyId);
+  if (error) throw error;
+}
+
 async function syncSingleRow(tableName, companyId, data) {
   const { error } = await supabase.from(tableName).upsert({ company_id: companyId, data });
   if (error) throw error;
@@ -438,13 +473,30 @@ function onPasswordRecovery(callback) {
 // gestion (toast d'erreur, la donnée reste correcte localement dans tous les cas).
 // ---------------------------------------------------------------------------
 
-const pushEmployees = (rows, companyId) => syncTable('employees', rows, employeeToRow, companyId);
+// employees/leaveRequests/teleworkRequests/expenses : insert/update séparés (jamais syncTable/upsert)
+// — le cache local d'un utilisateur contient aussi des lignes qu'il peut lire mais pas écrire
+// (l'équipe d'un manager, le calendrier général...), donc jamais de resync complet ni de
+// suppression par omission ; et jamais d'upsert unique (voir le commentaire sur insertRows/updateRows).
+async function pushEmployees({ added, modified }, companyId) {
+  await insertRows('employees', added, employeeToRow, companyId);
+  await updateRows('employees', modified, employeeToRow, companyId);
+}
+async function pushLeaveRequests({ added, modified }, companyId) {
+  await insertRows('leave_requests', added, leaveRequestToRow, companyId);
+  await updateRows('leave_requests', modified, leaveRequestToRow, companyId);
+}
+async function pushTeleworkRequests({ added, modified }, companyId) {
+  await insertRows('telework_requests', added, teleworkRequestToRow, companyId);
+  await updateRows('telework_requests', modified, teleworkRequestToRow, companyId);
+}
+async function pushExpenses({ added, modified }, companyId) {
+  await insertRows('expenses', added, expenseToRow, companyId);
+  await updateRows('expenses', modified, expenseToRow, companyId);
+}
+
 const pushEtablissements = (rows, companyId) => syncTable('etablissements', rows, etablissementToRow, companyId);
 const pushServices = (rows, companyId) => syncTable('services', rows, serviceToRow, companyId);
 const pushLeaveTypes = (rows, companyId) => syncTable('leave_types', rows, leaveTypeToRow, companyId);
-const pushLeaveRequests = (rows, companyId) => syncTable('leave_requests', rows, leaveRequestToRow, companyId);
-const pushTeleworkRequests = (rows, companyId) => syncTable('telework_requests', rows, teleworkRequestToRow, companyId);
-const pushExpenses = (rows, companyId) => syncTable('expenses', rows, expenseToRow, companyId);
 const pushDocuments = (rows, companyId) => syncTable('documents', rows, documentToRow, companyId);
 const pushDrafts = (rows, companyId) => syncTable('drafts', rows, draftToRow, companyId);
 const pushNotifications = (rows, companyId) => syncTable('notifications', rows, notificationToRow, companyId);
@@ -473,5 +525,6 @@ window.SupabaseSync = {
   updatePassword, sendPasswordResetEmail, onPasswordRecovery,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
-  pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog
+  pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
+  deleteRow
 };
