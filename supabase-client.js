@@ -470,11 +470,29 @@ async function sendPasswordResetEmail(email) {
 }
 
 /** true si la session en cours vient d'un lien de récupération de mot de passe (email) —
- * app.js s'en sert pour router automatiquement vers l'écran "nouveau mot de passe". */
+ * app.js s'en sert pour router automatiquement vers l'écran "nouveau mot de passe".
+ *
+ * L'écouteur est posé ici, au chargement du module (donc avant DOMContentLoaded), pas dans le
+ * callback passé par app.js : supabase-js détecte le token de récupération dans l'URL de façon
+ * asynchrone dès la création du client (ligne 19), et peut émettre PASSWORD_RECOVERY avant qu'app.js
+ * n'ait eu la main pour s'abonner. Le flag mémorise l'évènement ; onPasswordRecovery() le rejoue
+ * immédiatement à l'inscription si l'évènement est déjà passé. */
+let passwordRecoveryDetected = false;
+const passwordRecoveryCallbacks = [];
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    passwordRecoveryDetected = true;
+    passwordRecoveryCallbacks.forEach(cb => cb());
+  }
+});
+
 function onPasswordRecovery(callback) {
-  supabase.auth.onAuthStateChange((event) => {
-    if (event === 'PASSWORD_RECOVERY') callback();
-  });
+  passwordRecoveryCallbacks.push(callback);
+  if (passwordRecoveryDetected) callback();
+}
+
+function wasPasswordRecoveryDetected() {
+  return passwordRecoveryDetected;
 }
 
 // ---------------------------------------------------------------------------
@@ -533,7 +551,7 @@ async function pushClearAuditLog(companyId) {
 
 window.SupabaseSync = {
   signIn, signUp, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
-  updatePassword, sendPasswordResetEmail, onPasswordRecovery,
+  updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,

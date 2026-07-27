@@ -735,7 +735,7 @@ const DB = {
   // ---- Établissements (§12) ----
 
   getEtablissements() {
-    return this.getCurrentCompany().etablissements || [];
+    return (this.getCurrentCompany().etablissements || []).slice();
   },
 
   saveEtablissements(list) {
@@ -785,7 +785,7 @@ const DB = {
   },
 
   getServices() {
-    return this.getCurrentCompany().services || [];
+    return (this.getCurrentCompany().services || []).slice();
   },
 
   saveServices(list) {
@@ -1396,7 +1396,7 @@ const DB = {
   // ---- Coffre-fort documents RH ----
 
   getDocuments() {
-    return this.getCurrentCompany().documents || [];
+    return (this.getCurrentCompany().documents || []).slice();
   },
 
   saveDocuments(list) {

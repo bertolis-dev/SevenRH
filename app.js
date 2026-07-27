@@ -6,6 +6,32 @@
 
 const LIST_PAGE_SIZE = 20;
 
+/** Un onglet oublié/épinglé ouvert sur l'écran "vérifiez vos emails" resterait sinon bloqué là
+ * indéfiniment (sessionStorage ne s'efface qu'à la fermeture de l'onglet) même si l'inscription a
+ * été abandonnée depuis longtemps — au-delà de ce délai, on retombe silencieusement sur l'écran de
+ * connexion normal. */
+const PENDING_SIGNUP_TTL_MS = 24 * 60 * 60 * 1000;
+
+function setPendingSignupEmail(email) {
+  sessionStorage.setItem('sevenrh_pending_signup_email', JSON.stringify({ email, ts: Date.now() }));
+}
+
+function getPendingSignupEmail() {
+  const raw = sessionStorage.getItem('sevenrh_pending_signup_email');
+  if (!raw) return null;
+  try {
+    const { email, ts } = JSON.parse(raw);
+    if (!email || Date.now() - ts > PENDING_SIGNUP_TTL_MS) {
+      sessionStorage.removeItem('sevenrh_pending_signup_email');
+      return null;
+    }
+    return email;
+  } catch {
+    sessionStorage.removeItem('sevenrh_pending_signup_email');
+    return null;
+  }
+}
+
 /** Élément qui avait le focus juste avant l'ouverture d'une modale — restauré par closeModal() à la fermeture. */
 let lastFocusedBeforeModal = null;
 
@@ -172,6 +198,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindNotificationEvents();
   bindUserMenuEvents();
 
+  // La console BERTOLIS (super-admin multi-entreprise) est un système entièrement séparé, basé sur
+  // localStorage, qui n'a besoin d'aucune donnée Supabase — une session BERTOLIS déjà active ne doit
+  // pas rester bloquée par un souci réseau/extension qui empêcherait supabase-client.js de charger.
+  if (DB.isBertolisLoggedIn()) {
+    showBertolisConsole();
+    return;
+  }
+
   // Le module supabase-client.js charge son propre import réseau (CDN) avant de poser
   // window.SupabaseSync — si ça échoue (réseau lent, extension de navigateur, etc.), mieux vaut un
   // message d'erreur clair qu'un écran de connexion silencieusement figé (aucun bouton ne répond).
@@ -190,16 +224,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.SupabaseSync.onPasswordRecovery(() => {
     state.authView = 'reset';
     state.authError = '';
+    // Persisté : si l'onglet recharge pendant qu'on est sur l'écran "nouveau mot de passe" (avant
+    // validation), la session de récupération reste valide mais state.authView (en mémoire) serait
+    // perdu — sans ce flag, restoreSession() plus bas verrait une session valide et enverrait
+    // directement dans l'appli, sautant le vrai changement de mot de passe.
+    sessionStorage.setItem('sevenrh_password_recovery_pending', '1');
     renderLoginScreen();
   });
 
-  if (DB.isBertolisLoggedIn()) {
-    showBertolisConsole();
-    return;
-  }
-
   const restored = await DB.restoreSession();
-  if (restored) {
+  // Une session de récupération de mot de passe est une session valide comme une autre : si
+  // PASSWORD_RECOVERY a été détecté (maintenant ou lors d'un chargement précédent, via le flag
+  // persisté), il ne faut jamais laisser restoreSession() envoyer directement dans l'appli.
+  if (restored && !window.SupabaseSync.wasPasswordRecoveryDetected() && !sessionStorage.getItem('sevenrh_password_recovery_pending')) {
     showApp();
   } else {
     showLogin();
@@ -219,10 +256,20 @@ function showLogin() {
   // l'utilisateur a changé d'appli pour consulter ses emails, ce qui peut faire recharger l'onglet
   // en arrière-plan sur mobile), on retrouve cet état au lieu de silencieusement revenir au simple
   // écran de connexion — voir le formulaire de signup dans bindLoginScreenEvents.
-  const pendingEmail = sessionStorage.getItem('sevenrh_pending_signup_email');
+  const pendingEmail = getPendingSignupEmail();
+  const pendingResetEmail = sessionStorage.getItem('sevenrh_pending_reset_email');
+  const recoveryPending = sessionStorage.getItem('sevenrh_password_recovery_pending');
   if (pendingEmail) {
     state.authView = 'signup';
     state.pendingSignupConfirmation = pendingEmail;
+  } else if (recoveryPending) {
+    // Priorité sur pendingResetEmail : cliquer le lien reçu par email fait progresser l'utilisateur
+    // de "en attente de l'email" à "en train de choisir un nouveau mot de passe".
+    state.authView = 'reset';
+    state.authError = '';
+  } else if (pendingResetEmail) {
+    state.authView = 'forgot';
+    state.pendingReset = { email: pendingResetEmail };
   } else {
     state.authView = 'login';
   }
@@ -231,6 +278,8 @@ function showLogin() {
 
 function showApp() {
   sessionStorage.removeItem('sevenrh_pending_signup_email');
+  sessionStorage.removeItem('sevenrh_pending_reset_email');
+  sessionStorage.removeItem('sevenrh_password_recovery_pending');
   Object.assign(state, getInitialViewState());
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
@@ -557,6 +606,8 @@ function bindLoginScreenEvents() {
     state.pendingReset = null;
     state.pendingSignupConfirmation = null;
     sessionStorage.removeItem('sevenrh_pending_signup_email');
+    sessionStorage.removeItem('sevenrh_pending_reset_email');
+    sessionStorage.removeItem('sevenrh_password_recovery_pending');
     renderLoginScreen();
   });
 
@@ -587,7 +638,7 @@ function bindLoginScreenEvents() {
       // Persisté (pas juste en mémoire) : l'utilisateur va typiquement changer d'appli pour
       // consulter ses emails, ce qui peut faire recharger l'onglet en arrière-plan (fréquent sur
       // mobile) — sans ça, il retombe silencieusement sur l'écran de connexion à son retour.
-      sessionStorage.setItem('sevenrh_pending_signup_email', email);
+      setPendingSignupEmail(email);
       renderLoginScreen();
       return;
     }
@@ -602,6 +653,9 @@ function bindLoginScreenEvents() {
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.authError = '';
     state.pendingReset = { email };
+    // Même correctif que pour l'inscription : persiste au cas où l'utilisateur change d'appli
+    // pour consulter ses emails et que l'onglet recharge en arrière-plan (fréquent sur mobile).
+    sessionStorage.setItem('sevenrh_pending_reset_email', email);
     renderLoginScreen();
   });
 
@@ -614,6 +668,8 @@ function bindLoginScreenEvents() {
     const result = await authRepository.resetPasswordWithToken(null, p1);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.pendingReset = null;
+    sessionStorage.removeItem('sevenrh_pending_reset_email');
+    sessionStorage.removeItem('sevenrh_password_recovery_pending');
     state.authView = 'login';
     state.authError = '';
     renderLoginScreen();
@@ -2362,7 +2418,7 @@ function renderBarChartSVG(data) {
     const barW = Math.max((d.value / maxValue) * chartWidth, 2);
     return `
       <text x="${labelWidth - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" class="chart-label">${escapeHtml(d.label)}</text>
-      <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${d.color}" />
+      <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${escapeHtml(d.color)}" />
       <text x="${labelWidth + barW + 8}" y="${y + barHeight / 2 + 4}" class="chart-value">${d.value}</text>
     `;
   }).join('');
@@ -2380,7 +2436,7 @@ function renderDonutChartSVG(data) {
 
   const segments = data.map(d => {
     const dash = (d.value / total) * circumference;
-    const circle = `<circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="${d.color}" stroke-width="${strokeWidth}" stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size / 2} ${size / 2})" />`;
+    const circle = `<circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="${escapeHtml(d.color)}" stroke-width="${strokeWidth}" stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size / 2} ${size / 2})" />`;
     offset += dash;
     return circle;
   }).join('');
@@ -2398,7 +2454,7 @@ function chartLegend(data) {
     <div class="chart-legend">
       ${data.map(d => `
         <span class="chart-legend-item">
-          <span class="chart-legend-swatch" style="background:${d.color}"></span>${escapeHtml(d.label)} (${d.value})
+          <span class="chart-legend-swatch" style="background:${escapeHtml(d.color)}"></span>${escapeHtml(d.label)} (${d.value})
         </span>
       `).join('')}
     </div>
@@ -2583,10 +2639,13 @@ function renderPresenceCard() {
 }
 
 function kpiCard(label, value, icon) {
+  // value/icon peuvent provenir de texte libre saisi par un administrateur (ex. nom/icône d'un
+  // type de congé) — jamais interpolés sans échappement, sinon une valeur malveillante s'exécute
+  // chez tout salarié dont le tableau de bord affiche cette carte.
   return `
     <div class="kpi-card">
-      <div class="kpi-icon">${icon}</div>
-      <div class="kpi-value">${value}</div>
+      <div class="kpi-icon">${escapeHtml(icon)}</div>
+      <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>
     </div>
   `;
@@ -2886,26 +2945,45 @@ function buildOrgTree(employees) {
     }
   });
 
-  // Défense contre un cycle manager<->manager (ex. A manager de B ET B manager de A) : sans ça, ni
-  // l'un ni l'autre n'est jamais atteignable depuis `roots` en suivant childrenOf, et ils
-  // disparaissent silencieusement de l'organigramme. Tout salarié resté hors d'atteinte devient une
-  // racine supplémentaire — et est RETIRÉ de la liste des enfants de son manager déclaré (qui fait
-  // partie du même cycle), sinon le rendu récursif de l'arbre boucle indéfiniment entre les membres
-  // du cycle (chacun listé à la fois comme racine et comme descendant de l'autre).
-  const reachable = new Set();
-  const stack = [...roots];
-  while (stack.length) {
-    const e = stack.pop();
-    if (reachable.has(e.id)) continue;
-    reachable.add(e.id);
-    (childrenOf.get(e.id) || []).forEach(child => stack.push(child));
-  }
-  employees.forEach(e => {
-    if (reachable.has(e.id)) return;
-    roots.push(e);
-    const primaryManagerId = (e.managerIds || [])[0];
-    if (primaryManagerId && childrenOf.has(primaryManagerId)) {
-      childrenOf.set(primaryManagerId, childrenOf.get(primaryManagerId).filter(c => c.id !== e.id));
+  // Défense contre un cycle manager<->manager (ex. A manager de B ET B manager de A) : sans ça, les
+  // membres du cycle ne sont jamais atteignables depuis `roots`, et disparaissent silencieusement.
+  // Remonte la chaîne de managers de chaque salarié ; si elle boucle sur elle-même, casse le cycle
+  // À UN SEUL ENDROIT précis (le salarié où la boucle est détectée devient une racine, retiré de la
+  // liste des enfants de SON manager) — sans toucher aux autres membres du cycle ni à leurs
+  // subordonnés légitimes, qui restent correctement rattachés (une première version de ce
+  // correctif détachait À TORT tout le monde en aval d'un manager pris dans le cycle).
+  const resolved = new Set(); // remonte correctement jusqu'à un vrai root, rien à faire
+  const brokenAt = new Set(); // déjà promu en racine pour casser un cycle
+
+  employees.forEach(start => {
+    if (resolved.has(start.id) || brokenAt.has(start.id)) return;
+    const path = [];
+    let current = start;
+    while (true) {
+      if (resolved.has(current.id) || brokenAt.has(current.id)) {
+        path.forEach(id => resolved.add(id));
+        return;
+      }
+      const cycleIndex = path.indexOf(current.id);
+      if (cycleIndex !== -1) {
+        const cycleStartId = path[cycleIndex];
+        const cycleStart = byId.get(cycleStartId);
+        const managerId = (cycleStart.managerIds || [])[0];
+        if (managerId && childrenOf.has(managerId)) {
+          childrenOf.set(managerId, childrenOf.get(managerId).filter(c => c.id !== cycleStartId));
+        }
+        roots.push(cycleStart);
+        brokenAt.add(cycleStartId);
+        path.forEach(id => { if (id !== cycleStartId) resolved.add(id); });
+        return;
+      }
+      path.push(current.id);
+      const managerId = (current.managerIds || [])[0];
+      if (!managerId || !byId.has(managerId)) {
+        path.forEach(id => resolved.add(id));
+        return;
+      }
+      current = byId.get(managerId);
     }
   });
 
@@ -3387,6 +3465,7 @@ function renderCompteCard(e, user) {
 
 function openForcerMotDePasseModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
@@ -3552,6 +3631,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
 function openAjusterCompteurModal(employeeId, typeId) {
   const employee = employeeRepository.getById(employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(typeId);
+  if (!employee || !type) { showToast('Ce salarié ou ce type n\'est plus disponible.', 'error'); return; }
   const current = (employee.compteurs && employee.compteurs[typeId]) || 0;
 
   const html = `
@@ -3619,6 +3699,7 @@ function managerNames(managerIds) {
  * reste de la fiche (poste, contrat, salaire...) qui reste réservé à MODIFIER_SALARIE/manager. */
 function openCoordonneesModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
 
   const html = `
     <div class="modal modal-small">
@@ -6324,7 +6405,7 @@ function exportAuditLogCSV() {
  * "En attente" (pas seulement "Validé") — `pending: true` permet à l'affichage de les distinguer
  * visuellement (semi-transparent) plutôt que de les rendre invisibles comme avant. */
 function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
-  const weekday = WEEKDAY_LABELS[(new Date(dateStr).getDay() + 6) % 7];
+  const weekday = WEEKDAY_LABELS[(parseISODateLocal(dateStr).getDay() + 6) % 7];
   if (!(employee.joursTravailles || []).includes(weekday)) {
     return { icon: '—', level: 'off', title: 'Non travaillé' };
   }
@@ -6556,7 +6637,7 @@ function timeRangeToHours(debut, fin) {
  * employee.horaireMatinDebut etc.) — le télétravail reste travaillé (mêmes horaires), juste signalé
  * différemment à l'affichage. */
 function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
-  const weekday = WEEKDAY_LABELS[(new Date(dateStr).getDay() + 6) % 7];
+  const weekday = WEEKDAY_LABELS[(parseISODateLocal(dateStr).getDay() + 6) % 7];
   if (!(employee.joursTravailles || []).includes(weekday)) return { heures: 0, label: '—', level: 'off' };
 
   const leaveToday = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
@@ -6644,7 +6725,7 @@ function renderHorairesSemaine() {
  * horaires. */
 function renderHorairesJour() {
   const dateStr = state.horairesDay;
-  const date = new Date(dateStr);
+  const date = parseISODateLocal(dateStr);
   const weekday = WEEKDAY_LABELS[(date.getDay() + 6) % 7];
   const employees = getPlanningEmployees(dateStr, dateStr);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
@@ -6738,6 +6819,7 @@ function renderHorairesMois() {
 
 function openHorairesModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
@@ -6900,6 +6982,10 @@ function handlePlanningDrop(dragData, targetDate) {
   if (dragData.requestType === 'leave') {
     const request = leaveRepository.getById(dragData.requestId);
     if (!request) return;
+    // Même règle que le bouton "Régulariser" (canManageRequestFor exclut déjà le demandeur
+    // lui-même) — sans ce contrôle, glisser-déposer sur "Mon planning" laissait n'importe qui
+    // déplacer sa PROPRE demande déjà validée, contournant la séparation des tâches.
+    if (!canManageRequestFor(request.employeeId)) { showToast('Action non autorisée.', 'error'); return; }
     const nouvelleDateDebut = toISODate(addDays(parseISODateLocal(request.dateDebut), deltaJours));
     const nouvelleDateFin = toISODate(addDays(parseISODateLocal(request.dateFin), deltaJours));
     const result = leaveRepository.regulariser(dragData.requestId, {
@@ -6912,6 +6998,7 @@ function handlePlanningDrop(dragData, targetDate) {
   } else if (dragData.requestType === 'telework') {
     const request = teleworkRepository.getById(dragData.requestId);
     if (!request) return;
+    if (!canManageRequestFor(request.employeeId)) { showToast('Action non autorisée.', 'error'); return; }
     const nouvelleDateDebut = toISODate(addDays(parseISODateLocal(request.dateDebut), deltaJours));
     const nouvelleDateFin = toISODate(addDays(parseISODateLocal(request.dateFin), deltaJours));
     const result = moveTeleworkRequest(dragData.requestId, nouvelleDateDebut, nouvelleDateFin);
@@ -7905,6 +7992,7 @@ function renderTickets() {
 
 function openCorrigerTicketsModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const year = state.ticketsYear;
   const month = state.ticketsMonth;
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -8330,6 +8418,7 @@ function bindExportPaieEvents() {
  * (openCorrigerTicketsModal) mais un montant en euros plutôt qu'un nombre entier de tickets. */
 function openVariablesPaieModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const year = state.paieYear;
   const month = state.paieMonth;
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
