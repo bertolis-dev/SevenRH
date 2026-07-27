@@ -201,6 +201,122 @@ function favoritesFromRows(rows) {
 }
 
 // ---------------------------------------------------------------------------
+// Objet JS -> row (sens inverse des fonctions ci-dessus) pour les écritures.
+// Toujours { <colonnes indexées propres à la table>, data: {<le reste, tel quel>} }.
+// ---------------------------------------------------------------------------
+
+function employeeToRow(e, companyId) {
+  const { id, matricule, nom, prenom, email, etablissementId, service, equipe, managerIds, archive,
+    permissionsOverrides, role, motDePasse, tentativesEchouees, verrouille, resetToken,
+    dateCreation, dateModification, ...rest } = e;
+  return {
+    id, company_id: companyId, email, role, matricule, nom, prenom,
+    manager_ids: managerIds || [], etablissement_id: etablissementId || null,
+    service, equipe, archive: Boolean(archive), permissions_overrides: permissionsOverrides || {},
+    data: rest
+  };
+}
+
+function etablissementToRow(e, companyId) {
+  const { id, nom, principal, actif, ...rest } = e;
+  return { id, company_id: companyId, nom, principal: Boolean(principal), actif: Boolean(actif), data: rest };
+}
+
+function serviceToRow(s, companyId) {
+  return { id: s.id, company_id: companyId, nom: s.nom, equipes: s.equipes || [] };
+}
+
+function leaveTypeToRow(t, companyId) {
+  const { id, ordre, actif, categorie, nom, ...rest } = t;
+  return { id, company_id: companyId, ordre, actif: Boolean(actif), categorie, nom, data: rest };
+}
+
+function leaveRequestToRow(r, companyId) {
+  const { id, employeeId, typeId, dateDebut, dateFin, statut, etapeIndex, dateCreation, dateModification, ...rest } = r;
+  return {
+    id, company_id: companyId, employee_id: employeeId, type_id: typeId,
+    date_debut: dateDebut, date_fin: dateFin, statut, etape_index: etapeIndex, data: rest
+  };
+}
+
+function teleworkRequestToRow(r, companyId) {
+  const { id, employeeId, dateDebut, dateFin, statut, etapeIndex, dateCreation, dateModification, ...rest } = r;
+  return {
+    id, company_id: companyId, employee_id: employeeId,
+    date_debut: dateDebut, date_fin: dateFin, statut, etape_index: etapeIndex, data: rest
+  };
+}
+
+function expenseToRow(r, companyId) {
+  const { id, employeeId, montantTTC, statut, etapeIndex, dateCreation, dateModification, ...rest } = r;
+  return {
+    id, company_id: companyId, employee_id: employeeId,
+    montant_ttc: Number(montantTTC) || 0, statut, etape_index: etapeIndex, data: rest
+  };
+}
+
+// Coffre-fort documentaire : SEULES les métadonnées sont synchronisées pour l'instant (nom,
+// catégorie, date d'expiration) — le contenu du fichier (aujourd'hui un dataUrl base64) nécessite
+// une vraie migration vers Supabase Storage, volontairement hors périmètre de cet incrément (voir
+// le plan de migration, note Phase 1 sur le stockage des fichiers). fichier_path reste donc null.
+function documentToRow(d, companyId) {
+  return {
+    id: d.id, company_id: companyId, employee_id: d.employeeId,
+    categorie: d.categorie || '', nom: d.nom || '', date_expiration: d.dateExpiration || null,
+    fichier_path: null
+  };
+}
+
+function draftToRow(d, companyId) {
+  return { id: d.id, company_id: companyId, owner_id: d.ownerId, type: d.type, champs: d.champs || {} };
+}
+
+function notificationToRow(n, companyId) {
+  const { id, dateCreation, ...rest } = n;
+  return { id, company_id: companyId, data: rest };
+}
+
+// ---------------------------------------------------------------------------
+// Synchronisation générique : upsert de toutes les lignes de la liste locale + suppression de
+// celles qui n'y sont plus (la liste locale reste la source de vérité après une écriture optimiste).
+// ---------------------------------------------------------------------------
+
+async function syncTable(tableName, rows, toRowFn, companyId) {
+  const mappedRows = rows.map(r => toRowFn(r, companyId));
+  if (mappedRows.length > 0) {
+    const { error } = await supabase.from(tableName).upsert(mappedRows);
+    if (error) throw error;
+  }
+  const ids = mappedRows.map(r => r.id);
+  let query = supabase.from(tableName).delete().eq('company_id', companyId);
+  query = ids.length > 0 ? query.not('id', 'in', `(${ids.join(',')})`) : query;
+  const { error: deleteError } = await query;
+  if (deleteError) throw deleteError;
+}
+
+async function syncSingleRow(tableName, companyId, data) {
+  const { error } = await supabase.from(tableName).upsert({ company_id: companyId, data });
+  if (error) throw error;
+}
+
+async function syncCompanyProfile(companyId, raisonSociale, data) {
+  const { error } = await supabase.from('companies').update({ raison_sociale: raisonSociale, data }).eq('id', companyId);
+  if (error) throw error;
+}
+
+async function syncFavorites(companyId, favoritesMap) {
+  const rows = [];
+  Object.keys(favoritesMap || {}).forEach(userId => {
+    (favoritesMap[userId] || []).forEach(favId => rows.push({ company_id: companyId, user_id: userId, favorite_employee_id: favId }));
+  });
+  await supabase.from('favorites').delete().eq('company_id', companyId);
+  if (rows.length > 0) {
+    const { error } = await supabase.from('favorites').insert(rows);
+    if (error) throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Authentification
 // ---------------------------------------------------------------------------
 
@@ -315,7 +431,47 @@ function onPasswordRecovery(callback) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Points d'entrée d'écriture appelés depuis data.js (voir DB.save*() — cache local optimiste :
+// la liste locale est déjà à jour au moment de l'appel, ceci ne fait que la refléter sur Supabase
+// en arrière-plan). Chaque fonction lève en cas d'erreur réseau — l'appelant (data.js) décide de la
+// gestion (toast d'erreur, la donnée reste correcte localement dans tous les cas).
+// ---------------------------------------------------------------------------
+
+const pushEmployees = (rows, companyId) => syncTable('employees', rows, employeeToRow, companyId);
+const pushEtablissements = (rows, companyId) => syncTable('etablissements', rows, etablissementToRow, companyId);
+const pushServices = (rows, companyId) => syncTable('services', rows, serviceToRow, companyId);
+const pushLeaveTypes = (rows, companyId) => syncTable('leave_types', rows, leaveTypeToRow, companyId);
+const pushLeaveRequests = (rows, companyId) => syncTable('leave_requests', rows, leaveRequestToRow, companyId);
+const pushTeleworkRequests = (rows, companyId) => syncTable('telework_requests', rows, teleworkRequestToRow, companyId);
+const pushExpenses = (rows, companyId) => syncTable('expenses', rows, expenseToRow, companyId);
+const pushDocuments = (rows, companyId) => syncTable('documents', rows, documentToRow, companyId);
+const pushDrafts = (rows, companyId) => syncTable('drafts', rows, draftToRow, companyId);
+const pushNotifications = (rows, companyId) => syncTable('notifications', rows, notificationToRow, companyId);
+const pushFavorites = (companyId, map) => syncFavorites(companyId, map);
+const pushSchoolHolidays = (companyId, data) => syncSingleRow('school_holidays', companyId, data);
+const pushSettings = (companyId, data) => syncSingleRow('settings', companyId, data);
+const pushCompanyProfile = (companyId, raisonSociale, data) => syncCompanyProfile(companyId, raisonSociale, data);
+
+/** Journal d'audit : append-only, jamais un resync complet (jusqu'à 2000 entrées — un resync à
+ * chaque action serait ruineux). Une seule ligne insérée par appel. */
+async function pushAuditLogEntry(entry, companyId) {
+  const { error } = await supabase.from('audit_log').insert({
+    id: entry.id, company_id: companyId, date: entry.date,
+    action: entry.action, entite: entry.entite, cible: entry.cible, details: entry.details
+  });
+  if (error) throw error;
+}
+
+async function pushClearAuditLog(companyId) {
+  const { error } = await supabase.from('audit_log').delete().eq('company_id', companyId);
+  if (error) throw error;
+}
+
 window.SupabaseSync = {
   signIn, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
-  updatePassword, sendPasswordResetEmail, onPasswordRecovery
+  updatePassword, sendPasswordResetEmail, onPasswordRecovery,
+  pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
+  pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
+  pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog
 };

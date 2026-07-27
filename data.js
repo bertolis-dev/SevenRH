@@ -355,14 +355,16 @@ function migrateCompanyAbonnement(company) {
  * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
 function appendAuditLogEntry(company, action, entite, cible, details) {
   const list = company.auditLog || [];
-  list.push({
+  const entry = {
     id: generateId('log'),
     date: new Date().toISOString(),
     action, entite,
     cible: cible || '',
     details: details || ''
-  });
+  };
+  list.push(entry);
   company.auditLog = list.length > 2000 ? list.slice(list.length - 2000) : list;
+  return entry;
 }
 
 const DB = {
@@ -476,6 +478,18 @@ const DB = {
   /** onSaveError : hook optionnel branché par app.js (ex. showToast) pour prévenir l'utilisateur sans coupler data.js à l'UI. */
   onSaveError: null,
 
+  /** Cache local optimiste (voir le plan de migration) : le cache mémoire est déjà à jour au
+   * moment de l'appel, ceci envoie juste la même écriture à Supabase en arrière-plan, sans jamais
+   * bloquer l'UI. En cas d'échec réseau, la donnée reste correcte localement — on prévient juste
+   * l'utilisateur que la synchronisation en ligne a échoué (pas de retour en arrière automatique :
+   * la prochaine écriture réussie renverra l'état local complet). */
+  _pushInBackground(promise) {
+    promise.catch(err => {
+      console.error('Échec de synchronisation Supabase :', err);
+      if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : vos modifications restent enregistrées localement mais n\'ont pas encore été envoyées au serveur.');
+    });
+  },
+
   saveCompanies(list) {
     this._companiesCache = list;
     try {
@@ -530,6 +544,10 @@ const DB = {
     Object.assign(company, profile);
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Entreprise', profile.raisonSociale || company.raisonSociale);
+    const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+      teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+      brouillons, _currentEmployeeId, ...companyData } = company;
+    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData));
   },
 
   /**
@@ -596,6 +614,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.employees = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushEmployees(list, company.id));
   },
 
   getEmployeeById(id) {
@@ -692,6 +711,7 @@ const DB = {
     company.settings = settings;
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Paramètres', 'Listes et réglages généraux');
+    this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
   },
 
   // ---- Services & équipes (catalogue structuré, pas une simple liste de textes) ----
@@ -706,6 +726,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.etablissements = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushEtablissements(list, company.id));
   },
 
   getEtablissementById(id) {
@@ -755,6 +776,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.services = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushServices(list, company.id));
   },
 
   getServiceById(id) {
@@ -861,6 +883,7 @@ const DB = {
     company.schoolHolidays = data;
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Vacances scolaires', data.anneeScolaire || '');
+    this._pushInBackground(window.SupabaseSync.pushSchoolHolidays(company.id, data));
   },
 
   // ---- Types de congés (paramétrables) ----
@@ -873,6 +896,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.leaveTypes = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushLeaveTypes(list, company.id));
   },
 
   getLeaveTypeById(id) {
@@ -936,6 +960,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.leaveRequests = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushLeaveRequests(list, company.id));
   },
 
   getLeaveRequestById(id) {
@@ -1183,6 +1208,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.teleworkRequests = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushTeleworkRequests(list, company.id));
   },
 
   getTeleworkRequestById(id) {
@@ -1232,6 +1258,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.expenses = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushExpenses(list, company.id));
   },
 
   getExpenseById(id) {
@@ -1286,6 +1313,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.brouillons = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushDrafts(list, company.id));
   },
 
   getBrouillonById(id) {
@@ -1319,6 +1347,9 @@ const DB = {
     const company = this.getCurrentCompany();
     company.documents = list;
     this.saveCurrentCompany(company);
+    // Seules les métadonnées sont synchronisées pour l'instant (le contenu du fichier nécessite une
+    // vraie migration vers Supabase Storage, voir supabase-client.js/documentToRow).
+    this._pushInBackground(window.SupabaseSync.pushDocuments(list, company.id));
   },
 
   getDocumentById(id) {
@@ -1364,14 +1395,16 @@ const DB = {
   /** Historique borné (2000 entrées) pour ne pas saturer le localStorage indéfiniment. */
   logAudit(action, entite, cible, details) {
     const company = this.getCurrentCompany();
-    appendAuditLogEntry(company, action, entite, cible, details);
+    const entry = appendAuditLogEntry(company, action, entite, cible, details);
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id));
   },
 
   clearAuditLog() {
     const company = this.getCurrentCompany();
     company.auditLog = [];
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushClearAuditLog(company.id));
   },
 
   // ---- Favoris ----
@@ -1399,6 +1432,7 @@ const DB = {
     if (index === -1) list.push(id); else list.splice(index, 1);
     company.favorites[user.id] = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushFavorites(company.id, company.favorites));
     return list.includes(id);
   },
 
@@ -1421,6 +1455,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.notifications = list;
     this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushNotifications(list, company.id));
   },
 
   addNotificationsIfNew(candidates) {

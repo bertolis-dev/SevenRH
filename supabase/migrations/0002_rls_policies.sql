@@ -21,14 +21,14 @@
 -- ---------------------------------------------------------------------------
 
 create or replace function current_employee_id()
-returns uuid
+returns text
 language sql stable security definer set search_path = public
 as $$
   select id from employees where auth_user_id = auth.uid() limit 1;
 $$;
 
 create or replace function current_company_id()
-returns uuid
+returns text
 language sql stable security definer set search_path = public
 as $$
   select company_id from employees where auth_user_id = auth.uid() limit 1;
@@ -71,7 +71,7 @@ end;
 $$;
 
 -- Reflète employee.managerIds : "suis-je manager de ce salarié ?"
-create or replace function is_manager_of(target_employee_id uuid)
+create or replace function is_manager_of(target_employee_id text)
 returns boolean
 language sql stable security definer set search_path = public
 as $$
