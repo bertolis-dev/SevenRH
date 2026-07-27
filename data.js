@@ -607,7 +607,7 @@ const DB = {
   // ---- Salariés ----
 
   getEmployees() {
-    return this.getCurrentCompany().employees;
+    return this.getCurrentCompany().employees.slice();
   },
 
   /** Ne pousse vers Supabase QUE les salariés réellement ajoutés/modifiés (pas toute la liste
@@ -643,8 +643,10 @@ const DB = {
       dateCreation: now,
       dateModification: now
     });
-    company.employees.push(employee);
-    this.saveCurrentCompany(company);
+    // Passe par saveEmployees (pas un push direct sur company.employees) pour que la nouvelle
+    // fiche soit bien envoyée à Supabase — un ajout direct au tableau contourne le diff qui
+    // détermine quoi synchroniser.
+    this.saveEmployees([...company.employees, employee]);
     this.logAudit('Création', 'Salarié', `${employee.prenom} ${employee.nom}`);
     return employee;
   },
@@ -662,10 +664,12 @@ const DB = {
   /** Suppression définitive : nettoie aussi les références qui pointeraient vers ce salarié ailleurs dans l'entreprise (managers, équipes, demandes, documents, favoris). */
   deleteEmployee(id) {
     const employee = this.getEmployeeById(id);
-    const list = this.getEmployees().filter(e => e.id !== id);
-    list.forEach(e => {
-      if ((e.managerIds || []).includes(id)) e.managerIds = e.managerIds.filter(m => m !== id);
-    });
+    // Remplace (pas mute) les fiches dont managerIds change : une mutation en place sur le même
+    // objet que celui déjà référencé par le cache empêcherait saveEmployees de détecter le
+    // changement (comparaison par référence/JSON avant/après toujours égale).
+    const list = this.getEmployees().filter(e => e.id !== id).map(e =>
+      (e.managerIds || []).includes(id) ? { ...e, managerIds: e.managerIds.filter(m => m !== id) } : e
+    );
     this.saveEmployees(list);
 
     const services = this.getServices();
@@ -814,10 +818,13 @@ const DB = {
     this.saveServices(list);
 
     if (oldNom !== nom) {
-      const employees = this.getEmployees();
+      // Remplace (pas mute) les fiches concernées : une mutation en place empêcherait le diff de
+      // saveEmployees de détecter le changement (voir deleteEmployee pour le même correctif).
       let employeesChanged = false;
-      employees.forEach(e => {
-        if (e.service === oldNom) { e.service = nom; employeesChanged = true; }
+      const employees = this.getEmployees().map(e => {
+        if (e.service !== oldNom) return e;
+        employeesChanged = true;
+        return { ...e, service: nom };
       });
       if (employeesChanged) this.saveEmployees(employees);
     }
@@ -831,10 +838,11 @@ const DB = {
     this.saveServices(this.getServices().filter(s => s.id !== id));
 
     if (service) {
-      const employees = this.getEmployees();
       let employeesChanged = false;
-      employees.forEach(e => {
-        if (e.service === service.nom) { e.service = ''; e.equipe = ''; employeesChanged = true; }
+      const employees = this.getEmployees().map(e => {
+        if (e.service !== service.nom) return e;
+        employeesChanged = true;
+        return { ...e, service: '', equipe: '' };
       });
       if (employeesChanged) this.saveEmployees(employees);
     }
@@ -863,10 +871,11 @@ const DB = {
     this.saveServices(list);
 
     if (equipe) {
-      const employees = this.getEmployees();
       let employeesChanged = false;
-      employees.forEach(e => {
-        if (e.service === service.nom && e.equipe === equipe.nom) { e.equipe = ''; employeesChanged = true; }
+      const employees = this.getEmployees().map(e => {
+        if (e.service !== service.nom || e.equipe !== equipe.nom) return e;
+        employeesChanged = true;
+        return { ...e, equipe: '' };
       });
       if (employeesChanged) this.saveEmployees(employees);
     }

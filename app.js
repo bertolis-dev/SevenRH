@@ -214,12 +214,23 @@ function showLogin() {
   const themeToggle = document.getElementById('btn-theme-toggle');
   themeToggle.classList.remove('theme-toggle-inline');
   document.body.prepend(themeToggle);
-  state.authView = 'login';
   state.authError = '';
+  // Si un rechargement survient pendant l'attente de confirmation d'email (typiquement parce que
+  // l'utilisateur a changé d'appli pour consulter ses emails, ce qui peut faire recharger l'onglet
+  // en arrière-plan sur mobile), on retrouve cet état au lieu de silencieusement revenir au simple
+  // écran de connexion — voir le formulaire de signup dans bindLoginScreenEvents.
+  const pendingEmail = sessionStorage.getItem('sevenrh_pending_signup_email');
+  if (pendingEmail) {
+    state.authView = 'signup';
+    state.pendingSignupConfirmation = pendingEmail;
+  } else {
+    state.authView = 'login';
+  }
   renderLoginScreen();
 }
 
 function showApp() {
+  sessionStorage.removeItem('sevenrh_pending_signup_email');
   Object.assign(state, getInitialViewState());
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
@@ -545,6 +556,7 @@ function bindLoginScreenEvents() {
     state.authError = '';
     state.pendingReset = null;
     state.pendingSignupConfirmation = null;
+    sessionStorage.removeItem('sevenrh_pending_signup_email');
     renderLoginScreen();
   });
 
@@ -572,6 +584,10 @@ function bindLoginScreenEvents() {
     if (result.needsEmailConfirmation) {
       state.pendingSignupConfirmation = email;
       state.authError = '';
+      // Persisté (pas juste en mémoire) : l'utilisateur va typiquement changer d'appli pour
+      // consulter ses emails, ce qui peut faire recharger l'onglet en arrière-plan (fréquent sur
+      // mobile) — sans ça, il retombe silencieusement sur l'écran de connexion à son retour.
+      sessionStorage.setItem('sevenrh_pending_signup_email', email);
       renderLoginScreen();
       return;
     }
