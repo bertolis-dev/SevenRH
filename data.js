@@ -1656,6 +1656,57 @@ const companyRepository = {
   createFromOnboarding: (payload) => DB.createCompanyFromOnboarding(payload)
 };
 
+const authRepository = {
+  getCurrentUser: () => DB.getCurrentUser(),
+  isLoggedIn: () => DB.isLoggedIn(),
+  login: (email, password) => DB.login(email, password),
+  logout: () => DB.logout(),
+  changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
+  requestPasswordReset: (email) => DB.requestPasswordReset(email),
+  resetPasswordWithToken: (token, newPassword) => DB.resetPasswordWithToken(token, newPassword)
+};
+
+const settingsRepository = {
+  getSettings: () => DB.getSettings(),
+  saveSettings: (settings) => DB.saveSettings(settings)
+};
+
+const leaveTypeRepository = {
+  getLeaveTypes: () => DB.getLeaveTypes(),
+  getLeaveTypeById: (id) => DB.getLeaveTypeById(id),
+  addLeaveType: (data) => DB.addLeaveType(data),
+  updateLeaveType: (id, patch) => DB.updateLeaveType(id, patch),
+  duplicateLeaveType: (id) => DB.duplicateLeaveType(id),
+  deleteLeaveType: (id) => DB.deleteLeaveType(id),
+  reorderLeaveType: (id, direction) => DB.reorderLeaveType(id, direction)
+};
+
+const notificationRepository = {
+  getNotifications: () => DB.getNotifications(),
+  saveNotifications: (list) => DB.saveNotifications(list),
+  addNotificationsIfNew: (candidates) => DB.addNotificationsIfNew(candidates),
+  markNotificationRead: (id, read) => DB.markNotificationRead(id, read),
+  markAllNotificationsRead: () => DB.markAllNotificationsRead(),
+  setNotificationArchived: (id, archived) => DB.setNotificationArchived(id, archived)
+};
+
+const favoriteRepository = {
+  getFavoriteEmployeeIds: () => DB.getFavoriteEmployeeIds(),
+  isFavoriteEmployee: (id) => DB.isFavoriteEmployee(id),
+  toggleFavoriteEmployee: (id) => DB.toggleFavoriteEmployee(id)
+};
+
+const schoolHolidayRepository = {
+  getSchoolHolidays: () => DB.getSchoolHolidays(),
+  saveSchoolHolidays: (data) => DB.saveSchoolHolidays(data)
+};
+
+const auditLogRepository = {
+  getAuditLog: () => DB.getAuditLog(),
+  logAudit: (action, entite, cible, details) => DB.logAudit(action, entite, cible, details),
+  clearAuditLog: () => DB.clearAuditLog()
+};
+
 /** Structure complète d'une fiche salarié (valeurs par défaut). */
 function makeEmptyEmployee() {
   return {

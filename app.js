@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (DB.isBertolisLoggedIn()) {
     showBertolisConsole();
-  } else if (DB.isLoggedIn()) {
+  } else if (authRepository.isLoggedIn()) {
     showApp();
   } else {
     showLogin();
@@ -446,7 +446,7 @@ function bindLoginScreenEvents() {
       evt.preventDefault();
       const email = document.getElementById('f-login-email').value;
       const password = document.getElementById('f-login-password').value;
-      const result = DB.login(email, password);
+      const result = authRepository.login(email, password);
       if (!result.success) {
         state.authError = result.error;
         renderLoginScreen();
@@ -458,7 +458,7 @@ function bindLoginScreenEvents() {
 
   document.querySelectorAll('.login-demo-account').forEach(btn => {
     btn.addEventListener('click', () => {
-      const result = DB.login(btn.dataset.demoEmail, 'Demo1234');
+      const result = authRepository.login(btn.dataset.demoEmail, 'Demo1234');
       if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
       showApp();
     });
@@ -505,7 +505,7 @@ function bindLoginScreenEvents() {
   if (forgotForm) forgotForm.addEventListener('submit', (evt) => {
     evt.preventDefault();
     const email = document.getElementById('f-forgot-email').value;
-    const result = DB.requestPasswordReset(email);
+    const result = authRepository.requestPasswordReset(email);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.authError = '';
     state.pendingReset = { token: result.token, employeeName: result.employeeName };
@@ -525,7 +525,7 @@ function bindLoginScreenEvents() {
     const p1 = document.getElementById('f-reset-password').value;
     const p2 = document.getElementById('f-reset-password-confirm').value;
     if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
-    const result = DB.resetPasswordWithToken(state.pendingReset.token, p1);
+    const result = authRepository.resetPasswordWithToken(state.pendingReset.token, p1);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.pendingReset = null;
     state.authView = 'login';
@@ -538,7 +538,7 @@ function bindLoginScreenEvents() {
 // ---- Menu utilisateur (topbar) : rôle, changement de mot de passe, déconnexion ----
 
 function renderUserMenuButton() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const button = document.getElementById('btn-user-menu');
   button.textContent = user ? getInitials(user.prenom, user.nom) : '?';
 }
@@ -560,7 +560,7 @@ function bindUserMenuEvents() {
 }
 
 function renderUserMenuPanel() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const panel = document.getElementById('user-menu-panel');
   if (!user) { panel.innerHTML = ''; return; }
 
@@ -583,7 +583,7 @@ function renderUserMenuPanel() {
     exportMyDataRGPD();
   });
   document.getElementById('btn-logout').addEventListener('click', () => {
-    DB.logout();
+    authRepository.logout();
     showLogin();
   });
 }
@@ -595,7 +595,7 @@ function renderUserMenuPanel() {
  * (juste leur nom) pour garder l'export lisible — ce ne sont pas des données que l'export RGPD
  * doit exposer ou qui apportent une valeur dans ce format. */
 function exportMyDataRGPD() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const employee = employeeRepository.getById(user.id);
   const { motDePasse, resetToken, tentativesEchouees, verrouille, permissionsOverrides, ...salarie } = employee;
 
@@ -630,7 +630,7 @@ function exportMyDataRGPD() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  DB.logAudit('Export', 'Données personnelles (RGPD)', `${employee.prenom} ${employee.nom} (auto-export)`);
+  auditLogRepository.logAudit('Export', 'Données personnelles (RGPD)', `${employee.prenom} ${employee.nom} (auto-export)`);
   showToast('Vos données ont été téléchargées.');
 }
 
@@ -683,7 +683,7 @@ function openChangePasswordModal() {
       errorEl.style.display = 'block';
       return;
     }
-    const result = DB.changePassword(DB.getCurrentUser().id, current, p1);
+    const result = authRepository.changePassword(authRepository.getCurrentUser().id, current, p1);
     if (!result.success) {
       errorEl.textContent = result.error;
       errorEl.style.display = 'block';
@@ -916,7 +916,7 @@ function bindOnboardingWizardEvents() {
     const { profile, conventionCollective, etablissement, organisation, admin } = state.onboarding;
     companyRepository.createFromOnboarding({ profile, conventionCollective, etablissement, organisation, admin });
     closeModal();
-    DB.login(admin.email, admin.motDePasse);
+    authRepository.login(admin.email, admin.motDePasse);
     showApp();
     showToast(`Entreprise "${profile.raisonSociale}" créée avec succès.`);
   });
@@ -1128,7 +1128,7 @@ function performGlobalSearch(term) {
   const q = term.trim().toLowerCase();
   if (!q) return [];
   const results = [];
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
@@ -1136,7 +1136,7 @@ function performGlobalSearch(term) {
     const haystack = `${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`.toLowerCase();
     if (haystack.includes(q)) {
       results.push({
-        icon: DB.isFavoriteEmployee(e.id) ? '⭐' : '👤',
+        icon: favoriteRepository.isFavoriteEmployee(e.id) ? '⭐' : '👤',
         label: `${e.prenom} ${e.nom}`,
         sublabel: e.poste || e.service || 'Salarié',
         nav: 'employee-detail',
@@ -1147,7 +1147,7 @@ function performGlobalSearch(term) {
 
   leaveRepository.getAll().forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
-    const type = DB.getLeaveTypeById(r.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type || !isVisible(employee.id)) return;
     const haystack = `${employee.prenom} ${employee.nom} ${type.nom} congé`.toLowerCase();
     if (haystack.includes(q)) {
@@ -1242,7 +1242,7 @@ function searchResultItemHTML(result, index, isHighlighted) {
 
 function renderFavoritesDropdown(resultsBox) {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  const favorites = DB.getFavoriteEmployeeIds()
+  const favorites = favoriteRepository.getFavoriteEmployeeIds()
     .map(id => employeeRepository.getById(id))
     .filter(e => e && (visibleIds === null || visibleIds.includes(e.id)));
 
@@ -1369,7 +1369,7 @@ function makeNotification(sourceKey, icon, title, message, nav, params, employee
 /** Notifications visibles par l'utilisateur courant : restreint au même périmètre que les listes de congés/frais/salariés (self / équipe / tout, selon le rôle). */
 function getVisibleNotificationsForCurrentUser() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  return DB.getNotifications().filter(n => !n.employeeId || visibleIds === null || visibleIds.includes(n.employeeId));
+  return notificationRepository.getNotifications().filter(n => !n.employeeId || visibleIds === null || visibleIds.includes(n.employeeId));
 }
 
 /** Détecte les événements notifiables actuels et crée les notifications manquantes (idempotent). */
@@ -1378,7 +1378,7 @@ function syncNotifications() {
 
   leaveRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
-    const type = DB.getLeaveTypeById(r.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
     candidates.push(makeNotification(`leave-${r.id}`, '🏖️', 'Demande de congé en attente',
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'conges', { congesTab: 'demandes' }, employee.id));
@@ -1427,7 +1427,7 @@ function syncNotifications() {
       'employee-detail', { currentEmployeeId: employee.id }, employee.id));
   });
 
-  DB.addNotificationsIfNew(candidates);
+  notificationRepository.addNotificationsIfNew(candidates);
 }
 
 function updateNotifBadge() {
@@ -1493,7 +1493,7 @@ function renderNotifPanel() {
   if (markAllBtn) {
     markAllBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      DB.markAllNotificationsRead();
+      notificationRepository.markAllNotificationsRead();
       updateNotifBadge();
       renderNotifPanel();
     });
@@ -1524,8 +1524,8 @@ function bindNotifItemEvents() {
   document.querySelectorAll('[data-notif-open]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const notif = DB.getNotifications().find(n => n.id === el.dataset.notifOpen);
-      DB.markNotificationRead(el.dataset.notifOpen, true);
+      const notif = notificationRepository.getNotifications().find(n => n.id === el.dataset.notifOpen);
+      notificationRepository.markNotificationRead(el.dataset.notifOpen, true);
       document.getElementById('notif-panel').classList.remove('open');
       updateNotifBadge();
       if (notif) navigateTo(notif.nav, notif.params);
@@ -1535,7 +1535,7 @@ function bindNotifItemEvents() {
   document.querySelectorAll('[data-notif-archive]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      DB.setNotificationArchived(el.dataset.notifArchive, true);
+      notificationRepository.setNotificationArchived(el.dataset.notifArchive, true);
       updateNotifBadge();
       renderNotifPanel();
     });
@@ -1544,7 +1544,7 @@ function bindNotifItemEvents() {
   document.querySelectorAll('[data-notif-unarchive]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      DB.setNotificationArchived(el.dataset.notifUnarchive, false);
+      notificationRepository.setNotificationArchived(el.dataset.notifUnarchive, false);
       updateNotifBadge();
       renderNotifPanel();
     });
@@ -1552,7 +1552,7 @@ function bindNotifItemEvents() {
 }
 
 function navigateTo(view, params = {}) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const allowedKeys = navItemsForRole(user || { role: ROLES.SALARIE }).map(i => i.key);
   // Toujours autoriser les vues qui ne sont pas des entrées de menu (détail salarié, coming-soon...).
   const isNavView = NAV_ITEMS.some(i => i.key === view);
@@ -1591,7 +1591,7 @@ function isNavItemActive(item, allItems) {
 }
 
 function renderSidebar() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return;
   const items = navItemsForRole(user);
   const nav = document.getElementById('sidebar-nav');
@@ -1742,7 +1742,7 @@ function bindDashboardEvents() {
 }
 
 function openDashboardCustomizeModal() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const widgets = widgetsForRole(user.role);
   const hidden = user.dashboardWidgetsMasques || [];
 
@@ -1776,7 +1776,7 @@ function openDashboardCustomizeModal() {
   document.getElementById('dashboard-customize-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const dashboardWidgetsMasques = widgets.filter(w => !document.getElementById(`f-widget-${w.id}`).checked).map(w => w.id);
-    DB.updateEmployee(user.id, { dashboardWidgetsMasques });
+    employeeRepository.update(user.id, { dashboardWidgetsMasques });
     closeModal();
     showToast('Tableau de bord personnalisé.');
     render();
@@ -1785,7 +1785,7 @@ function openDashboardCustomizeModal() {
 
 /** Le tableau de bord est différent par rôle : vue personnelle (Salarié), vue équipe (Manager), vue entreprise (RH/Comptabilité), vue entreprise + indicateurs avancés (Directeur). */
 function renderDashboard() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return '';
   if (user.role === ROLES.SALARIE) return renderDashboardSalarie(user);
   if (user.role === ROLES.MANAGER) return renderDashboardManager();
@@ -1810,7 +1810,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const today = toISODate(new Date());
   teletravailAujourdhui = teletravailAujourdhui.filter(r => today >= r.dateDebut && today <= r.dateFin);
   const now = new Date();
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
   const ticketsCeMois = actifs
@@ -1823,7 +1823,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const birthdays = getUpcomingBirthdays(60, employees);
   const contractEnds = getUpcomingContractEnds(60, employees);
 
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
   const isVisible = (widgetId) => isDashboardWidgetVisible(user, widgetId);
 
@@ -1875,7 +1875,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
  * signaler (liste vide = pas de bruit), sauf "Préparation de paie" qui reste visible même à 0
  * anomalie pour confirmer explicitement que la paie est prête. */
 function renderDashboardActionCenter(employees, employeeIds) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   // Congés/télétravail/contrats : seuls manager/RH/directeur valident ou gèrent des contrats — la
   // comptabilité (qui tombe aussi sur renderDashboardRH) n'a ni ces écrans ni ces entrées sidebar
   // (§5), un item cliquable ici la ramènerait juste vers le dashboard sans rien ouvrir.
@@ -1916,7 +1916,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
     // n'a besoin que de filtrer ces mêmes listes, déjà identiques à chaque itération).
     const leaveRequests = leaveRepository.getAll();
     const teleworkRequests = teleworkRepository.getAll();
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     const totalTickets = employees.filter(e => e.statut === 'Actif')
       .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
     items.push({ icon: '🍽️', label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
@@ -1956,7 +1956,7 @@ function renderDashboardShortcuts() {
 
 function renderDashboardRH() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   return `
     <div class="view-header-row">
       <div>
@@ -1974,7 +1974,7 @@ function renderDashboardRH() {
 function renderDashboardManager() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const employees = employeeRepository.getAll().filter(e => !e.archive && visibleIds.includes(e.id));
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   return `
     <div class="view-header-row">
       <div>
@@ -1993,7 +1993,7 @@ function renderDashboardSalarie(user) {
   const today = getTodayPresenceStatus(user);
   const requests = [
     ...leaveRepository.getAll().filter(r => r.employeeId === user.id).map(r => {
-      const type = DB.getLeaveTypeById(r.typeId);
+      const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
       return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', date: r.dateDebut, statut: r.statut };
     }),
     ...teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: '💻', date: r.dateDebut, statut: r.statut })),
@@ -2073,8 +2073,8 @@ function renderDashboardSalarie(user) {
 
 function renderDashboardDirecteur() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const settings = DB.getSettings();
-  const leaveTypes = DB.getLeaveTypes();
+  const settings = settingsRepository.getSettings();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveRequests = leaveRepository.getAll();
   const expenses = expenseRepository.getAll();
   const actifs = employees.filter(e => e.statut === 'Actif');
@@ -2096,7 +2096,7 @@ function renderDashboardDirecteur() {
   const ageBuckets = settings.suiviAgeActive ? getAgePyramidBuckets(employees) : null;
   const genderBreakdown = settings.suiviGenreActive ? getGenderBreakdown(employees) : null;
 
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   return `
     <div class="view-header-row">
       <div>
@@ -2164,7 +2164,7 @@ function getContratBreakdown(employees) {
 }
 
 function getCongesParType(employeeIds) {
-  const types = DB.getLeaveTypes();
+  const types = leaveTypeRepository.getLeaveTypes();
   let requests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   if (employeeIds) requests = requests.filter(r => employeeIds.includes(r.employeeId));
   const year = String(new Date().getFullYear());
@@ -2181,7 +2181,7 @@ function getCongesParType(employeeIds) {
 
 function getTicketsCostTrend(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
   const now = new Date();
@@ -2436,7 +2436,7 @@ function getTodayPresenceStatus(employee, leaveRequests, teleworkRequests) {
   const onLeave = (leaveRequests || leaveRepository.getAll()).find(r =>
     r.employeeId === employee.id && r.statut === 'Validé' && today >= r.dateDebut && today <= r.dateFin);
   if (onLeave) {
-    const type = DB.getLeaveTypeById(onLeave.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(onLeave.typeId);
     return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', level: 'warning' };
   }
 
@@ -2517,7 +2517,7 @@ function getScopedEmployeesForFilters() {
 }
 
 function getVisibleEmployeeIdsForCurrentUser() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return [];
   if ([ROLES.RH, ROLES.DIRECTEUR, ROLES.COMPTABILITE].includes(user.role)) return null;
   if (user.role === ROLES.MANAGER) {
@@ -2528,7 +2528,7 @@ function getVisibleEmployeeIdsForCurrentUser() {
 }
 
 function getFilteredSortedEmployees() {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   let list = employeeRepository.getAll();
 
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -2544,7 +2544,7 @@ function getFilteredSortedEmployees() {
   if (state.filters.service) list = list.filter(e => e.service === state.filters.service);
   if (state.filters.statutContrat) list = list.filter(e => e.typeContrat === state.filters.statutContrat);
   if (state.filters.statut) list = list.filter(e => e.statut === state.filters.statut);
-  if (state.filters.favorisOnly) list = list.filter(e => DB.isFavoriteEmployee(e.id));
+  if (state.filters.favorisOnly) list = list.filter(e => favoriteRepository.isFavoriteEmployee(e.id));
 
   list.sort((a, b) => {
     const dir = state.sortDir === 'asc' ? 1 : -1;
@@ -2559,7 +2559,7 @@ function getFilteredSortedEmployees() {
 function renderEmployeesList() {
   const { list, settings } = getFilteredSortedEmployees();
   const visible = list.filter(e => !e.archive);
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const isManager = user.role === ROLES.MANAGER;
   const canCreate = hasPermission(user, PERMISSIONS.CREER_SALARIE);
 
@@ -2653,7 +2653,7 @@ function renderEmployeeRow(e) {
         <div class="employee-cell">
           ${renderAvatar(e)}
           <div>
-            <div class="employee-name">${DB.isFavoriteEmployee(e.id) ? '⭐ ' : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
+            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? '⭐ ' : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
             <div class="employee-matricule">${escapeHtml(e.matricule)}</div>
           </div>
         </div>
@@ -2677,7 +2677,7 @@ function exportEmployeesCSV() {
     e.typeContrat, formatDate(e.dateEmbauche), calculateAnciennete(e.dateEmbauche), e.statut
   ]);
   exportRowsToCSV(headers, rows, 'salaries.csv');
-  DB.logAudit('Export', 'Salariés', `${visible.length} salarié${visible.length > 1 ? 's' : ''}`);
+  auditLogRepository.logAudit('Export', 'Salariés', `${visible.length} salarié${visible.length > 1 ? 's' : ''}`);
 }
 
 function renderAvatar(e) {
@@ -2900,7 +2900,7 @@ function bindOrganigrammeEvents() {
 
 /** Upload/suppression réservés à RH et Directeur ; la consultation suit l'accès normal à la fiche. */
 function canManageDocumentsFor() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   return Boolean(user && (user.role === ROLES.RH || user.role === ROLES.DIRECTEUR));
 }
 
@@ -2985,7 +2985,7 @@ function bindEmployeeDocumentsEvents(employeeId) {
 }
 
 function openDocumentModal(employeeId) {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   state.pendingAttachment = null;
 
   const html = `
@@ -3044,7 +3044,7 @@ function openDocumentModal(employeeId) {
 // ---- Vue : Mes documents (libre-service Salarié, lecture + téléchargement uniquement) ----
 
 function renderMesDocuments() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const documents = documentRepository.getForEmployee(user.id);
 
   return `
@@ -3070,7 +3070,7 @@ function bindMesDocumentsEvents() {
 
 /** Un RH ne peut pas modifier sa propre fiche sensible ; seul le Directeur le peut. */
 function canEditEmployeeRecord(employee) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) {
     if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false; // §9.3 : seul le Directeur modifie sa propre fiche
@@ -3082,7 +3082,7 @@ function canEditEmployeeRecord(employee) {
 
 /** Même règle que canEditEmployeeRecord, mais pour l'archivage (permission distincte au §8). */
 function canArchiveEmployeeRecord(employee) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (hasPermission(user, PERMISSIONS.ARCHIVER_SALARIE)) {
     if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false;
@@ -3092,7 +3092,7 @@ function canArchiveEmployeeRecord(employee) {
 }
 
 function canDeleteEmployeeRecord() {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   return hasPermission(user, PERMISSIONS.SUPPRIMER_SALARIE);
 }
 
@@ -3106,7 +3106,7 @@ function renderEmployeeDetail(id) {
   }
 
   const age = calculateAge(e.dateNaissance);
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const canEdit = canEditEmployeeRecord(e);
   const canDelete = canDeleteEmployeeRecord();
   const selfRhBlocked = user.role === ROLES.RH && user.id === e.id;
@@ -3134,7 +3134,7 @@ function renderEmployeeDetail(id) {
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Directeur peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
-        <button class="btn btn-secondary" id="btn-toggle-favorite">${DB.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
+        <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
         ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
@@ -3214,7 +3214,7 @@ function renderEmployeeDetail(id) {
  * le catalogue des 31 du §8 reste fermé. */
 function renderTypesAbsenceCard(e, user) {
   if (!canEditEmployeeRecord(e)) return '';
-  const types = DB.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return '';
   const desactives = new Set(e.typesAbsenceDesactives || []);
   return `
@@ -3243,8 +3243,8 @@ function bindTypesAbsenceCardEvents(employeeId) {
       const desactives = new Set(employee.typesAbsenceDesactives || []);
       if (evt.target.checked) desactives.delete(typeId); else desactives.add(typeId);
       employeeRepository.update(employeeId, { typesAbsenceDesactives: [...desactives] });
-      const type = DB.getLeaveTypeById(typeId);
-      DB.logAudit('Modification', 'Types d\'absence autorisés', `${employee.prenom} ${employee.nom} · ${type.nom} ${evt.target.checked ? 'autorisé' : 'désactivé'}`);
+      const type = leaveTypeRepository.getLeaveTypeById(typeId);
+      auditLogRepository.logAudit('Modification', 'Types d\'absence autorisés', `${employee.prenom} ${employee.nom} · ${type.nom} ${evt.target.checked ? 'autorisé' : 'désactivé'}`);
       showToast('Mis à jour.');
     });
   });
@@ -3386,7 +3386,7 @@ function bindPermissionsCardEvents(employeeId) {
       if (evt.target.value === '') delete overrides[key];
       else overrides[key] = evt.target.value === 'true';
       employeeRepository.update(employeeId, { permissionsOverrides: overrides });
-      DB.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = ${evt.target.value || 'défaut du rôle'}`);
+      auditLogRepository.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = ${evt.target.value || 'défaut du rôle'}`);
       showToast('Permission mise à jour.');
       navigateTo('employee-detail', { currentEmployeeId: employeeId });
     });
@@ -3396,7 +3396,7 @@ function bindPermissionsCardEvents(employeeId) {
 /** Salaire/genre : données sensibles, réservées au Directeur, et seulement si l'entreprise a activé le suivi correspondant. */
 function renderConfidentialEmployeeCard(e, user) {
   if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
     <div class="card">
@@ -3410,7 +3410,7 @@ function renderConfidentialEmployeeCard(e, user) {
 function renderEmployeeBalances(employee, canAdjust = false) {
   // Liste complète (pas seulement les types actifs/visibles ci-dessous) : getLeaveBalance en a besoin
   // pour retrouver les types "deduireRTT/CP" même désactivés depuis, sans re-fetch à chaque type.
-  const allLeaveTypes = DB.getLeaveTypes();
+  const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
   const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
@@ -3436,7 +3436,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
 
 function openAjusterCompteurModal(employeeId, typeId) {
   const employee = employeeRepository.getById(employeeId);
-  const type = DB.getLeaveTypeById(typeId);
+  const type = leaveTypeRepository.getLeaveTypeById(typeId);
   const current = (employee.compteurs && employee.compteurs[typeId]) || 0;
 
   const html = `
@@ -3554,7 +3554,7 @@ function openCoordonneesModal(employeeId) {
 function openEmployeePrintModal(id) {
   const e = employeeRepository.getById(id);
   const age = calculateAge(e.dateNaissance);
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   const html = `
@@ -3612,7 +3612,7 @@ function openEmployeePrintModal(id) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('btn-print-employee').addEventListener('click', () => {
-    DB.logAudit('Export', 'Fiche salarié', `${e.prenom} ${e.nom}`);
+    auditLogRepository.logAudit('Export', 'Fiche salarié', `${e.prenom} ${e.nom}`);
     window.print();
   });
 }
@@ -3623,7 +3623,7 @@ function bindEmployeeDetailEvents() {
   const favoriteBtn = document.getElementById('btn-toggle-favorite');
   if (!favoriteBtn) return; // fiche introuvable ou accès non autorisé : seul le lien de retour existe sur cet état
   favoriteBtn.addEventListener('click', () => {
-    DB.toggleFavoriteEmployee(state.currentEmployeeId);
+    favoriteRepository.toggleFavoriteEmployee(state.currentEmployeeId);
     render();
   });
   document.getElementById('btn-print-employee-fiche').addEventListener('click', () => openEmployeePrintModal(state.currentEmployeeId));
@@ -3764,7 +3764,7 @@ function bindAutresAbsencesEvents() {
 function getFilteredLeaveRequests(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   let list = leaveRepository.getAll().filter(r => {
-    const type = DB.getLeaveTypeById(r.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     return type && type.categorie === categorie;
   });
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -3779,7 +3779,7 @@ function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
   const employees = getScopedEmployeesForFilters();
-  const types = DB.getLeaveTypes().filter(t => t.categorie === categorie);
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const requests = getFilteredLeaveRequests(categorie);
   const { pageItems, totalPages, page, pageStart } = paginate(requests, pageKey);
 
@@ -3834,7 +3834,7 @@ function renderCongesDemandes(categorie = 'conge') {
 
 function renderLeaveRequestRow(r) {
   const employee = employeeRepository.getById(r.employeeId);
-  const type = DB.getLeaveTypeById(r.typeId);
+  const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   if (!employee || !type) return '';
 
   const periode = r.dateDebut === r.dateFin
@@ -3903,7 +3903,7 @@ function isCurrentWorkflowStepFor(request, user, domain) {
 }
 
 function canActOnRequestFor(request, domain = 'absence') {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
   if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
@@ -3915,7 +3915,7 @@ function canActOnRequestFor(request, domain = 'absence') {
  * indépendamment de celui de valider. Pas de permission "refuser une note de frais" distincte au
  * catalogue : même règle que Valider pour le domaine 'frais'. */
 function canRefuserRequestFor(request, domain = 'absence') {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
   if (request.employeeId === user.id) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.REFUSER_ABSENCE)) return true;
@@ -3925,7 +3925,7 @@ function canRefuserRequestFor(request, domain = 'absence') {
 /** Pour les actions post-validation (ex. Annuler) qui ne dépendent plus de l'étape de workflow.
  * Même logique de domain que canActOnRequestFor ci-dessus. */
 function canManageRequestFor(employeeId, domain = 'absence') {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (employeeId === user.id) return false; // séparation des tâches : personne ne gère sa propre demande, même RH/Directeur
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
@@ -3948,7 +3948,7 @@ function renderRequestActions(r, type) {
   if (r.statut === 'Validé') {
     // §24 : "Prolonger l'arrêt" — réservé aux types "saisie réservée RH" (maladie et assimilés,
     // voir SS15) et à qui a la permission PROLONGER_MALADIE.
-    const canProlonger = !type.saisiParSalarie && hasPermission(DB.getCurrentUser(), PERMISSIONS.PROLONGER_MALADIE);
+    const canProlonger = !type.saisiParSalarie && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.PROLONGER_MALADIE);
     return `
       ${historyBtn}
       <button class="btn-link" data-attestation="${r.id}">Attestation</button>
@@ -4024,7 +4024,7 @@ function bindHistoryButtons(repo) {
 function openProlongerModal(requestId) {
   const request = leaveRepository.getById(requestId);
   const employee = employeeRepository.getById(request.employeeId);
-  const type = DB.getLeaveTypeById(request.typeId);
+  const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
 
   const html = `
     <div class="modal modal-small">
@@ -4076,11 +4076,11 @@ function openProlongerModal(requestId) {
 function openRegulariserModal(requestId) {
   const request = leaveRepository.getById(requestId);
   const employee = employeeRepository.getById(request.employeeId);
-  const currentType = DB.getLeaveTypeById(request.typeId);
+  const currentType = leaveTypeRepository.getLeaveTypeById(request.typeId);
   // Inclut le type ACTUEL même s'il a été désactivé depuis (sinon le select retombe sur le fallback
   // générique de selectField, qui affiche l'id brut plutôt qu'un nom lisible — même bug déjà corrigé
   // pour les établissements désactivés).
-  const typesMemeCategorie = DB.getLeaveTypes().filter(t =>
+  const typesMemeCategorie = leaveTypeRepository.getLeaveTypes().filter(t =>
     t.categorie === currentType.categorie && (t.actif || t.id === currentType.id));
 
   const html = `
@@ -4144,7 +4144,7 @@ function exportLeaveRequestsCSV(categorie = 'conge') {
   const headers = ['Salarié', 'Type', 'Début', 'Fin', 'Jours', 'Payé', 'Statut'];
   const rows = requests.map(r => {
     const employee = employeeRepository.getById(r.employeeId);
-    const type = DB.getLeaveTypeById(r.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     return [
       employee ? `${employee.prenom} ${employee.nom}` : '—',
       type ? type.nom : '—',
@@ -4154,7 +4154,7 @@ function exportLeaveRequestsCSV(categorie = 'conge') {
     ];
   });
   exportRowsToCSV(headers, rows, categorie === 'conge' ? 'conges.csv' : 'autres-absences.csv');
-  DB.logAudit('Export', categorie === 'conge' ? 'Demandes de congé' : 'Demandes d\'autre absence', `${requests.length} ligne${requests.length > 1 ? 's' : ''}`);
+  auditLogRepository.logAudit('Export', categorie === 'conge' ? 'Demandes de congé' : 'Demandes d\'autre absence', `${requests.length} ligne${requests.length > 1 ? 's' : ''}`);
 }
 
 function bindCongesDemandesEvents(categorie = 'conge') {
@@ -4213,7 +4213,7 @@ function bindCongesDemandesEvents(categorie = 'conge') {
 function openLeaveAttestationModal(requestId) {
   const r = leaveRepository.getById(requestId);
   const employee = employeeRepository.getById(r.employeeId);
-  const type = DB.getLeaveTypeById(r.typeId);
+  const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
 
   const html = `
@@ -4254,7 +4254,7 @@ function openLeaveAttestationModal(requestId) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('btn-print-attestation').addEventListener('click', () => {
-    DB.logAudit('Export', 'Attestation de congé', `${employee.prenom} ${employee.nom}`);
+    auditLogRepository.logAudit('Export', 'Attestation de congé', `${employee.prenom} ${employee.nom}`);
     window.print();
   });
 }
@@ -4267,7 +4267,7 @@ function auditLabelForEmployee(employeeId) {
 function handleApproveRequest(id) {
   const request = leaveRepository.getById(id);
   leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
-  DB.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+  auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
   showToast('Demande validée.');
   render();
 }
@@ -4281,7 +4281,7 @@ function handleRefuseRequest(id) {
     danger: true,
     onConfirm: () => {
       leaveRepository.update(id, refuseRequest(request));
-      DB.logAudit('Refus', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Refus', 'Demande de congé', auditLabelForEmployee(request.employeeId));
       showToast('Demande refusée.');
       render();
     }
@@ -4297,7 +4297,7 @@ function handleCancelRequest(id) {
     danger: true,
     onConfirm: () => {
       leaveRepository.update(id, cancelRequest(request));
-      DB.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
       showToast('Demande annulée.');
       render();
     }
@@ -4327,7 +4327,7 @@ function saveDraftFromForm(form, type, extra) {
   for (const [key, value] of formData.entries()) champs[key] = value;
   Object.assign(champs, extra || {});
   finalizeDraftEdit();
-  draftRepository.create({ ownerId: DB.getCurrentUser().id, type, champs });
+  draftRepository.create({ ownerId: authRepository.getCurrentUser().id, type, champs });
   closeModal();
   showToast('Brouillon enregistré.');
   render();
@@ -4338,7 +4338,7 @@ function saveDraftFromForm(form, type, extra) {
  * importe pour qui la demande est destinée, cf. saveDraftFromForm) et du type demandé. Pas de carte
  * du tout si la liste est vide, pour ne jamais ajouter de bruit à un écran qui n'en a pas besoin. */
 function renderDraftsCard(type) {
-  const drafts = draftRepository.getForOwner(DB.getCurrentUser().id, type);
+  const drafts = draftRepository.getForOwner(authRepository.getCurrentUser().id, type);
   if (!drafts.length) return '';
   return `
     <div class="card">
@@ -4361,7 +4361,7 @@ function renderDraftsCard(type) {
 function draftSummaryLabel(draft) {
   const c = draft.champs || {};
   if (draft.type === 'conge' || draft.type === 'autre-absence') {
-    const type = c.typeId ? DB.getLeaveTypeById(c.typeId) : null;
+    const type = c.typeId ? leaveTypeRepository.getLeaveTypeById(c.typeId) : null;
     return `${type ? escapeHtml(type.icone) + ' ' + escapeHtml(type.nom) : 'Type non choisi'}${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
   }
   if (draft.type === 'teletravail') {
@@ -4399,7 +4399,7 @@ function bindDraftsCardEvents(resumeHandler) {
  * à leur périmètre visible (équipe pour un manager, tout le monde pour RH/Directeur).
  */
 function employeeFieldForRequest(presetEmployeeId, employees) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (user.role === ROLES.SALARIE) {
     return `
       <input type="hidden" id="f-employeeId" name="employeeId" value="${escapeHtml(user.id)}">
@@ -4423,8 +4423,8 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
   // §15/§24 : un type marqué "saisie réservée aux RH" (ex. Maladie) ne doit pas être proposé à qui
   // n'a pas SAISIR_MALADIE — sinon un salarié pourrait se déclarer lui-même en arrêt maladie alors
   // que le cahier des charges l'attribue exclusivement au service RH.
-  const canSaisirRestreint = hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE);
-  const currentUser = DB.getCurrentUser();
+  const canSaisirRestreint = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE);
+  const currentUser = authRepository.getCurrentUser();
   // Sprint SIRH premium §1 : un salarié (uniquement en libre-service sur SA PROPRE fiche — jamais
   // un manager/RH créant une demande pour le compte d'un tiers, qui agit à titre administratif, cf.
   // le même principe que le contournement SAISIR_MALADIE ci-dessus) ne peut demander que les types
@@ -4432,7 +4432,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
   const typesDesactivesPourSoi = currentUser.role === ROLES.SALARIE
     ? new Set(currentUser.typesAbsenceDesactives || [])
     : new Set();
-  const types = DB.getLeaveTypes().filter(t =>
+  const types = leaveTypeRepository.getLeaveTypes().filter(t =>
     t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) &&
     (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id));
   const champs = (draft && draft.champs) || {};
@@ -4524,7 +4524,7 @@ function updateLeaveRequestHints() {
   const demiField = document.getElementById('field-demi-journee');
   const hint = document.getElementById('leave-balance-hint');
 
-  const type = typeId ? DB.getLeaveTypeById(typeId) : null;
+  const type = typeId ? leaveTypeRepository.getLeaveTypeById(typeId) : null;
   demiField.style.display = type && type.autoriserDemiJournee && dateDebut && dateDebut === dateFin ? 'block' : 'none';
 
   if (!type || !employeeId) { hint.textContent = ''; return; }
@@ -4566,24 +4566,24 @@ function submitLeaveRequestForm(evt) {
   // [...] Les salariés ne peuvent jamais modifier une période antérieure à aujourd'hui." — la
   // création couvre aussi la saisie initiale, pas seulement la modification d'une demande existante
   // (déjà couverte par canManageRequestFor, qui exclut systématiquement le demandeur lui-même).
-  if (DB.getCurrentUser().role === ROLES.SALARIE && dateDebut < toISODate(new Date())) {
+  if (authRepository.getCurrentUser().role === ROLES.SALARIE && dateDebut < toISODate(new Date())) {
     showToast('Vous ne pouvez pas saisir une absence dont la date de début est déjà passée.', 'error');
     return;
   }
 
   const employee = employeeRepository.getById(employeeId);
-  const type = DB.getLeaveTypeById(typeId);
+  const type = leaveTypeRepository.getLeaveTypeById(typeId);
 
   // §15/§24 : ne fait pas confiance au seul filtrage du menu déroulant (contournable en modifiant
   // le DOM) — revérifie ici que l'utilisateur courant a le droit de saisir ce type restreint.
-  if (!type.saisiParSalarie && !hasPermission(DB.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE)) {
+  if (!type.saisiParSalarie && !hasPermission(authRepository.getCurrentUser(), PERMISSIONS.SAISIR_MALADIE)) {
     showToast(`La saisie du type « ${type.nom} » est réservée aux RH.`, 'error');
     return;
   }
 
   // Sprint SIRH premium §1 : même principe — ne fait pas confiance au seul filtrage du menu
   // déroulant pour la liste blanche de types autorisés par salarié.
-  const currentUser = DB.getCurrentUser();
+  const currentUser = authRepository.getCurrentUser();
   if (currentUser.role === ROLES.SALARIE && (currentUser.typesAbsenceDesactives || []).includes(typeId)) {
     showToast(`Le type « ${type.nom} » n'est pas autorisé pour votre profil.`, 'error');
     return;
@@ -4652,7 +4652,7 @@ function submitLeaveRequestForm(evt) {
 // ---- Sous-vue : Types de congés ----
 
 function renderCongesTypes(categorie = 'conge') {
-  const types = DB.getLeaveTypes().filter(t => t.categorie === categorie);
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const noun = categorie === 'conge' ? 'de congé' : 'd\'absence';
   const plural = types.length > 1 ? 's' : '';
 
@@ -4750,32 +4750,32 @@ function bindCongesTypesEvents(categorie = 'conge') {
 
   document.querySelectorAll('[data-edit-type]').forEach(btn => btn.addEventListener('click', () => openLeaveTypeModal(btn.dataset.editType)));
   document.querySelectorAll('[data-duplicate-type]').forEach(btn => btn.addEventListener('click', () => {
-    DB.duplicateLeaveType(btn.dataset.duplicateType);
+    leaveTypeRepository.duplicateLeaveType(btn.dataset.duplicateType);
     showToast('Type de congé dupliqué.');
     render();
   }));
   document.querySelectorAll('[data-toggle-type]').forEach(btn => btn.addEventListener('click', () => {
-    const t = DB.getLeaveTypeById(btn.dataset.toggleType);
-    DB.updateLeaveType(t.id, { actif: !t.actif });
+    const t = leaveTypeRepository.getLeaveTypeById(btn.dataset.toggleType);
+    leaveTypeRepository.updateLeaveType(t.id, { actif: !t.actif });
     render();
   }));
   document.querySelectorAll('[data-reorder-up]').forEach(btn => btn.addEventListener('click', () => {
-    DB.reorderLeaveType(btn.dataset.reorderUp, 'up');
+    leaveTypeRepository.reorderLeaveType(btn.dataset.reorderUp, 'up');
     render();
   }));
   document.querySelectorAll('[data-reorder-down]').forEach(btn => btn.addEventListener('click', () => {
-    DB.reorderLeaveType(btn.dataset.reorderDown, 'down');
+    leaveTypeRepository.reorderLeaveType(btn.dataset.reorderDown, 'down');
     render();
   }));
   document.querySelectorAll('[data-delete-type]').forEach(btn => btn.addEventListener('click', () => {
-    const t = DB.getLeaveTypeById(btn.dataset.deleteType);
+    const t = leaveTypeRepository.getLeaveTypeById(btn.dataset.deleteType);
     openConfirm({
       title: 'Supprimer ce type de congé ?',
       message: `"${t.nom}" et toutes ses demandes associées seront définitivement supprimés.`,
       confirmLabel: 'Supprimer',
       danger: true,
       onConfirm: () => {
-        DB.deleteLeaveType(t.id);
+        leaveTypeRepository.deleteLeaveType(t.id);
         showToast('Type de congé supprimé.');
         render();
       }
@@ -4787,7 +4787,7 @@ function bindCongesTypesEvents(categorie = 'conge') {
 
 function openLeaveTypeModal(id, categorie = 'conge') {
   const isEdit = Boolean(id);
-  const type = isEdit ? DB.getLeaveTypeById(id) : Object.assign(makeEmptyLeaveType(), { workflow: DB.getSettings().workflowCongesDefault, categorie });
+  const type = isEdit ? leaveTypeRepository.getLeaveTypeById(id) : Object.assign(makeEmptyLeaveType(), { workflow: settingsRepository.getSettings().workflowCongesDefault, categorie });
   // En édition, la catégorie du type lui-même fait foi plutôt que le paramètre reçu — l'appelant
   // (bouton "Modifier") ne le passait pas toujours correctement, ce qui renvoyait vers le mauvais
   // écran ("Congés" au lieu d'"Autres absences") après enregistrement. Ne dépend plus du contexte
@@ -4903,11 +4903,11 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge') {
   patch.deduireCompteur = true;
 
   if (id) {
-    DB.updateLeaveType(id, patch);
+    leaveTypeRepository.updateLeaveType(id, patch);
     showToast('Type de congé mis à jour.');
   } else {
     patch.categorie = categorie;
-    DB.addLeaveType(patch);
+    leaveTypeRepository.addLeaveType(patch);
     showToast('Type de congé créé.');
   }
   closeModal();
@@ -4964,8 +4964,8 @@ function renderCalendrierValidationsCard(user) {
  * (§4, reprise) puisse recalculer le même `sharedData` pour une seule date sans dupliquer cette
  * logique de périmètre/scope. */
 function buildCalendarSharedData(cells) {
-  const settings = DB.getSettings();
-  const user = DB.getCurrentUser();
+  const settings = settingsRepository.getSettings();
+  const user = authRepository.getCurrentUser();
   // Sprint SIRH premium §2 : "Créer un calendrier spécifique pour RH/Managers/Directeur [...] leurs
   // propres congés, leurs événements personnels, leurs validations" — un salarié voit déjà
   // uniquement son propre calendrier par défaut (getVisibleEmployeeIdsForCurrentUser), donc le
@@ -4978,10 +4978,10 @@ function buildCalendarSharedData(cells) {
   const visibleIds = vuePersonnelle ? [user.id] : getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
-  const leaveTypes = DB.getLeaveTypes();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
-  const schoolHolidays = DB.getSchoolHolidays();
+  const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getFrenchPublicHolidays(y));
   return { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone };
@@ -4990,8 +4990,8 @@ function buildCalendarSharedData(cells) {
 function renderCalendrier() {
   const cells = buildMonthGridCells(state.calendarYear, state.calendarMonth);
   const sharedData = buildCalendarSharedData(cells);
-  const settings = DB.getSettings();
-  const user = DB.getCurrentUser();
+  const settings = settingsRepository.getSettings();
+  const user = authRepository.getCurrentUser();
   const hasWiderView = user.role !== ROLES.SALARIE;
 
   return `
@@ -5239,7 +5239,7 @@ const SETTINGS_LISTS = [
 ];
 
 function renderParametres() {
-  const canSeeAudit = hasPermission(DB.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
+  const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
   if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
   return `
     <div class="view-header">
@@ -5313,8 +5313,8 @@ function bindParametresEvents() {
 
 function renderParametresEntreprise() {
   const profile = companyRepository.getProfile();
-  const settings = DB.getSettings();
-  const user = DB.getCurrentUser();
+  const settings = settingsRepository.getSettings();
+  const user = authRepository.getCurrentUser();
 
   return `
     <div class="card">
@@ -5356,7 +5356,7 @@ function renderParametresEntreprise() {
 /** Aperçu en lecture seule (§36) — la gestion réelle de l'abonnement (changement d'offre,
  * suspension, facturation) est réservée à l'Administrateur BERTOLIS, pas encore construite. */
 function renderAbonnementCard() {
-  const company = DB.getCurrentCompany();
+  const company = companyRepository.getCurrent();
   const abo = company.abonnement;
   if (!abo) return '';
   const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
@@ -5452,7 +5452,7 @@ function bindParametresEtablissementsEvents() {
       confirmLabel: 'Supprimer',
       danger: true,
       onConfirm: () => {
-        const result = DB.deleteEtablissement(etab.id);
+        const result = etablissementRepository.delete(etab.id);
         if (!result.success) { showToast(result.error, 'error'); return; }
         showToast('Établissement supprimé.');
         render();
@@ -5711,7 +5711,7 @@ function openEquipeManagersModal(serviceId, equipeId) {
 // ---- Sous-vue : Listes de référence ----
 
 function renderParametresListes() {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   return `
     <div class="card">
       <h2>Règles générales</h2>
@@ -5785,73 +5785,73 @@ function renderSettingsListCard(listDef, items) {
 
 function bindParametresListesEvents() {
   document.getElementById('f-teletravail-quota').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.teletravailQuotaSemaine = Number(e.target.value) || 0;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Quota mis à jour.');
   });
   document.getElementById('f-tickets-valeur').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.ticketsValeurFaciale = Number(e.target.value) || 0;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Valeur faciale mise à jour.');
   });
   document.getElementById('f-tickets-part').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.ticketsPartEmployeurPct = Number(e.target.value) || 0;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Part employeur mise à jour.');
   });
   document.getElementById('f-tickets-teletravail').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.ticketsInclureTeletravail = e.target.checked;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Règle mise à jour.');
   });
   document.getElementById('f-masse-salariale').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.masseSalarialeActivee = e.target.checked;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Réglage mis à jour.');
   });
   document.getElementById('f-suivi-genre').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.suiviGenreActive = e.target.checked;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Réglage mis à jour.');
   });
   document.getElementById('f-suivi-age').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.suiviAgeActive = e.target.checked;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Réglage mis à jour.');
   });
   document.getElementById('f-workflow-conges-default').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.workflowCongesDefault = JSON.parse(e.target.value);
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Modèle de validation des congés mis à jour.');
   });
   document.getElementById('f-workflow-teletravail').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.workflowTeletravail = JSON.parse(e.target.value);
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Chaîne de validation du télétravail mise à jour.');
   });
   document.getElementById('f-workflow-frais').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.workflowFrais = JSON.parse(e.target.value);
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Chaîne de validation des notes de frais mise à jour.');
   });
 
   document.querySelectorAll('.chip-remove').forEach(btn => {
     btn.addEventListener('click', () => {
-      const settings = DB.getSettings();
+      const settings = settingsRepository.getSettings();
       const key = btn.dataset.listKey;
       const index = Number(btn.dataset.index);
       settings[key] = settings[key].filter((_, i) => i !== index);
-      DB.saveSettings(settings);
+      settingsRepository.saveSettings(settings);
       render();
     });
   });
@@ -5864,13 +5864,13 @@ function bindParametresListesEvents() {
       const value = input.value.trim();
       if (!value) return;
 
-      const settings = DB.getSettings();
+      const settings = settingsRepository.getSettings();
       if (settings[key].includes(value)) {
         showToast('Cet élément existe déjà.', 'error');
         return;
       }
       settings[key] = [...settings[key], value];
-      DB.saveSettings(settings);
+      settingsRepository.saveSettings(settings);
       showToast('Liste mise à jour.');
       render();
     });
@@ -5880,8 +5880,8 @@ function bindParametresListesEvents() {
 // ---- Sous-vue : Vacances scolaires ----
 
 function renderParametresVacances() {
-  const settings = DB.getSettings();
-  const schoolData = DB.getSchoolHolidays();
+  const settings = settingsRepository.getSettings();
+  const schoolData = schoolHolidayRepository.getSchoolHolidays();
 
   return `
     <div class="card">
@@ -5922,9 +5922,9 @@ function renderParametresVacances() {
 
 function bindParametresVacancesEvents() {
   document.getElementById('f-school-zone').addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.schoolZone = e.target.value;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     showToast('Zone de vacances scolaires mise à jour.');
   });
 
@@ -5935,7 +5935,7 @@ function bindParametresVacancesEvents() {
   document.querySelectorAll('[data-delete-period]').forEach(btn => {
     btn.addEventListener('click', () => {
       const index = Number(btn.dataset.deletePeriod);
-      const schoolData = DB.getSchoolHolidays();
+      const schoolData = schoolHolidayRepository.getSchoolHolidays();
       const period = schoolData.periodes[index];
       openConfirm({
         title: 'Supprimer cette période ?',
@@ -5944,7 +5944,7 @@ function bindParametresVacancesEvents() {
         danger: true,
         onConfirm: () => {
           schoolData.periodes.splice(index, 1);
-          DB.saveSchoolHolidays(schoolData);
+          schoolHolidayRepository.saveSchoolHolidays(schoolData);
           showToast('Période supprimée.');
           render();
         }
@@ -5955,7 +5955,7 @@ function bindParametresVacancesEvents() {
 
 function openSchoolPeriodModal(index) {
   const isEdit = index !== undefined;
-  const schoolData = DB.getSchoolHolidays();
+  const schoolData = schoolHolidayRepository.getSchoolHolidays();
   const period = isEdit ? schoolData.periodes[index] : { nom: '', debut: '', fin: '', zones: ['A', 'B', 'C'] };
 
   const html = `
@@ -6008,13 +6008,13 @@ function submitSchoolPeriodForm(evt, index) {
     return;
   }
 
-  const schoolData = DB.getSchoolHolidays();
+  const schoolData = schoolHolidayRepository.getSchoolHolidays();
   if (index !== undefined) {
     schoolData.periodes[index] = patch;
   } else {
     schoolData.periodes.push(patch);
   }
-  DB.saveSchoolHolidays(schoolData);
+  schoolHolidayRepository.saveSchoolHolidays(schoolData);
   showToast(index !== undefined ? 'Période mise à jour.' : 'Période créée.');
   closeModal();
   navigateTo('parametres', { parametresTab: 'vacances' });
@@ -6062,7 +6062,7 @@ const AUDIT_ACTIONS = ['Création', 'Modification', 'Suppression', 'Validation',
  * 200 plus récents sans aucun moyen d'aller plus loin. */
 function getFilteredAuditLog() {
   const filters = state.auditFilters;
-  let list = DB.getAuditLog();
+  let list = auditLogRepository.getAuditLog();
   if (filters.action) list = list.filter(e => e.action === filters.action);
   if (filters.dateDebut) list = list.filter(e => toISODate(new Date(e.date)) >= filters.dateDebut);
   if (filters.dateFin) list = list.filter(e => toISODate(new Date(e.date)) <= filters.dateFin);
@@ -6073,7 +6073,7 @@ function getFilteredAuditLog() {
 
 function renderParametresAudit() {
   const filters = state.auditFilters;
-  const total = DB.getAuditLog().length;
+  const total = auditLogRepository.getAuditLog().length;
   const log = getFilteredAuditLog();
   const { pageItems, totalPages, page, pageStart } = paginate(log, 'auditPage');
 
@@ -6158,7 +6158,7 @@ function exportAuditLogCSV() {
   const headers = ['Date', 'Action', 'Entité', 'Cible', 'Détails'];
   const rows = log.map(e => [formatDateTime(e.date), e.action, e.entite, e.cible, e.details]);
   exportRowsToCSV(headers, rows, 'journal-audit.csv');
-  DB.logAudit('Export', 'Journal d\'audit', `${log.length} événements`);
+  auditLogRepository.logAudit('Export', 'Journal d\'audit', `${log.length} événements`);
 }
 
 // ---------------------------------------------------------------------------
@@ -6177,7 +6177,7 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
 
   const onLeave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
   if (onLeave) {
-    const type = DB.getLeaveTypeById(onLeave.typeId);
+    const type = leaveTypeRepository.getLeaveTypeById(onLeave.typeId);
     const pending = onLeave.statut !== 'Validé';
     return { icon: type ? type.icone : '🏖️', level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
   }
@@ -6201,7 +6201,7 @@ function isEmployedDuringPeriod(employee, periodStart, periodEnd) {
 }
 
 function getPlanningEmployees(periodStart, periodEnd) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   // Sprint SIRH premium §5 : "Mon planning" (espace Personnel) restreint à l'utilisateur courant
   // seul, quel que soit son rôle — même principe que calendrierVue (§2).
   const visibleIds = (user.role !== ROLES.SALARIE && state.planningVue === 'personnel') ? [user.id] : getVisibleEmployeeIdsForCurrentUser();
@@ -6619,7 +6619,7 @@ function openHorairesModal(employeeId) {
       return;
     }
     employeeRepository.update(employeeId, patch);
-    DB.logAudit('Modification', 'Horaires', `${employee.prenom} ${employee.nom}`);
+    auditLogRepository.logAudit('Modification', 'Horaires', `${employee.prenom} ${employee.nom}`);
     showToast('Horaires mis à jour.');
     closeModal();
     render();
@@ -6896,7 +6896,7 @@ function bindTeletravailDemandesEvents() {
 function handleApproveTelework(id) {
   const request = teleworkRepository.getById(id);
   teleworkRepository.update(id, advanceWorkflow(request, 'Validé'));
-  DB.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+  auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
   showToast('Télétravail validé.');
   render();
 }
@@ -6910,7 +6910,7 @@ function handleRefuseTelework(id) {
     danger: true,
     onConfirm: () => {
       teleworkRepository.update(id, refuseRequest(request));
-      DB.logAudit('Refus', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Refus', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
       showToast('Demande refusée.');
       render();
     }
@@ -6926,7 +6926,7 @@ function handleCancelTelework(id) {
     danger: true,
     onConfirm: () => {
       teleworkRepository.update(id, cancelRequest(request));
-      DB.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
       showToast('Demande annulée.');
       render();
     }
@@ -6993,7 +6993,7 @@ function updateTeleworkQuotaHint() {
   if (!employeeId || !dateDebut) { hint.textContent = ''; return; }
 
   const employee = employeeRepository.getById(employeeId);
-  const quota = DB.getSettings().teletravailQuotaSemaine;
+  const quota = settingsRepository.getSettings().teletravailQuotaSemaine;
   const weekDates = getWeekDatesContaining(dateDebut);
   const weekStart = toISODate(weekDates[0]);
   const weekEnd = toISODate(weekDates[6]);
@@ -7104,7 +7104,7 @@ function moveTeleworkRequest(id, nouvelleDateDebut, nouvelleDateFin) {
     return { success: false, error: 'La période cible ne comporte aucun jour travaillé.' };
   }
 
-  const quota = DB.getSettings().teletravailQuotaSemaine;
+  const quota = settingsRepository.getSettings().teletravailQuotaSemaine;
   const overQuota = findTeleworkWeekOverQuota(request.employeeId, nouvelleDateDebut, nouvelleDateFin, employee, quota, id);
   if (overQuota) {
     return { success: false, error: `Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).` };
@@ -7122,7 +7122,7 @@ function moveTeleworkRequest(id, nouvelleDateDebut, nouvelleDateFin) {
     action: `Déplacé (glisser-déposer) : ${formatDate(request.dateDebut)}${request.dateDebut !== request.dateFin ? ' → ' + formatDate(request.dateFin) : ''} devient ${formatDate(nouvelleDateDebut)}${nouvelleDateDebut !== nouvelleDateFin ? ' → ' + formatDate(nouvelleDateFin) : ''}`
   }]);
   teleworkRepository.update(id, { dateDebut: nouvelleDateDebut, dateFin: nouvelleDateFin, nbJours, historique });
-  DB.logAudit('Modification', 'Télétravail déplacé (glisser-déposer)', `${employee.prenom} ${employee.nom} · ${formatDate(nouvelleDateDebut)}${nouvelleDateDebut !== nouvelleDateFin ? ' au ' + formatDate(nouvelleDateFin) : ''}`);
+  auditLogRepository.logAudit('Modification', 'Télétravail déplacé (glisser-déposer)', `${employee.prenom} ${employee.nom} · ${formatDate(nouvelleDateDebut)}${nouvelleDateDebut !== nouvelleDateFin ? ' au ' + formatDate(nouvelleDateFin) : ''}`);
   return { success: true };
 }
 
@@ -7152,7 +7152,7 @@ function submitTeleworkRequestForm(evt) {
     return;
   }
 
-  const quota = DB.getSettings().teletravailQuotaSemaine;
+  const quota = settingsRepository.getSettings().teletravailQuotaSemaine;
   const overQuota = findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota);
   if (overQuota) {
     showToast(`Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).`, 'error');
@@ -7300,7 +7300,7 @@ function getFilteredExpenses() {
 
 function renderFrais() {
   const employees = getScopedEmployeesForFilters();
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const expenses = getFilteredExpenses();
   const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
   const { pageItems, totalPages, page, pageStart } = paginate(expenses, 'fraisPage');
@@ -7410,7 +7410,7 @@ function handleApproveExpense(id) {
   const expense = expenseRepository.getById(id);
   const patch = advanceWorkflow(expense, 'Remboursé');
   expenseRepository.update(id, patch);
-  DB.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+  auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
   showToast(patch.statut === 'Remboursé' ? 'Note de frais remboursée.' : 'Étape de validation suivante en attente.');
   render();
 }
@@ -7424,7 +7424,7 @@ function handleRefuseExpense(id) {
     danger: true,
     onConfirm: () => {
       expenseRepository.update(id, refuseRequest(expense));
-      DB.logAudit('Refus', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+      auditLogRepository.logAudit('Refus', 'Note de frais', auditLabelForEmployee(expense.employeeId));
       showToast('Note de frais refusée.');
       render();
     }
@@ -7440,7 +7440,7 @@ function handleCancelExpense(id) {
     danger: true,
     onConfirm: () => {
       expenseRepository.update(id, cancelRequest(expense));
-      DB.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
       showToast('Note de frais annulée.');
       render();
     }
@@ -7464,14 +7464,14 @@ function exportExpensesCSV() {
     ];
   });
   exportRowsToCSV(headers, rows, 'notes-de-frais.csv');
-  DB.logAudit('Export', 'Notes de frais', `${expenses.length} ligne${expenses.length > 1 ? 's' : ''}`);
+  auditLogRepository.logAudit('Export', 'Notes de frais', `${expenses.length} ligne${expenses.length > 1 ? 's' : ''}`);
 }
 
 // ---- Modale : Nouvelle note de frais ----
 
 function openExpenseModal(presetEmployeeId, draft) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const champs = (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
   beginDraftEdit(draft);
@@ -7667,7 +7667,7 @@ function getTicketsRows() {
   // présent — calculateTicketsRestaurant borne déjà correctement le calcul lui-même, mais encore
   // faut-il que le salarié atteigne cette fonction.
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
 
@@ -7678,9 +7678,9 @@ function getTicketsRows() {
 }
 
 function renderTickets() {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const rows = getTicketsRows();
-  const canCorriger = hasPermission(DB.getCurrentUser(), PERMISSIONS.CORRIGER_TICKETS_RESTAURANT);
+  const canCorriger = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.CORRIGER_TICKETS_RESTAURANT);
   const totals = rows.reduce((acc, r) => ({
     nbTickets: acc.nbTickets + r.result.nbTickets,
     montantTotal: acc.montantTotal + r.result.montantTotal,
@@ -7817,7 +7817,7 @@ function exportTicketsCSV() {
     formatNumberFR(r.result.partSalarie)
   ]);
   exportRowsToCSV(headers, data, `tickets-restaurant-${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}.csv`);
-  DB.logAudit('Export', 'Tickets restaurant', `${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear}`);
+  auditLogRepository.logAudit('Export', 'Tickets restaurant', `${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -7833,7 +7833,7 @@ function getPaieRows(year, month) {
   // présent — le filtrer sur son statut live lui aurait fait perdre toutes ses données de ce mois-là
   // (congés, télétravail, notes de frais), pas seulement les jours après son départ.
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
-  const leaveTypes = DB.getLeaveTypes();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveTypesExportables = leaveTypes.filter(t => t.exportPaie);
   // Sprint SIRH premium §6 (Préparation de paie) : buckets fixes par nom de type, indépendants du
   // réglage "export paie" par type — le récapitulatif doit montrer les vraies données de congés/RTT/
@@ -7845,7 +7845,7 @@ function getPaieRows(year, month) {
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
   const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
 
   return employees.map(e => {
     const sumTypeIdsInMonth = (typeIds) => leaveRequests
@@ -7888,7 +7888,7 @@ function getPaieAnomalies(year, month) {
   const monthStart = `${monthStr}-01`;
   const monthEnd = toISODate(new Date(year, month + 1, 0));
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
-  const leaveTypes = DB.getLeaveTypes();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const allLeaveRequests = leaveRepository.getAll();
   const validLeaveRequests = allLeaveRequests.filter(r => r.statut === 'Validé');
   const validTeleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
@@ -8050,11 +8050,11 @@ function renderExportPaiePreparationTab(rows) {
 }
 
 function renderExportPaieExportTab(rows) {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const modele = settings.exportPaieModele || 'generique';
   const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
   const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
-  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
+  const leaveTypesExportables = showColonne('conges') ? leaveTypeRepository.getLeaveTypes().filter(t => t.exportPaie) : [];
 
   return `
     <div class="card">
@@ -8130,18 +8130,18 @@ function bindExportPaieEvents() {
 
   const modeleSelect = document.getElementById('f-export-paie-modele');
   if (modeleSelect) modeleSelect.addEventListener('change', (e) => {
-    const settings = DB.getSettings();
+    const settings = settingsRepository.getSettings();
     settings.exportPaieModele = e.target.value;
-    DB.saveSettings(settings);
+    settingsRepository.saveSettings(settings);
     render();
   });
 
   ['conges', 'teletravail', 'tickets', 'frais'].forEach(key => {
     const checkbox = document.getElementById(`f-paieCol.${key}`);
     if (checkbox) checkbox.addEventListener('change', (e) => {
-      const settings = DB.getSettings();
+      const settings = settingsRepository.getSettings();
       settings.exportPaieColonnes = Object.assign({}, settings.exportPaieColonnes, { [key]: e.target.checked });
-      DB.saveSettings(settings);
+      settingsRepository.saveSettings(settings);
       render();
     });
   });
@@ -8249,13 +8249,13 @@ function handleExportPaieClick() {
 }
 
 function exportPaieCSV() {
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const modele = settings.exportPaieModele || 'generique';
   const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
   const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
   const delimiter = (EXPORT_PAIE_MODELES[modele] || EXPORT_PAIE_MODELES.generique).delimiter;
 
-  const leaveTypesExportables = showColonne('conges') ? DB.getLeaveTypes().filter(t => t.exportPaie) : [];
+  const leaveTypesExportables = showColonne('conges') ? leaveTypeRepository.getLeaveTypes().filter(t => t.exportPaie) : [];
   const rows = getPaieRows(state.paieYear, state.paieMonth);
   const headers = [
     'Matricule', 'Nom', 'Prénom',
@@ -8274,7 +8274,7 @@ function exportPaieCSV() {
     formatNumberFR(r.variablesMontant)
   ]);
   exportRowsToCSVWithDelimiter(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`, delimiter);
-  DB.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);
+  auditLogRepository.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -8311,7 +8311,7 @@ function updateEquipeOptionsForSelectedService() {
 
 /** Salaire/genre : édition réservée au Directeur, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
 function renderConfidentialEmployeeFieldset(employee, settings) {
-  const user = DB.getCurrentUser();
+  const user = authRepository.getCurrentUser();
   if (!user || user.role !== ROLES.DIRECTEUR) return '';
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
@@ -8328,7 +8328,7 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
 function openEmployeeModal(id) {
   const isEdit = Boolean(id);
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
-  const settings = DB.getSettings();
+  const settings = settingsRepository.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id);
   const etablissements = etablissementRepository.getAll();
   const etablissementsActifs = etablissements.filter(e => e.actif);
@@ -8524,7 +8524,7 @@ function submitEmployeeForm(evt, id) {
   } else {
     // §36 : plafond de salariés de l'offre BERTOLIS — ne s'applique qu'à la création, pas à
     // l'édition (modifier un salarié existant ne change pas l'effectif).
-    const abonnement = DB.getCurrentCompany().abonnement;
+    const abonnement = companyRepository.getCurrent().abonnement;
     const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
     const nbActifs = employeeRepository.getAll().filter(e => !e.archive).length;
     if (offre.nombreSalariesMax !== null && nbActifs >= offre.nombreSalariesMax) {
