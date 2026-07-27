@@ -329,8 +329,10 @@ p { margin: 0; line-height: 1.5; }
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  padding: 0;
-  margin-bottom: 16px;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  display: inline-block;
+  min-height: 24px;
 }
 
 .btn-icon {
