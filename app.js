@@ -366,8 +366,16 @@ function renderSignupView() {
     <div class="login-card">
       <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
       <h1>Créer mon compte</h1>
-      <p class="text-muted">Votre fiche salarié doit déjà exister dans l'entreprise (créée par RH ou votre manager) — utilisez le même email.</p>
+      <p class="text-muted">Si votre fiche existe déjà dans l'entreprise (créée par RH/manager), votre compte y sera relié automatiquement. Sinon, une nouvelle fiche est créée pour vous (rôle Salarié par défaut, modifiable ensuite par RH).</p>
       <form id="signup-form">
+        <div class="form-field">
+          <label for="f-signup-prenom">Prénom</label>
+          <input class="input" type="text" id="f-signup-prenom" required>
+        </div>
+        <div class="form-field">
+          <label for="f-signup-nom">Nom</label>
+          <input class="input" type="text" id="f-signup-nom" required>
+        </div>
         <div class="form-field">
           <label for="f-signup-email">Email professionnel</label>
           <input class="input" type="email" id="f-signup-email" required autocomplete="username">
@@ -535,6 +543,8 @@ function bindLoginScreenEvents() {
   const signupForm = document.getElementById('signup-form');
   if (signupForm) signupForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
+    const prenom = document.getElementById('f-signup-prenom').value;
+    const nom = document.getElementById('f-signup-nom').value;
     const email = document.getElementById('f-signup-email').value;
     const p1 = document.getElementById('f-signup-password').value;
     const p2 = document.getElementById('f-signup-password-confirm').value;
@@ -542,7 +552,7 @@ function bindLoginScreenEvents() {
     const submitBtn = document.getElementById('btn-signup-submit');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Création...';
-    const result = await authRepository.signUp(email, p1);
+    const result = await authRepository.signUp(email, p1, nom, prenom);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     if (result.needsEmailConfirmation) {
       state.pendingSignupConfirmation = email;

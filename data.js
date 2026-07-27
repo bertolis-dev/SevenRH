@@ -1585,14 +1585,17 @@ const DB = {
     return { success: true, employee };
   },
 
-  /** Crée un compte de connexion pour un salarié dont la fiche existe déjà (créée par RH/manager
-   * via Salariés > Nouveau salarié) — la liaison auth_user_id <-> employee se fait automatiquement
-   * côté serveur (trigger, voir 0005_signup_auto_link.sql), pas ici. */
-  async signUp(email, password) {
+  /** Crée un compte de connexion — si une fiche existe déjà pour cet email (créée par RH/manager),
+   * le compte y est relié ; sinon une nouvelle fiche "salarie" est créée automatiquement à partir
+   * de nom/prenom. Tout se joue côté serveur (trigger, voir 0006_signup_self_create_employee.sql). */
+  async signUp(email, password, nom, prenom) {
     if (!password || password.length < 6) {
       return { success: false, error: 'Le mot de passe doit contenir au moins 6 caractères.' };
     }
-    const authResult = await window.SupabaseSync.signUp(email, password);
+    if (!nom || !prenom) {
+      return { success: false, error: 'Nom et prénom sont obligatoires.' };
+    }
+    const authResult = await window.SupabaseSync.signUp(email, password, nom, prenom);
     if (!authResult.success) {
       return { success: false, error: authResult.error };
     }
@@ -1765,7 +1768,7 @@ const authRepository = {
   getCurrentUser: () => DB.getCurrentUser(),
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
-  signUp: (email, password) => DB.signUp(email, password),
+  signUp: (email, password, nom, prenom) => DB.signUp(email, password, nom, prenom),
   logout: () => DB.logout(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),

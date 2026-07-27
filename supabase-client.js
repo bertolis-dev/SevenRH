@@ -362,10 +362,11 @@ async function signIn(email, password) {
 }
 
 /** Crée un vrai compte Supabase Auth — un trigger côté serveur (voir migration
- * 0005_signup_auto_link.sql) relie automatiquement ce compte à la fiche salarié existante dont
- * l'email correspond (aucune fiche = le compte est créé mais restera "orphelin", voir data.js). */
-async function signUp(email, password) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+ * 0006_signup_self_create_employee.sql) relie ce compte à une fiche salarié existante si l'email
+ * correspond, sinon en crée une nouvelle (rôle "salarie" par défaut) à partir de nom/prénom, passés
+ * ici en métadonnées du compte (raw_user_meta_data, lu par le trigger). */
+async function signUp(email, password, nom, prenom) {
+  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { nom, prenom } } });
   if (error) return { success: false, error: error.message };
   // Selon la config du projet (confirmation email activée ou non), une session peut déjà exister.
   return { success: true, session: data.session, needsEmailConfirmation: !data.session };
