@@ -161,7 +161,7 @@ function navItemsForRole(user) {
 // Initialisation
 // ---------------------------------------------------------------------------
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   DB.onSaveError = (message) => showToast(message, 'error');
   DB.init();
   applyTheme();
@@ -171,9 +171,19 @@ document.addEventListener('DOMContentLoaded', () => {
   bindNotificationEvents();
   bindUserMenuEvents();
 
+  window.SupabaseSync.onPasswordRecovery(() => {
+    state.authView = 'reset';
+    state.authError = '';
+    renderLoginScreen();
+  });
+
   if (DB.isBertolisLoggedIn()) {
     showBertolisConsole();
-  } else if (authRepository.isLoggedIn()) {
+    return;
+  }
+
+  const restored = await DB.restoreSession();
+  if (restored) {
     showApp();
   } else {
     showLogin();
@@ -308,19 +318,9 @@ function renderLoginScreen() {
 }
 
 function renderLoginView() {
-  const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const companies = DB.getCompanies();
   return `
     <div class="login-card">
       <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
-      ${companies.length > 1 ? `
-        <div class="form-field">
-          <label for="f-company-switcher">Entreprise</label>
-          <select class="input" id="f-company-switcher">
-            ${companies.map(c => `<option value="${c.id}" ${c.id === DB.getCurrentCompanyId() ? 'selected' : ''}>${escapeHtml(c.raisonSociale)}</option>`).join('')}
-          </select>
-        </div>
-      ` : ''}
       <h1>Connexion</h1>
       <form id="login-form">
         <div class="form-field">
@@ -332,19 +332,9 @@ function renderLoginView() {
           <input class="input" type="password" id="f-login-password" required autocomplete="current-password">
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
-        <button type="submit" class="btn btn-primary" style="width: 100%;">Se connecter</button>
+        <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
       </form>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
-
-      <div class="login-demo-accounts">
-        <p class="text-muted">Comptes de démonstration (mot de passe : <code>Demo1234</code>)</p>
-        ${employees.map(e => `
-          <button type="button" class="login-demo-account" data-demo-email="${escapeHtml(e.email)}">
-            <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</span>
-            <span class="badge badge-info">${escapeHtml(ROLE_LABELS[e.role] || e.role)}</span>
-          </button>
-        `).join('')}
-      </div>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
@@ -383,10 +373,9 @@ function renderForgotPasswordView() {
         <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
         <h1>Mot de passe oublié</h1>
         <p class="text-muted">
-          Compte trouvé pour <strong>${escapeHtml(state.pendingReset.employeeName)}</strong>.
-          En production, un lien serait envoyé par email ; ici, cliquez directement dessus :
+          Si un compte existe pour cet email, un lien de réinitialisation vient de lui être envoyé.
+          Ouvrez cet email et cliquez sur le lien pour choisir un nouveau mot de passe.
         </p>
-        <button type="button" class="btn btn-primary" style="width: 100%;" id="btn-open-reset">Réinitialiser mon mot de passe</button>
         <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
       </div>
     `;
@@ -432,21 +421,16 @@ function renderResetPasswordView() {
 }
 
 function bindLoginScreenEvents() {
-  const companySwitcher = document.getElementById('f-company-switcher');
-  if (companySwitcher) {
-    companySwitcher.addEventListener('change', (e) => {
-      DB.setCurrentCompanyId(e.target.value);
-      renderLoginScreen();
-    });
-  }
-
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
-    loginForm.addEventListener('submit', (evt) => {
+    loginForm.addEventListener('submit', async (evt) => {
       evt.preventDefault();
       const email = document.getElementById('f-login-email').value;
       const password = document.getElementById('f-login-password').value;
-      const result = authRepository.login(email, password);
+      const submitBtn = document.getElementById('btn-login-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Connexion...';
+      const result = await authRepository.login(email, password);
       if (!result.success) {
         state.authError = result.error;
         renderLoginScreen();
@@ -455,14 +439,6 @@ function bindLoginScreenEvents() {
       showApp();
     });
   }
-
-  document.querySelectorAll('.login-demo-account').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const result = authRepository.login(btn.dataset.demoEmail, 'Demo1234');
-      if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
-      showApp();
-    });
-  });
 
   const forgotBtn = document.getElementById('btn-forgot-password');
   if (forgotBtn) forgotBtn.addEventListener('click', () => {
@@ -502,30 +478,23 @@ function bindLoginScreenEvents() {
   });
 
   const forgotForm = document.getElementById('forgot-password-form');
-  if (forgotForm) forgotForm.addEventListener('submit', (evt) => {
+  if (forgotForm) forgotForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
     const email = document.getElementById('f-forgot-email').value;
-    const result = authRepository.requestPasswordReset(email);
+    const result = await authRepository.requestPasswordReset(email);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.authError = '';
-    state.pendingReset = { token: result.token, employeeName: result.employeeName };
-    renderLoginScreen();
-  });
-
-  const openResetBtn = document.getElementById('btn-open-reset');
-  if (openResetBtn) openResetBtn.addEventListener('click', () => {
-    state.authView = 'reset';
-    state.authError = '';
+    state.pendingReset = { email };
     renderLoginScreen();
   });
 
   const resetForm = document.getElementById('reset-password-form');
-  if (resetForm) resetForm.addEventListener('submit', (evt) => {
+  if (resetForm) resetForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
     const p1 = document.getElementById('f-reset-password').value;
     const p2 = document.getElementById('f-reset-password-confirm').value;
     if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
-    const result = authRepository.resetPasswordWithToken(state.pendingReset.token, p1);
+    const result = await authRepository.resetPasswordWithToken(null, p1);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     state.pendingReset = null;
     state.authView = 'login';

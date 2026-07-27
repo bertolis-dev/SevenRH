@@ -8,7 +8,6 @@
 
 const ROOT_KEY = 'sevenrh_companies';
 const CURRENT_COMPANY_KEY = 'sevenrh_current_company_id';
-const SESSION_KEY = 'sevenrh_session';
 const NOTIF_STORAGE_LIMIT = 500; // même logique que le Journal d'audit (borné à 2000) : évite une croissance illimitée du blob localStorage au fil des années
 
 /**
@@ -1462,32 +1461,37 @@ const DB = {
     this.saveNotifications(list);
   },
 
-  // ---- Authentification (simulation navigateur, voir avertissement sur ROLES) ----
+  // ---- Authentification réelle (Supabase Auth, voir supabase-client.js — remplace la simulation
+  // navigateur précédente, qui comparait un mot de passe en clair stocké dans localStorage) ----
+
+  _currentEmployeeId: null,
 
   getCurrentUser() {
-    let session;
-    try {
-      session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-    } catch (err) {
-      console.error('Session corrompue dans sessionStorage, déconnexion.', err);
-      return null;
-    }
-    if (!session) return null;
-    return this.getEmployeeById(session.employeeId);
+    if (!this._currentEmployeeId) return null;
+    return this.getEmployeeById(this._currentEmployeeId);
   },
 
   isLoggedIn() {
-    return this.getCurrentUser() !== null;
+    return this._currentEmployeeId !== null;
   },
 
-  login(email, password) {
-    // §36/§9.6 : une entreprise suspendue ou résiliée par BERTOLIS ne doit plus permettre la
-    // connexion. "Impayé" reste volontairement non bloquant (période de grâce implicite, comme la
-    // plupart des SaaS réels) — seuls suspendu/résilié bloquent. Ne touche à aucun compteur de
-    // tentatives échouées : ce n'est pas un mauvais mot de passe, c'est l'entreprise qui est bloquée.
-    const company = this.getCurrentCompany();
-    const statutAbonnement = company && company.abonnement && company.abonnement.statut;
+  /** Point d'entrée asynchrone (le seul de toute l'authentification) : connexion Supabase Auth +
+   * rapatriement complet de l'entreprise dans le cache mémoire. Une fois résolu, TOUT le reste de
+   * l'app (getCurrentUser, getEmployees, etc.) reste synchrone comme avant — voir le plan de
+   * migration (stratégie "cache local optimiste"). */
+  async login(email, password) {
+    const authResult = await window.SupabaseSync.signIn(email, password);
+    if (!authResult.success) {
+      return { success: false, error: 'Email ou mot de passe incorrect.' };
+    }
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (!company) {
+      await window.SupabaseSync.signOut();
+      return { success: false, error: 'Aucun salarié associé à ce compte.' };
+    }
+    const statutAbonnement = company.abonnement && company.abonnement.statut;
     if (statutAbonnement === 'suspendu' || statutAbonnement === 'resilie') {
+      await window.SupabaseSync.signOut();
       return {
         success: false,
         error: statutAbonnement === 'resilie'
@@ -1496,73 +1500,69 @@ const DB = {
       };
     }
 
-    const list = this.getEmployees();
-    const index = list.findIndex(e => e.email.toLowerCase() === (email || '').toLowerCase().trim());
-    if (index === -1) return { success: false, error: 'Email ou mot de passe incorrect.' };
-
-    const employee = list[index];
-    if (employee.verrouille) {
-      return { success: false, error: 'Compte verrouillé après 5 tentatives échouées. Utilisez « Mot de passe oublié ? » pour le réinitialiser.' };
-    }
-    if (employee.motDePasse !== password) {
-      list[index].tentativesEchouees = (employee.tentativesEchouees || 0) + 1;
-      list[index].verrouille = list[index].tentativesEchouees >= 5;
-      this.saveEmployees(list);
-      this.logAudit('Connexion', 'Session', `Échec (${list[index].tentativesEchouees}/5) — ${employee.prenom} ${employee.nom}`);
-      return {
-        success: false,
-        error: list[index].verrouille
-          ? 'Compte verrouillé après 5 tentatives échouées. Utilisez « Mot de passe oublié ? » pour le réinitialiser.'
-          : `Mot de passe incorrect (tentative ${list[index].tentativesEchouees}/5).`
-      };
-    }
-
-    list[index].tentativesEchouees = 0;
-    this.saveEmployees(list);
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ employeeId: employee.id }));
+    this._currentEmployeeId = company._currentEmployeeId;
+    this._companiesCache = [company];
+    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+    const employee = this.getEmployeeById(this._currentEmployeeId);
     this.logAudit('Connexion', 'Session', `${employee.prenom} ${employee.nom} (${ROLE_LABELS[employee.role] || employee.role})`);
     return { success: true, employee };
   },
 
-  logout() {
+  async logout() {
     const user = this.getCurrentUser();
-    sessionStorage.removeItem(SESSION_KEY);
     if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
+    await window.SupabaseSync.signOut();
+    this._currentEmployeeId = null;
+    this._companiesCache = null;
   },
 
-  changePassword(employeeId, currentPassword, newPassword) {
-    const employee = this.getEmployeeById(employeeId);
-    if (!employee || employee.motDePasse !== currentPassword) {
-      return { success: false, error: 'Mot de passe actuel incorrect.' };
-    }
+  /** Restaure la session au chargement de la page si un jeton Supabase valide existe encore
+   * (persisté par le client Supabase lui-même dans son propre coin de localStorage) — évite de
+   * forcer une reconnexion à chaque rafraîchissement de page. Retourne true si une session a bien
+   * été restaurée (auquel cas l'appelant peut passer directement à showApp()). */
+  async restoreSession() {
+    const session = await window.SupabaseSync.getSession();
+    if (!session) return false;
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (!company) return false;
+    this._currentEmployeeId = company._currentEmployeeId;
+    this._companiesCache = [company];
+    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+    return true;
+  },
+
+  /** Vérifie l'ancien mot de passe en retentant une connexion (l'API Supabase Auth n'expose pas de
+   * simple "vérifier le mot de passe actuel" sans redemander une authentification complète). */
+  async changePassword(employeeId, currentPassword, newPassword) {
     if (!newPassword || newPassword.length < 6) {
       return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' };
     }
-    const list = this.getEmployees();
-    const index = list.findIndex(e => e.id === employeeId);
-    list[index].motDePasse = newPassword;
-    this.saveEmployees(list);
+    const employee = this.getEmployeeById(employeeId);
+    const verify = await window.SupabaseSync.signIn(employee.email, currentPassword);
+    if (!verify.success) return { success: false, error: 'Mot de passe actuel incorrect.' };
+    const { error } = await window.SupabaseSync.updatePassword(newPassword);
+    if (error) return { success: false, error: error.message };
     this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom}`);
     return { success: true };
   },
 
-  /** Simule l'envoi d'un email : en production ce lien partirait par email, ici il est renvoyé directement. */
-  requestPasswordReset(email) {
-    const employee = this.getEmployees().find(e => e.email.toLowerCase() === (email || '').toLowerCase().trim());
-    if (!employee) return { success: false, error: 'Aucun compte associé à cet email.' };
-    const token = generateId('reset');
-    this.updateEmployee(employee.id, { resetToken: token });
-    return { success: true, token, employeeName: `${employee.prenom} ${employee.nom}` };
+  /** Envoie un vrai email de réinitialisation via Supabase Auth (fini le token affiché directement
+   * à l'écran de la simulation précédente — l'utilisateur doit maintenant cliquer le lien reçu par
+   * email, qui ramène sur cette même page en mode "récupération", voir bindGlobalEvents/app.js). */
+  async requestPasswordReset(email) {
+    const { error } = await window.SupabaseSync.sendPasswordResetEmail(email);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
-  resetPasswordWithToken(token, newPassword) {
-    const employee = this.getEmployees().find(e => e.resetToken === token);
-    if (!employee) return { success: false, error: 'Lien de réinitialisation invalide ou expiré.' };
+  /** N'est valide que si l'utilisateur est arrivé via le lien de récupération envoyé par email
+   * (Supabase crée alors une session temporaire "recovery" détectée par onAuthStateChange). */
+  async resetPasswordWithToken(_token, newPassword) {
     if (!newPassword || newPassword.length < 6) {
       return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' };
     }
-    this.updateEmployee(employee.id, { motDePasse: newPassword, resetToken: null, tentativesEchouees: 0, verrouille: false });
-    this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom} (réinitialisé)`);
+    const { error } = await window.SupabaseSync.updatePassword(newPassword);
+    if (error) return { success: false, error: 'Lien de réinitialisation invalide ou expiré.' };
     return { success: true };
   }
 };
