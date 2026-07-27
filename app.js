@@ -172,6 +172,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindNotificationEvents();
   bindUserMenuEvents();
 
+  // Le module supabase-client.js charge son propre import réseau (CDN) avant de poser
+  // window.SupabaseSync — si ça échoue (réseau lent, extension de navigateur, etc.), mieux vaut un
+  // message d'erreur clair qu'un écran de connexion silencieusement figé (aucun bouton ne répond).
+  if (!window.SupabaseSync) {
+    document.getElementById('login-root').style.display = 'flex';
+    document.getElementById('login-root').innerHTML = `
+      <div class="login-card">
+        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <p class="login-error" role="alert">Impossible de charger le module de connexion (problème réseau ou extension de navigateur). Rechargez la page ; si le problème persiste, essayez sans bloqueur de publicité/traqueurs.</p>
+        <button type="button" class="btn btn-primary" style="width: 100%;" onclick="location.reload()">Recharger la page</button>
+      </div>
+    `;
+    return;
+  }
+
   window.SupabaseSync.onPasswordRecovery(() => {
     state.authView = 'reset';
     state.authError = '';
