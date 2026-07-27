@@ -86,9 +86,10 @@ function getInitialViewState() {
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
     paieTab: 'preparation', // Sprint SIRH premium §6 : préparation/anomalies affichée par défaut, avant l'export
-    authView: 'login', // 'login' | 'forgot' | 'reset'
+    authView: 'login', // 'login' | 'forgot' | 'reset' | 'signup'
     authError: '',
     pendingReset: null, // { token, employeeName } après une demande de réinitialisation
+    pendingSignupConfirmation: null, // email en attente de confirmation après DB.signUp()
     onboarding: null, // brouillon de l'assistant de première installation, voir openOnboardingWizard()
     planningView: 'semaine', // 'semaine' | 'mois' | 'annee'
     planningFilters: { service: '' },
@@ -308,6 +309,8 @@ function renderLoginScreen() {
     root.innerHTML = renderForgotPasswordView();
   } else if (state.authView === 'reset') {
     root.innerHTML = renderResetPasswordView();
+  } else if (state.authView === 'signup') {
+    root.innerHTML = renderSignupView();
   } else if (state.authView === 'bertolis') {
     root.innerHTML = renderBertolisLoginView();
   } else {
@@ -335,8 +338,52 @@ function renderLoginView() {
         <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
       </form>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
+      <button type="button" class="btn-link" id="btn-goto-signup">Première connexion ? Créer mon compte</button>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
+    </div>
+  `;
+}
+
+/** Réservé aux salariés dont la fiche existe déjà dans l'entreprise (créée par RH/manager) — voir
+ * DB.signUp() : la liaison au compte se fait automatiquement côté serveur via l'email. */
+function renderSignupView() {
+  if (state.pendingSignupConfirmation) {
+    return `
+      <div class="login-card">
+        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <h1>Créer mon compte</h1>
+        <p class="text-muted">
+          Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
+          Vérifiez votre boîte mail et cliquez sur le lien de confirmation avant de vous connecter.
+        </p>
+        <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="login-card">
+      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <h1>Créer mon compte</h1>
+      <p class="text-muted">Votre fiche salarié doit déjà exister dans l'entreprise (créée par RH ou votre manager) — utilisez le même email.</p>
+      <form id="signup-form">
+        <div class="form-field">
+          <label for="f-signup-email">Email professionnel</label>
+          <input class="input" type="email" id="f-signup-email" required autocomplete="username">
+        </div>
+        <div class="form-field">
+          <label for="f-signup-password">Mot de passe</label>
+          <input class="input" type="password" id="f-signup-password" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="form-field">
+          <label for="f-signup-password-confirm">Confirmation</label>
+          <input class="input" type="password" id="f-signup-password-confirm" required minlength="6" autocomplete="new-password">
+        </div>
+        ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
+        <button type="submit" class="btn btn-primary" id="btn-signup-submit" style="width: 100%;">Créer mon compte</button>
+      </form>
+      <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
     </div>
   `;
 }
@@ -474,7 +521,36 @@ function bindLoginScreenEvents() {
     state.authView = 'login';
     state.authError = '';
     state.pendingReset = null;
+    state.pendingSignupConfirmation = null;
     renderLoginScreen();
+  });
+
+  const gotoSignupBtn = document.getElementById('btn-goto-signup');
+  if (gotoSignupBtn) gotoSignupBtn.addEventListener('click', () => {
+    state.authView = 'signup';
+    state.authError = '';
+    renderLoginScreen();
+  });
+
+  const signupForm = document.getElementById('signup-form');
+  if (signupForm) signupForm.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const email = document.getElementById('f-signup-email').value;
+    const p1 = document.getElementById('f-signup-password').value;
+    const p2 = document.getElementById('f-signup-password-confirm').value;
+    if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
+    const submitBtn = document.getElementById('btn-signup-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Création...';
+    const result = await authRepository.signUp(email, p1);
+    if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
+    if (result.needsEmailConfirmation) {
+      state.pendingSignupConfirmation = email;
+      state.authError = '';
+      renderLoginScreen();
+      return;
+    }
+    showApp();
   });
 
   const forgotForm = document.getElementById('forgot-password-form');

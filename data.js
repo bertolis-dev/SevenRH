@@ -1585,6 +1585,34 @@ const DB = {
     return { success: true, employee };
   },
 
+  /** Crée un compte de connexion pour un salarié dont la fiche existe déjà (créée par RH/manager
+   * via Salariés > Nouveau salarié) — la liaison auth_user_id <-> employee se fait automatiquement
+   * côté serveur (trigger, voir 0005_signup_auto_link.sql), pas ici. */
+  async signUp(email, password) {
+    if (!password || password.length < 6) {
+      return { success: false, error: 'Le mot de passe doit contenir au moins 6 caractères.' };
+    }
+    const authResult = await window.SupabaseSync.signUp(email, password);
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+    if (authResult.needsEmailConfirmation) {
+      return { success: true, needsEmailConfirmation: true };
+    }
+    // Certains projets Supabase désactivent la confirmation par email : une session existe déjà,
+    // on peut enchaîner directement comme un login normal.
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (!company) {
+      return { success: false, error: 'Compte créé, mais aucune fiche salarié ne correspond à cet email. Contactez votre RH.' };
+    }
+    this._currentEmployeeId = company._currentEmployeeId;
+    this._companiesCache = [company];
+    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+    const employee = this.getEmployeeById(this._currentEmployeeId);
+    this.logAudit('Création', 'Compte de connexion', `${employee.prenom} ${employee.nom}`);
+    return { success: true, employee };
+  },
+
   async logout() {
     const user = this.getCurrentUser();
     if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
@@ -1737,6 +1765,7 @@ const authRepository = {
   getCurrentUser: () => DB.getCurrentUser(),
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
+  signUp: (email, password) => DB.signUp(email, password),
   logout: () => DB.logout(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),

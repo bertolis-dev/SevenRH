@@ -361,6 +361,16 @@ async function signIn(email, password) {
   return { success: true, session: data.session };
 }
 
+/** Crée un vrai compte Supabase Auth — un trigger côté serveur (voir migration
+ * 0005_signup_auto_link.sql) relie automatiquement ce compte à la fiche salarié existante dont
+ * l'email correspond (aucune fiche = le compte est créé mais restera "orphelin", voir data.js). */
+async function signUp(email, password) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) return { success: false, error: error.message };
+  // Selon la config du projet (confirmation email activée ou non), une session peut déjà exister.
+  return { success: true, session: data.session, needsEmailConfirmation: !data.session };
+}
+
 async function signOut() {
   await supabase.auth.signOut();
 }
@@ -521,7 +531,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signUp, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
