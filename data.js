@@ -1124,6 +1124,11 @@ const DB = {
       return { success: false, error: 'Ces nouvelles dates chevauchent une demande de télétravail active de ce salarié.' };
     }
 
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee.joursTravailles);
+    if (nbJours <= 0) {
+      return { success: false, error: 'Ces nouvelles dates ne couvrent aucun jour travaillé pour ce salarié.' };
+    }
+
     const ancienType = this.getLeaveTypeById(request.typeId);
     const regularisations = (request.regularisations || []).concat([{
       date: new Date().toISOString(),
@@ -1134,7 +1139,7 @@ const DB = {
     }]);
     list[index] = Object.assign({}, request, {
       typeId, dateDebut, dateFin, demiJournee: demi,
-      nbJours: computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee.joursTravailles),
+      nbJours,
       regularisations,
       dateModification: new Date().toISOString()
     });
@@ -2198,7 +2203,10 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
     if (!(employee.joursTravailles || []).includes(dayLabels[date.getDay()])) continue;
     if (holidays.some(h => h.date === dateStr)) continue;
 
-    const onLeave = employeeLeaves.some(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    // Une demi-journée (matin OU après-midi, sur une date isolée) ne prive pas du ticket restaurant
+    // du jour — seule une absence sur la journée entière compte comme "non travaillé" ici.
+    const onLeave = employeeLeaves.some(r =>
+      dateStr >= r.dateDebut && dateStr <= r.dateFin && !(r.demiJournee && r.dateDebut === r.dateFin));
     if (onLeave) continue;
 
     const remote = employeeTelework.some(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
@@ -2359,8 +2367,20 @@ function calculateAcquisition(employee, leaveType, refDate) {
  * s'ancrer sur un type "connu" (RTT/Congés payés/Maladie) plutôt que sur un id, qui varie d'une
  * entreprise à l'autre. Un seul endroit pour cet idiome, repris par calculateAbsenteeismRate,
  * getLeaveBalance et getPaieRows (app.js) — auparavant recopié séparément à chacun de ces 3 sites. */
+/** Rapprochement tolérant par nom (insensible à la casse/aux espaces, accepte un suffixe du type
+ * "RTT 2026") : un simple `===` cassait silencieusement dès qu'une entreprise renommait légèrement
+ * son type (ex. "RTT" → "RTT 2026" lors d'un changement de millésime), faisant disparaître ces
+ * jours de la préparation de paie sans aucune anomalie signalée. Reste une heuristique par nom, pas
+ * un vrai identifiant stable — un renommage complet (ex. "RTT" → "Récupération") échapperait
+ * toujours à ce rapprochement ; seul un champ dédié réglerait ça durablement. */
+function leaveTypeNameMatches(nom, target) {
+  const n = (nom || '').trim().toLowerCase();
+  const t = target.trim().toLowerCase();
+  return n === t || n.startsWith(t + ' ');
+}
+
 function getLeaveTypeIdsByName(leaveTypes, nom) {
-  return leaveTypes.filter(t => t.nom === nom).map(t => t.id);
+  return leaveTypes.filter(t => leaveTypeNameMatches(t.nom, nom)).map(t => t.id);
 }
 
 /** Solde d'un salarié pour un type de congé : acquis, pris, en attente, disponible.
@@ -2383,12 +2403,17 @@ function getLeaveTypeIdsByName(leaveTypes, nom) {
  * getPaieAnomalies, renderEmployeeBalances) doit le passer pour éviter de re-fetch/re-trier la
  * liste complète à CHAQUE appel — sinon on retombe sur DB.getLeaveTypes() comme avant. Doit rester
  * la liste COMPLÈTE (pas une liste déjà filtrée par actif/visibleSalarie) : un type "autre absence"
- * désactivé depuis doit quand même compter dans l'historique du solde. */
-function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes) {
-  const acquis = calculateAcquisition(employee, leaveType);
+ * désactivé depuis doit quand même compter dans l'historique du solde.
+ *
+ * `refDate` est optionnel (défaut : aujourd'hui, comportement inchangé pour les écrans de solde
+ * "en direct"). getPaieAnomalies doit impérativement passer la fin du mois qu'on prépare, sinon le
+ * solde évalué est toujours celui d'AUJOURD'HUI — préparer la paie de mars en juillet vérifierait
+ * alors le solde de juillet, pas celui de mars. */
+function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate) {
+  const acquis = calculateAcquisition(employee, leaveType, refDate);
   const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
 
-  const deducteurField = leaveType.nom === 'RTT' ? 'deduireRTT' : leaveType.nom === 'Congés payés' ? 'deduireCP' : null;
+  const deducteurField = leaveTypeNameMatches(leaveType.nom, 'RTT') ? 'deduireRTT' : leaveTypeNameMatches(leaveType.nom, 'Congés payés') ? 'deduireCP' : null;
   const typeIds = new Set([leaveType.id]);
   if (deducteurField) {
     (allLeaveTypes || DB.getLeaveTypes()).filter(t => t.id !== leaveType.id && t[deducteurField]).forEach(t => typeIds.add(t.id));
@@ -2518,6 +2543,19 @@ function seedLeaveTypes() {
 // Calendrier — jours fériés, vacances scolaires
 // ---------------------------------------------------------------------------
 
+/** `new Date("YYYY-MM-DD")` parse en UTC minuit (spécification ECMA-262), alors que .getDate()/
+ * .setDate()/.getFullYear() etc. lisent/écrivent en heure LOCALE — pour un fuseau en retard sur
+ * UTC, ce décalage peut faire lire la veille (ex. UTC minuit le 10 devient 19h locale le 9),
+ * provoquant un jour de décalage dans tout calcul de date qui mélange les deux. Cette fonction
+ * construit directement une date locale à partir des composants texte, sans jamais passer par
+ * l'interprétation UTC de la chaîne — à utiliser à la place de `new Date(dateStr)` partout où
+ * dateStr est un "YYYY-MM-DD" destiné à un calcul calendaire local (ajout/soustraction de jours,
+ * calcul de semaine...). */
+function parseISODateLocal(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function toISODate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -2533,7 +2571,7 @@ function addDays(date, days) {
 
 /** Les 7 dates (Lundi → Dimanche) de la semaine contenant la date donnée. */
 function getWeekDatesContaining(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseISODateLocal(dateStr);
   const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
   return Array.from({ length: 7 }, (_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
 }

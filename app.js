@@ -682,7 +682,11 @@ function renderUserMenuPanel() {
  * doit exposer ou qui apportent une valeur dans ce format. */
 function exportMyDataRGPD() {
   const user = authRepository.getCurrentUser();
-  const employee = employeeRepository.getById(user.id);
+  const employee = user ? employeeRepository.getById(user.id) : null;
+  if (!employee) {
+    showToast('Impossible de charger vos données pour le moment. Réessayez dans un instant.', 'error');
+    return;
+  }
   const { motDePasse, resetToken, tentativesEchouees, verrouille, permissionsOverrides, ...salarie } = employee;
 
   const data = {
@@ -1484,17 +1488,19 @@ function syncNotifications() {
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
   });
 
-  getUpcomingBirthdays(7).forEach(x => {
+  // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
+  // widgets d'aperçu du tableau de bord) — sinon le 6e salarié et au-delà n'est simplement jamais notifié.
+  getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`birthday-${x.employee.id}-${x.next.getFullYear()}`, '🎂', 'Anniversaire à venir',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  getUpcomingContractEnds(14).forEach(e => {
+  getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, '📄', 'Fin de contrat proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
-  getUpcomingProbationEnds(14).forEach(e => {
+  getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, '📄', 'Fin de période d\'essai proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
@@ -1978,7 +1984,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
   if (managesEquipe) {
     const congesEnAttente = pendingFor(leaveRepository);
     const teletravailEnAttente = pendingFor(teleworkRepository);
-    const contractEnds = getUpcomingContractEnds(60, employees);
+    const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
     if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER });
     if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'teletravail', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     if (contractEnds.length) items.push({ icon: '📄', label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
@@ -2281,7 +2287,7 @@ function getTicketsCostTrend(employees) {
   return points;
 }
 
-function getUpcomingBirthdays(daysAhead = 60, employees) {
+function getUpcomingBirthdays(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateNaissance);
   const now = new Date();
   // Comparé à minuit (pas l'instant courant) : sinon, le jour de son anniversaire, `next` (calculé à
@@ -2298,29 +2304,29 @@ function getUpcomingBirthdays(daysAhead = 60, employees) {
     })
     .filter(x => x.daysUntil <= daysAhead)
     .sort((a, b) => a.daysUntil - b.daysUntil)
-    .slice(0, 5);
+    .slice(0, limit);
 }
 
-function getUpcomingContractEnds(daysAhead = 60, employees) {
+function getUpcomingContractEnds(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinContrat);
   const todayStr = toISODate(new Date());
   const limitStr = toISODate(addDays(new Date(), daysAhead));
   return employees
     .filter(e => e.dateFinContrat >= todayStr && e.dateFinContrat <= limitStr)
     .sort((a, b) => a.dateFinContrat.localeCompare(b.dateFinContrat))
-    .slice(0, 5);
+    .slice(0, limit);
 }
 
 /** Même principe que getUpcomingContractEnds, pour la fin de période d'essai — champ existant
  * depuis le début (formulaire + fiche salarié) mais jamais consulté par le moteur de notifications. */
-function getUpcomingProbationEnds(daysAhead = 60, employees) {
+function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinPeriodeEssai);
   const todayStr = toISODate(new Date());
   const limitStr = toISODate(addDays(new Date(), daysAhead));
   return employees
     .filter(e => e.dateFinPeriodeEssai >= todayStr && e.dateFinPeriodeEssai <= limitStr)
     .sort((a, b) => a.dateFinPeriodeEssai.localeCompare(b.dateFinPeriodeEssai))
-    .slice(0, 5);
+    .slice(0, limit);
 }
 
 // ---- Rendu des graphiques SVG (aucune librairie externe) ----
@@ -2877,6 +2883,29 @@ function buildOrgTree(employees) {
       childrenOf.get(primaryManagerId).push(e);
     } else {
       roots.push(e);
+    }
+  });
+
+  // Défense contre un cycle manager<->manager (ex. A manager de B ET B manager de A) : sans ça, ni
+  // l'un ni l'autre n'est jamais atteignable depuis `roots` en suivant childrenOf, et ils
+  // disparaissent silencieusement de l'organigramme. Tout salarié resté hors d'atteinte devient une
+  // racine supplémentaire — et est RETIRÉ de la liste des enfants de son manager déclaré (qui fait
+  // partie du même cycle), sinon le rendu récursif de l'arbre boucle indéfiniment entre les membres
+  // du cycle (chacun listé à la fois comme racine et comme descendant de l'autre).
+  const reachable = new Set();
+  const stack = [...roots];
+  while (stack.length) {
+    const e = stack.pop();
+    if (reachable.has(e.id)) continue;
+    reachable.add(e.id);
+    (childrenOf.get(e.id) || []).forEach(child => stack.push(child));
+  }
+  employees.forEach(e => {
+    if (reachable.has(e.id)) return;
+    roots.push(e);
+    const primaryManagerId = (e.managerIds || [])[0];
+    if (primaryManagerId && childrenOf.has(primaryManagerId)) {
+      childrenOf.set(primaryManagerId, childrenOf.get(primaryManagerId).filter(c => c.id !== e.id));
     }
   });
 
@@ -4063,6 +4092,7 @@ function buildRequestTimeline(request) {
 }
 
 function openRequestHistoryModal(request) {
+  if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const timeline = buildRequestTimeline(request);
   const html = `
     <div class="modal modal-small">
@@ -4109,6 +4139,7 @@ function bindHistoryButtons(repo) {
 
 function openProlongerModal(requestId) {
   const request = leaveRepository.getById(requestId);
+  if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(request.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
 
@@ -4161,6 +4192,7 @@ function openProlongerModal(requestId) {
  * une régularisation mélangerait des règles de saisie différentes (§15) sans raison claire. */
 function openRegulariserModal(requestId) {
   const request = leaveRepository.getById(requestId);
+  if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(request.employeeId);
   const currentType = leaveTypeRepository.getLeaveTypeById(request.typeId);
   // Inclut le type ACTUEL même s'il a été désactivé depuis (sinon le select retombe sur le fallback
@@ -4298,6 +4330,7 @@ function bindCongesDemandesEvents(categorie = 'conge') {
 
 function openLeaveAttestationModal(requestId) {
   const r = leaveRepository.getById(requestId);
+  if (!r) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
@@ -4352,6 +4385,11 @@ function auditLabelForEmployee(employeeId) {
 
 function handleApproveRequest(id) {
   const request = leaveRepository.getById(id);
+  // Défense en profondeur : le bouton n'est déjà rendu que si canActOnRequestFor(request) est vrai,
+  // mais cette fonction reste appelable directement (devtools/console) — revérifie ici. La vraie
+  // barrière est de toute façon côté serveur (policies RLS Supabase), mais éviter une mise à jour
+  // optimiste locale trompeuse (que Supabase rejetterait silencieusement) reste plus honnête pour l'UI.
+  if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
   leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
   auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
   showToast('Demande validée.');
@@ -4360,6 +4398,7 @@ function handleApproveRequest(id) {
 
 function handleRefuseRequest(id) {
   const request = leaveRepository.getById(id);
+  if (!request || !canRefuserRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
@@ -4376,6 +4415,7 @@ function handleRefuseRequest(id) {
 
 function handleCancelRequest(id) {
   const request = leaveRepository.getById(id);
+  if (!request || !canManageRequestFor(request.employeeId)) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Annuler cette demande ?',
     message: 'Les jours seront recrédités sur le compteur du salarié.',
@@ -4701,9 +4741,18 @@ function submitLeaveRequestForm(evt) {
   }
 
   if (!type.autoriserPlusieursDemandes) {
-    const overlapping = leaveRepository.getAll().some(r =>
-      r.employeeId === employeeId && r.typeId === typeId && r.statut !== 'Refusé' && r.statut !== 'Annulé' &&
-      r.dateDebut <= dateFin && r.dateFin >= dateDebut);
+    const bothSingleDay = dateDebut === dateFin;
+    const overlapping = leaveRepository.getAll().some(r => {
+      if (r.employeeId !== employeeId || r.typeId !== typeId) return false;
+      if (r.statut === 'Refusé' || r.statut === 'Annulé') return false;
+      if (!(r.dateDebut <= dateFin && r.dateFin >= dateDebut)) return false;
+      // Même exception que hasConflictingLeaveRequest : deux demi-journées complémentaires (matin +
+      // après-midi) d'une même date isolée ne sont pas un vrai chevauchement.
+      const sameSingleDay = bothSingleDay && r.dateDebut === r.dateFin;
+      if (!sameSingleDay) return true;
+      if (!demiJournee || !r.demiJournee) return true;
+      return demiJournee === r.demiJournee;
+    });
     if (overlapping) {
       showToast(`Une demande "${type.nom}" existe déjà sur une période qui chevauche ces dates.`, 'error');
       return;
@@ -5324,6 +5373,19 @@ const SETTINGS_LISTS = [
   { key: 'categoriesDocuments', label: 'Catégories de documents' }
 ];
 
+/** Avant de retirer une valeur de ces listes de référence, vérifie qu'aucun enregistrement ne la
+ * référence encore — sinon cet enregistrement se retrouve avec une valeur orpheline, invisible
+ * dans tout futur select (même défaut déjà corrigé pour établissements/services/équipes). */
+const SETTINGS_LIST_USAGE_CHECK = {
+  postes: (value) => employeeRepository.getAll().some(e => e.poste === value),
+  conventionsCollectives: (value) => employeeRepository.getAll().some(e => e.conventionCollective === value),
+  statutsPro: (value) => employeeRepository.getAll().some(e => e.statutPro === value),
+  typesContrat: (value) => employeeRepository.getAll().some(e => e.typeContrat === value),
+  forfaits: (value) => employeeRepository.getAll().some(e => e.forfait === value),
+  categoriesFrais: (value) => expenseRepository.getAll().some(n => n.categorie === value),
+  categoriesDocuments: (value) => documentRepository.getAll().some(d => d.categorie === value)
+};
+
 function renderParametres() {
   const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
   if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
@@ -5931,11 +5993,17 @@ function bindParametresListesEvents() {
     showToast('Chaîne de validation des notes de frais mise à jour.');
   });
 
-  document.querySelectorAll('.chip-remove').forEach(btn => {
+  document.querySelectorAll('.chip-remove[data-list-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
       const key = btn.dataset.listKey;
       const index = Number(btn.dataset.index);
+      const value = settings[key][index];
+      const checkUsage = SETTINGS_LIST_USAGE_CHECK[key];
+      if (checkUsage && checkUsage(value)) {
+        showToast(`« ${value} » est encore utilisé et ne peut pas être retiré de la liste.`, 'error');
+        return;
+      }
       settings[key] = settings[key].filter((_, i) => i !== index);
       settingsRepository.saveSettings(settings);
       render();
@@ -6491,13 +6559,20 @@ function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
   const weekday = WEEKDAY_LABELS[(new Date(dateStr).getDay() + 6) % 7];
   if (!(employee.joursTravailles || []).includes(weekday)) return { heures: 0, label: '—', level: 'off' };
 
-  const onLeave = leaveRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-  if (onLeave) return { heures: 0, label: '🏖️', level: 'leave' };
+  const leaveToday = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+  // Une demi-journée (matin OU après-midi, sur une date isolée) ne doit faire disparaître que la
+  // moitié concernée des heures, pas la journée entière.
+  const isHalfDayLeave = Boolean(leaveToday && leaveToday.demiJournee && leaveToday.dateDebut === leaveToday.dateFin);
+  if (leaveToday && !isHalfDayLeave) return { heures: 0, label: '🏖️', level: 'leave' };
 
-  const heures = round2(timeRangeToHours(employee.horaireMatinDebut, employee.horaireMatinFin) +
-    timeRangeToHours(employee.horaireApresMidiDebut, employee.horaireApresMidiFin));
+  const matinHeures = timeRangeToHours(employee.horaireMatinDebut, employee.horaireMatinFin);
+  const apremHeures = timeRangeToHours(employee.horaireApresMidiDebut, employee.horaireApresMidiFin);
+  const heures = round2(isHalfDayLeave
+    ? (leaveToday.demiJournee === 'matin' ? apremHeures : matinHeures)
+    : matinHeures + apremHeures);
   const onTelework = teleworkRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-  return { heures, label: `${formatNumberFR(heures)} h${onTelework ? ' 💻' : ''}`, level: onTelework ? 'remote' : 'office' };
+  const label = `${formatNumberFR(heures)} h${isHalfDayLeave ? ' 🏖️' : ''}${onTelework ? ' 💻' : ''}`;
+  return { heures, label, level: isHalfDayLeave ? 'leave' : (onTelework ? 'remote' : 'office') };
 }
 
 /** Sprint SIRH premium §3 : "Créer trois vues : Jour / Semaine / Mois" pour le planning d'horaires
@@ -6818,13 +6893,15 @@ function bindPlanningDragEvents() {
 }
 
 function handlePlanningDrop(dragData, targetDate) {
-  const deltaJours = daysBetween(new Date(dragData.dateStr), new Date(targetDate));
+  // parseISODateLocal (pas `new Date(string)`, qui parse en UTC alors que getDate()/setDate()
+  // lisent/écrivent en heure locale — décalage d'un jour possible selon le fuseau) : voir data.js.
+  const deltaJours = daysBetween(parseISODateLocal(dragData.dateStr), parseISODateLocal(targetDate));
 
   if (dragData.requestType === 'leave') {
     const request = leaveRepository.getById(dragData.requestId);
     if (!request) return;
-    const nouvelleDateDebut = toISODate(addDays(new Date(request.dateDebut), deltaJours));
-    const nouvelleDateFin = toISODate(addDays(new Date(request.dateFin), deltaJours));
+    const nouvelleDateDebut = toISODate(addDays(parseISODateLocal(request.dateDebut), deltaJours));
+    const nouvelleDateFin = toISODate(addDays(parseISODateLocal(request.dateFin), deltaJours));
     const result = leaveRepository.regulariser(dragData.requestId, {
       typeId: request.typeId, dateDebut: nouvelleDateDebut, dateFin: nouvelleDateFin,
       demiJournee: request.demiJournee, motif: 'Déplacé par glisser-déposer (Planning)'
@@ -6835,8 +6912,8 @@ function handlePlanningDrop(dragData, targetDate) {
   } else if (dragData.requestType === 'telework') {
     const request = teleworkRepository.getById(dragData.requestId);
     if (!request) return;
-    const nouvelleDateDebut = toISODate(addDays(new Date(request.dateDebut), deltaJours));
-    const nouvelleDateFin = toISODate(addDays(new Date(request.dateFin), deltaJours));
+    const nouvelleDateDebut = toISODate(addDays(parseISODateLocal(request.dateDebut), deltaJours));
+    const nouvelleDateFin = toISODate(addDays(parseISODateLocal(request.dateFin), deltaJours));
     const result = moveTeleworkRequest(dragData.requestId, nouvelleDateDebut, nouvelleDateFin);
     if (!result.success) { showToast(result.error, 'error'); return; }
     showToast('Télétravail déplacé.');
@@ -6981,6 +7058,7 @@ function bindTeletravailDemandesEvents() {
 
 function handleApproveTelework(id) {
   const request = teleworkRepository.getById(id);
+  if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
   teleworkRepository.update(id, advanceWorkflow(request, 'Validé'));
   auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
   showToast('Télétravail validé.');
@@ -6989,6 +7067,7 @@ function handleApproveTelework(id) {
 
 function handleRefuseTelework(id) {
   const request = teleworkRepository.getById(id);
+  if (!request || !canRefuserRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus.',
@@ -7005,6 +7084,7 @@ function handleRefuseTelework(id) {
 
 function handleCancelTelework(id) {
   const request = teleworkRepository.getById(id);
+  if (!request || !canManageRequestFor(request.employeeId)) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Annuler ce télétravail ?',
     message: 'Ce jour redeviendra un jour de présence au bureau.',
@@ -7247,6 +7327,10 @@ function submitTeleworkRequestForm(evt) {
 
   if (hasActiveRequestOverlap(leaveRepository.getAll(), employeeId, dateDebut, dateFin)) {
     showToast('Ce salarié a déjà une demande de congé/absence active sur cette période.', 'error');
+    return;
+  }
+  if (hasActiveRequestOverlap(teleworkRepository.getAll(), employeeId, dateDebut, dateFin)) {
+    showToast('Ce salarié a déjà une autre demande de télétravail active sur cette période.', 'error');
     return;
   }
 
@@ -7494,6 +7578,7 @@ function bindFraisEvents() {
 
 function handleApproveExpense(id) {
   const expense = expenseRepository.getById(id);
+  if (!expense || !canActOnRequestFor(expense, 'frais')) { showToast('Action non autorisée.', 'error'); return; }
   const patch = advanceWorkflow(expense, 'Remboursé');
   expenseRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
@@ -7503,6 +7588,7 @@ function handleApproveExpense(id) {
 
 function handleRefuseExpense(id) {
   const expense = expenseRepository.getById(id);
+  if (!expense || !canRefuserRequestFor(expense, 'frais')) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Refuser cette note de frais ?',
     message: 'Le salarié sera informé du refus.',
@@ -7519,6 +7605,7 @@ function handleRefuseExpense(id) {
 
 function handleCancelExpense(id) {
   const expense = expenseRepository.getById(id);
+  if (!expense || !canManageRequestFor(expense.employeeId, 'frais')) { showToast('Action non autorisée.', 'error'); return; }
   openConfirm({
     title: 'Annuler cette note de frais ?',
     message: 'La validation sera annulée.',
@@ -7698,6 +7785,7 @@ function submitExpenseForm(evt) {
 
 function openExpenseDetailModal(id) {
   const n = expenseRepository.getById(id);
+  if (!n) { showToast('Cette note de frais n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(n.employeeId);
   const ht = computeMontantHT(n.montantTTC, n.tauxTVA);
   const tva = computeMontantTVA(n.montantTTC, n.tauxTVA);
@@ -7993,7 +8081,7 @@ function getPaieAnomalies(year, month) {
   const anomalies = [];
   employees.forEach(e => {
     congeTypesFinis.forEach(t => {
-      const balance = getLeaveBalance(e, t, allLeaveRequests, leaveTypes);
+      const balance = getLeaveBalance(e, t, allLeaveRequests, leaveTypes, monthEnd);
       if (balance.disponible < 0) {
         anomalies.push({ severity: 'bloquante', type: 'compteur_negatif', employee: e, message: `Solde "${t.nom}" négatif : ${formatDurationFR(balance.disponible)}` });
       }
@@ -8415,7 +8503,7 @@ function openEmployeeModal(id) {
   const isEdit = Boolean(id);
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   const settings = settingsRepository.getSettings();
-  const managers = employeeRepository.getAll().filter(e => e.id !== id);
+  const managers = employeeRepository.getAll().filter(e => e.id !== id && !e.archive);
   const etablissements = etablissementRepository.getAll();
   const etablissementsActifs = etablissements.filter(e => e.actif);
   if (!isEdit && !employee.etablissementId) {
@@ -8587,7 +8675,7 @@ function submitEmployeeForm(evt, id) {
   if ('salaireBrutMensuel' in patch) patch.salaireBrutMensuel = Number(patch.salaireBrutMensuel) || 0;
 
   const emailTaken = employeeRepository.getAll().some(e =>
-    e.id !== id && e.email.toLowerCase().trim() === (patch.email || '').toLowerCase().trim());
+    e.id !== id && (e.email || '').toLowerCase().trim() === (patch.email || '').toLowerCase().trim());
   if (emailTaken) {
     showToast('Cet email est déjà utilisé par un autre salarié — la connexion serait ambiguë.', 'error');
     return;
