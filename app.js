@@ -338,7 +338,7 @@ function renderLoginView() {
         <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
       </form>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
-      <button type="button" class="btn-link" id="btn-goto-signup">Première connexion ? Créer mon compte</button>
+      <button type="button" class="btn-link" id="btn-goto-signup">Créer un compte</button>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
