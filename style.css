@@ -102,6 +102,12 @@ p { margin: 0; line-height: 1.5; }
   flex-direction: column;
   gap: 2px;
   padding: 8px;
+  /* #sidebar est en position:fixed (hauteur = 100vh) : sans ça, un compte avec beaucoup d'entrées
+     de menu (Directeur...) sur un écran court (téléphone) poussait les derniers éléments
+     ("Paramètres"...) sous le bas de l'écran, purement inatteignables (rien ne défilait). */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -607,6 +613,18 @@ p { margin: 0; line-height: 1.5; }
   animation: modal-in 0.15s ease;
 }
 
+/* Beaucoup de modales enveloppent .modal-body + .modal-footer dans un <form> (pour le submit) —
+   ce <form>, en display:block par défaut, casse la chaîne flex column de .modal : il grandit à la
+   hauteur naturelle de son contenu au lieu de participer à la répartition flex, ce qui empêche
+   .modal-body de jamais être contraint et donc de défiler (symptôme vu sur mobile : le bas des
+   formulaires longs devenait inatteignable, aucun scroll nulle part). */
+.modal > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .modal-large { max-width: 760px; }
 .modal-small { max-width: 420px; }
 
@@ -627,6 +645,11 @@ p { margin: 0; line-height: 1.5; }
   padding: 22px;
   overflow-y: auto;
   flex: 1;
+  /* Sans ça, un flex item garde par défaut min-height:auto (= sa hauteur de contenu naturelle),
+     ce qui annule le overflow-y:auto ci-dessus : le corps grandissait au-delà de max-height:90vh
+     de .modal au lieu de défiler dedans — sur mobile (viewport court), le bas des formulaires
+     longs (fiche salarié...) devenait purement inatteignable, aucun scroll possible nulle part. */
+  min-height: 0;
 }
 
 .modal-footer {
@@ -892,6 +915,11 @@ textarea.input { resize: vertical; font-family: inherit; }
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
+  /* La zone tactile agrandie de .chip-remove (::before, inset:-10px) déborde son propre bouton
+     sans rien changer visuellement, mais compte dans le scrollWidth d'un ancêtre en
+     overflow:visible — avec beaucoup de chips (Paramètres notamment), ça rendait toute la page
+     horizontalement "scrollable" de quelques pixels sur un écran étroit. */
+  overflow: hidden;
 }
 
 .chip {
@@ -1430,7 +1458,18 @@ textarea.input { resize: vertical; font-family: inherit; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
-  .notif-panel { width: min(360px, calc(100vw - 28px)); right: -8px; }
+  /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
+     cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
+     position:fixed + left/right ancrés à la fenêtre (pas au petit wrapper de la cloche, qui rendait
+     un simple left/right en absolute inutilisable) garantit une marge de 14px des deux côtés quel
+     que soit l'endroit où la cloche se trouve dans la topbar. */
+  .notif-panel {
+    position: fixed;
+    top: calc(var(--topbar-height) + 8px);
+    left: 14px;
+    right: 14px;
+    width: auto;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1443,6 +1482,13 @@ textarea.input { resize: vertical; font-family: inherit; }
   .settings-lists-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Sur un téléphone, .topbar-user (thème + aide + notifs + compte) prenait à elle seule ~186px
+     sur les ~275px disponibles, ne laissant qu'une barre de recherche d'à peine 80px de large.
+     Resserre l'espacement (la zone tactile agrandie de .btn-icon::before, inset:-10px, reste bien
+     assez grande même avec un espacement réduit) pour rendre la recherche réellement utilisable. */
+  .topbar-user { gap: 6px; }
+  .topbar-user .btn-icon { padding: 2px; }
 }
 
 /* ---------------------------------------------------------------------
