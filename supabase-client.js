@@ -366,7 +366,14 @@ async function signIn(email, password) {
  * correspond, sinon en crée une nouvelle (rôle "salarie" par défaut) à partir de nom/prénom, passés
  * ici en métadonnées du compte (raw_user_meta_data, lu par le trigger). */
 async function signUp(email, password, nom, prenom) {
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { nom, prenom } } });
+  // Sans emailRedirectTo, Supabase renvoie vers l'URL "Site URL" configurée par défaut sur le
+  // projet (souvent http://localhost:3000, jamais mise à jour depuis) — le lien de confirmation
+  // reçu par email pointait donc vers une adresse injoignable ("Safari ne peut pas ouvrir la
+  // page..."). Même correctif que sendPasswordResetEmail ci-dessous, qui l'avait déjà.
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { nom, prenom }, emailRedirectTo: window.location.origin }
+  });
   if (error) return { success: false, error: error.message };
   // Selon la config du projet (confirmation email activée ou non), une session peut déjà exister.
   return { success: true, session: data.session, needsEmailConfirmation: !data.session };
