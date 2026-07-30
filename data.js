@@ -544,9 +544,12 @@ const DB = {
     Object.assign(company, profile);
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Entreprise', profile.raisonSociale || company.raisonSociale);
+    // abonnement est exclu volontairement : depuis la migration 0010, il vit dans sa propre table
+    // (subscriptions), jamais dans ce blob — le repousser ici écrirait une copie obsolète que
+    // personne ne relit plus, mais mieux vaut ne jamais l'y remettre du tout.
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData));
   },
 
@@ -1802,6 +1805,14 @@ const leaveTypeRepository = {
   duplicateLeaveType: (id) => DB.duplicateLeaveType(id),
   deleteLeaveType: (id) => DB.deleteLeaveType(id),
   reorderLeaveType: (id, direction) => DB.reorderLeaveType(id, direction)
+};
+
+/** Paiement Stripe réel (voir supabase/functions/billing) — chaque appel passe par le jeton de
+ * connexion en cours, vérifié côté serveur (permission gererAbonnements) avant toute action. */
+const billingRepository = {
+  checkout: (offre, periodicite) => window.SupabaseSync.invokeBilling('checkout', { offre, periodicite }),
+  portal: () => window.SupabaseSync.invokeBilling('portal', {}),
+  confirm: (sessionId) => window.SupabaseSync.invokeBilling('confirm', { sessionId })
 };
 
 const notificationRepository = {

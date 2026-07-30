@@ -292,6 +292,35 @@ function showApp() {
   themeToggle.classList.add('theme-toggle-inline');
   document.querySelector('.topbar-user').prepend(themeToggle);
   navigateTo('dashboard');
+  handleCheckoutReturn();
+}
+
+/** Retour depuis Stripe Checkout (voir billing/index.ts, success_url/cancel_url) — le webhook
+ * Stripe met déjà à jour l'abonnement en arrière-plan, mais confirmer ici en plus donne un retour
+ * immédiat à l'utilisateur sans dépendre du délai (parfois quelques secondes) du webhook. */
+function handleCheckoutReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const checkout = params.get('checkout');
+  if (!checkout) return;
+  const sessionId = params.get('session_id');
+  history.replaceState({}, '', window.location.pathname);
+
+  if (checkout === 'cancel') {
+    showToast('Paiement annulé.');
+    return;
+  }
+  if (checkout === 'success' && sessionId) {
+    billingRepository.confirm(sessionId).then(async (result) => {
+      if (!result.success) {
+        showToast('Paiement reçu, mais l\'activation a échoué : ' + (result.error || 'réessayez depuis Paramètres.'), 'error');
+        return;
+      }
+      await DB.restoreSession();
+      showToast('Abonnement activé !');
+      state.parametresTab = 'abonnement';
+      navigateTo('parametres');
+    });
+  }
 }
 
 /** Console BERTOLIS (§9.6, §36) — écran totalement séparé de l'app-shell salarié : pas de sidebar,
@@ -5469,7 +5498,9 @@ const SETTINGS_LIST_USAGE_CHECK = {
 
 function renderParametres() {
   const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
+  const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
   if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
+  if (state.parametresTab === 'abonnement' && !canGererAbonnement) state.parametresTab = 'listes';
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
@@ -5477,6 +5508,7 @@ function renderParametres() {
     </div>
     <div class="tabs">
       <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
+      ${canGererAbonnement ? `<button class="tab ${state.parametresTab === 'abonnement' ? 'active' : ''}" data-parametres-tab="abonnement">Abonnement</button>` : ''}
       <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
       <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
       <button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>
@@ -5487,6 +5519,7 @@ function renderParametres() {
     </div>
     <div id="parametres-tab-content">
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
+        : state.parametresTab === 'abonnement' && canGererAbonnement ? renderParametresAbonnement()
         : state.parametresTab === 'etablissements' ? renderParametresEtablissements()
         : state.parametresTab === 'services' ? renderParametresServices()
         : state.parametresTab === 'types-absences' ? renderParametresTypesAbsences()
@@ -5529,6 +5562,7 @@ function bindParametresEvents() {
   });
 
   if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
+  else if (state.parametresTab === 'abonnement') bindParametresAbonnementEvents();
   else if (state.parametresTab === 'etablissements') bindParametresEtablissementsEvents();
   else if (state.parametresTab === 'services') bindParametresServicesEvents();
   else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
@@ -5561,7 +5595,6 @@ function renderParametresEntreprise() {
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
-    ${hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS) ? renderAbonnementCard() : ''}
     <div class="card">
       <div class="view-header-row">
         <div>
@@ -5582,21 +5615,32 @@ function renderParametresEntreprise() {
   `;
 }
 
-/** Aperçu en lecture seule (§36) — la gestion réelle de l'abonnement (changement d'offre,
- * suspension, facturation) est réservée à l'Administrateur BERTOLIS, pas encore construite. */
-function renderAbonnementCard() {
+/** Tarifs affichés (mensuel/annuel, remise ~2 mois offerts sur l'annuel) — doivent correspondre
+ * exactement aux Price ID Stripe configurés dans supabase/functions/billing/index.ts. Offre "essai"
+ * volontairement absente ici : gratuite, jamais "souscrite" via Stripe. */
+const OFFRE_TARIFS = {
+  essentiel: { label: 'Essentiel', mensuel: 29, annuel: 290 },
+  professionnel: { label: 'Professionnel', mensuel: 79, annuel: 790 },
+  premium: { label: 'Premium', mensuel: 149, annuel: 1490 }
+};
+
+/** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing) — remplace
+ * l'ancien aperçu en lecture seule : l'entreprise cliente choisit et paie elle-même son offre,
+ * la gestion (changer d'offre, annuler, moyen de paiement) passe par le portail Stripe hébergé. */
+function renderParametresAbonnement() {
   const company = companyRepository.getCurrent();
   const abo = company.abonnement;
-  if (!abo) return '';
+  if (!abo) return '<p class="text-muted">Abonnement indisponible.</p>';
   const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
   const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted' }[abo.statut] || 'muted';
   const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
   const plafondLabel = offre.nombreSalariesMax === null ? 'illimité' : `${nbSalaries} / ${offre.nombreSalariesMax}`;
+  const dejaAbonne = abo.offre !== 'essai' && abo.statut !== 'resilie';
+  const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
 
   return `
     <div class="card">
-      <h2>Abonnement</h2>
-      <p class="text-muted">Géré par BERTOLIS, l'éditeur du logiciel (§9.6, §36) — aperçu en lecture seule.</p>
+      <h2>Votre abonnement</h2>
       <div class="badge-row" style="margin: 8px 0 12px;">
         <span class="badge badge-info">${escapeHtml(offre.label)}</span>
         <span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[abo.statut] || abo.statut)}</span>
@@ -5605,8 +5649,63 @@ function renderAbonnementCard() {
       ${infoRow('Date de début', formatDate(abo.dateDebut))}
       ${infoRow('Date de renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
       ${infoRow('Salariés actifs', plafondLabel)}
+      ${dejaAbonne ? `<button class="btn btn-secondary" id="btn-gerer-abonnement" style="margin-top: 12px;">Gérer mon abonnement</button>` : ''}
+    </div>
+    <div class="card">
+      <h2>Changer d'offre</h2>
+      <p class="text-muted">Paiement sécurisé par Stripe. Annulation possible à tout moment depuis "Gérer mon abonnement".</p>
+      <div class="tabs" style="margin: 12px 0;">
+        <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
+        <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-abonnement-periodicite="annuel">Annuel (2 mois offerts)</button>
+      </div>
+      <div class="offres-grid">
+        ${Object.entries(OFFRE_TARIFS).map(([key, o]) => `
+          <div class="offre-card ${abo.offre === key ? 'offre-card-active' : ''}">
+            <h3>${escapeHtml(o.label)}</h3>
+            <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
+            ${abo.offre === key && abo.periodicite === periodicite && dejaAbonne
+              ? `<span class="badge badge-success">Offre actuelle</span>`
+              : `<button class="btn btn-primary" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}">Souscrire</button>`}
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
+}
+
+function bindParametresAbonnementEvents() {
+  document.querySelectorAll('[data-abonnement-periodicite]').forEach(btn => {
+    btn.addEventListener('click', () => { state.abonnementPeriodicite = btn.dataset.abonnementPeriodicite; render(); });
+  });
+
+  const gererBtn = document.getElementById('btn-gerer-abonnement');
+  if (gererBtn) gererBtn.addEventListener('click', async () => {
+    gererBtn.disabled = true;
+    gererBtn.textContent = 'Redirection...';
+    const result = await billingRepository.portal();
+    if (!result.success) {
+      showToast(result.error || 'Impossible d\'ouvrir le portail de gestion.', 'error');
+      gererBtn.disabled = false;
+      gererBtn.textContent = 'Gérer mon abonnement';
+      return;
+    }
+    window.location.href = result.url;
+  });
+
+  document.querySelectorAll('[data-souscrire-offre]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Redirection...';
+      const result = await billingRepository.checkout(btn.dataset.souscrireOffre, btn.dataset.souscrirePeriodicite);
+      if (!result.success) {
+        showToast(result.error || 'Impossible de démarrer le paiement.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Souscrire';
+        return;
+      }
+      window.location.href = result.url;
+    });
+  });
 }
 
 function bindParametresEntrepriseEvents() {

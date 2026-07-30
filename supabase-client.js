@@ -81,6 +81,23 @@ function employeeFromRow(row) {
   };
 }
 
+/** Même forme que makeEmptyAbonnement() (data.js) — row est null pour une entreprise pas encore
+ * migrée par 0010 (ne devrait plus arriver après la migration, mais évite un company.abonnement
+ * undefined qui casserait tout appelant qui lit ses champs sans garde). */
+function abonnementFromRow(row) {
+  if (!row) {
+    return { offre: 'essai', periodicite: 'mensuel', statut: 'actif', dateDebut: '', dateRenouvellement: '', nombreSalariesMax: null };
+  }
+  return {
+    offre: row.offre,
+    periodicite: row.periodicite || 'mensuel',
+    statut: row.statut,
+    dateDebut: row.date_debut || '',
+    dateRenouvellement: row.date_renouvellement || '',
+    nombreSalariesMax: row.nombre_salaries_max
+  };
+}
+
 function etablissementFromRow(row) {
   const d = row.data || {};
   return {
@@ -414,7 +431,7 @@ async function hydrateCurrentCompany() {
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
     expensesRes, documentsRes, draftsRes, notificationsRes, favoritesRes,
-    auditLogRes, schoolHolidaysRes, settingsRes
+    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
     supabase.from('employees').select('*').eq('company_id', companyId),
@@ -432,7 +449,8 @@ async function hydrateCurrentCompany() {
     supabase.from('favorites').select('*').eq('company_id', companyId),
     supabase.from('audit_log').select('*').eq('company_id', companyId),
     supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
-    supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle()
+    supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
+    supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle()
   ]);
 
   const company = companyRes.data;
@@ -450,6 +468,10 @@ async function hydrateCurrentCompany() {
     id: company.id,
     raisonSociale: company.raison_sociale,
     ...(company.data || {}),
+    // Toujours après le spread de company.data : abonnement vit désormais dans sa propre table
+    // (migration 0010, jamais dans data) — au cas où une ligne pas encore migrée aurait encore un
+    // data.abonnement obsolète, cette clé explicite gagne toujours.
+    abonnement: abonnementFromRow(subscriptionRes.data),
     etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
     employees: (employeesRes.data || []).map(employeeFromRow),
     services: (servicesRes.data || []).map(serviceFromRow),
@@ -466,6 +488,23 @@ async function hydrateCurrentCompany() {
     brouillons: (draftsRes.data || []).map(draftFromRow),
     _currentEmployeeId: employeeRow.id
   };
+}
+
+/** Appelle la fonction serveur "billing" (Edge Function Supabase) — invoke() du client Supabase
+ * transmet automatiquement le jeton de la session en cours, exactement ce dont has_permission()/
+ * current_company_id() ont besoin côté serveur pour vérifier qui appelle (voir supabase/functions/
+ * billing/index.ts). action : "checkout" | "portal" | "confirm". */
+async function invokeBilling(action, payload) {
+  const { data, error } = await supabase.functions.invoke('billing', { body: { action, ...payload } });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, ...data };
 }
 
 async function updatePassword(newPassword) {
@@ -558,7 +597,7 @@ async function pushClearAuditLog(companyId) {
 
 window.SupabaseSync = {
   signIn, signUp, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
-  updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected,
+  updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
