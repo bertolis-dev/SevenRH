@@ -29,12 +29,13 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Prix Stripe (mode test) → offre/périodicité Seven RH. Les Price ID ne sont pas sensibles, donc
-// pas besoin d'en faire un secret Supabase.
+// Prix Stripe (mode PRODUCTION — voir git blame pour les anciens Price ID de test) →
+// offre/périodicité Seven RH. Les Price ID ne sont pas sensibles, donc pas besoin d'en faire un
+// secret Supabase.
 const PRICE_IDS: Record<string, { mensuel: string; annuel: string }> = {
-  essentiel: { mensuel: "price_1TyqCSCGRqCJoHLtCaR6bnJx", annuel: "price_1TyqCSCGRqCJoHLtbGJCcX0s" },
-  professionnel: { mensuel: "price_1TyqDeCGRqCJoHLtvwxF2KzN", annuel: "price_1TyqDeCGRqCJoHLtvXNqXuCY" },
-  premium: { mensuel: "price_1TyqEQCGRqCJoHLtkoMmhWLO", annuel: "price_1TyqEQCGRqCJoHLtIWqwRdO6" },
+  essentiel: { mensuel: "price_1TzGUpCAcL94JssKUQXchzW2", annuel: "price_1TzGUqCAcL94JssKhPj74tfu" },
+  professionnel: { mensuel: "price_1TzGUlCAcL94JssKETzTuocx", annuel: "price_1TzGUlCAcL94JssKpkRCtXfD" },
+  premium: { mensuel: "price_1TzGUkCAcL94JssKziG5RV4C", annuel: "price_1TzGUlCAcL94JssKD3XSdpN0" },
 };
 
 // Plafond de salariés par offre — reflète OFFRES_BERTOLIS (data.js) pour cette même offre.
