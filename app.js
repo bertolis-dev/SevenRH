@@ -172,7 +172,12 @@ const NAV_ITEMS = [
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
   { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
 
-  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] }
+  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
+  // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
+  // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
+  // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
+  // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
+  { key: 'parametres', label: 'Abonnement', icon: '💳', roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
 ];
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
@@ -5558,7 +5563,10 @@ function bindParametresTypesAbsencesEvents() {
 
 function bindParametresEvents() {
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {
-    btn.addEventListener('click', () => { state.parametresTab = btn.dataset.parametresTab; render(); });
+    // renderSidebar() en plus de render() : "Abonnement" a maintenant sa propre entrée de menu
+    // (même vue "parametres", distinguée par navParams) — sans ça, passer d'un onglet à l'autre ne
+    // met jamais à jour quel item du menu doit rester surligné.
+    btn.addEventListener('click', () => { state.parametresTab = btn.dataset.parametresTab; render(); renderSidebar(); });
   });
 
   if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
