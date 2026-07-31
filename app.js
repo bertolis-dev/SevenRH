@@ -740,16 +740,30 @@ function renderUserMenuPanel() {
   const panel = document.getElementById('user-menu-panel');
   if (!user) { panel.innerHTML = ''; return; }
 
+  // "Abonnement" en plus de sa propre entrée de menu (retour utilisateur : toujours pas facile à
+  // trouver au fond d'une longue liste) — le menu du compte est l'endroit où la quasi-totalité des
+  // SaaS (Stripe lui-même, GitHub, Notion, Slack...) placent la facturation : toujours visible en
+  // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
+  const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
+
   panel.innerHTML = `
     <div class="user-menu-header">
       <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
       <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
     </div>
+    ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">💳 Abonnement</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
   `;
 
+  if (canGererAbonnement) {
+    document.getElementById('btn-user-menu-abonnement').addEventListener('click', () => {
+      document.getElementById('user-menu-panel').classList.remove('open');
+      state.parametresTab = 'abonnement';
+      navigateTo('parametres');
+    });
+  }
   document.getElementById('btn-change-password').addEventListener('click', () => {
     document.getElementById('user-menu-panel').classList.remove('open');
     openChangePasswordModal();
