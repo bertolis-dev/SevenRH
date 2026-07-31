@@ -1240,6 +1240,39 @@ const DB = {
     return { success: true };
   },
 
+  /** § GERER_UTILISATEURS : change le rôle d'un salarié existant (Salarié/Manager/RH/Comptabilité/
+   * Directeur) — jamais sur sa propre fiche (séparation des tâches, même principe que partout
+   * ailleurs dans l'app : on ne s'accorde pas soi-même un droit). Deux garde-fous supplémentaires
+   * réservés au rôle Directeur lui-même, plus sensible que les autres : (1) seul un Directeur peut
+   * attribuer OU retirer ce rôle — sinon un RH avec gererUtilisateurs pourrait se créer un compte
+   * Directeur ou en démettre un ; (2) impossible de retirer le rôle du DERNIER Directeur de
+   * l'entreprise, qui se retrouverait sans personne pour gérer les cas que seul ce rôle couvre
+   * (accorder GERER_ABONNEMENTS, modifier sa propre fiche, etc.). */
+  changerRoleSalarie(employeeId, newRole, actingUserId) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    if (employeeId === actingUserId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle.' };
+    if (!Object.values(ROLES).includes(newRole)) return { success: false, error: 'Rôle invalide.' };
+    if (newRole === employee.role) return { success: false, error: 'Ce salarié a déjà ce rôle.' };
+
+    const actingUser = this.getEmployeeById(actingUserId);
+    const toucheDirecteur = newRole === ROLES.DIRECTEUR || employee.role === ROLES.DIRECTEUR;
+    if (toucheDirecteur && (!actingUser || actingUser.role !== ROLES.DIRECTEUR)) {
+      return { success: false, error: 'Seul un Directeur peut attribuer ou retirer le rôle Directeur.' };
+    }
+    if (employee.role === ROLES.DIRECTEUR && newRole !== ROLES.DIRECTEUR) {
+      const nbDirecteurs = this.getEmployees().filter(e => !e.archive && e.role === ROLES.DIRECTEUR).length;
+      if (nbDirecteurs <= 1) {
+        return { success: false, error: 'Impossible : ce salarié est le dernier Directeur de l\'entreprise.' };
+      }
+    }
+
+    const ancienRole = employee.role;
+    this.updateEmployee(employeeId, { role: newRole });
+    this.logAudit('Modification', 'Rôle', `${employee.prenom} ${employee.nom} : ${ROLE_LABELS[ancienRole]} → ${ROLE_LABELS[newRole]}`);
+    return { success: true };
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1714,7 +1747,8 @@ const employeeRepository = {
   ajusterVariables: (employeeId, year, month, montant, motif) => DB.ajusterVariablesPaie(employeeId, year, month, montant, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
-  forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword)
+  forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
+  changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId)
 };
 
 const leaveRepository = {

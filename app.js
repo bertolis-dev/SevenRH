@@ -3503,12 +3503,70 @@ function renderCompteCard(e, user) {
         <span class="badge badge-${e.verrouille ? 'warning' : 'success'}">${e.verrouille ? 'Verrouillé' : 'Actif'}</span>
         ${e.tentativesEchouees ? `<span class="text-muted">${e.tentativesEchouees} tentative${e.tentativesEchouees > 1 ? 's' : ''} échouée${e.tentativesEchouees > 1 ? 's' : ''}</span>` : ''}
       </div>
+      <p class="text-muted" style="margin-bottom: 10px;">Rôle actuel : <strong>${escapeHtml(ROLE_LABELS[e.role] || e.role)}</strong></p>
       <div class="detail-header-actions">
         ${e.verrouille ? '<button class="btn btn-secondary btn-sm" id="btn-deverrouiller-compte">Déverrouiller le compte</button>' : ''}
         <button class="btn btn-secondary btn-sm" id="btn-forcer-mot-de-passe">Réinitialiser le mot de passe</button>
+        <button class="btn btn-secondary btn-sm" id="btn-changer-role">Changer le rôle</button>
       </div>
     </div>
   `;
+}
+
+/** Le rôle Directeur est traité à part (option désactivée dans le select + message explicite)
+ * plutôt que de laisser l'utilisateur découvrir le refus seulement après avoir soumis — les
+ * vraies règles (un seul Directeur peut toucher ce rôle, jamais retirer le dernier) restent
+ * appliquées côté serveur (DB.changerRoleSalarie + trigger Postgres, migration 0011), ceci n'est
+ * qu'un confort d'affichage. */
+function openChangeRoleModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const actingUser = authRepository.getCurrentUser();
+  const actingIsDirecteur = actingUser.role === ROLES.DIRECTEUR;
+  const directeurBloque = !actingIsDirecteur;
+  const roleOptions = Object.values(ROLES).filter(r => r !== employee.role);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Changer le rôle</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="changer-role-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — rôle actuel : <strong>${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</strong>.</p>
+          <div class="form-field">
+            <label for="f-nouveau-role">Nouveau rôle *</label>
+            <select class="input" id="f-nouveau-role" name="nouveauRole" required>
+              <option value="">—</option>
+              ${roleOptions.map(r => `<option value="${r}" ${r === ROLES.DIRECTEUR && directeurBloque ? 'disabled' : ''}>${escapeHtml(ROLE_LABELS[r])}${r === ROLES.DIRECTEUR && directeurBloque ? ' (réservé à un Directeur)' : ''}</option>`).join('')}
+            </select>
+          </div>
+          ${employee.role === ROLES.DIRECTEUR && directeurBloque ? `<p class="login-error" role="alert">Seul un Directeur peut retirer le rôle Directeur à quelqu'un.</p>` : ''}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary" ${employee.role === ROLES.DIRECTEUR && directeurBloque ? 'disabled' : ''}>Changer le rôle</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('changer-role-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const newRole = document.getElementById('f-nouveau-role').value;
+    const result = employeeRepository.changerRole(employeeId, newRole, actingUser.id);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Rôle mis à jour.');
+    closeModal();
+    render();
+  });
 }
 
 function openForcerMotDePasseModal(employeeId) {
@@ -3884,6 +3942,9 @@ function bindEmployeeDetailEvents() {
   });
   const forcerMdpBtn = document.getElementById('btn-forcer-mot-de-passe');
   if (forcerMdpBtn) forcerMdpBtn.addEventListener('click', () => openForcerMotDePasseModal(state.currentEmployeeId));
+
+  const changerRoleBtn = document.getElementById('btn-changer-role');
+  if (changerRoleBtn) changerRoleBtn.addEventListener('click', () => openChangeRoleModal(state.currentEmployeeId));
 
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
