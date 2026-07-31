@@ -141,7 +141,13 @@ Deno.serve(async (req) => {
     .eq("company_id", companyId)
     .maybeSingle();
 
-  const origin = req.headers.get("origin") || "https://melodic-conkies-6a8bdd.netlify.app";
+  // Le site n'est pas forcément servi à la racine d'un domaine (ex. GitHub Pages :
+  // https://<compte>.github.io/SevenRH/) — se fier au seul en-tête "origin" (juste schéma+hôte,
+  // sans le sous-dossier) renverrait Stripe vers une page inexistante. Le site envoie donc sa
+  // propre URL de base (window.location.origin + pathname) ; l'en-tête origin ne sert plus que de
+  // filet de sécurité si returnBase manque pour une raison quelconque.
+  const returnBase: string = (body && body.returnBase) || req.headers.get("origin") || "https://melodic-conkies-6a8bdd.netlify.app/";
+  const base = returnBase.endsWith("/") ? returnBase : returnBase + "/";
 
   try {
     if (body.action === "checkout") {
@@ -162,8 +168,8 @@ Deno.serve(async (req) => {
         line_items: [{ price: priceId, quantity: 1 }],
         subscription_data: { metadata: { company_id: companyId } },
         metadata: { company_id: companyId },
-        success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${origin}/?checkout=cancel`,
+        success_url: `${base}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${base}?checkout=cancel`,
       });
       return jsonResponse({ url: session.url });
     }
@@ -174,7 +180,7 @@ Deno.serve(async (req) => {
       }
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: sub.stripe_customer_id,
-        return_url: `${origin}/`,
+        return_url: base,
       });
       return jsonResponse({ url: portalSession.url });
     }

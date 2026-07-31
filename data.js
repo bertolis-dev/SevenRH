@@ -1808,10 +1808,17 @@ const leaveTypeRepository = {
 };
 
 /** Paiement Stripe réel (voir supabase/functions/billing) — chaque appel passe par le jeton de
- * connexion en cours, vérifié côté serveur (permission gererAbonnements) avant toute action. */
+ * connexion en cours, vérifié côté serveur (permission gererAbonnements) avant toute action.
+ * returnBase (origin + chemin du dossier courant) permet à la fonction serveur de renvoyer vers
+ * la bonne page même quand le site est servi depuis un sous-dossier (ex. GitHub Pages :
+ * https://<compte>.github.io/SevenRH/), où se fier au seul en-tête "origin" échouerait. */
+function currentReturnBase() {
+  return window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+}
+
 const billingRepository = {
-  checkout: (offre, periodicite) => window.SupabaseSync.invokeBilling('checkout', { offre, periodicite }),
-  portal: () => window.SupabaseSync.invokeBilling('portal', {}),
+  checkout: (offre, periodicite) => window.SupabaseSync.invokeBilling('checkout', { offre, periodicite, returnBase: currentReturnBase() }),
+  portal: () => window.SupabaseSync.invokeBilling('portal', { returnBase: currentReturnBase() }),
   confirm: (sessionId) => window.SupabaseSync.invokeBilling('confirm', { sessionId })
 };
 
