@@ -12,20 +12,23 @@ const LIST_PAGE_SIZE = 20;
  * connexion normal. */
 const PENDING_SIGNUP_TTL_MS = 24 * 60 * 60 * 1000;
 
-function setPendingSignupEmail(email) {
-  sessionStorage.setItem('sevenrh_pending_signup_email', JSON.stringify({ email, ts: Date.now() }));
+function setPendingSignupEmail(email, view = 'signup') {
+  sessionStorage.setItem('sevenrh_pending_signup_email', JSON.stringify({ email, view, ts: Date.now() }));
 }
 
-function getPendingSignupEmail() {
+/** Renvoie { email, view } ou null — `view` distingue "signup" (rejoindre une entreprise) de
+ * "signup-company" (créer sa propre entreprise), pour réafficher le bon écran après un rechargement
+ * pendant l'attente de confirmation d'email (voir showLoginScreen). */
+function getPendingSignup() {
   const raw = sessionStorage.getItem('sevenrh_pending_signup_email');
   if (!raw) return null;
   try {
-    const { email, ts } = JSON.parse(raw);
+    const { email, view, ts } = JSON.parse(raw);
     if (!email || Date.now() - ts > PENDING_SIGNUP_TTL_MS) {
       sessionStorage.removeItem('sevenrh_pending_signup_email');
       return null;
     }
-    return email;
+    return { email, view: view || 'signup' };
   } catch {
     sessionStorage.removeItem('sevenrh_pending_signup_email');
     return null;
@@ -261,12 +264,12 @@ function showLogin() {
   // l'utilisateur a changé d'appli pour consulter ses emails, ce qui peut faire recharger l'onglet
   // en arrière-plan sur mobile), on retrouve cet état au lieu de silencieusement revenir au simple
   // écran de connexion — voir le formulaire de signup dans bindLoginScreenEvents.
-  const pendingEmail = getPendingSignupEmail();
+  const pendingSignup = getPendingSignup();
   const pendingResetEmail = sessionStorage.getItem('sevenrh_pending_reset_email');
   const recoveryPending = sessionStorage.getItem('sevenrh_password_recovery_pending');
-  if (pendingEmail) {
-    state.authView = 'signup';
-    state.pendingSignupConfirmation = pendingEmail;
+  if (pendingSignup) {
+    state.authView = pendingSignup.view;
+    state.pendingSignupConfirmation = pendingSignup.email;
   } else if (recoveryPending) {
     // Priorité sur pendingResetEmail : cliquer le lien reçu par email fait progresser l'utilisateur
     // de "en attente de l'email" à "en train de choisir un nouveau mot de passe".
@@ -298,6 +301,32 @@ function showApp() {
   document.querySelector('.topbar-user').prepend(themeToggle);
   navigateTo('dashboard');
   handleCheckoutReturn();
+}
+
+/** Bandeau persistant app-wide pour les entreprises créées via "Créer mon entreprise" (migration
+ * 0012) qui n'ont pas encore souscrit d'offre — pas de blocage total (le Directeur fondateur peut
+ * explorer l'app normalement), seul l'ajout d'un 2ᵉ salarié est bloqué par le plafond existant. */
+function renderNonSouscritBanner() {
+  const banner = document.getElementById('non-souscrit-banner');
+  if (!banner) return;
+  const company = companyRepository.getCurrent();
+  const abonnement = company && company.abonnement;
+  if (!abonnement || abonnement.statut !== 'non_souscrit') {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+  const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
+  banner.style.display = 'flex';
+  banner.innerHTML = `
+    <span>🔒 Accès d'essai limité à 1 salarié. Souscrivez une offre pour inviter votre équipe.</span>
+    ${canGererAbonnement ? `<button type="button" class="btn btn-sm btn-primary" id="btn-banner-abonnement">Voir les offres</button>` : ''}
+  `;
+  const btn = document.getElementById('btn-banner-abonnement');
+  if (btn) btn.addEventListener('click', () => {
+    state.parametresTab = 'abonnement';
+    navigateTo('parametres');
+  });
 }
 
 /** Retour depuis Stripe Checkout (voir billing/index.ts, success_url/cancel_url) — le webhook
@@ -370,13 +399,13 @@ function renderBertolisConsole() {
           <tbody>
             ${companies.map(c => {
               const offre = OFFRES_BERTOLIS[c.abonnement.offre] || OFFRES_BERTOLIS.essai;
-              const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted' }[c.abonnement.statut] || 'muted';
+              const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[c.abonnement.statut] || 'muted';
               return `
                 <tr>
                   <td>${escapeHtml(c.raisonSociale)}</td>
                   <td>${escapeHtml(offre.label)}</td>
                   <td><span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[c.abonnement.statut] || c.abonnement.statut)}</span></td>
-                  <td>${c.nombreSalaries}${offre.nombreSalariesMax !== null ? ` / ${offre.nombreSalariesMax}` : ''}</td>
+                  <td>${c.nombreSalaries}${c.abonnement.nombreSalariesMax !== null ? ` / ${c.abonnement.nombreSalariesMax}` : ''}</td>
                   <td>${c.nombreEtablissements}</td>
                   <td class="table-actions">
                     <select class="input" data-bertolis-statut="${c.id}" style="width: auto;">
@@ -420,6 +449,8 @@ function renderLoginScreen() {
     root.innerHTML = renderResetPasswordView();
   } else if (state.authView === 'signup') {
     root.innerHTML = renderSignupView();
+  } else if (state.authView === 'signup-company') {
+    root.innerHTML = renderSignupCompanyView();
   } else if (state.authView === 'bertolis') {
     root.innerHTML = renderBertolisLoginView();
   } else {
@@ -448,6 +479,7 @@ function renderLoginView() {
       </form>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup">Créer un compte</button>
+      <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
@@ -499,6 +531,67 @@ function renderSignupView() {
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-signup-submit" style="width: 100%;">Créer mon compte</button>
+      </form>
+      <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
+    </div>
+  `;
+}
+
+/** Crée une toute nouvelle entreprise dans Seven RH (pas juste rejoindre une entreprise existante,
+ * contrairement à renderSignupView ci-dessus) — voir DB.signUpNewCompany() / migration 0012.
+ * L'entreprise démarre en accès restreint (statut "non_souscrit", 1 seul salarié) jusqu'à
+ * souscription d'une offre depuis Paramètres → Abonnement. */
+function renderSignupCompanyView() {
+  if (state.pendingSignupConfirmation) {
+    return `
+      <div class="login-card">
+        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <h1>Créer mon entreprise</h1>
+        <p class="text-muted">
+          Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
+          Vérifiez votre boîte mail et cliquez sur le lien de confirmation avant de vous connecter.
+        </p>
+        <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="login-card">
+      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <h1>Créer mon entreprise</h1>
+      <p class="text-muted">Vous démarrez avec un accès d'essai limité à 1 salarié (vous-même). Souscrivez une offre depuis Paramètres → Abonnement pour ajouter votre équipe.</p>
+      <form id="signup-company-form">
+        <div class="form-field">
+          <label for="f-signup-company-raison-sociale">Nom de l'entreprise</label>
+          <input class="input" type="text" id="f-signup-company-raison-sociale" required>
+        </div>
+        <div class="form-field">
+          <label for="f-signup-company-prenom">Votre prénom</label>
+          <input class="input" type="text" id="f-signup-company-prenom" required>
+        </div>
+        <div class="form-field">
+          <label for="f-signup-company-nom">Votre nom</label>
+          <input class="input" type="text" id="f-signup-company-nom" required>
+        </div>
+        <div class="form-field">
+          <label for="f-signup-company-email">Email</label>
+          <input class="input" type="email" id="f-signup-company-email" required autocomplete="username">
+          <p class="form-hint" id="signup-company-domain-warning" style="display: none;">
+            Une entreprise semble déjà utiliser ce domaine d'email sur Seven RH.
+            <button type="button" class="btn-link" id="btn-signup-company-goto-join" style="padding: 0;">Rejoindre une entreprise existante</button> ?
+          </p>
+        </div>
+        <div class="form-field">
+          <label for="f-signup-company-password">Mot de passe</label>
+          <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="form-field">
+          <label for="f-signup-company-password-confirm">Confirmation</label>
+          <input class="input" type="password" id="f-signup-company-password-confirm" required minlength="6" autocomplete="new-password">
+        </div>
+        ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
+        <button type="submit" class="btn btn-primary" id="btn-signup-company-submit" style="width: 100%;">Créer mon entreprise</button>
       </form>
       <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
     </div>
@@ -652,6 +745,58 @@ function bindLoginScreenEvents() {
     renderLoginScreen();
   });
 
+  const gotoSignupCompanyBtn = document.getElementById('btn-goto-signup-company');
+  if (gotoSignupCompanyBtn) gotoSignupCompanyBtn.addEventListener('click', () => {
+    state.authView = 'signup-company';
+    state.authError = '';
+    renderLoginScreen();
+  });
+
+  const signupCompanyEmailInput = document.getElementById('f-signup-company-email');
+  if (signupCompanyEmailInput) signupCompanyEmailInput.addEventListener('blur', async () => {
+    const email = signupCompanyEmailInput.value;
+    const warning = document.getElementById('signup-company-domain-warning');
+    if (!warning || !email || !email.includes('@')) return;
+    const matches = await window.SupabaseSync.checkEmailDomainHasExistingCompany(email);
+    // Le champ email a pu changer pendant l'appel réseau (utilisateur qui corrige une faute de
+    // frappe) — on ignore un résultat devenu obsolète plutôt que d'afficher un avertissement pour
+    // une adresse qui n'est plus celle saisie.
+    if (signupCompanyEmailInput.value !== email) return;
+    warning.style.display = matches ? 'block' : 'none';
+  });
+
+  const gotoJoinFromWarningBtn = document.getElementById('btn-signup-company-goto-join');
+  if (gotoJoinFromWarningBtn) gotoJoinFromWarningBtn.addEventListener('click', () => {
+    state.authView = 'signup';
+    state.authError = '';
+    renderLoginScreen();
+  });
+
+  const signupCompanyForm = document.getElementById('signup-company-form');
+  if (signupCompanyForm) signupCompanyForm.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const raisonSociale = document.getElementById('f-signup-company-raison-sociale').value;
+    const prenom = document.getElementById('f-signup-company-prenom').value;
+    const nom = document.getElementById('f-signup-company-nom').value;
+    const email = document.getElementById('f-signup-company-email').value;
+    const p1 = document.getElementById('f-signup-company-password').value;
+    const p2 = document.getElementById('f-signup-company-password-confirm').value;
+    if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
+    const submitBtn = document.getElementById('btn-signup-company-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Création...';
+    const result = await authRepository.signUpNewCompany(raisonSociale, email, p1, nom, prenom);
+    if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
+    if (result.needsEmailConfirmation) {
+      state.pendingSignupConfirmation = email;
+      state.authError = '';
+      setPendingSignupEmail(email, 'signup-company');
+      renderLoginScreen();
+      return;
+    }
+    showApp();
+  });
+
   const signupForm = document.getElementById('signup-form');
   if (signupForm) signupForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
@@ -672,7 +817,7 @@ function bindLoginScreenEvents() {
       // Persisté (pas juste en mémoire) : l'utilisateur va typiquement changer d'appli pour
       // consulter ses emails, ce qui peut faire recharger l'onglet en arrière-plan (fréquent sur
       // mobile) — sans ça, il retombe silencieusement sur l'écran de connexion à son retour.
-      setPendingSignupEmail(email);
+      setPendingSignupEmail(email, 'signup');
       renderLoginScreen();
       return;
     }
@@ -1836,6 +1981,7 @@ function renderSidebar() {
 // ---------------------------------------------------------------------------
 
 function render() {
+  renderNonSouscritBanner();
   const root = document.getElementById('view-root');
   switch (state.view) {
     case 'dashboard':
@@ -5715,9 +5861,9 @@ function renderParametresAbonnement() {
   const abo = company.abonnement;
   if (!abo) return '<p class="text-muted">Abonnement indisponible.</p>';
   const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
-  const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted' }[abo.statut] || 'muted';
+  const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[abo.statut] || 'muted';
   const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
-  const plafondLabel = offre.nombreSalariesMax === null ? 'illimité' : `${nbSalaries} / ${offre.nombreSalariesMax}`;
+  const plafondLabel = abo.nombreSalariesMax === null ? 'illimité' : `${nbSalaries} / ${abo.nombreSalariesMax}`;
   const dejaAbonne = abo.offre !== 'essai' && abo.statut !== 'resilie';
   const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
 
@@ -8971,9 +9117,13 @@ function submitEmployeeForm(evt, id) {
     // l'édition (modifier un salarié existant ne change pas l'effectif).
     const abonnement = companyRepository.getCurrent().abonnement;
     const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
+    // Le plafond réel vient de abonnement.nombreSalariesMax (vraie colonne de subscriptions, mise
+    // à jour par le webhook Stripe) — PAS du catalogue statique OFFRES_BERTOLIS, qui ne reflète pas
+    // le cas d'une entreprise pas encore souscrite (plafond à 1 en attendant, voir migration 0012).
+    const plafond = abonnement ? abonnement.nombreSalariesMax : offre.nombreSalariesMax;
     const nbActifs = employeeRepository.getAll().filter(e => !e.archive).length;
-    if (offre.nombreSalariesMax !== null && nbActifs >= offre.nombreSalariesMax) {
-      showToast(`Plafond de l'offre « ${offre.label} » atteint (${offre.nombreSalariesMax} salariés). Contactez BERTOLIS pour changer d'offre.`, 'error');
+    if (plafond !== null && nbActifs >= plafond) {
+      showToast(`Plafond de l'offre « ${offre.label} » atteint (${plafond} salarié${plafond > 1 ? 's' : ''}). ${abonnement && abonnement.statut === 'non_souscrit' ? 'Souscrivez une offre pour ajouter d\'autres salariés.' : 'Contactez BERTOLIS pour changer d\'offre.'}`, 'error');
       return;
     }
     const created = employeeRepository.create(patch);

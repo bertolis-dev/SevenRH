@@ -154,7 +154,8 @@ const ABONNEMENT_STATUT_LABELS = {
   actif: 'Actif',
   impaye: 'Impayé',
   suspendu: 'Suspendu',
-  resilie: 'Résilié'
+  resilie: 'Résilié',
+  non_souscrit: 'Non souscrit'
 };
 
 function makeEmptyAbonnement() {
@@ -1666,6 +1667,54 @@ const DB = {
     return { success: true, employee };
   },
 
+  /** "Créer mon entreprise" (migration 0012) : crée un vrai compte marqué intent=creer_entreprise
+   * (le trigger serveur ne tente alors aucun rattachement par domaine), puis, si une session est
+   * déjà disponible (confirmation email désactivée sur ce projet), enchaîne directement sur la
+   * création de l'entreprise. Sinon, la création est reportée à la prochaine restoreSession, une
+   * fois l'email confirmé (voir _finalizeCompanySelfServiceCreation). */
+  async signUpNewCompany(raisonSociale, email, password, nom, prenom) {
+    if (!password || password.length < 6) {
+      return { success: false, error: 'Le mot de passe doit contenir au moins 6 caractères.' };
+    }
+    if (!raisonSociale || !nom || !prenom) {
+      return { success: false, error: 'Raison sociale, nom et prénom sont obligatoires.' };
+    }
+    const authResult = await window.SupabaseSync.signUpNewCompany(email, password, raisonSociale, nom, prenom);
+    if (!authResult.success) {
+      return { success: false, error: authResult.error };
+    }
+    if (authResult.needsEmailConfirmation) {
+      return { success: true, needsEmailConfirmation: true };
+    }
+    return await this._finalizeCompanySelfServiceCreation();
+  },
+
+  /** Appelle la RPC create_company_self_service puis rapatrie l'entreprise créée. Rejouable sans
+   * risque depuis restoreSession : si la fiche salarié existe déjà (création réussie lors d'un
+   * appel précédent, seule l'hydratation avait échoué), la RPC renvoie une erreur "déjà associé"
+   * qu'on traite ici comme un simple signal pour passer directement à l'hydratation plutôt qu'une
+   * vraie erreur — dans ce cas, les données par défaut ne sont PAS re-semées (déjà faites). */
+  async _finalizeCompanySelfServiceCreation() {
+    const rpcResult = await window.SupabaseSync.createCompanySelfService();
+    if (!rpcResult.success && !/déjà associé/i.test(rpcResult.error || '')) {
+      return { success: false, error: rpcResult.error };
+    }
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (!company) {
+      return { success: false, error: 'Compte créé, mais la création de l\'entreprise a échoué. Reconnectez-vous pour réessayer.' };
+    }
+    this._currentEmployeeId = company._currentEmployeeId;
+    this._companiesCache = [company];
+    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+    const employee = this.getEmployeeById(this._currentEmployeeId);
+    if (rpcResult.success) {
+      seedLeaveTypes().forEach(lt => this.addLeaveType(lt));
+      this.saveSchoolHolidays(seedSchoolHolidays());
+    }
+    this.logAudit('Création', 'Entreprise', `${employee.prenom} ${employee.nom} — ${company.raisonSociale || ''}`);
+    return { success: true, employee };
+  },
+
   async logout() {
     const user = this.getCurrentUser();
     if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
@@ -1682,11 +1731,21 @@ const DB = {
     const session = await window.SupabaseSync.getSession();
     if (!session) return false;
     const company = await window.SupabaseSync.hydrateCurrentCompany();
-    if (!company) return false;
-    this._currentEmployeeId = company._currentEmployeeId;
-    this._companiesCache = [company];
-    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
-    return true;
+    if (company) {
+      this._currentEmployeeId = company._currentEmployeeId;
+      this._companiesCache = [company];
+      localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+      return true;
+    }
+    // Aucune fiche salarié trouvée : si ce compte vient d'un signUpNewCompany dont la création
+    // d'entreprise avait échoué (ex. coupure réseau juste après confirmation d'email), on retente
+    // ici — sans risque, voir _finalizeCompanySelfServiceCreation.
+    const intent = session.user && session.user.user_metadata && session.user.user_metadata.intent;
+    if (intent === 'creer_entreprise') {
+      const result = await this._finalizeCompanySelfServiceCreation();
+      return result.success;
+    }
+    return false;
   },
 
   /** Vérifie l'ancien mot de passe en retentant une connexion (l'API Supabase Auth n'expose pas de
@@ -1820,6 +1879,7 @@ const authRepository = {
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
   signUp: (email, password, nom, prenom) => DB.signUp(email, password, nom, prenom),
+  signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
   logout: () => DB.logout(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),

@@ -18,6 +18,15 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/** Le site est hébergé dans un sous-dossier (GitHub Pages, ex. https://<compte>.github.io/SevenRH/),
+ * pas à la racine du domaine — se fier au seul `window.location.origin` pour les liens envoyés par
+ * email (confirmation, réinitialisation de mot de passe) renvoie vers la racine du compte GitHub,
+ * qui n'a pas de site ("404 There isn't a GitHub Pages site here"). Même correctif que
+ * currentReturnBase() (data.js), dupliqué ici car ce module tourne dans un scope ES module séparé. */
+function currentSiteBase() {
+  return window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+}
+
 // ---------------------------------------------------------------------------
 // Row -> objet JS (même forme que les makeEmptyXxx() de data.js)
 // ---------------------------------------------------------------------------
@@ -86,7 +95,9 @@ function employeeFromRow(row) {
  * undefined qui casserait tout appelant qui lit ses champs sans garde). */
 function abonnementFromRow(row) {
   if (!row) {
-    return { offre: 'essai', periodicite: 'mensuel', statut: 'actif', dateDebut: '', dateRenouvellement: '', nombreSalariesMax: null };
+    // Échec fermé : une entreprise sans ligne subscriptions (ne devrait plus arriver après la
+    // migration 0012) est restreinte plutôt que de bénéficier d'un accès illimité par erreur.
+    return { offre: 'essai', periodicite: 'mensuel', statut: 'non_souscrit', dateDebut: '', dateRenouvellement: '', nombreSalariesMax: 1 };
   }
   return {
     offre: row.offre,
@@ -389,11 +400,46 @@ async function signUp(email, password, nom, prenom) {
   // page..."). Même correctif que sendPasswordResetEmail ci-dessous, qui l'avait déjà.
   const { data, error } = await supabase.auth.signUp({
     email, password,
-    options: { data: { nom, prenom }, emailRedirectTo: window.location.origin }
+    options: { data: { nom, prenom }, emailRedirectTo: currentSiteBase() }
   });
   if (error) return { success: false, error: error.message };
   // Selon la config du projet (confirmation email activée ou non), une session peut déjà exister.
   return { success: true, session: data.session, needsEmailConfirmation: !data.session };
+}
+
+/** Inscription "Créer mon entreprise" (migration 0012) : marque le compte avec intent
+ * "creer_entreprise" (le trigger serveur ne doit alors tenter aucun rattachement par domaine
+ * d'email) et transmet raisonSociale/nom/prenom en métadonnées — c'est create_company_self_service
+ * (RPC ci-dessous) qui les relit depuis auth.users, pour rester utilisable même après un délai de
+ * confirmation d'email (voir son commentaire dans la migration). */
+async function signUpNewCompany(email, password, raisonSociale, nom, prenom) {
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { nom, prenom, raisonSociale, intent: 'creer_entreprise' }, emailRedirectTo: currentSiteBase() }
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, session: data.session, needsEmailConfirmation: !data.session };
+}
+
+/** Appelle la RPC create_company_self_service — nécessite une session active (auth.uid() côté
+ * serveur), donc uniquement appelable une fois la confirmation d'email passée s'il y en a une.
+ * Rejouable sans risque : la RPC vérifie elle-même qu'aucune fiche salarié n'existe déjà pour ce
+ * compte avant de créer quoi que ce soit. */
+async function createCompanySelfService() {
+  const { data, error } = await supabase.rpc('create_company_self_service');
+  if (error) return { success: false, error: error.message };
+  return { success: true, companyId: data };
+}
+
+/** Avertissement doux (non bloquant) sur l'écran "Créer mon entreprise" : indique juste si CE
+ * DOMAINE d'email est déjà utilisé par une entreprise existante, sans jamais révéler laquelle (voir
+ * le commentaire de la migration 0013 — appelable sans session, donc le résultat doit rester un
+ * simple booléen). En cas d'erreur (réseau, etc.), on renvoie false plutôt que de bloquer le
+ * formulaire pour un avertissement qui n'est de toute façon pas essentiel. */
+async function checkEmailDomainHasExistingCompany(email) {
+  const { data, error } = await supabase.rpc('email_domain_has_existing_company', { p_email: email });
+  if (error) return false;
+  return !!data;
 }
 
 async function signOut() {
@@ -512,7 +558,7 @@ async function updatePassword(newPassword) {
 }
 
 async function sendPasswordResetEmail(email) {
-  return supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  return supabase.auth.resetPasswordForEmail(email, { redirectTo: currentSiteBase() });
 }
 
 /** true si la session en cours vient d'un lien de récupération de mot de passe (email) —
@@ -596,7 +642,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signUp, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signUp, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
