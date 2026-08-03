@@ -32,6 +32,7 @@
 
   --sidebar-width: 240px;
   --topbar-height: 64px;
+  --mobile-nav-height: 64px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
 }
 
@@ -1493,12 +1494,45 @@ textarea.input { resize: vertical; font-family: inherit; }
    --------------------------------------------------------------------- */
 
 @media (max-width: 860px) {
+  /* Barre de navigation en bas de l'écran (pattern natif mobile) plutôt qu'à gauche : plus
+     atteignable au pouce, et n'empiète plus sur la largeur déjà réduite du contenu. #sidebar-nav
+     passe d'un défilement vertical (colonne, hauteur = 100vh) à un défilement horizontal (ligne,
+     hauteur fixe) — nécessaire car un rôle Directeur peut avoir une dizaine d'entrées de menu,
+     largement plus que ce qu'une barre du bas peut afficher sans défiler. */
   #sidebar {
-    width: 72px;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: var(--mobile-nav-height);
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+    z-index: 40;
   }
-  .logo-text, .nav-label, .nav-soon { display: none; }
-  #main-column { margin-left: 72px; }
-  .nav-item { justify-content: center; }
+  .sidebar-logo { display: none; }
+  #sidebar-nav {
+    flex-direction: row;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 1;
+    min-height: 0;
+    gap: 2px;
+  }
+  .nav-section-label { display: none; }
+  .nav-item {
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 6px 14px;
+  }
+  .nav-icon { font-size: 18px; }
+  .nav-label { font-size: 10px; white-space: nowrap; }
+  .logo-text, .nav-soon { display: none; }
+  #main-column { margin-left: 0; padding-bottom: var(--mobile-nav-height); }
   #view-root { padding: 16px; }
   .calendar-cell { min-height: 64px; }
   .calendar-weekday { font-size: 10px; }
@@ -1506,6 +1540,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
+  #toast-root { bottom: calc(var(--mobile-nav-height) + 16px); }
   /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
      cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
      position:fixed + left/right ancrés à la fenêtre (pas au petit wrapper de la cloche, qui rendait
