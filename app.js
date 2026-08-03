@@ -498,6 +498,7 @@ function renderSignupView() {
           Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
           Vérifiez votre boîte mail et cliquez sur le lien de confirmation avant de vous connecter.
         </p>
+        <button type="button" class="btn-link" id="btn-resend-confirmation">Renvoyer l'email de confirmation</button>
         <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
       </div>
     `;
@@ -551,6 +552,7 @@ function renderSignupCompanyView() {
           Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
           Vérifiez votre boîte mail et cliquez sur le lien de confirmation avant de vous connecter.
         </p>
+        <button type="button" class="btn-link" id="btn-resend-confirmation">Renvoyer l'email de confirmation</button>
         <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
       </div>
     `;
@@ -724,6 +726,21 @@ function bindLoginScreenEvents() {
       return;
     }
     showBertolisConsole();
+  });
+
+  const resendBtn = document.getElementById('btn-resend-confirmation');
+  if (resendBtn) resendBtn.addEventListener('click', async () => {
+    resendBtn.disabled = true;
+    resendBtn.textContent = 'Envoi...';
+    const result = await authRepository.resendSignupConfirmation(state.pendingSignupConfirmation);
+    if (result.success) {
+      resendBtn.textContent = 'Email renvoyé ✓';
+      showToast('Email de confirmation renvoyé.');
+    } else {
+      resendBtn.textContent = "Renvoyer l'email de confirmation";
+      resendBtn.disabled = false;
+      showToast(result.error || "Impossible de renvoyer l'email pour le moment.", 'error');
+    }
   });
 
   const backBtn = document.getElementById('btn-back-to-login');

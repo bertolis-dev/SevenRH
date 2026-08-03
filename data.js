@@ -1715,6 +1715,13 @@ const DB = {
     return { success: true, employee };
   },
 
+  /** Renvoie l'email de confirmation (écran "vérifiez votre boîte mail", après signUp/signUpNewCompany)
+   * — utile quand le premier email n'arrive jamais (spam, adresse mal tapée puis corrigée...), sans
+   * avoir à recommencer toute l'inscription avec une autre adresse. */
+  async resendSignupConfirmation(email) {
+    return window.SupabaseSync.resendSignupConfirmation(email);
+  },
+
   async logout() {
     const user = this.getCurrentUser();
     if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
@@ -1880,6 +1887,7 @@ const authRepository = {
   login: (email, password) => DB.login(email, password),
   signUp: (email, password, nom, prenom) => DB.signUp(email, password, nom, prenom),
   signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
+  resendSignupConfirmation: (email) => DB.resendSignupConfirmation(email),
   logout: () => DB.logout(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),

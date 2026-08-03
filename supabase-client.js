@@ -442,6 +442,20 @@ async function checkEmailDomainHasExistingCompany(email) {
   return !!data;
 }
 
+/** Renvoie l'email de confirmation pour une inscription déjà faite mais pas encore confirmée —
+ * signUp() ne renvoie pas systématiquement un nouvel email pour une adresse déjà en attente (pour
+ * éviter le spam), donc un simple nouveau clic sur "Créer mon compte" ne suffit pas si le premier
+ * email n'est jamais arrivé (spam, faute de frappe corrigée, lien expiré...). Reste soumis aux
+ * mêmes limites de fréquence Supabase côté serveur — un utilisateur qui insiste verra l'erreur de
+ * Supabase plutôt qu'un email supplémentaire. */
+async function resendSignupConfirmation(email) {
+  const { error } = await supabase.auth.resend({
+    type: 'signup', email, options: { emailRedirectTo: currentSiteBase() }
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 async function signOut() {
   await supabase.auth.signOut();
 }
@@ -642,7 +656,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signUp, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signUp, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, resendSignupConfirmation, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
