@@ -6,6 +6,10 @@
 
 const LIST_PAGE_SIZE = 20;
 
+/** Marque "Nexus" (logo.png) — réutilisée partout où le logo apparaît (écrans de connexion,
+ * console BERTOLIS) pour n'avoir qu'un seul endroit à modifier. */
+const NEXUS_LOGO_MARK = `<span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>`;
+
 /** Un onglet oublié/épinglé ouvert sur l'écran "vérifiez vos emails" resterait sinon bloqué là
  * indéfiniment (sessionStorage ne s'efface qu'à la fermeture de l'onglet) même si l'inscription a
  * été abandonnée depuis longtemps — au-delà de ce délai, on retombe silencieusement sur l'écran de
@@ -221,7 +225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('login-root').style.display = 'flex';
     document.getElementById('login-root').innerHTML = `
       <div class="login-card">
-        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
         <p class="login-error" role="alert">Impossible de charger le module de connexion (problème réseau ou extension de navigateur). Rechargez la page ; si le problème persiste, essayez sans bloqueur de publicité/traqueurs.</p>
         <button type="button" class="btn btn-primary" style="width: 100%;" onclick="location.reload()">Recharger la page</button>
       </div>
@@ -373,7 +377,7 @@ function renderBertolisConsole() {
 
   root.innerHTML = `
     <header class="bertolis-topbar">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH <span class="badge badge-info">Console BERTOLIS</span></div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus <span class="badge badge-info">Console BERTOLIS</span></div>
       <div>
         <span class="text-muted">${escapeHtml(admin.prenom)} ${escapeHtml(admin.nom)}</span>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-bertolis-logout" style="margin-left: 10px;">Déconnexion</button>
@@ -463,7 +467,7 @@ function renderLoginScreen() {
 function renderLoginView() {
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Connexion</h1>
       <form id="login-form">
         <div class="form-field">
@@ -492,7 +496,7 @@ function renderSignupView() {
   if (state.pendingSignupConfirmation) {
     return `
       <div class="login-card">
-        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
         <h1>Créer mon compte</h1>
         <p class="text-muted">
           Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
@@ -506,7 +510,7 @@ function renderSignupView() {
 
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Créer mon compte</h1>
       <p class="text-muted">Si votre fiche existe déjà dans l'entreprise (créée par RH/manager), votre compte y sera relié automatiquement. Sinon, une nouvelle fiche est créée pour vous (rôle Salarié par défaut, modifiable ensuite par RH).</p>
       <form id="signup-form">
@@ -546,7 +550,7 @@ function renderSignupCompanyView() {
   if (state.pendingSignupConfirmation) {
     return `
       <div class="login-card">
-        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
         <h1>Créer mon entreprise</h1>
         <p class="text-muted">
           Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
@@ -560,7 +564,7 @@ function renderSignupCompanyView() {
 
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Créer mon entreprise</h1>
       <p class="text-muted">Vous démarrez avec un accès d'essai limité à 1 salarié (vous-même). Souscrivez une offre depuis Paramètres → Abonnement pour ajouter votre équipe.</p>
       <form id="signup-company-form">
@@ -580,7 +584,7 @@ function renderSignupCompanyView() {
           <label for="f-signup-company-email">Email</label>
           <input class="input" type="email" id="f-signup-company-email" required autocomplete="username">
           <p class="form-hint" id="signup-company-domain-warning" style="display: none;">
-            Une entreprise semble déjà utiliser ce domaine d'email sur Seven RH.
+            Une entreprise semble déjà utiliser ce domaine d'email sur Nexus.
             <button type="button" class="btn-link" id="btn-signup-company-goto-join" style="padding: 0;">Rejoindre une entreprise existante</button> ?
           </p>
         </div>
@@ -605,7 +609,7 @@ function renderSignupCompanyView() {
 function renderBertolisLoginView() {
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH <span class="badge badge-info">BERTOLIS</span></div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus <span class="badge badge-info">BERTOLIS</span></div>
       <h1>Accès éditeur</h1>
       <p class="text-muted">Réservé à l'équipe BERTOLIS — gestion des entreprises clientes et des abonnements (§9.6). Ce n'est pas un compte salarié.</p>
       <form id="bertolis-login-form">
@@ -629,7 +633,7 @@ function renderForgotPasswordView() {
   if (state.pendingReset) {
     return `
       <div class="login-card">
-        <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
         <h1>Mot de passe oublié</h1>
         <p class="text-muted">
           Si un compte existe pour cet email, un lien de réinitialisation vient de lui être envoyé.
@@ -642,7 +646,7 @@ function renderForgotPasswordView() {
 
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Mot de passe oublié</h1>
       <form id="forgot-password-form">
         <div class="form-field">
@@ -660,7 +664,7 @@ function renderForgotPasswordView() {
 function renderResetPasswordView() {
   return `
     <div class="login-card">
-      <div class="login-logo"><span class="logo-mark">7</span> Seven RH</div>
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Nouveau mot de passe</h1>
       <form id="reset-password-form">
         <div class="form-field">
@@ -4701,7 +4705,7 @@ function openLeaveAttestationModal(requestId) {
             <p class="text-muted">Émise le ${formatDate(toISODate(new Date()))}</p>
           </div>
           <p class="print-attestation-text">
-            Seven RH atteste que <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
+            Nexus atteste que <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
             (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(employee.poste || 'salarié·e')},
             a bénéficié d'un congé de type <strong>${escapeHtml(type.nom)}</strong> ${periode},
             soit ${formatNumberFR(r.nbJours)} jour${r.nbJours > 1 ? 's' : ''}.
