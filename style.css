@@ -248,8 +248,8 @@ p { margin: 0; line-height: 1.5; }
   max-height: 220px;
   overflow-y: auto;
 }
-.address-suggestion-item { padding: 8px 12px; font-size: 13px; cursor: pointer; }
-.address-suggestion-item:hover { background: var(--color-muted-soft); }
+.address-suggestion-item, .company-suggestion-item { padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.address-suggestion-item:hover, .company-suggestion-item:hover { background: var(--color-muted-soft); }
 
 /* Champ obligatoire resté vide après une tentative de soumission — voir bindGlobalEvents. */
 .input.field-invalid { border-color: var(--color-danger); background: var(--color-danger-soft); }

@@ -1235,7 +1235,7 @@ function renderOnboardingStep1() {
   const p = state.onboarding.profile;
   return `
     <div class="form-grid">
-      ${textField('ob-raisonSociale', 'Raison sociale', p.raisonSociale, true)}
+      ${companyNameAutocompleteField('ob-raisonSociale', 'Raison sociale', p.raisonSociale, true, 'ob-siret', 'ob-adresse')}
       <div class="form-field">
         <label for="f-ob-siret">SIRET</label>
         <input class="input" type="text" id="f-ob-siret" name="ob-siret" value="${escapeHtml(p.siret || '')}"
@@ -1746,6 +1746,61 @@ function bindGlobalEvents() {
       if (adresseField && !adresseField.value) adresseField.value = result.siege.adresse || '';
       if (hint) hint.textContent = `✓ ${result.nom_complet || ''}`;
     }, 400);
+  });
+
+  // Autocomplétion "Raison sociale" par nom (même API que le SIRET ci-dessus, sens inverse) —
+  // choisir une suggestion remplit aussi le SIRET et l'adresse. Même mécanique que l'autocomplétion
+  // d'adresse (suggestions sous le champ, stockées sur le nœud DOM le temps du clic).
+  let companyAutocompleteTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target.hasAttribute('data-company-autocomplete')) return;
+    const input = e.target;
+    const suggestionsEl = document.getElementById(input.id + '-suggestions');
+    if (!suggestionsEl) return;
+    clearTimeout(companyAutocompleteTimer);
+    const query = input.value.trim();
+    if (query.length < 3) {
+      suggestionsEl.style.display = 'none';
+      suggestionsEl.innerHTML = '';
+      return;
+    }
+    companyAutocompleteTimer = setTimeout(async () => {
+      let data;
+      try {
+        const res = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(query)}&per_page=5`);
+        data = await res.json();
+      } catch {
+        return; // Silencieux : confort seulement, la saisie manuelle reste possible.
+      }
+      const results = (data?.results || []).filter(r => r.siege);
+      if (!results.length) {
+        suggestionsEl.style.display = 'none';
+        suggestionsEl.innerHTML = '';
+        return;
+      }
+      suggestionsEl._companies = results;
+      suggestionsEl.innerHTML = results
+        .map((r, i) => `<div class="company-suggestion-item" data-company-index="${i}">${escapeHtml(r.nom_complet || '')} — ${escapeHtml(r.siege.siret || '')}<br><span class="text-muted">${escapeHtml(r.siege.adresse || '')}</span></div>`)
+        .join('');
+      suggestionsEl.style.display = 'block';
+    }, 300);
+  });
+
+  document.addEventListener('click', (e) => {
+    const companyItem = e.target.closest('[data-company-index]');
+    if (!companyItem) return;
+    const suggestionsEl = companyItem.parentElement;
+    const company = suggestionsEl._companies?.[Number(companyItem.dataset.companyIndex)];
+    const input = document.getElementById(suggestionsEl.id.replace(/-suggestions$/, ''));
+    if (company && input) {
+      input.value = company.nom_complet || '';
+      const siretField = document.getElementById(input.dataset.fillSiret);
+      const adresseField = document.getElementById(input.dataset.fillAdresse);
+      if (siretField) siretField.value = company.siege.siret || '';
+      if (adresseField) adresseField.value = company.siege.adresse || '';
+    }
+    suggestionsEl.style.display = 'none';
+    suggestionsEl.innerHTML = '';
   });
 
   /** Active au clavier (Entrée/Espace) n'importe quel élément focusable marqué role="button" — évite d'ajouter un gestionnaire keydown à chaque ligne/carte cliquable (salariés, organigramme, favoris, notifications...). */
@@ -6230,7 +6285,7 @@ function renderParametresEntreprise() {
       <h2>Profil de l'entreprise</h2>
       <form id="entreprise-form">
         <div class="form-grid">
-          ${textField('raisonSociale', 'Raison sociale', profile.raisonSociale, true)}
+          ${companyNameAutocompleteField('raisonSociale', 'Raison sociale', profile.raisonSociale, true, 'siret', 'adresse')}
           <div class="form-field">
             <label for="f-siret">SIRET</label>
             <input class="input" type="text" id="f-siret" name="siret" value="${escapeHtml(profile.siret || '')}"
@@ -9467,6 +9522,21 @@ function addressAutocompleteField(name, label, value, codePostalName, villeName)
       <input class="input" type="text" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}"
         autocomplete="off" data-address-autocomplete="true"
         data-fill-codepostal="f-${codePostalName}" data-fill-ville="f-${villeName}">
+      <div class="address-suggestions" id="f-${name}-suggestions"></div>
+    </div>
+  `;
+}
+
+/** Champ "Raison sociale" avec suggestions en direct (même API que le SIRET ci-dessus, cherchée
+ * cette fois par nom plutôt que par numéro — la plupart des gens connaissent le nom de leur
+ * entreprise, pas leur SIRET par cœur) : choisir une suggestion remplit aussi le SIRET et l'adresse. */
+function companyNameAutocompleteField(name, label, value, required, siretName, adresseName) {
+  return `
+    <div class="form-field address-autocomplete-field">
+      <label for="f-${name}">${escapeHtml(label)}${required ? ' *' : ''}</label>
+      <input class="input" type="text" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}" ${required ? 'required' : ''}
+        autocomplete="off" data-company-autocomplete="true"
+        data-fill-siret="f-${siretName}" data-fill-adresse="f-${adresseName}">
       <div class="address-suggestions" id="f-${name}-suggestions"></div>
     </div>
   `;
