@@ -259,6 +259,15 @@ p { margin: 0; line-height: 1.5; }
 .field-warning { display: none; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--color-warning); }
 .field-warning.visible { display: flex; }
 
+.text-danger { color: var(--color-danger); font-weight: 600; }
+
+.table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+
+.quality-issue-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+.quality-issue-header { display: flex; align-items: center; gap: 8px; }
+.quality-issue-employees { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.quality-issue-link { font-size: 13px; }
+
 .form-hint {
   margin-top: 6px;
   font-size: 12px;

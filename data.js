@@ -210,7 +210,7 @@ const DEFAULT_SETTINGS = {
   workflowCongesDefault: ['manager', 'rh'],
   workflowTeletravail: ['manager'],
   workflowFrais: ['manager', 'comptabilite'],
-  categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Visite médicale', 'Habilitation', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
+  categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Titre de séjour', 'Visite médicale', 'Habilitation', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
   // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
   // la masse salariale, le genre et la pyramide des âges restent des données que l'entreprise
   // choisit de suivre ou non (cf. l'avertissement affiché juste au-dessus de ces cases à cocher).
@@ -1984,6 +1984,7 @@ function makeEmptyEmployee() {
     typeContrat: 'CDI',
     dateFinContrat: '',
     dateFinPeriodeEssai: '',
+    dateDernierEntretienProfessionnel: '',
 
     tempsTravail: 'Temps plein',
     pourcentageActivite: 100,

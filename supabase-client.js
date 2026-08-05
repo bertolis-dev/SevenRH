@@ -58,6 +58,7 @@ function employeeFromRow(row) {
     typeContrat: d.typeContrat ?? 'CDI',
     dateFinContrat: d.dateFinContrat ?? '',
     dateFinPeriodeEssai: d.dateFinPeriodeEssai ?? '',
+    dateDernierEntretienProfessionnel: d.dateDernierEntretienProfessionnel ?? '',
     tempsTravail: d.tempsTravail ?? 'Temps plein',
     pourcentageActivite: d.pourcentageActivite ?? 100,
     horairesHebdo: d.horairesHebdo ?? 35,

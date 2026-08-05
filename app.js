@@ -1863,7 +1863,7 @@ const PARAMETRES_SEARCH_SECTIONS = [
 ];
 
 function performGlobalSearch(term) {
-  const q = term.trim().toLowerCase();
+  const q = normalizeForSearch(term.trim());
   if (!q) return [];
   const results = [];
   const user = authRepository.getCurrentUser();
@@ -1871,7 +1871,7 @@ function performGlobalSearch(term) {
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
   employeeRepository.getAll().filter(e => !e.archive && isVisible(e.id)).forEach(e => {
-    const haystack = `${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`.toLowerCase();
+    const haystack = normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`);
     if (haystack.includes(q)) {
       results.push({
         icon: favoriteRepository.isFavoriteEmployee(e.id) ? '⭐' : '👤',
@@ -1887,7 +1887,7 @@ function performGlobalSearch(term) {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type || !isVisible(employee.id)) return;
-    const haystack = `${employee.prenom} ${employee.nom} ${type.nom} congé`.toLowerCase();
+    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${type.nom} congé`);
     if (haystack.includes(q)) {
       results.push({
         icon: type.icone,
@@ -1902,7 +1902,7 @@ function performGlobalSearch(term) {
   teleworkRepository.getAll().forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee || !isVisible(employee.id)) return;
-    if (`${employee.prenom} ${employee.nom} télétravail`.toLowerCase().includes(q)) {
+    if (normalizeForSearch(`${employee.prenom} ${employee.nom} télétravail`).includes(q)) {
       results.push({
         icon: '💻',
         label: `${employee.prenom} ${employee.nom}`,
@@ -1916,7 +1916,7 @@ function performGlobalSearch(term) {
   expenseRepository.getAll().forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee || !isVisible(employee.id)) return;
-    const haystack = `${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`.toLowerCase();
+    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`);
     if (haystack.includes(q)) {
       results.push({
         icon: '🧾',
@@ -1933,7 +1933,7 @@ function performGlobalSearch(term) {
   // jamais faire remonter un résultat de recherche vers un écran que l'utilisateur ne peut pas ouvrir.
   if ([ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role)) {
     serviceRepository.getAll().forEach(s => {
-      if (s.nom.toLowerCase().includes(q)) {
+      if (normalizeForSearch(s.nom).includes(q)) {
         results.push({
           icon: '🏢',
           label: s.nom,
@@ -1943,7 +1943,7 @@ function performGlobalSearch(term) {
         });
       }
       (s.equipes || []).forEach(eq => {
-        if (eq.nom.toLowerCase().includes(q)) {
+        if (normalizeForSearch(eq.nom).includes(q)) {
           results.push({
             icon: '🧑‍🤝‍🧑',
             label: eq.nom,
@@ -1959,7 +1959,7 @@ function performGlobalSearch(term) {
   if (hasPermission(user, PERMISSIONS.GERER_PARAMETRES)) {
     PARAMETRES_SEARCH_SECTIONS
       .filter(s => !s.permission || hasPermission(user, s.permission))
-      .filter(s => s.label.toLowerCase().includes(q) || s.keywords.some(k => k.includes(q)))
+      .filter(s => normalizeForSearch(s.label).includes(q) || s.keywords.some(k => normalizeForSearch(k).includes(q)))
       .forEach(s => results.push({ icon: '⚙️', label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
   }
 
@@ -2143,6 +2143,11 @@ function syncNotifications() {
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
+  getUpcomingSeniorityAnniversaries(30, undefined, Infinity).forEach(x => {
+    candidates.push(makeNotification(`seniority-${x.employee.id}-${x.years}`, '🏅', `${x.years} ans d'ancienneté`,
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+  });
+
   getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, '📄', 'Fin de contrat proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
@@ -2151,6 +2156,16 @@ function syncNotifications() {
   getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, '📄', 'Fin de période d\'essai proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
+  });
+
+  getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
+    candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, '🗒️', 'Entretien professionnel à programmer',
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+  });
+
+  getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
+    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, '🗒️', 'Bilan à 6 ans à réaliser',
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
@@ -2563,6 +2578,9 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const ticketsCostTrend = getTicketsCostTrend(actifs);
   const birthdays = getUpcomingBirthdays(60, employees);
   const contractEnds = getUpcomingContractEnds(60, employees);
+  const seniorityAnniversaries = getUpcomingSeniorityAnniversaries(60, employees);
+  const entretiensProfessionnels = getUpcomingEntretiensProfessionnels(60, employees);
+  const bilansSixAns = getUpcomingBilansSixAns(60, employees);
 
   const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
@@ -2601,6 +2619,8 @@ function renderOperationalDashboardBody(employees, employeeIds) {
     <div class="dashboard-grid">
       ${renderUpcomingBirthdaysCard(birthdays)}
       ${renderUpcomingContractEndsCard(contractEnds)}
+      ${renderUpcomingSeniorityCard(seniorityAnniversaries)}
+      ${renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns)}
     </div>
     ` : ''}
 
@@ -2966,6 +2986,114 @@ function getUpcomingContractEnds(daysAhead = 60, employees, limit = 5) {
     .slice(0, limit);
 }
 
+// Paliers "médaille du travail" usuels (20/30/35/40 ans, médailles officielles) + jalons informels
+// (5/10/15/25 ans) que beaucoup d'entreprises marquent aussi — pas de liste paramétrable ici, valeur
+// symbolique plutôt que légale, contrairement aux autres échéances de ce fichier.
+const SENIORITY_MILESTONES = [5, 10, 15, 20, 25, 30, 35, 40];
+
+/** Même principe que getUpcomingBirthdays (anniversaire de naissance), pour l'anniversaire
+ * d'embauche — ne retient que les salariés dont le PROCHAIN anniversaire d'embauche tombe
+ * exactement sur un des paliers ci-dessus (les autres années n'ont rien à fêter). */
+function getUpcomingSeniorityAnniversaries(daysAhead = 60, employees, limit = 5) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return employees
+    .map(e => {
+      const hire = new Date(e.dateEmbauche);
+      let next = new Date(today.getFullYear(), hire.getMonth(), hire.getDate());
+      if (next < today) next = new Date(today.getFullYear() + 1, hire.getMonth(), hire.getDate());
+      const years = next.getFullYear() - hire.getFullYear();
+      return { employee: e, next, years, daysUntil: Math.round((next - today) / 86400000) };
+    })
+    .filter(x => SENIORITY_MILESTONES.includes(x.years) && x.daysUntil <= daysAhead)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, limit);
+}
+
+/** Entretien professionnel obligatoire (Code du travail, art. L6315-1) : au moins tous les 2 ans,
+ * à défaut de date connue on part de l'embauche (= "jamais fait" équivaut à "le premier est dû 2 ans
+ * après l'arrivée"). Contrairement à getUpcomingBilansSixAns, on ne recalcule pas une échéance
+ * future à partir d'un jalon manqué : un entretien en retard doit apparaître EN RETARD (daysUntil
+ * négatif, trié en premier), pas être silencieusement reporté à la prochaine échéance théorique. */
+function getUpcomingEntretiensProfessionnels(daysAhead = 60, employees, limit = 5) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return employees
+    .map(e => {
+      const baseline = new Date(e.dateDernierEntretienProfessionnel || e.dateEmbauche);
+      const next = new Date(baseline.getFullYear() + 2, baseline.getMonth(), baseline.getDate());
+      return { employee: e, next, daysUntil: Math.round((next - today) / 86400000) };
+    })
+    .filter(x => x.daysUntil <= daysAhead)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, limit);
+}
+
+/** Bilan à 6 ans (Code du travail, art. L6315-1 II) : récapitulatif obligatoire tous les 6 ans
+ * d'ancienneté, distinct de l'entretien biennal — pénalités (abondement CPF) si manqué dans les
+ * entreprises de 50 salariés et plus. Calculé sur des multiples de 6 ans depuis l'embauche. */
+function getUpcomingBilansSixAns(daysAhead = 60, employees, limit = 5) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return employees
+    .map(e => {
+      const hire = new Date(e.dateEmbauche);
+      let years = 6;
+      let next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate());
+      while (next < today) { years += 6; next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate()); }
+      return { employee: e, next, years, daysUntil: Math.round((next - today) / 86400000) };
+    })
+    .filter(x => x.daysUntil <= daysAhead)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, limit);
+}
+
+/** Contrôles de cohérence sur les salariés actifs — pas des règles bloquantes à la saisie (certains
+ * champs sont volontairement facultatifs, ex. un salarié en cours d'onboarding), juste une vue qui
+ * signale ce qui traînerait sinon silencieusement jusqu'à casser une paie ou une déclaration. */
+function getDataQualityIssues() {
+  const allEmployees = employeeRepository.getAll();
+  const employees = allEmployees.filter(e => !e.archive && e.statut === 'Actif');
+  const issues = [];
+
+  const byEmail = {};
+  employees.forEach(e => {
+    const key = (e.email || '').trim().toLowerCase();
+    if (!key) return;
+    (byEmail[key] = byEmail[key] || []).push(e);
+  });
+  Object.values(byEmail).filter(list => list.length > 1).forEach(list => {
+    issues.push({ severity: 'error', label: `Email en doublon (${list[0].email})`, employees: list });
+  });
+
+  const cddSansFin = employees.filter(e => (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') && !e.dateFinContrat);
+  if (cddSansFin.length) issues.push({ severity: 'error', label: 'CDD/Intérim sans date de fin de contrat', employees: cddSansFin });
+
+  const allById = new Map(allEmployees.map(e => [e.id, e]));
+  const managerOrphelin = employees.filter(e => (e.managerIds || []).some(mid => {
+    const m = allById.get(mid);
+    return !m || m.archive;
+  }));
+  if (managerOrphelin.length) issues.push({ severity: 'warning', label: 'Manager introuvable ou archivé', employees: managerOrphelin });
+
+  const sansEtab = employees.filter(e => !e.etablissementId);
+  if (sansEtab.length) issues.push({ severity: 'warning', label: 'Sans établissement', employees: sansEtab });
+
+  const sansService = employees.filter(e => !e.service);
+  if (sansService.length) issues.push({ severity: 'warning', label: 'Sans service', employees: sansService });
+
+  const sansNaissance = employees.filter(e => !e.dateNaissance);
+  if (sansNaissance.length) issues.push({ severity: 'info', label: 'Sans date de naissance', employees: sansNaissance });
+
+  const sansNumSecu = employees.filter(e => !e.numeroSecu);
+  if (sansNumSecu.length) issues.push({ severity: 'info', label: 'Sans numéro de sécurité sociale', employees: sansNumSecu });
+
+  return issues;
+}
+
 /** Même principe que getUpcomingContractEnds, pour la fin de période d'essai — champ existant
  * depuis le début (formulaire + fiche salarié) mais jamais consulté par le moteur de notifications. */
 function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
@@ -3142,6 +3270,46 @@ function renderUpcomingBirthdaysCard(birthdays) {
   `;
 }
 
+function renderUpcomingSeniorityCard(seniorityAnniversaries) {
+  return `
+    <div class="card">
+      <h2>Anniversaires d'ancienneté</h2>
+      ${seniorityAnniversaries.length === 0 ? `<p class="text-muted">Aucune médaille du travail dans les 30 prochains jours.</p>` : `
+        <div class="mini-list">
+          ${seniorityAnniversaries.map(x => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${x.years} ans</span>
+              <span class="text-muted">${x.daysUntil === 0 ? 'Aujourd\'hui 🏅' : formatDate(toISODate(x.next))}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function renderUpcomingEntretiensCard(entretiens, bilans) {
+  const items = [
+    ...entretiens.map(x => ({ employee: x.employee, next: x.next, daysUntil: x.daysUntil, label: 'Entretien professionnel' })),
+    ...bilans.map(x => ({ employee: x.employee, next: x.next, daysUntil: x.daysUntil, label: `Bilan à ${x.years} ans` }))
+  ].sort((a, b) => a.daysUntil - b.daysUntil);
+  return `
+    <div class="card">
+      <h2>Entretiens professionnels à programmer</h2>
+      ${items.length === 0 ? `<p class="text-muted">Aucun entretien professionnel ou bilan à 6 ans dans les 60 prochains jours.</p>` : `
+        <div class="mini-list">
+          ${items.map(x => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${escapeHtml(x.label)}</span>
+              <span class="${x.daysUntil < 0 ? 'text-danger' : 'text-muted'}">${x.daysUntil < 0 ? 'En retard · ' + formatDate(toISODate(x.next)) : formatDate(toISODate(x.next))}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
 function renderUpcomingContractEndsCard(contractEnds) {
   return `
     <div class="card">
@@ -3278,10 +3446,10 @@ function getFilteredSortedEmployees() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   if (visibleIds !== null) list = list.filter(e => visibleIds.includes(e.id));
 
-  const term = state.search.trim().toLowerCase();
+  const term = normalizeForSearch(state.search.trim());
   if (term) {
     list = list.filter(e =>
-      `${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste}`.toLowerCase().includes(term)
+      normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste}`).includes(term)
     );
   }
   if (state.filters.etablissementId) list = list.filter(e => e.etablissementId === state.filters.etablissementId);
@@ -3317,6 +3485,7 @@ function renderEmployeesList() {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
+        ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
     </div>
@@ -3412,6 +3581,221 @@ function renderEmployeeRow(e) {
 }
 
 /** Exporte la liste visible (déjà filtrée/scopée par rôle) — pas les archivés, pas les champs confidentiels. */
+// ---------------------------------------------------------------------------
+// Import de masse de salariés (CSV) — même esprit que l'export ci-dessous mais dans l'autre sens :
+// gros gain à l'arrivée d'une nouvelle entreprise sur Nexus (dizaines de salariés à saisir un par
+// un sinon). Volontairement CSV uniquement pour cette v1 (pas de .xlsx : nécessiterait une
+// dépendance externe — SheetJS ou équivalent — non présente dans ce projet 100% vanilla JS ; un
+// export Excel→CSV reste à un clic pour l'utilisateur).
+// ---------------------------------------------------------------------------
+
+/** Alias reconnus par en-tête (normalisés via normalizeForSearch, donc déjà insensibles à la casse
+ * et aux accents) — couvre le format généré par exportEmployeesCSV ci-dessous ET quelques
+ * variantes anglophones/informelles courantes dans un tableur importé de l'extérieur. */
+const IMPORT_EMPLOYEE_FIELD_ALIASES = {
+  matricule: ['matricule', 'id', 'employee id', 'identifiant'],
+  nom: ['nom', 'lastname', 'last name', 'surname', 'nom de famille'],
+  prenom: ['prenom', 'firstname', 'first name', 'given name'],
+  email: ['email', 'e-mail', 'mail', 'adresse email', 'adresse e-mail'],
+  telephone: ['telephone', 'tel', 'phone', 'mobile', 'portable'],
+  poste: ['poste', 'job title', 'fonction', 'metier', 'job'],
+  service: ['service', 'department', 'departement'],
+  equipe: ['equipe', 'team'],
+  typeContrat: ['type de contrat', 'contrat', 'contract type', 'contract'],
+  dateEmbauche: ["date d'embauche", 'date embauche', 'hire date', "date d'entree", 'date entree'],
+  dateNaissance: ['date de naissance', 'birthdate', 'date naissance', 'date of birth']
+};
+
+function parseCSVText(text) {
+  const firstLine = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n'));
+  const delimiter = firstLine.includes(';') ? ';' : ',';
+  const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+  const parseLine = (line) => {
+    const cells = [];
+    let cur = '', inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQuotes) {
+        if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = false; } }
+        else cur += c;
+      } else if (c === '"') inQuotes = true;
+      else if (c === delimiter) { cells.push(cur); cur = ''; }
+      else cur += c;
+    }
+    cells.push(cur);
+    return cells;
+  };
+  return lines.map(parseLine);
+}
+
+function guessEmployeeColumnMapping(headers) {
+  const mapping = {};
+  headers.forEach((h, i) => {
+    const norm = normalizeForSearch(h);
+    for (const [field, aliases] of Object.entries(IMPORT_EMPLOYEE_FIELD_ALIASES)) {
+      if (mapping[field] === undefined && aliases.some(a => normalizeForSearch(a) === norm)) { mapping[field] = i; break; }
+    }
+  });
+  return mapping;
+}
+
+/** Aucune date d'un tableur externe n'arrive garantie au format ISO (YYYY-MM-DD) attendu partout
+ * ailleurs dans Nexus — accepte aussi le format français JJ/MM/AAAA le plus courant à l'export
+ * Excel, sans quoi la quasi-totalité des lignes importées échoueraient sur ce seul champ. */
+function parseImportDate(value) {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const frMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (frMatch) return `${frMatch[3]}-${frMatch[2].padStart(2, '0')}-${frMatch[1].padStart(2, '0')}`;
+  return '';
+}
+
+const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Construit l'aperçu ligne par ligne : statut 'ok' (prêt à créer), 'duplicate' (email déjà utilisé
+ * par un salarié actif — ignoré par défaut, jamais de doublon silencieux) ou 'error' (champ
+ * obligatoire manquant/invalide). N'écrit rien — la création réelle se fait dans importEmployeesRows. */
+function buildImportPreviewRows(dataRows, mapping) {
+  const existingEmails = new Set(
+    employeeRepository.getAll().filter(e => !e.archive && e.email).map(e => normalizeForSearch(e.email))
+  );
+  const seenInFile = new Set();
+  return dataRows.map((cells, i) => {
+    const get = (field) => (mapping[field] !== undefined ? (cells[mapping[field]] || '').trim() : '');
+    const record = {
+      matricule: get('matricule'),
+      nom: get('nom'),
+      prenom: get('prenom'),
+      email: get('email'),
+      telephone: get('telephone'),
+      poste: get('poste'),
+      service: get('service'),
+      equipe: get('equipe'),
+      typeContrat: get('typeContrat') || 'CDI',
+      dateEmbauche: parseImportDate(get('dateEmbauche')),
+      dateNaissance: parseImportDate(get('dateNaissance'))
+    };
+    let status = 'ok', message = '';
+    const emailKey = normalizeForSearch(record.email);
+    if (!record.nom || !record.prenom || !record.email || !record.dateEmbauche) {
+      status = 'error'; message = 'Nom, prénom, email et date d\'embauche sont obligatoires.';
+    } else if (!EMAIL_FORMAT_REGEX.test(record.email)) {
+      status = 'error'; message = 'Email invalide.';
+    } else if (existingEmails.has(emailKey) || seenInFile.has(emailKey)) {
+      status = 'duplicate'; message = 'Email déjà utilisé — ligne ignorée.';
+    }
+    if (status !== 'error' && emailKey) seenInFile.add(emailKey);
+    return { rowIndex: i + 2, record, status, message }; // +2 : ligne 1 = en-têtes, humains comptent depuis 1
+  });
+}
+
+function importEmployeesRows(previewRows) {
+  const results = { created: 0, skipped: 0, errors: 0 };
+  previewRows.filter(r => r.status === 'ok').forEach(r => {
+    employeeRepository.create(r.record);
+    results.created++;
+  });
+  results.skipped = previewRows.filter(r => r.status === 'duplicate').length;
+  results.errors = previewRows.filter(r => r.status === 'error').length;
+  return results;
+}
+
+function openImportSalariesModal() {
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Importer des salariés (CSV)</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Fichier CSV (export Excel/Google Sheets). Colonnes reconnues automatiquement par en-tête : Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <input type="file" id="f-import-file" accept=".csv,text/csv">
+        <div id="import-preview-zone" style="margin-top: 16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-import" style="display: none;">Importer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  let currentPreview = [];
+
+  document.getElementById('f-import-file').addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCSVText(String(reader.result));
+      if (rows.length < 2) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier vide ou illisible (au moins une ligne d'en-têtes + une ligne de données attendues).</p>`;
+        return;
+      }
+      const [headerRow, ...dataRows] = rows;
+      const mapping = guessEmployeeColumnMapping(headerRow);
+      currentPreview = buildImportPreviewRows(dataRows, mapping);
+      renderImportPreview(currentPreview, mapping, headerRow);
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  function renderImportPreview(preview, mapping, headerRow) {
+    const okCount = preview.filter(r => r.status === 'ok').length;
+    const dupCount = preview.filter(r => r.status === 'duplicate').length;
+    const errCount = preview.filter(r => r.status === 'error').length;
+    const unmapped = Object.keys(IMPORT_EMPLOYEE_FIELD_ALIASES).filter(f => mapping[f] === undefined);
+    document.getElementById('import-preview-zone').innerHTML = `
+      ${unmapped.length ? `<p class="field-warning visible">⚠ Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces champs resteront vides, modifiables ensuite sur chaque fiche.</p>` : ''}
+      <p><span class="badge badge-success">${okCount} à créer</span> <span class="badge badge-warning">${dupCount} doublon${dupCount > 1 ? 's' : ''} ignoré${dupCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>Ligne</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Date d'embauche</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${preview.map(r => `
+              <tr>
+                <td>${r.rowIndex}</td>
+                <td>${escapeHtml(r.record.nom)}</td>
+                <td>${escapeHtml(r.record.prenom)}</td>
+                <td>${escapeHtml(r.record.email)}</td>
+                <td>${escapeHtml(r.record.dateEmbauche)}</td>
+                <td>${r.status === 'ok'
+                  ? '<span class="badge badge-success">OK</span>'
+                  : r.status === 'duplicate'
+                    ? `<span class="badge badge-warning" title="${escapeHtml(r.message)}">Doublon</span>`
+                    : `<span class="badge badge-danger" title="${escapeHtml(r.message)}">Erreur</span>`}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    const confirmBtn = document.getElementById('btn-confirm-import');
+    confirmBtn.style.display = okCount > 0 ? 'inline-block' : 'none';
+    confirmBtn.textContent = `Importer ${okCount} salarié${okCount > 1 ? 's' : ''}`;
+    confirmBtn.onclick = () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Import en cours...';
+      const results = importEmployeesRows(currentPreview);
+      auditLogRepository.logAudit('Création', 'Salariés (import CSV)', `${results.created} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}`);
+      document.getElementById('import-preview-zone').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">✅</div>
+          <p><strong>${results.created}</strong> salarié${results.created > 1 ? 's' : ''} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}.</p>
+        </div>
+      `;
+      confirmBtn.style.display = 'none';
+      document.getElementById('f-import-file').style.display = 'none';
+      render();
+    };
+  }
+}
+
 function exportEmployeesCSV() {
   const { list } = getFilteredSortedEmployees();
   const visible = list.filter(e => !e.archive);
@@ -3493,6 +3877,8 @@ function bindEmployeesListEvents() {
 
   const newEmployeeBtn = document.getElementById('btn-new-employee');
   if (newEmployeeBtn) newEmployeeBtn.addEventListener('click', () => openEmployeeModal(null));
+  const importEmployeesBtn = document.getElementById('btn-import-employees');
+  if (importEmployeesBtn) importEmployeesBtn.addEventListener('click', openImportSalariesModal);
 
   document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesCSV);
 
@@ -3587,8 +3973,8 @@ function renderOrganigramme() {
   const f = state.organigrammeFilters;
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
 
-  const term = f.search.trim().toLowerCase();
-  if (term) employees = employees.filter(e => `${e.prenom} ${e.nom} ${e.poste}`.toLowerCase().includes(term));
+  const term = normalizeForSearch(f.search.trim());
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
   if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
   if (f.service) employees = employees.filter(e => e.service === f.service);
   if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
@@ -3922,6 +4308,8 @@ function renderEmployeeDetail(id) {
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
+        ${canEdit ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
+        ${canEdit ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
         ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
         ${canArchiveEmployeeRecord(e) ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
@@ -3955,6 +4343,7 @@ function renderEmployeeDetail(id) {
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
         ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
         ${canSeeContractuel && e.dateFinPeriodeEssai ? infoRow('Fin de période d\'essai', formatDate(e.dateFinPeriodeEssai)) : ''}
+        ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
       </div>
 
       <div class="card">
@@ -4541,6 +4930,108 @@ function openEmployeePrintModal(id) {
   });
 }
 
+/** Générateurs de documents RH (attestation employeur, certificat de travail) — même mécanique
+ * d'impression que openEmployeePrintModal ci-dessus (.print-area + window.print(), pas de .docx :
+ * aucune dépendance externe fiable pour ça dans ce projet 100% vanilla JS, et le risque vécu — "un
+ * .docx généré peut être accepté par la lib mais refusé par Word" — n'existe pas avec Imprimer/PDF
+ * natif du navigateur). Toujours une AIDE À LA PRÉPARATION : texte type à relire avant remise, un
+ * humain reste responsable du contenu final et de la signature. */
+function openAttestationEmployeurModal(id) {
+  const e = employeeRepository.getById(id);
+  if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const profile = companyRepository.getProfile();
+  const today = toISODate(new Date());
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Attestation employeur</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
+        <div class="print-area print-document">
+          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
+          <p style="text-align: right;">${formatDate(today)}</p>
+          <h1>Attestation employeur</h1>
+          <p>
+            Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
+            atteste que ${escapeHtml(e.civilite)} ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
+            est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(e.poste || '____________________')},
+            sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
+          </p>
+          <p>Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.</p>
+          <p style="margin-top: 48px;">Fait pour servir et valoir ce que de droit.</p>
+          <p style="margin-top: 48px;">Signature et cachet de l'entreprise :</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-document">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-document').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Attestation employeur', `${e.prenom} ${e.nom}`);
+    window.print();
+  });
+}
+
+function openCertificatTravailModal(id) {
+  const e = employeeRepository.getById(id);
+  if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const profile = companyRepository.getProfile();
+  const today = toISODate(new Date());
+  // Le certificat de travail (Code du travail, art. L1234-19) est obligatoire à la SORTIE — reste
+  // générable pour un contrat en cours (préparation à l'avance), juste avec un avertissement.
+  const dateSortie = e.dateFinContrat || (e.statut !== 'Actif' ? today : '');
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Certificat de travail</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        ${!dateSortie ? `<p class="field-warning visible">⚠ Aucune date de fin de contrat renseignée sur cette fiche — ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
+        <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
+        <div class="print-area print-document">
+          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
+          <p style="text-align: right;">${formatDate(today)}</p>
+          <h1>Certificat de travail</h1>
+          <p>
+            Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
+            certifie que ${escapeHtml(e.civilite)} ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} a été employé(e) au sein de notre entreprise
+            du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
+            en qualité de ${escapeHtml(e.poste || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
+          </p>
+          <p>Le salarié est libre de tout engagement à l'issue de cette période.</p>
+          <p style="margin-top: 48px;">Fait pour servir et valoir ce que de droit.</p>
+          <p style="margin-top: 48px;">Signature et cachet de l'entreprise :</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-document">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-document').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Certificat de travail', `${e.prenom} ${e.nom}`);
+    window.print();
+  });
+}
+
 function bindEmployeeDetailEvents() {
   document.getElementById('btn-back-to-list').addEventListener('click', () => navigateTo('employees'));
 
@@ -4551,6 +5042,10 @@ function bindEmployeeDetailEvents() {
     render();
   });
   document.getElementById('btn-print-employee-fiche').addEventListener('click', () => openEmployeePrintModal(state.currentEmployeeId));
+  const attestationBtn = document.getElementById('btn-print-attestation');
+  if (attestationBtn) attestationBtn.addEventListener('click', () => openAttestationEmployeurModal(state.currentEmployeeId));
+  const certificatBtn = document.getElementById('btn-print-certificat-travail');
+  if (certificatBtn) certificatBtn.addEventListener('click', () => openCertificatTravailModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
@@ -6215,6 +6710,7 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
+      <button class="tab ${state.parametresTab === 'qualite' ? 'active' : ''}" data-parametres-tab="qualite">Qualité des données</button>
       ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
     </div>
     <div id="parametres-tab-content">
@@ -6225,6 +6721,7 @@ function renderParametres() {
         : state.parametresTab === 'types-absences' ? renderParametresTypesAbsences()
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
+        : state.parametresTab === 'qualite' ? renderParametresQualite()
         : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
         : renderParametresListes()}
     </div>
@@ -6271,6 +6768,7 @@ function bindParametresEvents() {
   else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
   else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
+  else if (state.parametresTab === 'qualite') bindParametresQualiteEvents();
   else if (state.parametresTab === 'audit') bindParametresAuditEvents();
   else bindParametresListesEvents();
 }
@@ -7108,9 +7606,40 @@ function getFilteredAuditLog() {
   if (filters.action) list = list.filter(e => e.action === filters.action);
   if (filters.dateDebut) list = list.filter(e => toISODate(new Date(e.date)) >= filters.dateDebut);
   if (filters.dateFin) list = list.filter(e => toISODate(new Date(e.date)) <= filters.dateFin);
-  const term = (filters.search || '').trim().toLowerCase();
-  if (term) list = list.filter(e => `${e.entite} ${e.cible} ${e.details || ''}`.toLowerCase().includes(term));
+  const term = normalizeForSearch((filters.search || '').trim());
+  if (term) list = list.filter(e => normalizeForSearch(`${e.entite} ${e.cible} ${e.details || ''}`).includes(term));
   return list;
+}
+
+function renderParametresQualite() {
+  const issues = getDataQualityIssues();
+  return `
+    <div class="card">
+      <h2>Qualité des données</h2>
+      <p class="text-muted">Contrôles automatiques sur les salariés actifs — à corriger avant que ça ne pose problème en paie ou en déclaration.</p>
+      ${issues.length === 0 ? `<div class="empty-state"><div class="empty-icon">✅</div><p>Aucun problème détecté.</p></div>` : `
+        <div class="mini-list" style="margin-top: 12px;">
+          ${issues.map(issue => `
+            <div class="mini-list-item quality-issue-row">
+              <div class="quality-issue-header">
+                <span class="badge badge-${issue.severity === 'error' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'info'}">${issue.employees.length}</span>
+                <strong>${escapeHtml(issue.label)}</strong>
+              </div>
+              <div class="quality-issue-employees">
+                ${issue.employees.map(e => `<button type="button" class="btn-link quality-issue-link" data-employee-id="${escapeHtml(e.id)}">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</button>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function bindParametresQualiteEvents() {
+  document.querySelectorAll('.quality-issue-link').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: btn.dataset.employeeId }));
+  });
 }
 
 function renderParametresAudit() {
@@ -9464,6 +9993,7 @@ function openEmployeeModal(id) {
               </div>
               ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date')}
               ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
+              ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
             </div>
           </fieldset>
 
@@ -9721,6 +10251,13 @@ document.addEventListener('click', (e) => {
 // ---------------------------------------------------------------------------
 // Utilitaire de sécurité : échappement HTML avant injection dans le DOM
 // ---------------------------------------------------------------------------
+
+/** Minuscule + suppression des diacritiques ("Müller"/"Périgueux" → "muller"/"perigueux") — utilisé
+ * partout où une recherche compare une saisie utilisateur à des données réelles, pour que la casse
+ * et les accents ne fassent jamais échouer un résultat qui devrait matcher. */
+function normalizeForSearch(value) {
+  return (value || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
 
 function escapeHtml(value) {
   const str = value === null || value === undefined ? '' : String(value);
