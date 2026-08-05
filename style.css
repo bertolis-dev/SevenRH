@@ -895,6 +895,23 @@ textarea.input { resize: vertical; font-family: inherit; }
 .legend-holiday { background: var(--color-danger-soft); border: 1px solid var(--color-danger); }
 .legend-school { background: var(--color-info-soft); border: 1px solid var(--color-info); }
 
+/* Précédent/Suivant sur les côtés du calendrier plutôt qu'en haut (retour utilisateur : plus
+   accessible) — "Aujourd'hui" reste en haut, ce n'est pas une navigation mois par mois. */
+.calendar-card-wrap { display: flex; align-items: stretch; gap: 8px; margin-bottom: 18px; }
+.calendar-card-wrap .calendar-card { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.calendar-side-nav {
+  flex-shrink: 0;
+  width: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.calendar-side-nav:hover { background: var(--color-muted-soft); color: var(--color-text); border-color: var(--color-text-muted); }
+
 .calendar-card { padding: 12px; overflow-x: auto; }
 
 .calendar-grid {

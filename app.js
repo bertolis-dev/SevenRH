@@ -5944,9 +5944,7 @@ function renderCalendrier() {
         <p class="view-subtitle">${MONTH_NAMES[state.calendarMonth]} ${state.calendarYear}</p>
       </div>
       <div class="calendar-nav">
-        <button class="btn btn-secondary btn-sm" id="btn-cal-prev">← Précédent</button>
         <button class="btn btn-secondary btn-sm" id="btn-cal-today">Aujourd'hui</button>
-        <button class="btn btn-secondary btn-sm" id="btn-cal-next">Suivant →</button>
       </div>
     </div>
 
@@ -5969,13 +5967,17 @@ function renderCalendrier() {
       <span class="legend-item"><span class="legend-swatch legend-school"></span> Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})</span>
     </div>
 
-    <div class="card calendar-card">
-      <div class="calendar-grid calendar-grid-header">
-        ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
+    <div class="calendar-card-wrap">
+      <button type="button" class="calendar-side-nav" id="btn-cal-prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
+      <div class="card calendar-card">
+        <div class="calendar-grid calendar-grid-header">
+          ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
+        </div>
+        <div class="calendar-grid">
+          ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
+        </div>
       </div>
-      <div class="calendar-grid">
-        ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
-      </div>
+      <button type="button" class="calendar-side-nav" id="btn-cal-next" aria-label="Mois suivant" title="Mois suivant">›</button>
     </div>
   `;
 }
