@@ -1236,7 +1236,12 @@ function renderOnboardingStep1() {
   return `
     <div class="form-grid">
       ${textField('ob-raisonSociale', 'Raison sociale', p.raisonSociale, true)}
-      ${textField('ob-siret', 'SIRET', p.siret)}
+      <div class="form-field">
+        <label for="f-ob-siret">SIRET</label>
+        <input class="input" type="text" id="f-ob-siret" name="ob-siret" value="${escapeHtml(p.siret || '')}"
+          data-siret-autocomplete="true" data-fill-raison="f-ob-raisonSociale" data-fill-adresse="f-ob-adresse">
+        <span class="field-hint-computed" id="f-ob-siret-hint"></span>
+      </div>
       ${textField('ob-tva', 'N° TVA intracommunautaire', p.tva)}
       ${textField('ob-adresse', 'Adresse', p.adresse)}
       ${textField('ob-telephone', 'Téléphone', p.telephone)}
