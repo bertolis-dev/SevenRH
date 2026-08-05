@@ -194,6 +194,32 @@ p { margin: 0; line-height: 1.5; }
 
 .non-souscrit-banner .btn { flex-shrink: 0; }
 
+/* Champs mot de passe — bouton "afficher" (œil) + indicateur de correspondance pour les paires
+   mot de passe/confirmation, partout où ils apparaissent (connexion, inscription, réinitialisation). */
+.password-input-wrapper { position: relative; }
+.password-input-wrapper .input { padding-right: 40px; }
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.password-match-indicator {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.password-match-indicator.match-ok { display: flex; color: var(--color-success); }
+.password-match-indicator.match-bad { display: flex; color: var(--color-danger); }
+
 .form-hint {
   margin-top: 6px;
   font-size: 12px;

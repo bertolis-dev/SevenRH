@@ -315,7 +315,7 @@ function showApp() {
  * modales) : closeModal() n'est jamais appelée tant que le nouveau mot de passe n'est pas accepté. */
 function openForcedPasswordChangeModal() {
   const html = `
-    <div class="modal modal-small">
+    <div class="modal modal-small" data-blocking="true">
       <div class="modal-header">
         <h2>Choisissez un nouveau mot de passe</h2>
       </div>
@@ -324,11 +324,18 @@ function openForcedPasswordChangeModal() {
           <p class="text-muted">Vous vous êtes connecté avec un mot de passe temporaire — choisissez-en un nouveau avant de continuer.</p>
           <div class="form-field">
             <label for="f-forced-password">Nouveau mot de passe (6 caractères minimum) *</label>
-            <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password">
+            <div class="password-input-wrapper">
+              <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password">
+              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
           </div>
           <div class="form-field">
             <label for="f-forced-password-confirm">Confirmation *</label>
-            <input class="input" type="password" id="f-forced-password-confirm" minlength="6" required autocomplete="new-password">
+            <div class="password-input-wrapper">
+              <input class="input" type="password" id="f-forced-password-confirm" minlength="6" required autocomplete="new-password" data-match-source="f-forced-password">
+              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
+            <span class="password-match-indicator" id="f-forced-password-confirm-match"></span>
           </div>
           <p class="login-error" role="alert" id="forced-password-error" style="display: none;"></p>
         </div>
@@ -537,7 +544,10 @@ function renderLoginView() {
         </div>
         <div class="form-field">
           <label for="f-login-password">Mot de passe</label>
-          <input class="input" type="password" id="f-login-password" required autocomplete="current-password">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-login-password" required autocomplete="current-password">
+            <button type="button" class="btn-icon password-toggle" data-target="f-login-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
@@ -602,11 +612,18 @@ function renderSignupCompanyView() {
         </div>
         <div class="form-field">
           <label for="f-signup-company-password">Mot de passe</label>
-          <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password">
+            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
         </div>
         <div class="form-field">
           <label for="f-signup-company-password-confirm">Confirmation</label>
-          <input class="input" type="password" id="f-signup-company-password-confirm" required minlength="6" autocomplete="new-password">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-signup-company-password-confirm" required minlength="6" autocomplete="new-password" data-match-source="f-signup-company-password">
+            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
+          <span class="password-match-indicator" id="f-signup-company-password-confirm-match"></span>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-signup-company-submit" style="width: 100%;">Créer mon entreprise</button>
@@ -670,7 +687,10 @@ function renderBertolisLoginView() {
         </div>
         <div class="form-field">
           <label for="f-bertolis-password">Mot de passe</label>
-          <input class="input" type="password" id="f-bertolis-password" required autocomplete="current-password">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-bertolis-password" required autocomplete="current-password">
+            <button type="button" class="btn-icon password-toggle" data-target="f-bertolis-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" style="width: 100%;">Se connecter</button>
@@ -720,11 +740,18 @@ function renderResetPasswordView() {
       <form id="reset-password-form">
         <div class="form-field">
           <label for="f-reset-password">Nouveau mot de passe</label>
-          <input class="input" type="password" id="f-reset-password" required minlength="6">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-reset-password" required minlength="6">
+            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
         </div>
         <div class="form-field">
           <label for="f-reset-password-confirm">Confirmation</label>
-          <input class="input" type="password" id="f-reset-password-confirm" required minlength="6">
+          <div class="password-input-wrapper">
+            <input class="input" type="password" id="f-reset-password-confirm" required minlength="6" data-match-source="f-reset-password">
+            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
+          <span class="password-match-indicator" id="f-reset-password-confirm-match"></span>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" style="width: 100%;">Valider</button>
@@ -952,18 +979,26 @@ function renderUserMenuPanel() {
   // SaaS (Stripe lui-même, GitHub, Notion, Slack...) placent la facturation : toujours visible en
   // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
   const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
+  const canGererParametres = ['rh', 'directeur'].includes(user.role) && hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
 
   panel.innerHTML = `
     <div class="user-menu-header">
       <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
       <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
     </div>
+    ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">⚙️ Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">💳 Abonnement</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
   `;
 
+  if (canGererParametres) {
+    document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
+      document.getElementById('user-menu-panel').classList.remove('open');
+      navigateTo('parametres');
+    });
+  }
   if (canGererAbonnement) {
     document.getElementById('btn-user-menu-abonnement').addEventListener('click', () => {
       document.getElementById('user-menu-panel').classList.remove('open');
@@ -1046,15 +1081,25 @@ function openChangePasswordModal() {
         <div class="modal-body">
           <div class="form-field">
             <label for="f-current-password">Mot de passe actuel</label>
-            <input class="input" type="password" id="f-current-password" required>
+            <div class="password-input-wrapper">
+              <input class="input" type="password" id="f-current-password" required>
+              <button type="button" class="btn-icon password-toggle" data-target="f-current-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-new-password">Nouveau mot de passe</label>
-            <input class="input" type="password" id="f-new-password" required minlength="6">
+            <div class="password-input-wrapper">
+              <input class="input" type="password" id="f-new-password" required minlength="6">
+              <button type="button" class="btn-icon password-toggle" data-target="f-new-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-new-password-confirm">Confirmation</label>
-            <input class="input" type="password" id="f-new-password-confirm" required minlength="6">
+            <div class="password-input-wrapper">
+              <input class="input" type="password" id="f-new-password-confirm" required minlength="6" data-match-source="f-new-password">
+              <button type="button" class="btn-icon password-toggle" data-target="f-new-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
+            <span class="password-match-indicator" id="f-new-password-confirm-match"></span>
           </div>
           <p class="login-error" role="alert" id="change-password-error" style="display: none;"></p>
         </div>
@@ -1459,11 +1504,46 @@ function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
 
   const modalRoot = document.getElementById('modal-root');
+  // Une modale marquée data-blocking (ex. changement de mot de passe obligatoire) ne doit pouvoir
+  // se fermer QUE via son propre bouton de validation — ni le clic sur le fond sombre, ni Échap.
   modalRoot.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-root') closeModal();
+    if (e.target.id === 'modal-root' && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape' && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
+  });
+
+  // Bouton "œil" — bascule l'affichage en clair de n'importe quel champ mot de passe marqué
+  // .password-toggle (délégué une seule fois ici : ces champs apparaissent dans des vues/modales
+  // qui se réécrivent entièrement à chaque rendu, pas la peine de re-lier à chaque fois).
+  document.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.password-toggle');
+    if (!toggle) return;
+    const input = document.getElementById(toggle.dataset.target);
+    if (!input) return;
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    toggle.textContent = showing ? '👁️' : '🙈';
+    toggle.setAttribute('aria-label', showing ? 'Afficher le mot de passe' : 'Masquer le mot de passe');
+  });
+
+  // Indicateur vert/rouge sous un champ de confirmation (data-match-source pointe vers le champ
+  // "mot de passe" à comparer) — recalculé à chaque frappe sur l'un OU l'autre des deux champs.
+  document.addEventListener('input', (e) => {
+    const id = e.target.id;
+    if (!id) return;
+    const isConfirmField = e.target.hasAttribute('data-match-source');
+    const isSourceField = !isConfirmField && !!document.querySelector(`[data-match-source="${id}"]`);
+    if (!isConfirmField && !isSourceField) return;
+    document.querySelectorAll('[data-match-source]').forEach(confirmInput => {
+      const sourceInput = document.getElementById(confirmInput.dataset.matchSource);
+      const indicator = document.getElementById(confirmInput.id + '-match');
+      if (!sourceInput || !indicator) return;
+      if (!confirmInput.value) { indicator.className = 'password-match-indicator'; indicator.textContent = ''; return; }
+      const match = sourceInput.value === confirmInput.value;
+      indicator.textContent = match ? '✓ Les mots de passe correspondent' : '✕ Les mots de passe sont différents';
+      indicator.className = 'password-match-indicator ' + (match ? 'match-ok' : 'match-bad');
+    });
   });
 
   /** Active au clavier (Entrée/Espace) n'importe quel élément focusable marqué role="button" — évite d'ajouter un gestionnaire keydown à chaque ligne/carte cliquable (salariés, organigramme, favoris, notifications...). */
