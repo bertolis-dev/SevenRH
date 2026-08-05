@@ -1260,7 +1260,7 @@ function renderOnboardingStepEtablissement() {
     <div class="form-grid">
       ${textField('ob-etab-nom', 'Nom', e.nom, true)}
       ${textField('ob-etab-code', 'Code interne', e.codeInterne)}
-      ${textField('ob-etab-adresse', 'Adresse', e.adresse)}
+      ${addressAutocompleteField('ob-etab-adresse', 'Adresse', e.adresse, 'ob-etab-cp', 'ob-etab-ville')}
       ${textField('ob-etab-cp', 'Code postal', e.codePostal)}
       ${textField('ob-etab-ville', 'Ville', e.ville)}
       ${textField('ob-etab-pays', 'Pays', e.pays)}
@@ -1656,6 +1656,91 @@ function bindGlobalEvents() {
     if (!e.target.closest('.address-autocomplete-field')) {
       document.querySelectorAll('.address-suggestions').forEach(el => { el.style.display = 'none'; });
     }
+  });
+
+  // Surligne en rouge tout champ obligatoire resté vide/invalide après une tentative de
+  // soumission — l'événement "invalid" (déclenché par le navigateur juste avant de bloquer un
+  // submit HTML5 classique) ne remonte pas (bubble) par défaut, d'où la phase de capture ci-dessous
+  // plutôt qu'un simple addEventListener('input'...). Se retire dès que le champ est corrigé.
+  document.addEventListener('invalid', (e) => {
+    if (e.target.classList && e.target.classList.contains('input')) e.target.classList.add('field-invalid');
+  }, true);
+  document.addEventListener('input', (e) => {
+    if (e.target.classList && e.target.classList.contains('field-invalid') && e.target.checkValidity()) {
+      e.target.classList.remove('field-invalid');
+    }
+  });
+
+  // Âge / ancienneté calculés en direct sous les champs de date correspondants — évite d'avoir à
+  // ouvrir la fiche imprimable juste pour voir un chiffre qu'on peut calculer soi-même à la volée.
+  document.addEventListener('input', (e) => {
+    if (e.target.hasAttribute('data-live-age')) {
+      const hint = document.getElementById(e.target.id + '-age');
+      if (!hint) return;
+      const age = calculateAge(e.target.value);
+      hint.textContent = age !== null ? `${age} an${age > 1 ? 's' : ''}` : '';
+    }
+    if (e.target.hasAttribute('data-live-anciennete')) {
+      const hint = document.getElementById(e.target.id + '-anciennete');
+      if (!hint) return;
+      const anciennete = calculateAnciennete(e.target.value);
+      hint.textContent = anciennete && anciennete !== '—' ? `Ancienneté : ${anciennete}` : '';
+    }
+  });
+
+  // Détection en direct d'un email déjà utilisé par un autre salarié de l'entreprise (plutôt que
+  // de laisser échouer la sauvegarde en silence ou avec une erreur générique après coup).
+  let duplicateEmailTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target.hasAttribute('data-check-duplicate-email')) return;
+    const input = e.target;
+    const warning = document.getElementById(input.id + '-duplicate-warning');
+    if (!warning) return;
+    clearTimeout(duplicateEmailTimer);
+    duplicateEmailTimer = setTimeout(() => {
+      const email = input.value.trim().toLowerCase();
+      const excludeId = input.dataset.excludeId;
+      const duplicate = email && employeeRepository.getAll().some(emp =>
+        emp.id !== excludeId && !emp.archive && (emp.email || '').toLowerCase() === email
+      );
+      warning.classList.toggle('visible', !!duplicate);
+    }, 250);
+  });
+
+  // Autocomplétion SIRET (API Recherche d'entreprises gouv.fr, gratuite/sans clé) — dès que 14
+  // chiffres valides sont saisis, remplit automatiquement la raison sociale et l'adresse du siège.
+  let siretAutocompleteTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target.hasAttribute('data-siret-autocomplete')) return;
+    const input = e.target;
+    const hint = document.getElementById(input.id + '-hint');
+    clearTimeout(siretAutocompleteTimer);
+    const digits = input.value.replace(/\s/g, '');
+    if (!/^\d{14}$/.test(digits)) {
+      if (hint) hint.textContent = '';
+      return;
+    }
+    if (hint) hint.textContent = 'Recherche...';
+    siretAutocompleteTimer = setTimeout(async () => {
+      let data;
+      try {
+        const res = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${digits}&per_page=1`);
+        data = await res.json();
+      } catch {
+        if (hint) hint.textContent = '';
+        return;
+      }
+      const result = data?.results?.[0];
+      if (!result || !result.siege) {
+        if (hint) hint.textContent = 'Aucune entreprise trouvée pour ce SIRET.';
+        return;
+      }
+      const raisonField = document.getElementById(input.dataset.fillRaison);
+      const adresseField = document.getElementById(input.dataset.fillAdresse);
+      if (raisonField && !raisonField.value) raisonField.value = result.nom_complet || '';
+      if (adresseField && !adresseField.value) adresseField.value = result.siege.adresse || '';
+      if (hint) hint.textContent = `✓ ${result.nom_complet || ''}`;
+    }, 400);
   });
 
   /** Active au clavier (Entrée/Espace) n'importe quel élément focusable marqué role="button" — évite d'ajouter un gestionnaire keydown à chaque ligne/carte cliquable (salariés, organigramme, favoris, notifications...). */
@@ -6141,7 +6226,12 @@ function renderParametresEntreprise() {
       <form id="entreprise-form">
         <div class="form-grid">
           ${textField('raisonSociale', 'Raison sociale', profile.raisonSociale, true)}
-          ${textField('siret', 'SIRET', profile.siret)}
+          <div class="form-field">
+            <label for="f-siret">SIRET</label>
+            <input class="input" type="text" id="f-siret" name="siret" value="${escapeHtml(profile.siret || '')}"
+              data-siret-autocomplete="true" data-fill-raison="f-raisonSociale" data-fill-adresse="f-adresse">
+            <span class="field-hint-computed" id="f-siret-hint"></span>
+          </div>
           ${textField('tva', 'N° TVA intracommunautaire', profile.tva)}
           ${textField('adresse', 'Adresse', profile.adresse)}
           ${textField('telephone', 'Téléphone', profile.telephone)}
@@ -9273,12 +9363,21 @@ function openEmployeeModal(id) {
               ${selectField('civilite', 'Civilité', ['M.', 'Mme'], employee.civilite)}
               ${textField('prenom', 'Prénom', employee.prenom, true)}
               ${textField('nom', 'Nom', employee.nom, true)}
-              ${textField('email', 'Email', employee.email, true, 'email')}
+              <div class="form-field">
+                <label for="f-email">Email *</label>
+                <input class="input" type="email" id="f-email" name="email" value="${escapeHtml(employee.email || '')}" required
+                  data-check-duplicate-email="true" data-exclude-id="${escapeHtml(employee.id || '')}">
+                <span class="field-warning" id="f-email-duplicate-warning">⚠ Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
+              </div>
               ${textField('telephone', 'Téléphone', employee.telephone)}
               ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
               ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
               ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
-              ${textField('dateNaissance', 'Date de naissance', employee.dateNaissance, false, 'date')}
+              <div class="form-field">
+                <label for="f-dateNaissance">Date de naissance</label>
+                <input class="input" type="date" id="f-dateNaissance" name="dateNaissance" value="${escapeHtml(employee.dateNaissance || '')}" data-live-age="true">
+                <span class="field-hint-computed" id="f-dateNaissance-age"></span>
+              </div>
               ${textField('lieuNaissance', 'Lieu de naissance', employee.lieuNaissance)}
               ${textField('nationalite', 'Nationalité', employee.nationalite)}
               ${textField('numeroSecu', 'N° sécurité sociale', employee.numeroSecu)}
@@ -9296,7 +9395,11 @@ function openEmployeeModal(id) {
               ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, employee.conventionCollective)}
               ${selectField('statutPro', 'Statut professionnel', settings.statutsPro, employee.statutPro)}
               ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat)}
-              ${textField('dateEmbauche', 'Date d\'embauche', employee.dateEmbauche, true, 'date')}
+              <div class="form-field">
+                <label for="f-dateEmbauche">Date d'embauche *</label>
+                <input class="input" type="date" id="f-dateEmbauche" name="dateEmbauche" value="${escapeHtml(employee.dateEmbauche || '')}" required data-live-anciennete="true">
+                <span class="field-hint-computed" id="f-dateEmbauche-anciennete"></span>
+              </div>
               ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date')}
               ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
             </div>
