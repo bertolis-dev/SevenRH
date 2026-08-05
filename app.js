@@ -123,6 +123,7 @@ function getInitialViewState() {
     authError: '',
     pendingReset: null, // { token, employeeName } après une demande de réinitialisation
     pendingSignupConfirmation: null, // email en attente de confirmation après DB.signUp()
+    resendConfirmationSent: null, // email confirmé après renderResendConfirmationView() (écran "email envoyé")
     onboarding: null, // brouillon de l'assistant de première installation, voir openOnboardingWizard()
     planningView: 'semaine', // 'semaine' | 'mois' | 'annee'
     planningFilters: { service: '' },
@@ -305,6 +306,66 @@ function showApp() {
   document.querySelector('.topbar-user').prepend(themeToggle);
   navigateTo('dashboard');
   handleCheckoutReturn();
+  const currentUser = authRepository.getCurrentUser();
+  if (currentUser && currentUser.mustChangePassword) openForcedPasswordChangeModal();
+}
+
+/** Après une première connexion avec un mot de passe temporaire (voir openCreerCompteConnexionModal
+ * / openForcerMotDePasseModal) — aucun bouton pour fermer sans valider (contrairement aux autres
+ * modales) : closeModal() n'est jamais appelée tant que le nouveau mot de passe n'est pas accepté. */
+function openForcedPasswordChangeModal() {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Choisissez un nouveau mot de passe</h2>
+      </div>
+      <form id="forced-password-change-form">
+        <div class="modal-body">
+          <p class="text-muted">Vous vous êtes connecté avec un mot de passe temporaire — choisissez-en un nouveau avant de continuer.</p>
+          <div class="form-field">
+            <label for="f-forced-password">Nouveau mot de passe (6 caractères minimum) *</label>
+            <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password">
+          </div>
+          <div class="form-field">
+            <label for="f-forced-password-confirm">Confirmation *</label>
+            <input class="input" type="password" id="f-forced-password-confirm" minlength="6" required autocomplete="new-password">
+          </div>
+          <p class="login-error" role="alert" id="forced-password-error" style="display: none;"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary" style="width: 100%;">Valider</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('forced-password-change-form').addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const p1 = document.getElementById('f-forced-password').value;
+    const p2 = document.getElementById('f-forced-password-confirm').value;
+    const errorEl = document.getElementById('forced-password-error');
+    if (p1 !== p2) {
+      errorEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    const submitBtn = evt.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Validation...';
+    const result = await authRepository.changerMotDePassePremiereConnexion(p1);
+    if (!result.success) {
+      errorEl.textContent = result.error;
+      errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Valider';
+      return;
+    }
+    closeModal();
+    showToast('Mot de passe mis à jour.');
+  });
 }
 
 /** Bandeau persistant app-wide pour les entreprises créées via "Créer mon entreprise" (migration
@@ -451,10 +512,10 @@ function renderLoginScreen() {
     root.innerHTML = renderForgotPasswordView();
   } else if (state.authView === 'reset') {
     root.innerHTML = renderResetPasswordView();
-  } else if (state.authView === 'signup') {
-    root.innerHTML = renderSignupView();
   } else if (state.authView === 'signup-company') {
     root.innerHTML = renderSignupCompanyView();
+  } else if (state.authView === 'resend-confirmation') {
+    root.innerHTML = renderResendConfirmationView();
   } else if (state.authView === 'bertolis') {
     root.innerHTML = renderBertolisLoginView();
   } else {
@@ -482,68 +543,19 @@ function renderLoginView() {
         <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
       </form>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
-      <button type="button" class="btn-link" id="btn-goto-signup">Créer un compte</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
+      <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
   `;
 }
 
-/** Réservé aux salariés dont la fiche existe déjà dans l'entreprise (créée par RH/manager) — voir
- * DB.signUp() : la liaison au compte se fait automatiquement côté serveur via l'email. */
-function renderSignupView() {
-  if (state.pendingSignupConfirmation) {
-    return `
-      <div class="login-card">
-        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
-        <h1>Créer mon compte</h1>
-        <p class="text-muted">
-          Compte créé pour <strong>${escapeHtml(state.pendingSignupConfirmation)}</strong>.
-          Vérifiez votre boîte mail et cliquez sur le lien de confirmation avant de vous connecter.
-        </p>
-        <button type="button" class="btn-link" id="btn-resend-confirmation">Renvoyer l'email de confirmation</button>
-        <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="login-card">
-      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
-      <h1>Créer mon compte</h1>
-      <p class="text-muted">Si votre fiche existe déjà dans l'entreprise (créée par RH/manager), votre compte y sera relié automatiquement. Sinon, une nouvelle fiche est créée pour vous (rôle Salarié par défaut, modifiable ensuite par RH).</p>
-      <form id="signup-form">
-        <div class="form-field">
-          <label for="f-signup-prenom">Prénom</label>
-          <input class="input" type="text" id="f-signup-prenom" required>
-        </div>
-        <div class="form-field">
-          <label for="f-signup-nom">Nom</label>
-          <input class="input" type="text" id="f-signup-nom" required>
-        </div>
-        <div class="form-field">
-          <label for="f-signup-email">Email professionnel</label>
-          <input class="input" type="email" id="f-signup-email" required autocomplete="username">
-        </div>
-        <div class="form-field">
-          <label for="f-signup-password">Mot de passe</label>
-          <input class="input" type="password" id="f-signup-password" required minlength="6" autocomplete="new-password">
-        </div>
-        <div class="form-field">
-          <label for="f-signup-password-confirm">Confirmation</label>
-          <input class="input" type="password" id="f-signup-password-confirm" required minlength="6" autocomplete="new-password">
-        </div>
-        ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
-        <button type="submit" class="btn btn-primary" id="btn-signup-submit" style="width: 100%;">Créer mon compte</button>
-      </form>
-      <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
-    </div>
-  `;
-}
-
-/** Crée une toute nouvelle entreprise dans Seven RH (pas juste rejoindre une entreprise existante,
- * contrairement à renderSignupView ci-dessus) — voir DB.signUpNewCompany() / migration 0012.
+/** Crée une toute nouvelle entreprise dans Seven RH — voir DB.signUpNewCompany() / migration 0012.
+ * Seul point d'entrée d'inscription libre-service (l'ancien "Créer un compte", qui rejoignait une
+ * entreprise existante par correspondance de domaine d'email, a été retiré : chaque compte de
+ * connexion est désormais créé explicitement par un Directeur/RH depuis la fiche du salarié, voir
+ * renderCompteCard/openCreerCompteConnexionModal).
  * L'entreprise démarre en accès restreint (statut "non_souscrit", 1 seul salarié) jusqu'à
  * souscription d'une offre depuis Paramètres → Abonnement. */
 function renderSignupCompanyView() {
@@ -598,6 +610,45 @@ function renderSignupCompanyView() {
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-signup-company-submit" style="width: 100%;">Créer mon entreprise</button>
+      </form>
+      <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
+    </div>
+  `;
+}
+
+/** Point d'entrée indépendant de l'écran "vérifiez vos emails" (state.pendingSignupConfirmation,
+ * éphémère — perdu si l'onglet est fermé ou après 24h, voir PENDING_SIGNUP_TTL_MS) : un vrai client
+ * qui n'a jamais reçu son premier email de confirmation (spam, filtre d'entreprise...) et revient
+ * sur le site plus tard doit pouvoir redemander l'envoi sans repasser par tout le formulaire
+ * d'inscription. Message volontairement générique quel que soit le résultat réel (compte inconnu,
+ * déjà confirmé, ou vraiment en attente) — ne révèle jamais si un compte existe pour cette adresse. */
+function renderResendConfirmationView() {
+  if (state.resendConfirmationSent) {
+    return `
+      <div class="login-card">
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+        <h1>Email de confirmation</h1>
+        <p class="text-muted">
+          Si un compte en attente de confirmation existe pour <strong>${escapeHtml(state.resendConfirmationSent)}</strong>,
+          un nouvel email vient d'être envoyé. Vérifiez votre boîte mail (et les spams).
+        </p>
+        <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="login-card">
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+      <h1>Renvoyer l'email de confirmation</h1>
+      <p class="text-muted">Vous vous êtes déjà inscrit mais n'avez jamais reçu l'email de confirmation ? Indiquez votre adresse ci-dessous pour qu'un nouvel envoi soit tenté.</p>
+      <form id="resend-confirmation-form">
+        <div class="form-field">
+          <label for="f-resend-confirmation-email">Email</label>
+          <input class="input" type="email" id="f-resend-confirmation-email" required autocomplete="username">
+        </div>
+        ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
+        <button type="submit" class="btn btn-primary" id="btn-resend-confirmation-submit" style="width: 100%;">Renvoyer l'email</button>
       </form>
       <button type="button" class="btn-link" id="btn-back-to-login">Retour à la connexion</button>
     </div>
@@ -753,15 +804,32 @@ function bindLoginScreenEvents() {
     state.authError = '';
     state.pendingReset = null;
     state.pendingSignupConfirmation = null;
+    state.resendConfirmationSent = null;
     sessionStorage.removeItem('sevenrh_pending_signup_email');
     sessionStorage.removeItem('sevenrh_pending_reset_email');
     sessionStorage.removeItem('sevenrh_password_recovery_pending');
     renderLoginScreen();
   });
 
-  const gotoSignupBtn = document.getElementById('btn-goto-signup');
-  if (gotoSignupBtn) gotoSignupBtn.addEventListener('click', () => {
-    state.authView = 'signup';
+  const gotoResendConfirmationBtn = document.getElementById('btn-goto-resend-confirmation');
+  if (gotoResendConfirmationBtn) gotoResendConfirmationBtn.addEventListener('click', () => {
+    state.authView = 'resend-confirmation';
+    state.authError = '';
+    state.resendConfirmationSent = null;
+    renderLoginScreen();
+  });
+
+  const resendConfirmationForm = document.getElementById('resend-confirmation-form');
+  if (resendConfirmationForm) resendConfirmationForm.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const email = document.getElementById('f-resend-confirmation-email').value;
+    const submitBtn = document.getElementById('btn-resend-confirmation-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi...';
+    await authRepository.resendSignupConfirmation(email);
+    // Message générique dans tous les cas (voir commentaire de renderResendConfirmationView) : ne
+    // révèle jamais si un compte existe, est déjà confirmé, ou vraiment en attente pour cette adresse.
+    state.resendConfirmationSent = email;
     state.authError = '';
     renderLoginScreen();
   });
@@ -812,33 +880,6 @@ function bindLoginScreenEvents() {
       state.pendingSignupConfirmation = email;
       state.authError = '';
       setPendingSignupEmail(email, 'signup-company');
-      renderLoginScreen();
-      return;
-    }
-    showApp();
-  });
-
-  const signupForm = document.getElementById('signup-form');
-  if (signupForm) signupForm.addEventListener('submit', async (evt) => {
-    evt.preventDefault();
-    const prenom = document.getElementById('f-signup-prenom').value;
-    const nom = document.getElementById('f-signup-nom').value;
-    const email = document.getElementById('f-signup-email').value;
-    const p1 = document.getElementById('f-signup-password').value;
-    const p2 = document.getElementById('f-signup-password-confirm').value;
-    if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
-    const submitBtn = document.getElementById('btn-signup-submit');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Création...';
-    const result = await authRepository.signUp(email, p1, nom, prenom);
-    if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
-    if (result.needsEmailConfirmation) {
-      state.pendingSignupConfirmation = email;
-      state.authError = '';
-      // Persisté (pas juste en mémoire) : l'utilisateur va typiquement changer d'appli pour
-      // consulter ses emails, ce qui peut faire recharger l'onglet en arrière-plan (fréquent sur
-      // mobile) — sans ça, il retombe silencieusement sur l'écran de connexion à son retour.
-      setPendingSignupEmail(email, 'signup');
       renderLoginScreen();
       return;
     }
@@ -3667,13 +3708,13 @@ function renderCompteCard(e, user) {
     <div class="card">
       <h2>Compte</h2>
       <div class="badge-row" style="margin-bottom: 10px;">
-        <span class="badge badge-${e.verrouille ? 'warning' : 'success'}">${e.verrouille ? 'Verrouillé' : 'Actif'}</span>
-        ${e.tentativesEchouees ? `<span class="text-muted">${e.tentativesEchouees} tentative${e.tentativesEchouees > 1 ? 's' : ''} échouée${e.tentativesEchouees > 1 ? 's' : ''}</span>` : ''}
+        <span class="badge badge-${e.authUserId ? 'success' : 'warning'}">${e.authUserId ? 'Compte actif' : 'Pas de compte de connexion'}</span>
       </div>
       <p class="text-muted" style="margin-bottom: 10px;">Rôle actuel : <strong>${escapeHtml(ROLE_LABELS[e.role] || e.role)}</strong></p>
       <div class="detail-header-actions">
-        ${e.verrouille ? '<button class="btn btn-secondary btn-sm" id="btn-deverrouiller-compte">Déverrouiller le compte</button>' : ''}
-        <button class="btn btn-secondary btn-sm" id="btn-forcer-mot-de-passe">Réinitialiser le mot de passe</button>
+        ${e.authUserId
+          ? '<button class="btn btn-secondary btn-sm" id="btn-forcer-mot-de-passe">Réinitialiser le mot de passe</button>'
+          : '<button class="btn btn-primary btn-sm" id="btn-creer-compte-connexion">Créer les identifiants de connexion</button>'}
         <button class="btn btn-secondary btn-sm" id="btn-changer-role">Changer le rôle</button>
       </div>
     </div>
@@ -3767,14 +3808,91 @@ function openForcerMotDePasseModal(employeeId) {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('forcer-mdp-form').addEventListener('submit', (evt) => {
+  document.getElementById('forcer-mdp-form').addEventListener('submit', async (evt) => {
     evt.preventDefault();
-    const result = employeeRepository.forcerMotDePasse(employeeId, document.getElementById('f-nouveau-mdp').value);
-    if (!result.success) { showToast(result.error, 'error'); return; }
+    const submitBtn = evt.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Réinitialisation...';
+    const result = await employeeRepository.forcerMotDePasse(employeeId, document.getElementById('f-nouveau-mdp').value);
+    if (!result.success) { showToast(result.error, 'error'); submitBtn.disabled = false; submitBtn.textContent = 'Réinitialiser'; return; }
     showToast('Mot de passe réinitialisé.');
     closeModal();
     render();
   });
+}
+
+/** § GERER_UTILISATEURS : crée le compte de connexion d'un salarié qui n'en a pas encore (voir
+ * DB.creerCompteConnexion / manage-employee-account) — remplace l'ancien parcours d'auto-inscription
+ * "Créer un compte" (retiré). Mot de passe généré côté serveur, affiché une seule fois ensuite via
+ * showGeneratedPasswordModal. */
+function openCreerCompteConnexionModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Créer les identifiants de connexion</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">
+          Un compte de connexion sera créé pour <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
+          (${escapeHtml(employee.email)}), avec un mot de passe temporaire généré automatiquement.
+          Vous devrez le transmettre vous-même au salarié (oral, SMS...) ; il devra le changer dès sa première connexion.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-creer-compte">Créer le compte</button>
+      </div>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-confirm-creer-compte').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirm-creer-compte');
+    btn.disabled = true;
+    btn.textContent = 'Création...';
+    const result = await employeeRepository.creerCompteConnexion(employeeId);
+    if (!result.success) { showToast(result.error, 'error'); closeModal(); return; }
+    showGeneratedPasswordModal(employee, result.password);
+    render();
+  });
+}
+
+/** Affiche une seule fois le mot de passe temporaire généré par creerCompteConnexion/
+ * forcerNouveauMotDePasse — Supabase ne le renvoie plus jamais ensuite (par sécurité). */
+function showGeneratedPasswordModal(employee, password) {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Compte créé</h2>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Communiquez ces identifiants à <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong> par un autre moyen que cette application. Ce mot de passe ne sera plus jamais affiché.</p>
+        <div class="form-field">
+          <label for="f-generated-email">Email</label>
+          <input class="input" type="text" id="f-generated-email" readonly value="${escapeHtml(employee.email)}">
+        </div>
+        <div class="form-field">
+          <label for="f-generated-password">Mot de passe temporaire</label>
+          <input class="input" type="text" id="f-generated-password" readonly value="${escapeHtml(password)}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btn-close-password-modal">J'ai noté le mot de passe</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-password-modal').addEventListener('click', closeModal);
 }
 
 /** Surcharges individuelles (§8) pour les permissions déjà réellement câblées dans l'app — voir
@@ -4100,15 +4218,11 @@ function bindEmployeeDetailEvents() {
   bindPermissionsCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
 
-  const deverrouillerBtn = document.getElementById('btn-deverrouiller-compte');
-  if (deverrouillerBtn) deverrouillerBtn.addEventListener('click', () => {
-    const result = employeeRepository.deverrouillerCompte(state.currentEmployeeId);
-    if (!result.success) { showToast(result.error, 'error'); return; }
-    showToast('Compte déverrouillé.');
-    render();
-  });
   const forcerMdpBtn = document.getElementById('btn-forcer-mot-de-passe');
   if (forcerMdpBtn) forcerMdpBtn.addEventListener('click', () => openForcerMotDePasseModal(state.currentEmployeeId));
+
+  const creerCompteBtn = document.getElementById('btn-creer-compte-connexion');
+  if (creerCompteBtn) creerCompteBtn.addEventListener('click', () => openCreerCompteConnexionModal(state.currentEmployeeId));
 
   const changerRoleBtn = document.getElementById('btn-changer-role');
   if (changerRoleBtn) changerRoleBtn.addEventListener('click', () => openChangeRoleModal(state.currentEmployeeId));

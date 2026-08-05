@@ -86,6 +86,8 @@ function employeeFromRow(row) {
     tentativesEchouees: 0,
     verrouille: false,
     resetToken: null,
+    authUserId: row.auth_user_id ?? null,
+    mustChangePassword: d.mustChangePassword ?? false,
     permissionsOverrides: row.permissions_overrides ?? {}
   };
 }
@@ -235,7 +237,7 @@ function favoritesFromRows(rows) {
 
 function employeeToRow(e, companyId) {
   const { id, matricule, nom, prenom, email, etablissementId, service, equipe, managerIds, archive,
-    permissionsOverrides, role, motDePasse, tentativesEchouees, verrouille, resetToken,
+    permissionsOverrides, role, motDePasse, tentativesEchouees, verrouille, resetToken, authUserId,
     dateCreation, dateModification, ...rest } = e;
   return {
     id, company_id: companyId, email, role, matricule, nom, prenom,
@@ -387,24 +389,6 @@ async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { success: false, error: error.message };
   return { success: true, session: data.session };
-}
-
-/** Crée un vrai compte Supabase Auth — un trigger côté serveur (voir migration
- * 0006_signup_self_create_employee.sql) relie ce compte à une fiche salarié existante si l'email
- * correspond, sinon en crée une nouvelle (rôle "salarie" par défaut) à partir de nom/prénom, passés
- * ici en métadonnées du compte (raw_user_meta_data, lu par le trigger). */
-async function signUp(email, password, nom, prenom) {
-  // Sans emailRedirectTo, Supabase renvoie vers l'URL "Site URL" configurée par défaut sur le
-  // projet (souvent http://localhost:3000, jamais mise à jour depuis) — le lien de confirmation
-  // reçu par email pointait donc vers une adresse injoignable ("Safari ne peut pas ouvrir la
-  // page..."). Même correctif que sendPasswordResetEmail ci-dessous, qui l'avait déjà.
-  const { data, error } = await supabase.auth.signUp({
-    email, password,
-    options: { data: { nom, prenom }, emailRedirectTo: currentSiteBase() }
-  });
-  if (error) return { success: false, error: error.message };
-  // Selon la config du projet (confirmation email activée ou non), une session peut déjà exister.
-  return { success: true, session: data.session, needsEmailConfirmation: !data.session };
 }
 
 /** Inscription "Créer mon entreprise" (migration 0012) : marque le compte avec intent
@@ -567,6 +551,24 @@ async function invokeBilling(action, payload) {
   return { success: true, ...data };
 }
 
+/** Appelle la fonction serveur "manage-employee-account" — un Directeur/RH crée ("create") ou
+ * réinitialise ("reset") directement le compte de connexion d'un salarié de son entreprise (voir
+ * supabase/functions/manage-employee-account/index.ts). Renvoie le mot de passe (généré côté
+ * serveur pour "create", ou celui passé/généré pour "reset") — à afficher une seule fois, jamais
+ * récupérable ensuite. */
+async function manageEmployeeAccount(action, employeeId, password) {
+  const { data, error } = await supabase.functions.invoke('manage-employee-account', { body: { action, employeeId, password } });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, ...data };
+}
+
 async function updatePassword(newPassword) {
   return supabase.auth.updateUser({ password: newPassword });
 }
@@ -656,7 +658,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signUp, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, resendSignupConfirmation, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,

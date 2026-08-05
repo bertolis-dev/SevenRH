@@ -1227,16 +1227,35 @@ const DB = {
     return { success: true };
   },
 
+  /** § GERER_UTILISATEURS : crée le compte de connexion Supabase Auth d'un salarié qui n'en a
+   * encore aucun (voir supabase/functions/manage-employee-account/index.ts) — remplace l'ancien
+   * parcours d'auto-inscription "Créer un compte" (retiré, migration 0014). Mot de passe temporaire
+   * généré côté serveur, renvoyé une seule fois pour être transmis au salarié par un autre canal. */
+  async creerCompteConnexion(employeeId) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const result = await window.SupabaseSync.manageEmployeeAccount('create', employeeId);
+    if (!result.success) return result;
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (company) this._companiesCache = [company];
+    this.logAudit('Création', 'Compte de connexion', `${employee.prenom} ${employee.nom}`);
+    return { success: true, password: result.password };
+  },
+
   /** § GERER_UTILISATEURS : un RH/Directeur impose un nouveau mot de passe sans connaître l'ancien
-   * (contrairement à changePassword, en libre-service) — débloque aussi le compte au passage, comme
-   * resetPasswordWithToken (même effet final, chemin différent : ici pas de token, action directe). */
-  forcerNouveauMotDePasse(employeeId, newPassword) {
+   * (contrairement à changePassword, en libre-service) — appelle réellement Supabase Auth (voir
+   * manage-employee-account/index.ts), contrairement à l'ancienne version qui n'écrivait que dans un
+   * champ local (`motDePasse`) devenu sans effet depuis la migration vers Supabase Auth. */
+  async forcerNouveauMotDePasse(employeeId, newPassword) {
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
     if (!newPassword || newPassword.length < 6) {
       return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' };
     }
-    this.updateEmployee(employeeId, { motDePasse: newPassword, resetToken: null, tentativesEchouees: 0, verrouille: false });
+    const result = await window.SupabaseSync.manageEmployeeAccount('reset', employeeId, newPassword);
+    if (!result.success) return result;
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (company) this._companiesCache = [company];
     this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom} (réinitialisé par un administrateur)`);
     return { success: true };
   },
@@ -1636,37 +1655,6 @@ const DB = {
     return { success: true, employee };
   },
 
-  /** Crée un compte de connexion — si une fiche existe déjà pour cet email (créée par RH/manager),
-   * le compte y est relié ; sinon une nouvelle fiche "salarie" est créée automatiquement à partir
-   * de nom/prenom. Tout se joue côté serveur (trigger, voir 0006_signup_self_create_employee.sql). */
-  async signUp(email, password, nom, prenom) {
-    if (!password || password.length < 6) {
-      return { success: false, error: 'Le mot de passe doit contenir au moins 6 caractères.' };
-    }
-    if (!nom || !prenom) {
-      return { success: false, error: 'Nom et prénom sont obligatoires.' };
-    }
-    const authResult = await window.SupabaseSync.signUp(email, password, nom, prenom);
-    if (!authResult.success) {
-      return { success: false, error: authResult.error };
-    }
-    if (authResult.needsEmailConfirmation) {
-      return { success: true, needsEmailConfirmation: true };
-    }
-    // Certains projets Supabase désactivent la confirmation par email : une session existe déjà,
-    // on peut enchaîner directement comme un login normal.
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
-    if (!company) {
-      return { success: false, error: 'Compte créé, mais aucune fiche salarié ne correspond à cet email. Contactez votre RH.' };
-    }
-    this._currentEmployeeId = company._currentEmployeeId;
-    this._companiesCache = [company];
-    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
-    const employee = this.getEmployeeById(this._currentEmployeeId);
-    this.logAudit('Création', 'Compte de connexion', `${employee.prenom} ${employee.nom}`);
-    return { success: true, employee };
-  },
-
   /** "Créer mon entreprise" (migration 0012) : crée un vrai compte marqué intent=creer_entreprise
    * (le trigger serveur ne tente alors aucun rattachement par domaine), puis, si une session est
    * déjà disponible (confirmation email désactivée sur ce projet), enchaîne directement sur la
@@ -1788,6 +1776,22 @@ const DB = {
     const { error } = await window.SupabaseSync.updatePassword(newPassword);
     if (error) return { success: false, error: 'Lien de réinitialisation invalide ou expiré.' };
     return { success: true };
+  },
+
+  /** Après une première connexion avec un mot de passe temporaire (créé par un Directeur/RH via
+   * creerCompteConnexion, ou réinitialisé via forcerNouveauMotDePasse) — pas besoin de l'ancien mot
+   * de passe, la session en cours suffit (même principe que resetPasswordWithToken ci-dessus). Lève
+   * ensuite le drapeau data.mustChangePassword (écriture normale, autorisée sur sa propre fiche). */
+  async changerMotDePassePremiereConnexion(newPassword) {
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' };
+    }
+    const { error } = await window.SupabaseSync.updatePassword(newPassword);
+    if (error) return { success: false, error: error.message };
+    const employee = this.getCurrentUser();
+    this.updateEmployee(employee.id, { mustChangePassword: false });
+    this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom} (première connexion)`);
+    return { success: true };
   }
 };
 
@@ -1814,6 +1818,7 @@ const employeeRepository = {
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
+  creerCompteConnexion: (employeeId) => DB.creerCompteConnexion(employeeId),
   changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId)
 };
 
@@ -1885,13 +1890,13 @@ const authRepository = {
   getCurrentUser: () => DB.getCurrentUser(),
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
-  signUp: (email, password, nom, prenom) => DB.signUp(email, password, nom, prenom),
   signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
   resendSignupConfirmation: (email) => DB.resendSignupConfirmation(email),
   logout: () => DB.logout(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),
-  resetPasswordWithToken: (token, newPassword) => DB.resetPasswordWithToken(token, newPassword)
+  resetPasswordWithToken: (token, newPassword) => DB.resetPasswordWithToken(token, newPassword),
+  changerMotDePassePremiereConnexion: (newPassword) => DB.changerMotDePassePremiereConnexion(newPassword)
 };
 
 const settingsRepository = {
