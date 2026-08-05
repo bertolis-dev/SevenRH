@@ -6,6 +6,22 @@
 
 const LIST_PAGE_SIZE = 20;
 
+/** Jauge de force du mot de passe (§ simplification UX) — heuristique simple (longueur + variété de
+ * caractères), pas de vérification contre une liste de mots de passe compromis (hors scope ici) :
+ * juste un repère visuel pour encourager un mot de passe un peu plus solide que le minimum requis. */
+function computePasswordStrengthLevel(password) {
+  if (!password) return null;
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  if (score <= 1) return { level: 'weak', label: 'Faible' };
+  if (score <= 3) return { level: 'medium', label: 'Moyen' };
+  return { level: 'strong', label: 'Fort' };
+}
+
 /** Marque "Nexus" (logo.png) — réutilisée partout où le logo apparaît (écrans de connexion,
  * console BERTOLIS) pour n'avoir qu'un seul endroit à modifier. */
 const NEXUS_LOGO_MARK = `<span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>`;
@@ -325,8 +341,12 @@ function openForcedPasswordChangeModal() {
           <div class="form-field">
             <label for="f-forced-password">Nouveau mot de passe (6 caractères minimum) *</label>
             <div class="password-input-wrapper">
-              <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password">
+              <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password" data-strength-meter="true">
               <button type="button" class="btn-icon password-toggle" data-target="f-forced-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
+            <div class="password-strength" id="f-forced-password-strength">
+              <div class="password-strength-bar"><span></span><span></span><span></span></div>
+              <span class="password-strength-label"></span>
             </div>
           </div>
           <div class="form-field">
@@ -613,8 +633,12 @@ function renderSignupCompanyView() {
         <div class="form-field">
           <label for="f-signup-company-password">Mot de passe</label>
           <div class="password-input-wrapper">
-            <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password">
+            <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password" data-strength-meter="true">
             <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
+          <div class="password-strength" id="f-signup-company-password-strength">
+            <div class="password-strength-bar"><span></span><span></span><span></span></div>
+            <span class="password-strength-label"></span>
           </div>
         </div>
         <div class="form-field">
@@ -741,8 +765,12 @@ function renderResetPasswordView() {
         <div class="form-field">
           <label for="f-reset-password">Nouveau mot de passe</label>
           <div class="password-input-wrapper">
-            <input class="input" type="password" id="f-reset-password" required minlength="6">
+            <input class="input" type="password" id="f-reset-password" required minlength="6" data-strength-meter="true">
             <button type="button" class="btn-icon password-toggle" data-target="f-reset-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+          </div>
+          <div class="password-strength" id="f-reset-password-strength">
+            <div class="password-strength-bar"><span></span><span></span><span></span></div>
+            <span class="password-strength-label"></span>
           </div>
         </div>
         <div class="form-field">
@@ -1089,8 +1117,12 @@ function openChangePasswordModal() {
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-new-password">Nouveau mot de passe</label>
             <div class="password-input-wrapper">
-              <input class="input" type="password" id="f-new-password" required minlength="6">
+              <input class="input" type="password" id="f-new-password" required minlength="6" data-strength-meter="true">
               <button type="button" class="btn-icon password-toggle" data-target="f-new-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            </div>
+            <div class="password-strength" id="f-new-password-strength">
+              <div class="password-strength-bar"><span></span><span></span><span></span></div>
+              <span class="password-strength-label"></span>
             </div>
           </div>
           <div class="form-field" style="margin-top: 12px;">
@@ -1544,6 +1576,86 @@ function bindGlobalEvents() {
       indicator.textContent = match ? '✓ Les mots de passe correspondent' : '✕ Les mots de passe sont différents';
       indicator.className = 'password-match-indicator ' + (match ? 'match-ok' : 'match-bad');
     });
+  });
+
+  // Jauge de force (data-strength-meter) sur les champs "nouveau mot de passe" uniquement — jamais
+  // sur un mot de passe déjà existant (connexion), qui n'a plus de sens à évaluer.
+  document.addEventListener('input', (e) => {
+    if (!e.target.hasAttribute('data-strength-meter')) return;
+    const meter = document.getElementById(e.target.id + '-strength');
+    if (!meter) return;
+    const result = computePasswordStrengthLevel(e.target.value);
+    if (!result) {
+      meter.style.display = 'none';
+      meter.className = 'password-strength';
+      return;
+    }
+    meter.style.display = 'flex';
+    meter.className = 'password-strength level-' + result.level;
+    meter.querySelector('.password-strength-label').textContent = result.label;
+  });
+
+  // Autocomplétion d'adresse (API Adresse gouv.fr) — délégué une seule fois ici, comme les
+  // gestionnaires mot de passe ci-dessus, car ces champs vivent dans des formulaires/modales
+  // entièrement réécrits à chaque ouverture.
+  let addressAutocompleteTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target.hasAttribute('data-address-autocomplete')) return;
+    const input = e.target;
+    const suggestionsEl = document.getElementById(input.id + '-suggestions');
+    if (!suggestionsEl) return;
+    clearTimeout(addressAutocompleteTimer);
+    const query = input.value.trim();
+    if (query.length < 3) {
+      suggestionsEl.style.display = 'none';
+      suggestionsEl.innerHTML = '';
+      return;
+    }
+    addressAutocompleteTimer = setTimeout(async () => {
+      let data;
+      try {
+        const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=5`);
+        data = await res.json();
+      } catch {
+        // Silencieux : l'autocomplétion n'est qu'un confort, la saisie manuelle reste toujours
+        // possible si l'API est indisponible (réseau, panne côté gouv.fr...).
+        return;
+      }
+      const features = data?.features || [];
+      if (!features.length) {
+        suggestionsEl.style.display = 'none';
+        suggestionsEl.innerHTML = '';
+        return;
+      }
+      suggestionsEl._features = features;
+      suggestionsEl.innerHTML = features
+        .map((f, i) => `<div class="address-suggestion-item" data-index="${i}">${escapeHtml(f.properties.label)}</div>`)
+        .join('');
+      suggestionsEl.style.display = 'block';
+    }, 300);
+  });
+
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.address-suggestion-item');
+    if (item) {
+      const suggestionsEl = item.parentElement;
+      const feature = suggestionsEl._features?.[Number(item.dataset.index)];
+      const input = document.getElementById(suggestionsEl.id.replace(/-suggestions$/, ''));
+      if (feature && input) {
+        input.value = feature.properties.name || feature.properties.label;
+        const cpField = document.getElementById(input.dataset.fillCodepostal);
+        const villeField = document.getElementById(input.dataset.fillVille);
+        if (cpField) cpField.value = feature.properties.postcode || '';
+        if (villeField) villeField.value = feature.properties.city || '';
+      }
+      suggestionsEl.style.display = 'none';
+      suggestionsEl.innerHTML = '';
+      return;
+    }
+    // Clic ailleurs que dans un champ d'adresse : referme toute liste de suggestions ouverte.
+    if (!e.target.closest('.address-autocomplete-field')) {
+      document.querySelectorAll('.address-suggestions').forEach(el => { el.style.display = 'none'; });
+    }
   });
 
   /** Active au clavier (Entrée/Espace) n'importe quel élément focusable marqué role="button" — évite d'ajouter un gestionnaire keydown à chaque ligne/carte cliquable (salariés, organigramme, favoris, notifications...). */
@@ -4182,7 +4294,7 @@ function openCoordonneesModal(employeeId) {
         <div class="modal-body">
           <div class="form-grid">
             ${textField('telephone', 'Téléphone', employee.telephone)}
-            ${textField('adresse.rue', 'Adresse', employee.adresse.rue)}
+            ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
             ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
             ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
           </div>
@@ -6249,7 +6361,7 @@ function openEtablissementModal(id) {
           <div class="form-grid">
             ${textField('nom', 'Nom', etab.nom, true)}
             ${textField('codeInterne', 'Code interne', etab.codeInterne)}
-            ${textField('adresse', 'Adresse', etab.adresse)}
+            ${addressAutocompleteField('adresse', 'Adresse', etab.adresse, 'codePostal', 'ville')}
             ${textField('codePostal', 'Code postal', etab.codePostal)}
             ${textField('ville', 'Ville', etab.ville)}
             ${textField('pays', 'Pays', etab.pays)}
@@ -9163,7 +9275,7 @@ function openEmployeeModal(id) {
               ${textField('nom', 'Nom', employee.nom, true)}
               ${textField('email', 'Email', employee.email, true, 'email')}
               ${textField('telephone', 'Téléphone', employee.telephone)}
-              ${textField('adresse.rue', 'Adresse', employee.adresse.rue)}
+              ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
               ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
               ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
               ${textField('dateNaissance', 'Date de naissance', employee.dateNaissance, false, 'date')}
@@ -9234,6 +9346,22 @@ function openEmployeeModal(id) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id));
+}
+
+/** Champ "Adresse" avec suggestions en direct (API Adresse gouv.fr, gratuite/sans clé) — remplace
+ * un textField() simple là où une adresse française complète est saisie : sélectionner une
+ * suggestion remplit aussi automatiquement le code postal et la ville, en évitant les fautes de
+ * frappe/incohérences (ex. code postal qui ne correspond pas à la ville tapée à côté). */
+function addressAutocompleteField(name, label, value, codePostalName, villeName) {
+  return `
+    <div class="form-field address-autocomplete-field">
+      <label for="f-${name}">${escapeHtml(label)}</label>
+      <input class="input" type="text" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}"
+        autocomplete="off" data-address-autocomplete="true"
+        data-fill-codepostal="f-${codePostalName}" data-fill-ville="f-${villeName}">
+      <div class="address-suggestions" id="f-${name}-suggestions"></div>
+    </div>
+  `;
 }
 
 function textField(name, label, value, required, type = 'text') {
