@@ -1,0 +1,11 @@
+-- Seven RH — retire la fonction email_domain_has_existing_company (migration 0013).
+--
+-- Cause du retrait : le formulaire "Créer mon entreprise" comparait le DOMAINE entier de l'email
+-- saisi à tous les salariés existants, pour avertir "une entreprise semble déjà utiliser ce
+-- domaine". Deux problèmes vécus en production : (1) faux positifs massifs avec un domaine
+-- personnel partagé (@gmail.com, @outlook.com...) — un seul salarié Gmail dans une autre entreprise
+-- suffisait à déclencher l'avertissement pour n'importe qui d'autre signant avec Gmail ; (2) le
+-- bouton "Rejoindre une entreprise existante" de cet avertissement pointait vers l'ancien parcours
+-- d'auto-inscription par domaine d'email, retiré depuis (voir migration 0014) — il ne menait donc
+-- plus nulle part. Le client (app.js/supabase-client.js) n'appelle plus cette RPC.
+drop function if exists email_domain_has_existing_company(text);

@@ -625,10 +625,6 @@ function renderSignupCompanyView() {
         <div class="form-field">
           <label for="f-signup-company-email">Email</label>
           <input class="input" type="email" id="f-signup-company-email" required autocomplete="username">
-          <p class="form-hint" id="signup-company-domain-warning" style="display: none;">
-            Une entreprise semble déjà utiliser ce domaine d'email sur Nexus.
-            <button type="button" class="btn-link" id="btn-signup-company-goto-join" style="padding: 0;">Rejoindre une entreprise existante</button> ?
-          </p>
         </div>
         <div class="form-field">
           <label for="f-signup-company-password">Mot de passe</label>
@@ -892,26 +888,6 @@ function bindLoginScreenEvents() {
   const gotoSignupCompanyBtn = document.getElementById('btn-goto-signup-company');
   if (gotoSignupCompanyBtn) gotoSignupCompanyBtn.addEventListener('click', () => {
     state.authView = 'signup-company';
-    state.authError = '';
-    renderLoginScreen();
-  });
-
-  const signupCompanyEmailInput = document.getElementById('f-signup-company-email');
-  if (signupCompanyEmailInput) signupCompanyEmailInput.addEventListener('blur', async () => {
-    const email = signupCompanyEmailInput.value;
-    const warning = document.getElementById('signup-company-domain-warning');
-    if (!warning || !email || !email.includes('@')) return;
-    const matches = await window.SupabaseSync.checkEmailDomainHasExistingCompany(email);
-    // Le champ email a pu changer pendant l'appel réseau (utilisateur qui corrige une faute de
-    // frappe) — on ignore un résultat devenu obsolète plutôt que d'afficher un avertissement pour
-    // une adresse qui n'est plus celle saisie.
-    if (signupCompanyEmailInput.value !== email) return;
-    warning.style.display = matches ? 'block' : 'none';
-  });
-
-  const gotoJoinFromWarningBtn = document.getElementById('btn-signup-company-goto-join');
-  if (gotoJoinFromWarningBtn) gotoJoinFromWarningBtn.addEventListener('click', () => {
-    state.authView = 'signup';
     state.authError = '';
     renderLoginScreen();
   });

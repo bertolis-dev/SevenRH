@@ -1671,6 +1671,9 @@ const DB = {
     if (!authResult.success) {
       return { success: false, error: authResult.error };
     }
+    if (authResult.emailAlreadyRegistered) {
+      return { success: false, error: 'Un compte existe déjà pour cette adresse email. Connectez-vous, ou utilisez "Mot de passe oublié ?" si besoin.' };
+    }
     if (authResult.needsEmailConfirmation) {
       return { success: true, needsEmailConfirmation: true };
     }

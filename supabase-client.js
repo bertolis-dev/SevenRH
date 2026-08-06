@@ -403,7 +403,13 @@ async function signUpNewCompany(email, password, raisonSociale, nom, prenom) {
     options: { data: { nom, prenom, raisonSociale, intent: 'creer_entreprise' }, emailRedirectTo: currentSiteBase() }
   });
   if (error) return { success: false, error: error.message };
-  return { success: true, session: data.session, needsEmailConfirmation: !data.session };
+  // Protection anti-énumération de Supabase : pour un email déjà inscrit (confirmé ou non), signUp()
+  // répond succès SANS ERREUR et SANS renvoyer d'email — data.user.identities est alors un tableau
+  // vide (seul signal disponible côté client). Sans cette détection, l'appelant croit à tort qu'un
+  // email de confirmation vient d'être envoyé ("vérifiez votre boîte mail") alors qu'aucun email n'a
+  // même été transmis au fournisseur SMTP (jamais visible dans ses logs) — symptôme réellement vécu.
+  const emailAlreadyRegistered = !data.session && Array.isArray(data.user?.identities) && data.user.identities.length === 0;
+  return { success: true, session: data.session, needsEmailConfirmation: !data.session, emailAlreadyRegistered };
 }
 
 /** Appelle la RPC create_company_self_service — nécessite une session active (auth.uid() côté
@@ -414,17 +420,6 @@ async function createCompanySelfService() {
   const { data, error } = await supabase.rpc('create_company_self_service');
   if (error) return { success: false, error: error.message };
   return { success: true, companyId: data };
-}
-
-/** Avertissement doux (non bloquant) sur l'écran "Créer mon entreprise" : indique juste si CE
- * DOMAINE d'email est déjà utilisé par une entreprise existante, sans jamais révéler laquelle (voir
- * le commentaire de la migration 0013 — appelable sans session, donc le résultat doit rester un
- * simple booléen). En cas d'erreur (réseau, etc.), on renvoie false plutôt que de bloquer le
- * formulaire pour un avertissement qui n'est de toute façon pas essentiel. */
-async function checkEmailDomainHasExistingCompany(email) {
-  const { data, error } = await supabase.rpc('email_domain_has_existing_company', { p_email: email });
-  if (error) return false;
-  return !!data;
 }
 
 /** Renvoie l'email de confirmation pour une inscription déjà faite mais pas encore confirmée —
@@ -659,7 +654,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signUpNewCompany, createCompanySelfService, checkEmailDomainHasExistingCompany, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signUpNewCompany, createCompanySelfService, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
