@@ -6397,7 +6397,7 @@ function buildCalendarSharedData(cells) {
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
   const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
-  const publicHolidays = years.flatMap(y => getFrenchPublicHolidays(y));
+  const publicHolidays = years.flatMap(y => getAllPublicHolidays(y, settings));
   return { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone };
 }
 
@@ -7540,24 +7540,33 @@ function submitSchoolPeriodForm(evt, index) {
 
 function renderParametresFeries() {
   const year = state.parametresFeriesYear;
-  const holidays = getFrenchPublicHolidays(year).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const settings = settingsRepository.getSettings();
+  const holidays = getAllPublicHolidays(year, settings).slice().sort((a, b) => a.date.localeCompare(b.date));
 
   return `
     <div class="card table-card">
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Jours fériés ${year}</h2>
-          <p class="text-muted">Calculés automatiquement chaque année, aucune saisie requise.</p>
+          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement — ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant.</p>
         </div>
         <div class="calendar-nav">
           <button class="btn btn-secondary btn-sm" id="btn-feries-prev">← ${year - 1}</button>
           <button class="btn btn-secondary btn-sm" id="btn-feries-next">${year + 1} →</button>
+          <button class="btn btn-primary btn-sm" id="btn-add-jour-ferie">+ Ajouter un jour férié</button>
         </div>
       </div>
       <table class="table">
-        <thead><tr><th>Date</th><th>Jour férié</th></tr></thead>
+        <thead><tr><th>Date</th><th>Jour férié</th><th></th><th></th></tr></thead>
         <tbody>
-          ${holidays.map(h => `<tr><td>${formatDate(h.date)}</td><td>${escapeHtml(h.label)}</td></tr>`).join('')}
+          ${holidays.map(h => `
+            <tr>
+              <td>${formatDate(h.date)}</td>
+              <td>${escapeHtml(h.label)}</td>
+              <td>${h.custom ? '<span class="badge badge-info">Ajouté</span>' : ''}</td>
+              <td>${h.custom ? `<button type="button" class="btn-link" data-remove-jour-ferie="${escapeHtml(h.date)}" data-remove-jour-ferie-label="${escapeHtml(h.label)}">Supprimer</button>` : ''}</td>
+            </tr>
+          `).join('')}
         </tbody>
       </table>
     </div>
@@ -7567,6 +7576,63 @@ function renderParametresFeries() {
 function bindParametresFeriesEvents() {
   document.getElementById('btn-feries-prev').addEventListener('click', () => { state.parametresFeriesYear -= 1; render(); });
   document.getElementById('btn-feries-next').addEventListener('click', () => { state.parametresFeriesYear += 1; render(); });
+  document.getElementById('btn-add-jour-ferie').addEventListener('click', openAjouterJourFerieModal);
+  document.querySelectorAll('[data-remove-jour-ferie]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = settingsRepository.getSettings();
+      settings.joursFeriesPersonnalises = (settings.joursFeriesPersonnalises || [])
+        .filter(h => !(h.date === btn.dataset.removeJourFerie && h.label === btn.dataset.removeJourFerieLabel));
+      settingsRepository.saveSettings(settings);
+      showToast('Jour férié supprimé.');
+      render();
+    });
+  });
+}
+
+/** Jour férié ajouté manuellement (settings.joursFeriesPersonnalises) — voir getAllPublicHolidays(),
+ * consulté partout où "les jours fériés de l'année" comptent (calendriers, tickets restaurant). */
+function openAjouterJourFerieModal() {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Ajouter un jour férié</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="ajouter-jour-ferie-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-jour-ferie-date">Date *</label>
+            <input class="input" type="date" id="f-jour-ferie-date" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-jour-ferie-label">Libellé *</label>
+            <input class="input" type="text" id="f-jour-ferie-label" placeholder="Ex. Vendredi Saint, Fermeture entreprise..." required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('ajouter-jour-ferie-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const date = document.getElementById('f-jour-ferie-date').value;
+    const label = document.getElementById('f-jour-ferie-label').value.trim();
+    const settings = settingsRepository.getSettings();
+    settings.joursFeriesPersonnalises = [...(settings.joursFeriesPersonnalises || []), { date, label }];
+    settingsRepository.saveSettings(settings);
+    state.parametresFeriesYear = Number(date.slice(0, 4));
+    closeModal();
+    showToast('Jour férié ajouté.');
+    render();
+  });
 }
 
 // ---- Sous-vue : Journal d'audit (lecture seule) ----

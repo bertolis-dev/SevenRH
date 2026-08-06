@@ -211,6 +211,9 @@ const DEFAULT_SETTINGS = {
   workflowTeletravail: ['manager'],
   workflowFrais: ['manager', 'comptabilite'],
   categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Titre de séjour', 'Visite médicale', 'Habilitation', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
+  // Jours fériés en plus des 11 fériés nationaux calculés automatiquement (getFrenchPublicHolidays)
+  // — ex. jours fériés locaux (Alsace-Moselle), fermeture d'entreprise, pont. { date: 'AAAA-MM-JJ', label }.
+  joursFeriesPersonnalises: [],
   // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
   // la masse salariale, le genre et la pyramide des âges restent des données que l'entreprise
   // choisit de suivre ou non (cf. l'avertissement affiché juste au-dessus de ces cases à cocher).
@@ -2313,7 +2316,7 @@ function ticketsMonthKey(year, month) {
 function calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = toISODate(new Date());
-  const holidays = getFrenchPublicHolidays(year);
+  const holidays = getAllPublicHolidays(year, settings);
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   let nbTickets = 0;
 
@@ -2741,6 +2744,17 @@ function getFrenchPublicHolidays(year) {
     [`${year}-12-25`, 'Noël']
   ];
   return holidays.map(([date, label]) => ({ date, label }));
+}
+
+/** getFrenchPublicHolidays() + les jours fériés ajoutés manuellement par l'entreprise
+ * (settings.joursFeriesPersonnalises) — à utiliser partout où "les jours fériés de l'année" sont
+ * consultés pour que l'ajout d'un jour se répercute vraiment partout (calendriers, tickets
+ * restaurant...), pas seulement sur l'écran Paramètres où on l'a saisi. */
+function getAllPublicHolidays(year, settings) {
+  const custom = (settings?.joursFeriesPersonnalises || [])
+    .filter(h => h.date && h.date.startsWith(String(year)))
+    .map(h => ({ ...h, custom: true }));
+  return getFrenchPublicHolidays(year).concat(custom);
 }
 
 /** Retourne la période de vacances scolaires en cours pour une date et une zone, s'il y en a une. */
