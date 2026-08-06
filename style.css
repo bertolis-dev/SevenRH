@@ -1597,7 +1597,12 @@ textarea.input { resize: vertical; font-family: inherit; }
     right: 0;
     bottom: 0;
     width: 100%;
-    height: var(--mobile-nav-height);
+    /* env(safe-area-inset-bottom) : sur un iPhone à barre de gestes (pas de bouton Accueil), une
+       barre collée à bottom:0 sans cette marge se fait chevaucher par la zone de geste système —
+       les boutons du bas deviennent difficiles à atteindre ("trop bas"). Nécessite
+       viewport-fit=cover dans la meta viewport (index.html), sinon cette valeur reste à 0. */
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
     flex-direction: row;
     border-right: none;
     border-top: 1px solid var(--color-border);
@@ -1624,7 +1629,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .nav-icon { font-size: 18px; }
   .nav-label { font-size: 10px; white-space: nowrap; }
   .logo-text, .nav-soon { display: none; }
-  #main-column { margin-left: 0; padding-bottom: var(--mobile-nav-height); }
+  #main-column { margin-left: 0; padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom)); }
   #view-root { padding: 16px; }
   .calendar-cell { min-height: 64px; }
   .calendar-weekday { font-size: 10px; }
@@ -1632,7 +1637,15 @@ textarea.input { resize: vertical; font-family: inherit; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
-  #toast-root { bottom: calc(var(--mobile-nav-height) + 16px); }
+  /* Sur mobile, .tabs (Congés/Télétravail/Paramètres...) défilait horizontalement sans aucun indice
+     visuel qu'il y avait "plus à droite" — un simple tap avec un léger mouvement du doigt faisait
+     glisser toute la rangée au lieu d'appuyer sur l'onglet visé (retour utilisateur : "je peux
+     bouger les boutons"). Passer à la ligne plutôt que défiler élimine cette ambiguïté tap/scroll :
+     chaque onglet reste visible et immobile, au prix d'un peu plus de hauteur sur les pages qui en
+     ont beaucoup (ex. Paramètres, 10 onglets). */
+  .tabs { flex-wrap: wrap; overflow-x: visible; }
+  .tab { padding: 8px 12px; font-size: 13px; }
+  #toast-root { bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 16px); }
   /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
      cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
      position:fixed + left/right ancrés à la fenêtre (pas au petit wrapper de la cloche, qui rendait
