@@ -169,6 +169,11 @@ Deno.serve(async (req) => {
         line_items: [{ price: priceId, quantity: 1 }],
         subscription_data: { metadata: { company_id: companyId } },
         metadata: { company_id: companyId },
+        // §12 sprint amélioration : code de réduction — délégué entièrement à Stripe (Coupons +
+        // Codes promotionnels, configurés dans le Dashboard Stripe, pas en dur ici) plutôt qu'un
+        // contrôle fait maison côté frontend. Stripe affiche son propre champ "Code promo" sur la
+        // page de paiement hébergée et valide/applique le code lui-même.
+        allow_promotion_codes: true,
         success_url: `${base}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${base}?checkout=cancel`,
       });

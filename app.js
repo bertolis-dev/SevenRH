@@ -174,13 +174,13 @@ const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '
  * voir renderSidebar()/navigateTo() pour la résolution. `group` est purement un indice d'affichage
  * (regroupement visuel) — n'affecte jamais qui voit quoi, ça reste `roles`/`permissions` seuls. */
 const NAV_ITEMS = [
-  { key: 'dashboard', label: 'Tableau de bord', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
+  { key: 'dashboard', label: 'Accueil', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
 
   // ---- Personnel ----
-  { key: 'planning', label: 'Mon planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' } },
-  { key: 'calendrier', label: 'Mon calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' } },
+  { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' } },
+  { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' } },
   { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
-  { key: 'autres-absences', label: 'Autres absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  { key: 'autres-absences', label: 'Absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
   { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
@@ -1390,7 +1390,7 @@ function bindOnboardingWizardEvents() {
  * titre suivi de rien. */
 const HELP_CONTENT = {
   dashboard: {
-    title: 'Tableau de bord',
+    title: 'Accueil',
     body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Directeur voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
            <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`,
     faq: [
@@ -2510,7 +2510,7 @@ function openDashboardCustomizeModal() {
     const dashboardWidgetsMasques = widgets.filter(w => !document.getElementById(`f-widget-${w.id}`).checked).map(w => w.id);
     employeeRepository.update(user.id, { dashboardWidgetsMasques });
     closeModal();
-    showToast('Tableau de bord personnalisé.');
+    showToast('Accueil personnalisé.');
     render();
   });
 }
@@ -2683,7 +2683,6 @@ function renderDashboardShortcuts() {
       <h2>Raccourcis</h2>
       <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
       <button class="btn btn-secondary" data-nav="conges">Gérer les congés</button>
-      <button class="btn btn-secondary" data-nav="calendrier">Voir le calendrier</button>
       <button class="btn btn-secondary" data-nav="teletravail">Gérer le télétravail</button>
       <button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>
       <button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>
@@ -2697,7 +2696,7 @@ function renderDashboardRH() {
   return `
     <div class="view-header-row">
       <div>
-        <h1>Tableau de bord</h1>
+        <h1>Accueil</h1>
         <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
       </div>
       <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
@@ -2715,7 +2714,7 @@ function renderDashboardManager() {
   return `
     <div class="view-header-row">
       <div>
-        <h1>Tableau de bord</h1>
+        <h1>Accueil</h1>
         <p class="view-subtitle">Vue d'ensemble de votre équipe</p>
       </div>
       <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
@@ -2802,7 +2801,6 @@ function renderDashboardSalarie(user) {
       <button class="btn btn-secondary" data-nav="teletravail">Déclarer du télétravail</button>
       <button class="btn btn-secondary" data-nav="frais">Déposer une note de frais</button>
       <button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>
-      <button class="btn btn-secondary" data-nav="calendrier">Voir le calendrier</button>
     </div>
     ` : ''}
   `;
@@ -2837,7 +2835,7 @@ function renderDashboardDirecteur() {
   return `
     <div class="view-header-row">
       <div>
-        <h1>Tableau de bord</h1>
+        <h1>Accueil</h1>
         <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
       </div>
       <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
@@ -5837,9 +5835,16 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
   const typesDesactivesPourSoi = currentUser.role === ROLES.SALARIE
     ? new Set(currentUser.typesAbsenceDesactives || [])
     : new Set();
+  // §3 sprint amélioration : si on connaît déjà le salarié cible (cas le plus courant, libre-
+  // service), on ne lui propose même pas un type pour lequel il n'est pas éligible — le contrôle à
+  // la soumission (submitLeaveRequestForm) reste le filet de sécurité pour le cas où un RH/manager
+  // choisit le salarié dans un menu déroulant du formulaire, pas encore connu ici.
+  const presetEmployee = presetEmployeeId ? employeeRepository.getById(presetEmployeeId) : null;
+  const categoriesSalarie = categorieSalarieRepository.getAll();
   const types = leaveTypeRepository.getLeaveTypes().filter(t =>
     t.actif && t.visibleSalarie && (!categorie || t.categorie === categorie) &&
-    (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id));
+    (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id) &&
+    (!presetEmployee || isLeaveTypeEligibleForEmployee(presetEmployee, t, categoriesSalarie)));
   const champs = (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
   beginDraftEdit(draft);
@@ -5991,6 +5996,14 @@ function submitLeaveRequestForm(evt) {
   const currentUser = authRepository.getCurrentUser();
   if (currentUser.role === ROLES.SALARIE && (currentUser.typesAbsenceDesactives || []).includes(typeId)) {
     showToast(`Le type « ${type.nom} » n'est pas autorisé pour votre profil.`, 'error');
+    return;
+  }
+
+  // §3 sprint amélioration : règles d'éligibilité (ancienneté, catégorie de salarié, établissement,
+  // type de contrat) — même principe défensif, ne fait pas confiance au seul filtrage de la liste
+  // proposée dans le formulaire (qui ne connaît le salarié cible qu'en libre-service).
+  if (!isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) {
+    showToast(`« ${type.nom} » n'est pas disponible pour ce salarié (règles d'éligibilité du type).`, 'error');
     return;
   }
 
@@ -6208,6 +6221,15 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   // d'ouverture, seulement de la donnée réelle du type.
   const effectiveCategorie = isEdit ? type.categorie : categorie;
 
+  // §3 sprint amélioration : liste des AUTRES types actifs, pour "Partager le compteur avec" —
+  // jamais soi-même (un type ne peut pas partager son propre compteur).
+  const autresTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.id !== id);
+  // État de travail des règles d'éligibilité, modifié en mémoire tant que la modale reste ouverte
+  // (ajout/suppression de ligne) — re-rendu seulement dans son propre conteneur (#regles-rows), pas
+  // toute la modale, pour ne jamais perdre les autres champs déjà saisis par l'utilisateur.
+  let currentRegles = (type.regles || []).map(r => ({ ...r }));
+  const [clotureMoisInit, clotureJourInit] = (type.dateClotureCompteur || '').split('-').map(Number);
+
   const html = `
     <div class="modal modal-large">
       <div class="modal-header">
@@ -6223,8 +6245,12 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               ${textField('icone', 'Icône (emoji)', type.icone)}
               <div class="form-field">
                 <label for="f-couleur">Couleur</label>
-                <input class="input" type="color" id="f-couleur" name="couleur" value="${escapeHtml(type.couleur)}">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="color" id="f-couleur" name="couleur" value="${escapeHtml(type.couleur)}" style="width:44px; height:36px; padding:2px; border:1px solid var(--color-border); border-radius:var(--radius-sm); cursor:pointer;">
+                  <span id="couleur-preview-hex" class="text-muted" style="font-size:13px;">${escapeHtml(type.couleur)}</span>
+                </div>
               </div>
+              ${checkboxField('actif', 'Type actif', type.actif)}
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label for="f-description">Description</label>
@@ -6236,7 +6262,35 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             <legend>Acquisition des droits</legend>
             <div class="form-grid">
               ${selectField('acquisition', 'Mode d\'acquisition', ['Mensuelle', 'Annuelle', 'Illimitée'], type.acquisition)}
-              ${textField('nombreAnnuel', 'Nombre de jours par an', type.nombreAnnuel, false, 'number')}
+              <div class="form-field" id="field-nombre-annuel">
+                <label for="f-nombreAnnuel" id="label-nombre-annuel">Nombre de jours par an</label>
+                <input class="input" type="number" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:14px;">
+              <div class="form-field">
+                <label>Clôture du compteur (optionnel)</label>
+                <div style="display:flex; gap:8px;">
+                  <select class="input" id="f-cloture-mois" style="flex:1;">
+                    <option value="">Jamais (une seule période continue)</option>
+                    ${MONTH_NAMES.map((m, i) => `<option value="${i + 1}" ${clotureMoisInit === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}
+                  </select>
+                  <input class="input" type="number" id="f-cloture-jour" min="1" max="31" placeholder="Jour" value="${clotureJourInit || ''}" style="flex:0 0 80px;">
+                </div>
+                <p class="form-hint">Ex. mai / 31 pour un compteur CP calé sur l'année de référence française.</p>
+              </div>
+              <div class="form-field" id="field-report" style="display:${type.dateClotureCompteur ? 'flex' : 'none'};">
+                <label for="f-reportCompteur">Report des jours non pris à la clôture</label>
+                <select class="input" id="f-reportCompteur" name="reportCompteur">
+                  <option value="aucun" ${type.reportCompteur === 'aucun' ? 'selected' : ''}>Aucun report (perdus)</option>
+                  <option value="limite" ${type.reportCompteur === 'limite' ? 'selected' : ''}>Report plafonné</option>
+                  <option value="illimite" ${type.reportCompteur === 'illimite' ? 'selected' : ''}>Report intégral</option>
+                </select>
+              </div>
+              <div class="form-field" id="field-report-limite" style="display:${type.reportCompteur === 'limite' ? 'flex' : 'none'};">
+                <label for="f-reportLimiteJours">Plafond de report (jours)</label>
+                <input class="input" type="number" min="0" id="f-reportLimiteJours" name="reportLimiteJours" value="${escapeHtml(type.reportLimiteJours || '')}">
+              </div>
             </div>
           </fieldset>
 
@@ -6257,10 +6311,17 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               ${checkboxField('saisiParSalarie', 'Le salarié peut créer lui-même une demande (§15)', type.saisiParSalarie)}
               ${checkboxField('autoriserDemiJournee', 'Autoriser la demi-journée', type.autoriserDemiJournee)}
               ${checkboxField('autoriserPlusieursDemandes', 'Autoriser plusieurs demandes simultanées', type.autoriserPlusieursDemandes)}
-              ${checkboxField('deduireRTT', 'Déduire du compteur RTT', type.deduireRTT)}
-              ${checkboxField('deduireCP', 'Déduire du compteur CP', type.deduireCP)}
               ${checkboxField('exportPaie', 'Inclure dans l\'export paie', type.exportPaie)}
-              ${checkboxField('actif', 'Type actif', type.actif)}
+            </div>
+            <div class="form-field" style="margin-top:14px;">
+              ${selectField('compteurPartageAvecId', 'Partager le compteur avec (optionnel)', null, type.compteurPartageAvecId, autresTypes.map(t => ({ value: t.id, label: t.nom })))}
+              <p class="form-hint">« — » = compteur propre à ce type (par défaut). Sinon, les demandes de CE type viennent en plus s'imputer sur le solde du type choisi (ex. un congé sans solde qui entame le compteur CP).</p>
+            </div>
+            <div class="form-field" style="margin-top:14px;">
+              <label>Règles d'éligibilité (optionnel)</label>
+              <p class="form-hint">Aucune règle = proposé à tous les salariés. Toutes les règles ajoutées doivent être vraies à la fois.</p>
+              <div id="regles-rows"></div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-regle" style="margin-top:8px;">+ Ajouter une règle</button>
             </div>
           </fieldset>
         </div>
@@ -6278,7 +6339,106 @@ function openLeaveTypeModal(id, categorie = 'conge') {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie));
+
+  // #1 : aperçu couleur en direct — pas de bouton de validation séparé (incohérent avec le reste du
+  // formulaire, qui n'a qu'un seul bouton Enregistrer global) : juste un retour visuel immédiat.
+  document.getElementById('f-couleur').addEventListener('input', (e) => {
+    document.getElementById('couleur-preview-hex').textContent = e.target.value;
+  });
+
+  // #2 + #4 : libellé du nombre de jours adapté au mode, champ masqué entièrement si Illimitée
+  // (aucun nombre ne doit être demandé dans ce cas).
+  const updateAcquisitionUI = () => {
+    const mode = document.getElementById('f-acquisition').value;
+    const field = document.getElementById('field-nombre-annuel');
+    const label = document.getElementById('label-nombre-annuel');
+    if (mode === 'Illimitée') {
+      field.style.display = 'none';
+    } else {
+      field.style.display = '';
+      label.textContent = mode === 'Mensuelle' ? 'Nombre de jours par mois' : 'Nombre de jours par an';
+    }
+  };
+  document.getElementById('f-acquisition').addEventListener('change', updateAcquisitionUI);
+  updateAcquisitionUI();
+
+  // #5 : le champ de report n'a de sens que si une clôture est définie ; le plafond n'a de sens que
+  // si le report est "limite".
+  const updateClotureUI = () => {
+    const hasCloture = Boolean(document.getElementById('f-cloture-mois').value);
+    document.getElementById('field-report').style.display = hasCloture ? 'flex' : 'none';
+  };
+  document.getElementById('f-cloture-mois').addEventListener('change', updateClotureUI);
+  document.getElementById('f-reportCompteur').addEventListener('change', (e) => {
+    document.getElementById('field-report-limite').style.display = e.target.value === 'limite' ? 'flex' : 'none';
+  });
+
+  // #3 : constructeur de règles générique — un critère du catalogue RULE_CRITERIA par ligne, avec
+  // son opérateur et sa valeur (nombre, ou multi-sélection selon le type de critère). Re-rendu
+  // localement (pas toute la modale) à chaque ajout/suppression pour préserver le reste du formulaire.
+  const categoriesSalarieOptions = categorieSalarieRepository.getAll();
+  const etablissementsOptions = etablissementRepository.getAll();
+  function renderRegleValueInput(regle, index) {
+    const criterion = RULE_CRITERIA[regle.critere];
+    if (criterion.valueType === 'number') {
+      return `<input class="input" type="number" data-regle-valeur="${index}" value="${escapeHtml(regle.valeur ?? '')}" style="flex:1;">`;
+    }
+    const options = criterion.valueType === 'categorieSalarie' ? categoriesSalarieOptions.map(c => ({ value: c.id, label: c.nom }))
+      : criterion.valueType === 'etablissement' ? etablissementsOptions.map(e => ({ value: e.id, label: e.nom }))
+      : settingsRepository.getSettings().typesContrat.map(v => ({ value: v, label: v }));
+    const selected = new Set(regle.valeur || []);
+    return `<select class="input" multiple data-regle-valeur="${index}" style="flex:1; min-height:70px;">
+      ${options.map(o => `<option value="${escapeHtml(o.value)}" ${selected.has(o.value) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
+    </select>`;
+  }
+  function renderReglesRows() {
+    document.getElementById('regles-rows').innerHTML = currentRegles.map((regle, index) => `
+      <div class="form-grid" style="grid-template-columns: 1.2fr 0.8fr 1.4fr auto; align-items:start; margin-top:8px;" data-regle-row="${index}">
+        <select class="input" data-regle-critere="${index}">
+          ${Object.entries(RULE_CRITERIA).map(([key, c]) => `<option value="${key}" ${regle.critere === key ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+        </select>
+        <select class="input" data-regle-operateur="${index}">
+          ${RULE_CRITERIA[regle.critere].operators.map(op => `<option value="${op}" ${regle.operateur === op ? 'selected' : ''}>${op === '>=' ? 'au moins' : op === '<=' ? 'au plus' : 'parmi'}</option>`).join('')}
+        </select>
+        ${renderRegleValueInput(regle, index)}
+        <button type="button" class="btn-icon" data-remove-regle="${index}" aria-label="Retirer" title="Retirer">✕</button>
+      </div>
+    `).join('');
+    bindReglesRowEvents();
+  }
+  function readCurrentRegleValue(index) {
+    const regle = currentRegles[index];
+    const criterion = RULE_CRITERIA[regle.critere];
+    const el = document.querySelector(`[data-regle-valeur="${index}"]`);
+    if (!el) return regle.valeur;
+    return criterion.valueType === 'number' ? Number(el.value) || 0 : Array.from(el.selectedOptions).map(o => o.value);
+  }
+  function bindReglesRowEvents() {
+    document.querySelectorAll('[data-regle-critere]').forEach(sel => sel.addEventListener('change', (e) => {
+      const index = Number(e.target.dataset.regleCritere);
+      currentRegles[index] = { critere: e.target.value, operateur: RULE_CRITERIA[e.target.value].operators[0], valeur: RULE_CRITERIA[e.target.value].valueType === 'number' ? 0 : [] };
+      renderReglesRows();
+    }));
+    document.querySelectorAll('[data-regle-operateur]').forEach(sel => sel.addEventListener('change', (e) => {
+      currentRegles[Number(e.target.dataset.regleOperateur)].valeur = readCurrentRegleValue(Number(e.target.dataset.regleOperateur));
+      currentRegles[Number(e.target.dataset.regleOperateur)].operateur = e.target.value;
+    }));
+    document.querySelectorAll('[data-regle-valeur]').forEach(el => el.addEventListener('change', (e) => {
+      const index = Number(e.target.dataset.regleValeur);
+      currentRegles[index].valeur = readCurrentRegleValue(index);
+    }));
+    document.querySelectorAll('[data-remove-regle]').forEach(btn => btn.addEventListener('click', () => {
+      currentRegles.splice(Number(btn.dataset.removeRegle), 1);
+      renderReglesRows();
+    }));
+  }
+  document.getElementById('btn-add-regle').addEventListener('click', () => {
+    currentRegles.push({ critere: 'anciennete', operateur: '>=', valeur: 0 });
+    renderReglesRows();
+  });
+  renderReglesRows();
+
+  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie, currentRegles));
 }
 
 function checkboxField(name, label, checked) {
@@ -6292,25 +6452,42 @@ function checkboxField(name, label, checked) {
   `;
 }
 
-function submitLeaveTypeForm(evt, id, categorie = 'conge') {
+function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = []) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
-  const checkboxNames = ['paye', 'justificatifObligatoire', 'visibleSalarie', 'visibleRH', 'saisiParSalarie', 'autoriserDemiJournee', 'autoriserPlusieursDemandes', 'deduireRTT', 'deduireCP', 'exportPaie', 'actif'];
+  const checkboxNames = ['paye', 'justificatifObligatoire', 'visibleSalarie', 'visibleRH', 'saisiParSalarie', 'autoriserDemiJournee', 'autoriserPlusieursDemandes', 'exportPaie', 'actif'];
 
-  if (Number(formData.get('nombreAnnuel')) < 0) {
-    showToast('Le nombre de jours par an ne peut pas être négatif.', 'error');
+  const acquisition = formData.get('acquisition');
+  // #4 : Illimitée masque le champ mais un <input> masqué reste dans FormData — on force explicitement
+  // à 0 plutôt que de conserver une valeur périmée qui n'a plus aucun effet sur le calcul mais
+  // resterait trompeuse dans les exports/imports.
+  const nombreAnnuel = acquisition === 'Illimitée' ? 0 : Number(formData.get('nombreAnnuel')) || 0;
+  if (nombreAnnuel < 0) {
+    showToast('Le nombre de jours ne peut pas être négatif.', 'error');
     return;
   }
+
+  // §5 : clôture de compteur optionnelle — 'MM-JJ' seulement si un mois ET un jour sont renseignés.
+  const clotureMois = document.getElementById('f-cloture-mois').value;
+  const clotureJour = document.getElementById('f-cloture-jour').value;
+  const dateClotureCompteur = clotureMois && clotureJour ? `${String(clotureMois).padStart(2, '0')}-${String(clotureJour).padStart(2, '0')}` : null;
+  const reportCompteur = dateClotureCompteur ? formData.get('reportCompteur') : 'aucun';
+  const reportLimiteJours = reportCompteur === 'limite' ? Number(formData.get('reportLimiteJours')) || 0 : null;
 
   const patch = {
     nom: formData.get('nom'),
     icone: formData.get('icone') || '🏖️',
     couleur: formData.get('couleur'),
     description: formData.get('description') || '',
-    acquisition: formData.get('acquisition'),
-    nombreAnnuel: Number(formData.get('nombreAnnuel')) || 0,
-    workflow: JSON.parse(formData.get('workflow') || '[]')
+    acquisition,
+    nombreAnnuel,
+    workflow: JSON.parse(formData.get('workflow') || '[]'),
+    compteurPartageAvecId: formData.get('compteurPartageAvecId') || null,
+    regles: regles.filter(r => r.critere), // ligne ajoutée puis jamais configurée = ignorée plutôt que sauvegardée à moitié
+    dateClotureCompteur,
+    reportCompteur,
+    reportLimiteJours
   };
   patch.illimite = patch.acquisition === 'Illimitée';
   checkboxNames.forEach(name => { patch[name] = form.querySelector(`#f-${name}`).checked; });
@@ -6686,6 +6863,8 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
+      <button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>
+      <button class="tab ${state.parametresTab === 'categories-salarie' ? 'active' : ''}" data-parametres-tab="categories-salarie">Catégories de salariés</button>
       <button class="tab ${state.parametresTab === 'qualite' ? 'active' : ''}" data-parametres-tab="qualite">Qualité des données</button>
       ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
     </div>
@@ -6697,6 +6876,8 @@ function renderParametres() {
         : state.parametresTab === 'types-absences' ? renderParametresTypesAbsences()
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
+        : state.parametresTab === 'fermetures' ? renderParametresFermetures()
+        : state.parametresTab === 'categories-salarie' ? renderParametresCategoriesSalarie()
         : state.parametresTab === 'qualite' ? renderParametresQualite()
         : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
         : renderParametresListes()}
@@ -6744,6 +6925,8 @@ function bindParametresEvents() {
   else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
   else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
+  else if (state.parametresTab === 'fermetures') bindParametresFermeturesEvents();
+  else if (state.parametresTab === 'categories-salarie') bindParametresCategoriesSalarieEvents();
   else if (state.parametresTab === 'qualite') bindParametresQualiteEvents();
   else if (state.parametresTab === 'audit') bindParametresAuditEvents();
   else bindParametresListesEvents();
@@ -7548,7 +7731,7 @@ function renderParametresFeries() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Jours fériés ${year}</h2>
-          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement — ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant.</p>
+          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement — ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant. Par défaut, personne ne travaille un jour férié — configurez des exceptions par catégorie si certains salariés doivent le travailler.</p>
         </div>
         <div class="calendar-nav">
           <button class="btn btn-secondary btn-sm" id="btn-feries-prev">← ${year - 1}</button>
@@ -7557,14 +7740,22 @@ function renderParametresFeries() {
         </div>
       </div>
       <table class="table">
-        <thead><tr><th>Date</th><th>Jour férié</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Jour férié</th><th>Travaillé</th><th></th><th></th></tr></thead>
         <tbody>
           ${holidays.map(h => `
             <tr>
               <td>${formatDate(h.date)}</td>
               <td>${escapeHtml(h.label)}</td>
+              <td>${h.travaillable
+                ? '<span class="badge badge-warning">Oui</span>'
+                : (h.exceptionsCategories || []).length
+                  ? '<span class="badge badge-info">Selon catégorie</span>'
+                  : '<span class="badge badge-muted">Non</span>'}</td>
               <td>${h.custom ? '<span class="badge badge-info">Ajouté</span>' : ''}</td>
-              <td>${h.custom ? `<button type="button" class="btn-link" data-remove-jour-ferie="${escapeHtml(h.date)}" data-remove-jour-ferie-label="${escapeHtml(h.label)}">Supprimer</button>` : ''}</td>
+              <td>
+                <button type="button" class="btn-link" data-configure-jour-ferie="${escapeHtml(h.date)}">Configurer</button>
+                ${h.custom ? `<button type="button" class="btn-link" data-remove-jour-ferie="${escapeHtml(h.date)}" data-remove-jour-ferie-label="${escapeHtml(h.label)}">Supprimer</button>` : ''}
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -7576,7 +7767,12 @@ function renderParametresFeries() {
 function bindParametresFeriesEvents() {
   document.getElementById('btn-feries-prev').addEventListener('click', () => { state.parametresFeriesYear -= 1; render(); });
   document.getElementById('btn-feries-next').addEventListener('click', () => { state.parametresFeriesYear += 1; render(); });
-  document.getElementById('btn-add-jour-ferie').addEventListener('click', openAjouterJourFerieModal);
+  document.getElementById('btn-add-jour-ferie').addEventListener('click', () => openJourFerieModal());
+  document.querySelectorAll('[data-configure-jour-ferie]').forEach(btn => {
+    const year = state.parametresFeriesYear;
+    const holiday = getAllPublicHolidays(year, settingsRepository.getSettings()).find(h => h.date === btn.dataset.configureJourFerie);
+    btn.addEventListener('click', () => openJourFerieModal(holiday));
+  });
   document.querySelectorAll('[data-remove-jour-ferie]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
@@ -7589,29 +7785,54 @@ function bindParametresFeriesEvents() {
   });
 }
 
-/** Jour férié ajouté manuellement (settings.joursFeriesPersonnalises) — voir getAllPublicHolidays(),
- * consulté partout où "les jours fériés de l'année" comptent (calendriers, tickets restaurant). */
-function openAjouterJourFerieModal() {
+/** Construit un multi-select "catégories qui font exception à la règle par défaut" — coché =
+ * comportement inverse de defaultTravaillable pour cette catégorie. Réutilisé pour les jours
+ * fériés (§8) ET les fermetures (§9), mêmes exceptionsCategories : [{categorieSalarieId, travaillable}]. */
+function renderExceptionsCategoriesField(exceptions, categoriesSalarie) {
+  const exceptionIds = new Set((exceptions || []).map(ex => ex.categorieSalarieId));
+  if (!categoriesSalarie.length) return '<p class="form-hint">Aucune catégorie de salarié paramétrée (Paramètres → Catégories de salariés).</p>';
+  return `
+    <select class="input" id="f-exceptions-categories" multiple style="min-height:80px;">
+      ${categoriesSalarie.map(c => `<option value="${escapeHtml(c.id)}" ${exceptionIds.has(c.id) ? 'selected' : ''}>${escapeHtml(c.nom)}</option>`).join('')}
+    </select>
+  `;
+}
+
+/** Ajoute un jour férié personnalisé (settings.joursFeriesPersonnalises) OU configure travaillable/
+ * exceptionsCategories d'un jour existant — national (settings.feriesOverrides, jamais stocké tel
+ * quel sinon) ou déjà ajouté (édition directe de l'entrée). Voir getAllPublicHolidays(),
+ * isJourTravaillePourSalarie() — consultés partout où "les jours fériés" comptent. */
+function openJourFerieModal(existingHoliday) {
+  const isNew = !existingHoliday;
+  const categoriesSalarie = categorieSalarieRepository.getAll();
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Ajouter un jour férié</h2>
+        <h2>${isNew ? 'Ajouter un jour férié' : 'Configurer ce jour férié'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
       </div>
-      <form id="ajouter-jour-ferie-form">
+      <form id="jour-ferie-form">
         <div class="modal-body">
           <div class="form-field">
             <label for="f-jour-ferie-date">Date *</label>
-            <input class="input" type="date" id="f-jour-ferie-date" required>
+            <input class="input" type="date" id="f-jour-ferie-date" value="${escapeHtml(existingHoliday?.date || '')}" ${isNew ? 'required' : 'readonly'}>
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-jour-ferie-label">Libellé *</label>
-            <input class="input" type="text" id="f-jour-ferie-label" placeholder="Ex. Vendredi Saint, Fermeture entreprise..." required>
+            <input class="input" type="text" id="f-jour-ferie-label" value="${escapeHtml(existingHoliday?.label || '')}" placeholder="Ex. Vendredi Saint, Fermeture entreprise..." ${!isNew && !existingHoliday.custom ? 'readonly' : ''} required>
+          </div>
+          <div class="form-field form-field-checkbox" style="margin-top: 12px;">
+            <input type="checkbox" id="f-jour-ferie-travaillable" ${existingHoliday?.travaillable ? 'checked' : ''}>
+            <label for="f-jour-ferie-travaillable">Ce jour est travaillé normalement (par défaut personne ne travaille)</label>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label>Catégories qui font exception à la règle ci-dessus</label>
+            ${renderExceptionsCategoriesField(existingHoliday?.exceptionsCategories, categoriesSalarie)}
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-          <button type="submit" class="btn btn-primary">Ajouter</button>
+          <button type="submit" class="btn btn-primary">${isNew ? 'Ajouter' : 'Enregistrer'}</button>
         </div>
       </form>
     </div>
@@ -7621,16 +7842,273 @@ function openAjouterJourFerieModal() {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('ajouter-jour-ferie-form').addEventListener('submit', (evt) => {
+  document.getElementById('jour-ferie-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const date = document.getElementById('f-jour-ferie-date').value;
     const label = document.getElementById('f-jour-ferie-label').value.trim();
+    const travaillable = document.getElementById('f-jour-ferie-travaillable').checked;
+    const exceptionsSelect = document.getElementById('f-exceptions-categories');
+    const exceptionsCategories = exceptionsSelect
+      ? Array.from(exceptionsSelect.selectedOptions).map(o => ({ categorieSalarieId: o.value, travaillable: !travaillable }))
+      : [];
+
     const settings = settingsRepository.getSettings();
-    settings.joursFeriesPersonnalises = [...(settings.joursFeriesPersonnalises || []), { date, label }];
+    if (isNew || existingHoliday.custom) {
+      settings.joursFeriesPersonnalises = [
+        ...(settings.joursFeriesPersonnalises || []).filter(h => !(existingHoliday && h.date === existingHoliday.date && h.label === existingHoliday.label)),
+        { date, label, travaillable, exceptionsCategories }
+      ];
+    } else {
+      settings.feriesOverrides = { ...(settings.feriesOverrides || {}), [date]: { travaillable, exceptionsCategories } };
+    }
     settingsRepository.saveSettings(settings);
     state.parametresFeriesYear = Number(date.slice(0, 4));
     closeModal();
-    showToast('Jour férié ajouté.');
+    showToast(isNew ? 'Jour férié ajouté.' : 'Jour férié mis à jour.');
+    render();
+  });
+}
+
+// ---- Sous-vue : Fermetures d'entreprise (§9 sprint amélioration) ----
+
+/** Module dédié plutôt que fondu dans les jours fériés ou les absences (voir le plan) : couvre une
+ * PLAGE de dates (pas un jour isolé comme un férié), n'a aucune portée légale/CP, et ne doit jamais
+ * entamer le solde de congés d'un salarié concerné — contrairement à une absence classique.
+ * settings.fermetures : { id, nom, dateDebut, dateFin, exceptionsCategories }. Consulté par
+ * isJourTravaillePourSalarie() (data.js), donc pris en compte partout (tickets restaurant, calendriers). */
+function renderParametresFermetures() {
+  const settings = settingsRepository.getSettings();
+  const fermetures = (settings.fermetures || []).slice().sort((a, b) => a.dateDebut.localeCompare(b.dateDebut));
+  return `
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Fermetures d'entreprise</h2>
+          <p class="text-muted">Fermeture exceptionnelle, pont, fermeture annuelle... — une plage de dates où personne (ou seulement certaines catégories) ne travaille, sans jamais entamer le solde de congés des salariés concernés.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-fermeture">+ Ajouter une fermeture</button>
+      </div>
+      ${fermetures.length === 0 ? `<div class="empty-state"><div class="empty-icon">🏢</div><p>Aucune fermeture programmée.</p></div>` : `
+        <table class="table">
+          <thead><tr><th>Nom</th><th>Du</th><th>Au</th><th></th></tr></thead>
+          <tbody>
+            ${fermetures.map(f => `
+              <tr>
+                <td>${escapeHtml(f.nom)}</td>
+                <td>${formatDate(f.dateDebut)}</td>
+                <td>${formatDate(f.dateFin)}</td>
+                <td>
+                  <button type="button" class="btn-link" data-edit-fermeture="${escapeHtml(f.id)}">Modifier</button>
+                  <button type="button" class="btn-link" data-delete-fermeture="${escapeHtml(f.id)}" data-nom="${escapeHtml(f.nom)}">Supprimer</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+function bindParametresFermeturesEvents() {
+  document.getElementById('btn-add-fermeture').addEventListener('click', () => openFermetureModal());
+  document.querySelectorAll('[data-edit-fermeture]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = settingsRepository.getSettings();
+      const fermeture = (settings.fermetures || []).find(f => f.id === btn.dataset.editFermeture);
+      openFermetureModal(fermeture);
+    });
+  });
+  document.querySelectorAll('[data-delete-fermeture]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Supprimer cette fermeture ?',
+        message: `«${btn.dataset.nom}» ne sera plus prise en compte.`,
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          const settings = settingsRepository.getSettings();
+          settings.fermetures = (settings.fermetures || []).filter(f => f.id !== btn.dataset.deleteFermeture);
+          settingsRepository.saveSettings(settings);
+          showToast('Fermeture supprimée.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+function openFermetureModal(existing) {
+  const isEdit = Boolean(existing);
+  const categoriesSalarie = categorieSalarieRepository.getAll();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier la fermeture' : 'Nouvelle fermeture'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="fermeture-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-fermeture-nom">Nom *</label>
+            <input class="input" type="text" id="f-fermeture-nom" value="${escapeHtml(existing?.nom || '')}" placeholder="Ex. Fermeture annuelle août" required>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field">
+              <label for="f-fermeture-debut">Du *</label>
+              <input class="input" type="date" id="f-fermeture-debut" value="${escapeHtml(existing?.dateDebut || '')}" required>
+            </div>
+            <div class="form-field">
+              <label for="f-fermeture-fin">Au *</label>
+              <input class="input" type="date" id="f-fermeture-fin" value="${escapeHtml(existing?.dateFin || '')}" required>
+            </div>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label>Catégories qui travaillent malgré tout pendant cette fermeture</label>
+            ${renderExceptionsCategoriesField(existing?.exceptionsCategories, categoriesSalarie)}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('fermeture-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-fermeture-nom').value.trim();
+    const dateDebut = document.getElementById('f-fermeture-debut').value;
+    const dateFin = document.getElementById('f-fermeture-fin').value;
+    if (dateFin < dateDebut) {
+      showToast('La date de fin ne peut pas être avant la date de début.', 'error');
+      return;
+    }
+    const exceptionsSelect = document.getElementById('f-exceptions-categories');
+    const exceptionsCategories = exceptionsSelect
+      ? Array.from(exceptionsSelect.selectedOptions).map(o => ({ categorieSalarieId: o.value, travaillable: true }))
+      : [];
+
+    const settings = settingsRepository.getSettings();
+    if (isEdit) {
+      settings.fermetures = (settings.fermetures || []).map(f => f.id === existing.id ? { ...f, nom, dateDebut, dateFin, exceptionsCategories } : f);
+    } else {
+      settings.fermetures = [...(settings.fermetures || []), { id: generateId('ferm'), nom, dateDebut, dateFin, exceptionsCategories }];
+    }
+    settingsRepository.saveSettings(settings);
+    closeModal();
+    showToast(isEdit ? 'Fermeture mise à jour.' : 'Fermeture créée.');
+    render();
+  });
+}
+
+// ---- Sous-vue : Catégories de salariés (§10 sprint amélioration) ----
+
+/** Remplace statutPro (texte libre, jamais lu par aucune règle) par une vraie liste paramétrable
+ * référençable par id — utilisée par les règles d'éligibilité de congé, les exceptions jours
+ * fériés/fermetures, etc. (voir getEffectiveCategorieSalarieId, data.js). Migrée automatiquement
+ * depuis les statutPro déjà utilisés (DB.getSettings()) — jamais vide à l'affichage. */
+function renderParametresCategoriesSalarie() {
+  const categories = categorieSalarieRepository.getAll();
+  return `
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Catégories de salariés</h2>
+          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise — utilisable dans les règles de congés, jours fériés et fermetures.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
+      </div>
+      <table class="table">
+        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
+        <tbody>
+          ${categories.map(c => `
+            <tr>
+              <td>${escapeHtml(c.nom)}</td>
+              <td>${escapeHtml(c.description || '—')}</td>
+              <td>
+                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
+                <button type="button" class="btn-link" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function bindParametresCategoriesSalarieEvents() {
+  document.getElementById('btn-add-categorie-salarie').addEventListener('click', () => openCategorieSalarieModal());
+  document.querySelectorAll('[data-edit-categorie-salarie]').forEach(btn => {
+    btn.addEventListener('click', () => openCategorieSalarieModal(btn.dataset.editCategorieSalarie));
+  });
+  document.querySelectorAll('[data-delete-categorie-salarie]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Supprimer cette catégorie ?',
+        message: `«${btn.dataset.nom}» sera retirée de la fiche de tout salarié qui la porte actuellement.`,
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          categorieSalarieRepository.delete(btn.dataset.deleteCategorieSalarie);
+          showToast('Catégorie supprimée.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+function openCategorieSalarieModal(id) {
+  const isEdit = Boolean(id);
+  const categorie = isEdit ? categorieSalarieRepository.getById(id) : makeEmptyCategorieSalarie();
+  if (isEdit && !categorie) { showToast('Cette catégorie n\'est plus disponible.', 'error'); return; }
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier la catégorie' : 'Nouvelle catégorie de salarié'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="categorie-salarie-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-cat-nom">Nom *</label>
+            <input class="input" type="text" id="f-cat-nom" value="${escapeHtml(categorie.nom)}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-cat-description">Description</label>
+            <input class="input" type="text" id="f-cat-description" value="${escapeHtml(categorie.description)}">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('categorie-salarie-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const patch = {
+      nom: document.getElementById('f-cat-nom').value.trim(),
+      description: document.getElementById('f-cat-description').value.trim()
+    };
+    if (isEdit) categorieSalarieRepository.update(id, patch);
+    else categorieSalarieRepository.create(patch);
+    closeModal();
+    showToast(isEdit ? 'Catégorie mise à jour.' : 'Catégorie créée.');
     render();
   });
 }
@@ -9971,6 +10449,7 @@ function openEmployeeModal(id) {
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   const settings = settingsRepository.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id && !e.archive);
+  const categoriesSalarie = categorieSalarieRepository.getAll();
   const etablissements = etablissementRepository.getAll();
   const etablissementsActifs = etablissements.filter(e => e.actif);
   if (!isEdit && !employee.etablissementId) {
@@ -10026,7 +10505,7 @@ function openEmployeeModal(id) {
               ${selectField('poste', 'Poste', settings.postes, employee.poste)}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, employee.conventionCollective)}
-              ${selectField('statutPro', 'Statut professionnel', settings.statutsPro, employee.statutPro)}
+              ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })))}
               ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat)}
               <div class="form-field">
                 <label for="f-dateEmbauche">Date d'embauche *</label>
@@ -10175,6 +10654,14 @@ function submitEmployeeForm(evt, id) {
       patch[key] = value;
     }
   });
+
+  // statutPro (texte libre) reste rempli en synchronisation avec la catégorie choisie, pour que les
+  // exports/documents existants qui le lisent encore restent cohérents — categorieSalarieId (ci-
+  // dessus, déjà dans patch via le name du select) est désormais la source de vérité pour les règles.
+  if (patch.categorieSalarieId) {
+    const categorie = categorieSalarieRepository.getById(patch.categorieSalarieId);
+    if (categorie) patch.statutPro = categorie.nom;
+  }
 
   const pourcentageActivite = Number(patch.pourcentageActivite) || 100;
   if (pourcentageActivite <= 0 || pourcentageActivite > 100) {

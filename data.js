@@ -188,6 +188,12 @@ const EXPORT_PAIE_MODELES = {
   personnalise: { label: 'Personnalisé', delimiter: ';' }
 };
 
+// Garde en mémoire (pas persistée) les entreprises pour qui la migration des catégories de salarié
+// a déjà été tentée cette session — évite de retenter l'écriture à chaque DB.getSettings() une fois
+// que settings.categoriesSalarie existe déjà (le check normal suffit alors), et pendant le bref
+// instant avant la fin du premier appel this.saveCurrentCompany() lui-même synchrone.
+const _categoriesSalarieMigratedCompanyIds = new Set();
+
 // Listes de référence par défaut (modifiables via DB.settings une fois le
 // module Paramètres construit — elles ne sont donc pas figées dans le code).
 const DEFAULT_SETTINGS = {
@@ -214,6 +220,14 @@ const DEFAULT_SETTINGS = {
   // Jours fériés en plus des 11 fériés nationaux calculés automatiquement (getFrenchPublicHolidays)
   // — ex. jours fériés locaux (Alsace-Moselle), fermeture d'entreprise, pont. { date: 'AAAA-MM-JJ', label }.
   joursFeriesPersonnalises: [],
+  // §8 sprint amélioration — personnalise un férié NATIONAL (jamais stocké tel quel, voir
+  // getFrenchPublicHolidays) sans le dupliquer dans joursFeriesPersonnalises. Clé = date 'AAAA-MM-JJ'.
+  feriesOverrides: {},
+  // §9 sprint amélioration — fermetures d'entreprise (plage de dates, pas un jour isolé comme un
+  // férié) : { id, nom, dateDebut, dateFin, exceptionsCategories }. Voir isJourTravaillePourSalarie().
+  fermetures: [],
+  // §10 sprint amélioration — voir makeEmptyCategorieSalarie()/deriveCategoriesSalarieFromStatutPro().
+  categoriesSalarie: [],
   // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
   // la masse salariale, le genre et la pyramide des âges restent des données que l'entreprise
   // choisit de suivre ou non (cf. l'avertissement affiché juste au-dessus de ces cases à cocher).
@@ -726,7 +740,21 @@ const DB = {
     const company = this.getCurrentCompany();
     // Fusion avec les défauts : un champ ajouté plus tard (ex. schoolZone) apparaît
     // automatiquement chez les utilisateurs existants sans écraser leurs réglages.
-    return Object.assign({}, DEFAULT_SETTINGS, company.settings || {});
+    const settings = Object.assign({}, DEFAULT_SETTINGS, company.settings || {});
+    // §10 sprint amélioration : migration silencieuse et unique (par entreprise, par session — pas
+    // à chaque lecture) des catégories de salarié depuis les statutPro déjà utilisés. Persistée une
+    // seule fois (pas juste calculée à la volée comme les jours fériés) car d'autres structures
+    // (règles d'éligibilité de congé, exceptions jours fériés/fermetures) vont référencer ces ids —
+    // ils doivent rester stables d'une lecture à l'autre. Écriture directe (pas this.saveSettings)
+    // pour ne pas polluer le journal d'audit d'une entrée "Modification Paramètres" fantôme.
+    if (company && !settings.categoriesSalarie.length && !_categoriesSalarieMigratedCompanyIds.has(company.id)) {
+      _categoriesSalarieMigratedCompanyIds.add(company.id);
+      settings.categoriesSalarie = deriveCategoriesSalarieFromStatutPro(this.getEmployees());
+      company.settings = settings;
+      this.saveCurrentCompany(company);
+      this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
+    }
+    return settings;
   },
 
   saveSettings(settings) {
@@ -735,6 +763,47 @@ const DB = {
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Paramètres', 'Listes et réglages généraux');
     this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
+  },
+
+  // ---- Catégories de salarié (§10 sprint amélioration) ----
+
+  getCategoriesSalarie() {
+    return this.getSettings().categoriesSalarie.slice().sort((a, b) => a.ordre - b.ordre);
+  },
+
+  addCategorieSalarie(data) {
+    const settings = this.getSettings();
+    const categorie = Object.assign(makeEmptyCategorieSalarie(), data, { id: generateId('cat'), ordre: settings.categoriesSalarie.length });
+    settings.categoriesSalarie = [...settings.categoriesSalarie, categorie];
+    this.saveSettings(settings);
+    this.logAudit('Création', 'Catégorie de salarié', categorie.nom);
+    return categorie;
+  },
+
+  updateCategorieSalarie(id, patch) {
+    const settings = this.getSettings();
+    settings.categoriesSalarie = settings.categoriesSalarie.map(c => c.id === id ? { ...c, ...patch } : c);
+    this.saveSettings(settings);
+    this.logAudit('Modification', 'Catégorie de salarié', patch.nom || id);
+  },
+
+  /** Retire aussi la référence chez tout salarié qui portait cette catégorie (categorieSalarieId
+   * redevient null) plutôt que de laisser un id fantôme — même principe que deleteService/employeeId. */
+  deleteCategorieSalarie(id) {
+    const settings = this.getSettings();
+    const categorie = settings.categoriesSalarie.find(c => c.id === id);
+    settings.categoriesSalarie = settings.categoriesSalarie.filter(c => c.id !== id);
+    this.saveSettings(settings);
+
+    let employeesChanged = false;
+    const employees = this.getEmployees().map(e => {
+      if (e.categorieSalarieId !== id) return e;
+      employeesChanged = true;
+      return { ...e, categorieSalarieId: null };
+    });
+    if (employeesChanged) this.saveEmployees(employees);
+
+    if (categorie) this.logAudit('Suppression', 'Catégorie de salarié', categorie.nom);
   },
 
   // ---- Services & équipes (catalogue structuré, pas une simple liste de textes) ----
@@ -1910,6 +1979,14 @@ const settingsRepository = {
   saveSettings: (settings) => DB.saveSettings(settings)
 };
 
+const categorieSalarieRepository = {
+  getAll: () => DB.getCategoriesSalarie(),
+  getById: (id) => DB.getCategoriesSalarie().find(c => c.id === id) || null,
+  create: (data) => DB.addCategorieSalarie(data),
+  update: (id, patch) => DB.updateCategorieSalarie(id, patch),
+  delete: (id) => DB.deleteCategorieSalarie(id)
+};
+
 const leaveTypeRepository = {
   getLeaveTypes: () => DB.getLeaveTypes(),
   getLeaveTypeById: (id) => DB.getLeaveTypeById(id),
@@ -1985,7 +2062,8 @@ function makeEmptyEmployee() {
     poste: '',
     managerIds: [], // un salarié peut avoir zéro, un ou plusieurs managers
     conventionCollective: '',
-    statutPro: 'Non cadre',
+    statutPro: 'Non cadre', // conservé pour compatibilité (affichage/exports existants) — voir categorieSalarieId
+    categorieSalarieId: null, // §10 sprint amélioration — voir getEffectiveCategorieSalarieId()
 
     typeContrat: 'CDI',
     dateFinContrat: '',
@@ -2054,6 +2132,40 @@ function makeEmptyEtablissement() {
 /** Un service regroupe plusieurs équipes ; chaque équipe peut avoir un ou plusieurs managers. */
 function makeEmptyService() {
   return { id: null, nom: '', equipes: [] };
+}
+
+/** Catégorie de salarié (cadre/non-cadre, ou toute autre catégorisation RH propre à l'entreprise) —
+ * §10 sprint amélioration : remplace le simple statutPro (texte libre, jamais lu par aucune règle)
+ * par une vraie petite entité référençable par id, pour que les règles d'éligibilité de congé
+ * (§3), les jours fériés/fermetures par catégorie (§8/§9) puissent s'y accrocher de façon stable
+ * (insensible à un renommage, contrairement à un rapprochement par texte). Vit dans
+ * settings.categoriesSalarie (voir migrateCategoriesSalarieFromStatutPro ci-dessous) — pas de
+ * nouvelle table Supabase, synchronisée avec le reste des réglages (pushSettings). */
+function makeEmptyCategorieSalarie() {
+  return { id: null, nom: '', description: '', ordre: 0 };
+}
+
+/** Migration de compatibilité — appelée depuis settingsRepository.getSettings() (donc pour TOUTE
+ * entreprise, qu'elle vienne du cache local de démo ou de Supabase, contrairement aux migrateXxx(company)
+ * historiques ci-dessous qui ne s'appliquent qu'au chemin de démo locale via DB.init()). Ne mute et
+ * ne persiste rien : calcule à la volée, à chaque lecture, les catégories à partir des valeurs
+ * distinctes de statutPro déjà utilisées par les salariés de l'entreprise — préserve exactement ce
+ * que l'entreprise avait déjà personnalisé, plutôt que d'imposer un "Cadre/Non cadre" générique.
+ * Idempotent et sans effet dès que settings.categoriesSalarie existe réellement (tableau non vide). */
+function deriveCategoriesSalarieFromStatutPro(employees) {
+  const noms = [...new Set((employees || []).map(e => (e.statutPro || '').trim()).filter(Boolean))];
+  if (!noms.length) noms.push('Cadre', 'Non cadre'); // aucun salarié encore créé : valeurs de départ raisonnables, pas figées.
+  return noms.map((nom, i) => ({ id: generateId('cat'), nom, description: '', ordre: i }));
+}
+
+/** categorieSalarieId n'est jamais rétro-écrit sur les fiches salarié existantes (éviterait une
+ * réécriture en masse de potentiellement centaines de fiches) — calculé à la volée à partir de
+ * l'ancien statutPro (dont le nom correspond exactement à une catégorie migrée, voir ci-dessus) tant
+ * qu'une vraie sélection n'a pas été faite dans le nouveau champ du formulaire salarié. */
+function getEffectiveCategorieSalarieId(employee, categoriesSalarie) {
+  if (employee.categorieSalarieId) return employee.categorieSalarieId;
+  const match = (categoriesSalarie || []).find(c => c.nom === (employee.statutPro || '').trim());
+  return match ? match.id : null;
 }
 
 function makeEmptyEquipe() {
@@ -2186,10 +2298,56 @@ function makeEmptyLeaveType() {
     autoriserDemiJournee: true,
     autoriserPlusieursDemandes: true,
     deduireCompteur: true,
+    // deduireRTT/deduireCP : anciens champs (§14), conservés en lecture pour compatibilité (voir
+    // getLeaveBalance) mais plus jamais écrits depuis le formulaire — remplacés par
+    // compteurPartageAvecId (référence stable par id, voir §3 sprint amélioration).
     deduireRTT: false,
     deduireCP: false,
+    compteurPartageAvecId: null,
+    // Règles d'éligibilité (§3 sprint amélioration) — tableau vide = ouvert à tous les salariés
+    // (comportement d'avant ce champ, inchangé). Voir RULE_CRITERIA/isLeaveTypeEligibleForEmployee.
+    regles: [],
+    // Clôture de compteur + report (§5 sprint amélioration) — dateClotureCompteur au format 'MM-JJ'
+    // (ex. '05-31'), null = une seule période continue depuis l'embauche (comportement actuel).
+    dateClotureCompteur: null,
+    reportCompteur: 'aucun', // 'aucun' | 'limite' | 'illimite'
+    reportLimiteJours: null,
     exportPaie: true
   };
+}
+
+/** Catalogue extensible des critères d'éligibilité disponibles pour un type de congé (§3 sprint
+ * amélioration) — même esprit que PERMISSIONS/IMPORT_EMPLOYEE_FIELD_ALIASES : un seul endroit à
+ * étendre pour ajouter un nouveau critère, sans toucher au moteur d'évaluation lui-même. */
+const RULE_CRITERIA = {
+  anciennete: { label: 'Ancienneté (années)', valueType: 'number', operators: ['>=', '<='] },
+  categorieSalarieId: { label: 'Catégorie de salarié', valueType: 'categorieSalarie', operators: ['in'] },
+  etablissementId: { label: 'Établissement', valueType: 'etablissement', operators: ['in'] },
+  typeContrat: { label: 'Type de contrat', valueType: 'typeContrat', operators: ['in'] }
+};
+
+/** Un type sans règle reste ouvert à tous (comportement d'avant l'existence de ce champ). Toutes
+ * les règles d'un type doivent être vraies (ET logique) pour que l'employé y soit éligible. */
+function isLeaveTypeEligibleForEmployee(employee, leaveType, categoriesSalarie) {
+  const regles = leaveType.regles || [];
+  if (!regles.length) return true;
+  return regles.every(regle => {
+    switch (regle.critere) {
+      case 'anciennete': {
+        if (!employee.dateEmbauche) return false;
+        const years = (new Date() - new Date(employee.dateEmbauche)) / (365.25 * 86400000);
+        return regle.operateur === '>=' ? years >= Number(regle.valeur) : years <= Number(regle.valeur);
+      }
+      case 'categorieSalarieId':
+        return (regle.valeur || []).includes(getEffectiveCategorieSalarieId(employee, categoriesSalarie));
+      case 'etablissementId':
+        return (regle.valeur || []).includes(employee.etablissementId);
+      case 'typeContrat':
+        return (regle.valeur || []).includes(employee.typeContrat);
+      default:
+        return true;
+    }
+  });
 }
 
 /** Structure complète d'une demande de congé. */
@@ -2316,7 +2474,6 @@ function ticketsMonthKey(year, month) {
 function calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = toISODate(new Date());
-  const holidays = getAllPublicHolidays(year, settings);
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   let nbTickets = 0;
 
@@ -2333,7 +2490,7 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
     if (employee.dateEmbauche && dateStr < employee.dateEmbauche) continue;
     if (employee.dateDepart && dateStr > employee.dateDepart) continue;
     if (!(employee.joursTravailles || []).includes(dayLabels[date.getDay()])) continue;
-    if (holidays.some(h => h.date === dateStr)) continue;
+    if (!isJourTravaillePourSalarie(dateStr, employee, settings)) continue;
 
     // Une demi-journée (matin OU après-midi, sur une date isolée) ne prive pas du ticket restaurant
     // du jour — seule une absence sur la journée entière compte comme "non travaillé" ici.
@@ -2465,16 +2622,37 @@ function round2(n) {
  * Simplification volontaire : les règles exactes varient selon la convention
  * collective ; ce moteur fournit une base paramétrable, pas un calcul légal figé.
  */
-function calculateAcquisition(employee, leaveType, refDate) {
+/** Bornes [periodStart, periodEnd] de la période de compteur EN COURS pour une date de clôture
+ * 'MM-JJ' donnée (ex. '05-31'), à un instant refDate — §5 sprint amélioration. Si refDate tombe
+ * avant la clôture de cette année, on est encore dans la période ouverte l'année précédente. */
+function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
+  const [month, day] = dateClotureMMJJ.split('-').map(Number);
+  const now = refDate ? new Date(refDate) : new Date();
+  const clotureThisYear = new Date(now.getFullYear(), month - 1, day);
+  if (now <= clotureThisYear) {
+    return { periodStart: new Date(now.getFullYear() - 1, month - 1, day + 1), periodEnd: clotureThisYear };
+  }
+  return { periodStart: new Date(now.getFullYear(), month - 1, day + 1), periodEnd: new Date(now.getFullYear() + 1, month - 1, day) };
+}
+
+/** periodOverride ({periodStart, periodEnd}) : borne le calcul à une période de clôture personnalisée
+ * (§5) au lieu de l'année civile par défaut — utilisé uniquement quand leaveType.dateClotureCompteur
+ * est renseigné (voir getLeaveBalance), sinon comportement strictement inchangé. */
+function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
   if (!leaveType || leaveType.illimite || leaveType.acquisition === 'Illimitée') return Infinity;
 
   const now = refDate ? new Date(refDate) : new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const yearEnd = new Date(now.getFullYear(), 11, 31);
+  const yearStart = periodOverride ? periodOverride.periodStart : new Date(now.getFullYear(), 0, 1);
+  const yearEnd = periodOverride ? periodOverride.periodEnd : new Date(now.getFullYear(), 11, 31);
   const hireDate = employee.dateEmbauche ? new Date(employee.dateEmbauche) : yearStart;
   const periodStart = hireDate > yearStart ? hireDate : yearStart;
   const departDate = employee.dateDepart ? new Date(employee.dateDepart) : null;
-  const periodEnd = departDate && departDate < now ? departDate : now;
+  // Clamp à yearEnd : sans periodOverride, `now` tombe toujours dans [yearStart,yearEnd] par
+  // construction (même année civile) — ce clamp ne change donc rien au comportement par défaut,
+  // il ne devient utile qu'avec un periodOverride dont la borne de fin dépasse "aujourd'hui"
+  // (ex. clôture au 31 mai alors qu'on est en janvier : la période en cours court jusqu'en mai
+  // prochain, mais on ne peut évidemment pas compter des jours pas encore vécus).
+  const periodEnd = departDate && departDate < now ? departDate : (now < yearEnd ? now : yearEnd);
 
   if (periodStart > periodEnd) return 0;
 
@@ -2541,23 +2719,77 @@ function getLeaveTypeIdsByName(leaveTypes, nom) {
  * "en direct"). getPaieAnomalies doit impérativement passer la fin du mois qu'on prépare, sinon le
  * solde évalué est toujours celui d'AUJOURD'HUI — préparer la paie de mars en juillet vérifierait
  * alors le solde de juillet, pas celui de mars. */
-function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate) {
-  const acquis = calculateAcquisition(employee, leaveType, refDate);
-  const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
+function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate, categoriesSalarie) {
+  const types = allLeaveTypes || DB.getLeaveTypes();
 
-  const deducteurField = leaveTypeNameMatches(leaveType.nom, 'RTT') ? 'deduireRTT' : leaveTypeNameMatches(leaveType.nom, 'Congés payés') ? 'deduireCP' : null;
-  const typeIds = new Set([leaveType.id]);
-  if (deducteurField) {
-    (allLeaveTypes || DB.getLeaveTypes()).filter(t => t.id !== leaveType.id && t[deducteurField]).forEach(t => typeIds.add(t.id));
+  // §3 sprint amélioration : un salarié inéligible (règles non satisfaites) n'a simplement rien
+  // acquis sur ce type — pas d'erreur, pas de blocage ailleurs, juste un solde à 0/0/0.
+  if (!isLeaveTypeEligibleForEmployee(employee, leaveType, categoriesSalarie || DB.getSettings().categoriesSalarie)) {
+    return { acquis: 0, pris: 0, enAttente: 0, disponible: 0, ajustement: 0 };
   }
 
-  const requests = allRequests.filter(r =>
-    r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé'
+  const ajustement = (employee.compteurs && employee.compteurs[leaveType.id]) || 0;
+
+  // Compteur partagé (§3) : tout type qui référence CELUI-CI par compteurPartageAvecId vient EN
+  // PLUS s'imputer sur son solde — remplace l'ancien rapprochement par nom (deduireRTT/deduireCP),
+  // gardé en lecture pour les types jamais migrés vers le nouveau champ (compatibilité, voir
+  // makeEmptyLeaveType). Un type qui a lui-même déjà compteurPartageAvecId renseigné n'utilise plus
+  // l'ancien mécanisme par nom, même si ses cases deduireRTT/deduireCP restent cochées en base.
+  const typeIds = new Set([leaveType.id]);
+  const typesPartageantVersMoi = types.filter(t => t.id !== leaveType.id && t.compteurPartageAvecId === leaveType.id);
+  if (typesPartageantVersMoi.length) {
+    typesPartageantVersMoi.forEach(t => typeIds.add(t.id));
+  } else {
+    const deducteurField = leaveTypeNameMatches(leaveType.nom, 'RTT') ? 'deduireRTT' : leaveTypeNameMatches(leaveType.nom, 'Congés payés') ? 'deduireCP' : null;
+    if (deducteurField) {
+      types.filter(t => t.id !== leaveType.id && !t.compteurPartageAvecId && t[deducteurField]).forEach(t => typeIds.add(t.id));
+    }
+  }
+
+  const isInPeriod = (r, start, end) => {
+    if (!r.dateDebut) return false;
+    if (start && r.dateDebut < toISODate(start)) return false;
+    if (end && r.dateDebut > toISODate(end)) return false;
+    return true;
+  };
+
+  const requestsFor = (start, end) => allRequests.filter(r =>
+    r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé' && isInPeriod(r, start, end)
   );
-  const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
-  const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+
+  // §5 sprint amélioration : sans dateClotureCompteur, comportement strictement inchangé (une seule
+  // période continue depuis l'embauche, comme avant ce champ).
+  if (!leaveType.dateClotureCompteur) {
+    const acquis = calculateAcquisition(employee, leaveType, refDate);
+    const requests = requestsFor(null, null);
+    const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+    const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+    const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
+    return { acquis, pris, enAttente, disponible, ajustement };
+  }
+
+  const current = getCompteurPeriodBounds(leaveType.dateClotureCompteur, refDate);
+  const acquisPeriode = calculateAcquisition(employee, leaveType, refDate, current);
+  const requestsCurrent = requestsFor(current.periodStart, current.periodEnd);
+  const pris = requestsCurrent.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+  const enAttente = requestsCurrent.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+
+  // Report depuis la période précédente immédiate uniquement (pas de chaîne indéfinie) — c'est la
+  // seule période qui a un solde résiduel encore pertinent, les précédentes ont déjà été closes.
+  let report = 0;
+  if (leaveType.reportCompteur !== 'aucun') {
+    const previousRefDate = new Date(current.periodStart.getTime() - 86400000); // un jour avant le début de la période en cours = dans la précédente
+    const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate);
+    const acquisPrecedent = calculateAcquisition(employee, leaveType, previous.periodEnd, previous);
+    const requestsPrecedent = requestsFor(previous.periodStart, previous.periodEnd);
+    const prisPrecedent = requestsPrecedent.reduce((sum, r) => sum + r.nbJours, 0); // validé + en attente : les deux entament le solde reportable
+    const soldeResiduel = Math.max(0, round2(acquisPrecedent - prisPrecedent));
+    report = leaveType.reportCompteur === 'limite' ? Math.min(soldeResiduel, Number(leaveType.reportLimiteJours) || 0) : soldeResiduel;
+  }
+
+  const acquis = acquisPeriode === Infinity ? Infinity : round2(acquisPeriode + report);
   const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
-  return { acquis, pris, enAttente, disponible, ajustement };
+  return { acquis, pris, enAttente, disponible, ajustement, report };
 }
 
 // ---- Indicateurs du tableau de bord Directeur ----
@@ -2749,12 +2981,48 @@ function getFrenchPublicHolidays(year) {
 /** getFrenchPublicHolidays() + les jours fériés ajoutés manuellement par l'entreprise
  * (settings.joursFeriesPersonnalises) — à utiliser partout où "les jours fériés de l'année" sont
  * consultés pour que l'ajout d'un jour se répercute vraiment partout (calendriers, tickets
- * restaurant...), pas seulement sur l'écran Paramètres où on l'a saisi. */
+ * restaurant...), pas seulement sur l'écran Paramètres où on l'a saisi.
+ *
+ * §8 sprint amélioration : chaque jour porte maintenant travaillable (par défaut personne ne
+ * travaille, comme le comportement historique) et exceptionsCategories (ex. les Commerciaux
+ * travaillent ce jour-là). settings.feriesOverrides permet de personnaliser un férié NATIONAL
+ * (jamais stocké tel quel, seulement calculé) sans avoir à le dupliquer dans joursFeriesPersonnalises. */
 function getAllPublicHolidays(year, settings) {
+  const overrides = settings?.feriesOverrides || {};
+  const national = getFrenchPublicHolidays(year).map(h => ({
+    travaillable: false,
+    exceptionsCategories: [],
+    ...h,
+    ...(overrides[h.date] || {})
+  }));
   const custom = (settings?.joursFeriesPersonnalises || [])
     .filter(h => h.date && h.date.startsWith(String(year)))
-    .map(h => ({ ...h, custom: true }));
-  return getFrenchPublicHolidays(year).concat(custom);
+    .map(h => ({ travaillable: false, exceptionsCategories: [], ...h, custom: true }));
+  return national.concat(custom);
+}
+
+/** Un salarié travaille-t-il réellement ce jour ? (§8 jours fériés + §9 fermetures, tous deux
+ * consultés ici) — centralise ce qui était avant un simple `holidays.some(h => h.date === dateStr)`
+ * disséminé (calcul des tickets restaurant, calendriers). Une exception par catégorie de salarié
+ * (ex. "les Commerciaux travaillent ce jour") l'emporte toujours sur la valeur par défaut du jour. */
+function isJourTravaillePourSalarie(dateStr, employee, settings, categoriesSalarie) {
+  const categories = categoriesSalarie || settings.categoriesSalarie || [];
+  const empCategorieId = getEffectiveCategorieSalarieId(employee, categories);
+
+  const year = Number(dateStr.slice(0, 4));
+  const holiday = getAllPublicHolidays(year, settings).find(h => h.date === dateStr);
+  if (holiday) {
+    const exception = (holiday.exceptionsCategories || []).find(ex => ex.categorieSalarieId === empCategorieId);
+    return exception ? exception.travaillable : holiday.travaillable;
+  }
+
+  const fermeture = (settings.fermetures || []).find(f => dateStr >= f.dateDebut && dateStr <= f.dateFin);
+  if (fermeture) {
+    const exception = (fermeture.exceptionsCategories || []).find(ex => ex.categorieSalarieId === empCategorieId);
+    return exception ? exception.travaillable : false;
+  }
+
+  return true;
 }
 
 /** Retourne la période de vacances scolaires en cours pour une date et une zone, s'il y en a une. */
