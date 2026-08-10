@@ -1160,7 +1160,7 @@ const DB = {
     }]);
     list[index] = Object.assign({}, request, {
       dateFin: nouvelleDateFin,
-      nbJours: computeWorkingDays(request.dateDebut, nouvelleDateFin, false, employee.joursTravailles),
+      nbJours: computeWorkingDays(request.dateDebut, nouvelleDateFin, false, employee, this.getSettings()),
       prolongations,
       dateModification: new Date().toISOString()
     });
@@ -1218,7 +1218,7 @@ const DB = {
       return { success: false, error: 'Ces nouvelles dates chevauchent une demande de télétravail active de ce salarié.' };
     }
 
-    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee.joursTravailles);
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee, this.getSettings());
     if (nbJours <= 0) {
       return { success: false, error: 'Ces nouvelles dates ne couvrent aucun jour travaillé pour ce salarié.' };
     }
@@ -2703,20 +2703,25 @@ function cancelRequest(request) {
   return { statut: 'Annulé', historique };
 }
 
-/** Nombre de jours ouvrés décomptés pour une période, selon les jours travaillés du salarié. */
-function computeWorkingDays(dateDebut, dateFin, demiJournee, joursTravailles) {
+/** Nombre de jours ouvrés décomptés pour une période, selon les jours travaillés du salarié —
+ * ET les jours fériés/fermetures (settings), via isJourTravaillePourSalarie (data.js:3145),
+ * déjà construite pour les tickets restaurant : un jour férié ou une fermeture ne doit pas être
+ * décompté comme un jour d'absence, exactement comme il n'aurait pas été travaillé de toute façon. */
+function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings) {
   if (!dateDebut || !dateFin) return 0;
   const start = new Date(dateDebut);
   const end = new Date(dateFin);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
 
+  const joursTravailles = employee && employee.joursTravailles;
   const workedDays = joursTravailles && joursTravailles.length ? joursTravailles : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
   let count = 0;
   const cursor = new Date(start);
   while (cursor <= end) {
-    if (workedDays.includes(dayLabels[cursor.getDay()])) count += 1;
+    const dateStr = toISODate(cursor);
+    if (workedDays.includes(dayLabels[cursor.getDay()]) && isJourTravaillePourSalarie(dateStr, employee, settings)) count += 1;
     cursor.setDate(cursor.getDate() + 1);
   }
 
@@ -2731,7 +2736,7 @@ function computeWorkingDays(dateDebut, dateFin, demiJournee, joursTravailles) {
  * en découpant la période aux bornes du mois. Réutilise computeWorkingDays plutôt que
  * de dupliquer la boucle de comptage — utilisé par l'export paie.
  */
-function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, joursTravailles) {
+function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings) {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
   const start = new Date(dateDebut);
@@ -2741,7 +2746,7 @@ function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, j
   if (clippedStart > clippedEnd) return 0;
 
   const fullyWithinMonth = start >= monthStart && end <= monthEnd;
-  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, joursTravailles);
+  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, employee, settings);
 }
 
 function daysBetween(a, b) {

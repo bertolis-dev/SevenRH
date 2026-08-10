@@ -974,7 +974,6 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .calendar-tag-holiday { background: var(--color-danger); color: white; }
-.calendar-tag-school { background: var(--color-info); color: white; }
 
 .calendar-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 

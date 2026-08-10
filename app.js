@@ -6240,7 +6240,9 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
  * "Mes brouillons" — préremplit le formulaire et fait passer le futur submit en mode "convertir le
  * brouillon" (state.editingDraftId) plutôt que "créer depuis zéro" ; supprimé automatiquement une
  * fois la demande réellement envoyée. */
-function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
+/** presetDate : préremplit début ET fin (clic sur une case du calendrier, §sprint calendrier
+ * interactif) — ignoré si un brouillon fournit déjà ses propres dates. */
+function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   // §15/§24 : un type marqué "saisie réservée aux RH" (ex. Maladie) ne doit pas être proposé à qui
   // n'a pas SAISIR_MALADIE — sinon un salarié pourrait se déclarer lui-même en arrêt maladie alors
@@ -6265,17 +6267,34 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft) {
     (t.saisiParSalarie || canSaisirRestreint) && !typesDesactivesPourSoi.has(t.id) &&
     (!presetEmployee || isLeaveTypeEligibleForEmployee(presetEmployee, t, categoriesSalarie)));
   const champs = (draft && draft.champs) || {};
+  if (!draft && presetDate) {
+    champs.dateDebut = presetDate;
+    champs.dateFin = presetDate;
+  }
   state.pendingAttachment = champs.justificatif || null;
   beginDraftEdit(draft);
+
+  // Bandeau informatif si le jour préselectionné est férié/en vacances scolaires — pour ne pas
+  // perdre cette information en passant du calendrier (où elle est visible) à ce formulaire.
+  let contextBanner = '';
+  if (presetDate) {
+    const settings = settingsRepository.getSettings();
+    const ferie = getAllPublicHolidays(Number(presetDate.slice(0, 4)), settings).find(h => h.date === presetDate);
+    const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
+    const vacances = schoolHolidays ? findSchoolHolidayPeriod(presetDate, settings.schoolZone, schoolHolidays) : null;
+    if (ferie) contextBanner = `<p class="text-muted" style="margin-top:0;">📅 ${escapeHtml(formatDate(presetDate))} est un jour férié (${escapeHtml(ferie.label)}).</p>`;
+    else if (vacances) contextBanner = `<p class="text-muted" style="margin-top:0;">🎒 ${escapeHtml(formatDate(presetDate))} est en période de vacances scolaires (${escapeHtml(vacances.nom)}).</p>`;
+  }
 
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>${categorie === 'autre' ? 'Nouvelle demande d\'absence' : 'Nouvelle demande de congé'}</h2>
+        <h2>${categorie === 'autre' ? 'Nouvelle demande d\'absence' : categorie === 'conge' ? 'Nouvelle demande de congé' : 'Nouvelle demande'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
       </div>
       <form id="leave-request-form">
         <div class="modal-body">
+          ${contextBanner}
           <div class="form-grid">
             ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
             ${selectField('typeId', categorie === 'autre' ? 'Type d\'absence' : 'Type de congé', null, champs.typeId || '', types.map(t => ({ value: t.id, label: `${t.icone} ${t.nom}` })))}
@@ -6364,7 +6383,7 @@ function updateLeaveRequestHints() {
   let nbJoursLabel = '';
   if (dateDebut && dateFin) {
     const demiJournee = demiField.style.display === 'block' ? document.getElementById('f-demiJournee').value : '';
-    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee.joursTravailles);
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings());
     nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
@@ -6439,7 +6458,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee.joursTravailles);
+  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings());
 
   if (nbJours <= 0) {
     showToast('La période sélectionnée ne comporte aucun jour travaillé.', 'error');
@@ -6491,7 +6510,12 @@ function submitLeaveRequestForm(evt) {
   finalizeDraftEdit();
   showToast('Demande envoyée.');
   closeModal();
-  if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
+  // Ouverte depuis un clic sur le calendrier (§sprint calendrier interactif) : on y retourne au lieu
+  // de filer vers la liste des demandes, pour que l'utilisateur voie tout de suite son jour rempli.
+  if (state._leaveRequestReturnToCalendar) {
+    state._leaveRequestReturnToCalendar = false;
+    navigateTo('calendrier');
+  } else if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
   else navigateTo('autres-absences', { autresAbsencesTab: 'demandes' });
 }
 
@@ -6994,7 +7018,13 @@ function buildCalendarSharedData(cells) {
   const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getAllPublicHolidays(y, settings));
-  return { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone };
+  return {
+    employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone,
+    // §sprint calendrier interactif : seule la vue personnelle (soi-même, jamais ambigu) autorise le
+    // clic sur une case vide à créer une demande — voir renderCalendarCell/bindCalendrierEvents.
+    vuePersonnelle: !hasWiderView || vuePersonnelle,
+    currentUserId: user.id
+  };
 }
 
 function renderCalendrier() {
@@ -7065,7 +7095,15 @@ function bindCalendrierEvents() {
     });
   });
   document.querySelectorAll('[data-calendar-day]').forEach(cell => {
-    cell.addEventListener('click', () => openCalendarDayModal(cell.dataset.calendarDay));
+    cell.addEventListener('click', () => {
+      const dateStr = cell.dataset.calendarDay;
+      if (cell.dataset.calendarCreate) {
+        state._leaveRequestReturnToCalendar = true;
+        openLeaveRequestModal(authRepository.getCurrentUser().id, undefined, undefined, dateStr);
+      } else {
+        openCalendarDayModal(dateStr);
+      }
+    });
   });
 }
 
@@ -7166,15 +7204,21 @@ function renderCalendarCell(cell, sharedData) {
   // avec du contenu est en plus rendue cliquable (clavier/tactile inclus, cf. le gestionnaire
   // role="button" générique déjà en place) pour ouvrir le détail complet du jour dans une modale.
   const hasContent = Boolean(badges || info.ferie || info.vacances);
+  const hasAbsence = Boolean(congesValides.length || congesEnAttente.length || teletravailValide.length || teletravailEnAttente.length);
+
+  // §sprint calendrier interactif : un jour sans absence, en vue personnelle (jamais en vue
+  // équipe/entreprise — une case y mélange plusieurs salariés, sans salarié cible évident), devient
+  // cliquable pour CRÉER une demande plutôt que pour consulter — voir bindCalendrierEvents.
+  const isCreateTarget = sharedData.vuePersonnelle && cell.inMonth && !hasAbsence;
+  const isClickable = hasContent || isCreateTarget;
 
   return `
-    <div class="${classes.join(' ')}${hasContent ? ' calendar-cell-clickable' : ''}"
-      ${hasContent ? `role="button" tabindex="0" data-calendar-day="${dateStr}" aria-label="Détail du ${escapeHtml(formatDate(dateStr))}"` : ''}>
+    <div class="${classes.join(' ')}${isClickable ? ' calendar-cell-clickable' : ''}"
+      ${isClickable ? `role="button" tabindex="0" data-calendar-day="${dateStr}" ${isCreateTarget ? 'data-calendar-create="1"' : ''} aria-label="${isCreateTarget ? 'Créer une demande le' : 'Détail du'} ${escapeHtml(formatDate(dateStr))}"` : ''}>
       <div class="calendar-cell-header">
         <span class="calendar-day-number">${cell.date.getDate()}</span>
       </div>
       ${info.ferie ? `<div class="calendar-tag calendar-tag-holiday">${escapeHtml(info.ferie.label)}</div>` : ''}
-      ${info.vacances ? `<div class="calendar-tag calendar-tag-school">🎒 ${escapeHtml(info.vacances.nom)}</div>` : ''}
       <div class="calendar-badges">${badges}</div>
     </div>
   `;
@@ -8863,6 +8907,7 @@ function renderPlanningAnnee() {
   const year = state.planningYear;
   const employees = getPlanningEmployees(`${year}-01-01`, `${year}-12-31`);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const settings = settingsRepository.getSettings();
 
   return `
     <div class="view-header-row">
@@ -8881,7 +8926,7 @@ function renderPlanningAnnee() {
               const monthCounts = MONTH_NAMES.map((_, monthIndex) =>
                 leaveRequests
                   .filter(r => r.employeeId === e.id)
-                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e.joursTravailles), 0)
+                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e, settings), 0)
               );
               const total = monthCounts.reduce((a, b) => a + b, 0);
               return `
@@ -9537,7 +9582,7 @@ function updateTeleworkQuotaHint() {
 
   let nbJoursLabel = '';
   if (dateFin) {
-    const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee.joursTravailles);
+    const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settingsRepository.getSettings());
     nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
@@ -9627,7 +9672,7 @@ function moveTeleworkRequest(id, nouvelleDateDebut, nouvelleDateFin) {
     return { success: false, error: `La date de fin ne peut pas être après la date de départ (${formatDate(employee.dateDepart)}).` };
   }
 
-  const nbJours = computeWorkingDays(nouvelleDateDebut, nouvelleDateFin, false, employee.joursTravailles);
+  const nbJours = computeWorkingDays(nouvelleDateDebut, nouvelleDateFin, false, employee, settingsRepository.getSettings());
   if (nbJours <= 0) {
     return { success: false, error: 'La période cible ne comporte aucun jour travaillé.' };
   }
@@ -9673,7 +9718,7 @@ function submitTeleworkRequestForm(evt) {
   }
 
   const employee = employeeRepository.getById(employeeId);
-  const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee.joursTravailles);
+  const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settingsRepository.getSettings());
 
   if (nbJours <= 0) {
     showToast('La période sélectionnée ne comporte aucun jour travaillé.', 'error');
@@ -10387,13 +10432,13 @@ function getPaieRows(year, month) {
   return employees.map(e => {
     const sumTypeIdsInMonth = (typeIds) => leaveRequests
       .filter(r => r.employeeId === e.id && typeIds.includes(r.typeId))
-      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e.joursTravailles), 0);
+      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e, settings), 0);
 
     const congesParType = leaveTypesExportables.map(t => sumTypeIdsInMonth([t.id]));
 
     const teletravailJours = teleworkRequests
       .filter(r => r.employeeId === e.id)
-      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, false, year, month, e.joursTravailles), 0);
+      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, false, year, month, e, settings), 0);
 
     const notesRembourser = expenses
       .filter(n => n.employeeId === e.id && n.date.startsWith(monthStr))
