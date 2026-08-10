@@ -633,11 +633,13 @@ function renderBertolisTicketDetail() {
         </select>
       </div>
     </div>
+    ${renderTicketDeliveryBanner(ticket.statut, ticket.date_livraison)}
     <div class="card">
       ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
       ${data.contexte && data.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(data.contexte.vue)}</p>` : ''}
       ${data.pieceJointe ? `<p><a href="${data.pieceJointe.dataUrl}" download="${escapeHtml(data.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(data.pieceJointe.nom)}</a></p>` : ''}
     </div>
+    ${renderTicketAiSuggestion(data.aiAnalysis, true)}
     <div class="card">
       <div class="ticket-thread">
         ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
@@ -647,6 +649,7 @@ function renderBertolisTicketDetail() {
         <button type="submit" class="btn btn-primary">Envoyer</button>
       </form>
     </div>
+    ${renderTicketHistoryTimeline(data.historique)}
   `;
 }
 
@@ -691,6 +694,20 @@ function bindBertolisTicketsEvents() {
       });
       submitBtn.disabled = false;
       if (!result.success) { showToast(result.error || 'Erreur.', 'error'); return; }
+      state.bertolisTicketsData = null;
+      renderBertolisConsole();
+    });
+  }
+
+  const applyAiBtn = document.getElementById('btn-ticket-apply-ai');
+  if (applyAiBtn) {
+    applyAiBtn.addEventListener('click', async () => {
+      applyAiBtn.disabled = true;
+      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'applyAiSuggestion', {
+        ticketId: state.bertolisCurrentTicketId
+      });
+      if (!result.success) { showToast(result.error || 'Erreur.', 'error'); applyAiBtn.disabled = false; return; }
+      showToast('Suggestion appliquée.');
       state.bertolisTicketsData = null;
       renderBertolisConsole();
     });
@@ -4397,8 +4414,10 @@ function bindMesDocumentsEvents() {
 // Tickets support (Phase 2 sprint amélioration RH, §16-17) — envoyés à BERTOLIS
 // ---------------------------------------------------------------------------
 
-const TICKET_STATUT_LABELS = { ouvert: 'Ouvert', en_cours: 'En cours', resolu: 'Résolu', ferme: 'Fermé' };
-const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', ferme: 'muted' };
+// §sprint suivi de livraison : ouvert/en_cours/resolu/ferme existaient déjà (0017), "livre" est
+// nouveau (0018) — ferme devient une clôture hors parcours normal (annulé/doublon), pas une étape.
+const TICKET_STATUT_LABELS = { ouvert: 'Nouvelle demande', en_cours: 'En cours', resolu: 'Terminé', livre: 'Livré', ferme: 'Fermé' };
+const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', livre: 'success', ferme: 'muted' };
 const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 
 /** Libellé humain de l'écran courant, utilisé comme contexte auto-capturé à la création d'un
@@ -4540,6 +4559,48 @@ function renderTicketComment(c) {
   `;
 }
 
+/** "Livré le ..." bien visible dès que le statut est "livre" — la date est renseignée
+ * automatiquement côté serveur (update_ticket_statut, 0018_ticket_suivi_livraison.sql). */
+function renderTicketDeliveryBanner(statut, dateLivraison) {
+  if (statut !== 'livre' || !dateLivraison) return '';
+  return `<p class="text-muted" style="margin-top:0;">📦 Livré le ${formatDateTime(dateLivraison)}</p>`;
+}
+
+/** Historique horodaté des changements de statut (0018_ticket_suivi_livraison.sql) — même
+ * composant `.timeline` déjà utilisé ailleurs dans l'app pour ce genre de suivi chronologique. */
+function renderTicketHistoryTimeline(historique) {
+  if (!historique || !historique.length) return '';
+  return `
+    <div class="card">
+      <div class="search-section-label" style="padding-left:0;">Historique</div>
+      <div class="timeline">
+        ${historique.map(h => `
+          <div class="timeline-item">
+            <div class="timeline-date text-muted">${formatDateTime(h.date)}</div>
+            <div class="timeline-label">${escapeHtml(h.action)}${h.auteur ? ` · ${escapeHtml(h.auteur)}` : ''}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/** Suggestion IA (§sprint analyse automatique) — encart visuellement distinct, jamais confondu avec
+ * les données saisies par le salarié : ne modifie jamais categorie/priorite tout seul. Le bouton
+ * "Appliquer" (BERTOLIS uniquement, showApplyButton) reste une action manuelle explicite. */
+function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
+  if (!aiAnalysis) return '';
+  return `
+    <div class="card" style="border: 1px dashed var(--color-primary); background: var(--color-primary-soft);">
+      <div class="search-section-label" style="padding-left:0;">🤖 Suggestion de l'IA — n'a pas modifié votre demande</div>
+      <p style="margin:6px 0;"><strong>Catégorie suggérée :</strong> ${escapeHtml(aiAnalysis.categorieSuggeree || '—')} · <strong>Priorité suggérée :</strong> ${escapeHtml(aiAnalysis.prioriteSuggeree || '—')}</p>
+      ${aiAnalysis.resume ? `<p style="margin:6px 0;">${escapeHtml(aiAnalysis.resume)}</p>` : ''}
+      ${Array.isArray(aiAnalysis.pointsCles) && aiAnalysis.pointsCles.length ? `<ul style="margin:6px 0;">${aiAnalysis.pointsCles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
+      ${showApplyButton ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ticket-apply-ai">Appliquer la suggestion</button>` : ''}
+    </div>
+  `;
+}
+
 function renderTicketDetail(id) {
   const ticket = supportTicketRepository.getById(id);
   if (!ticket) return `<button class="btn-link" id="btn-back-to-tickets">← Retour</button><div class="empty-state"><p>Ticket introuvable.</p></div>`;
@@ -4555,13 +4616,13 @@ function renderTicketDetail(id) {
   const comments = ticket.comments || [];
 
   // Un salarié ne peut pas se fermer lui-même un ticket encore ouvert/en cours (voir décision de
-  // conception : le statut resolu/ferme reste piloté par BERTOLIS ou RH via gererTickets) — un
-  // auteur ordinaire ne peut que rouvrir un ticket marqué résolu, ou confirmer sa clôture.
+  // conception : le statut resolu/livre/ferme reste piloté par BERTOLIS ou RH via gererTickets) —
+  // un auteur ordinaire ne peut que rouvrir un ticket terminé/livré, ou confirmer sa clôture.
   const statutControls = canManage
     ? `<select class="input" id="f-ticket-statut" style="width:auto;">
         ${Object.keys(TICKET_STATUT_LABELS).map(s => `<option value="${s}" ${s === ticket.statut ? 'selected' : ''}>${TICKET_STATUT_LABELS[s]}</option>`).join('')}
       </select>`
-    : ticket.statut === 'resolu'
+    : ['resolu', 'livre'].includes(ticket.statut)
       ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ticket-reopen">Rouvrir</button>
          <button type="button" class="btn btn-primary btn-sm" id="btn-ticket-close">Confirmer et clôturer</button>`
       : '';
@@ -4580,11 +4641,13 @@ function renderTicketDetail(id) {
       </div>
       <div class="detail-header-actions">${statutControls}</div>
     </div>
+    ${renderTicketDeliveryBanner(ticket.statut, ticket.dateLivraison)}
     <div class="card">
       ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
       ${ticket.contexte && ticket.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(ticket.contexte.vue)}</p>` : ''}
       ${ticket.pieceJointe ? `<p><a href="${ticket.pieceJointe.dataUrl}" download="${escapeHtml(ticket.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(ticket.pieceJointe.nom)}</a></p>` : ''}
     </div>
+    ${renderTicketAiSuggestion(ticket.aiAnalysis, false)}
     <div class="card">
       <div id="ticket-thread" class="ticket-thread">
         ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
@@ -4594,6 +4657,7 @@ function renderTicketDetail(id) {
         <button type="submit" class="btn btn-primary">Envoyer</button>
       </form>
     </div>
+    ${renderTicketHistoryTimeline(ticket.historique)}
   `;
 }
 
@@ -4602,17 +4666,17 @@ function bindTicketDetailEvents() {
   if (backBtn) backBtn.addEventListener('click', () => navigateTo('mes-tickets'));
   if (!supportTicketRepository.getById(state.currentTicketId)) return;
 
+  const changeStatut = async (statut) => {
+    const result = await supportTicketRepository.updateStatus(state.currentTicketId, statut);
+    if (!result.success) { showToast(result.error || 'Erreur lors du changement de statut.', 'error'); return; }
+    render();
+  };
   const statutSelect = document.getElementById('f-ticket-statut');
-  if (statutSelect) {
-    statutSelect.addEventListener('change', () => {
-      supportTicketRepository.updateStatus(state.currentTicketId, statutSelect.value);
-      render();
-    });
-  }
+  if (statutSelect) statutSelect.addEventListener('change', () => changeStatut(statutSelect.value));
   const reopenBtn = document.getElementById('btn-ticket-reopen');
-  if (reopenBtn) reopenBtn.addEventListener('click', () => { supportTicketRepository.updateStatus(state.currentTicketId, 'ouvert'); render(); });
+  if (reopenBtn) reopenBtn.addEventListener('click', () => changeStatut('ouvert'));
   const closeBtn = document.getElementById('btn-ticket-close');
-  if (closeBtn) closeBtn.addEventListener('click', () => { supportTicketRepository.updateStatus(state.currentTicketId, 'ferme'); render(); });
+  if (closeBtn) closeBtn.addEventListener('click', () => changeStatut('ferme'));
 
   const form = document.getElementById('ticket-comment-form');
   if (form) {
@@ -5926,8 +5990,8 @@ function openRegulariserModal(requestId) {
             ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
             ${textField('dateFin', 'Date de fin', request.dateFin, true, 'date')}
           </div>
-          <div class="form-field" style="margin-top: 12px;">
-            <label for="f-demiJournee">Demi-journée (si date de début = date de fin)</label>
+          <div class="form-field" id="field-demi-journee-regul" style="margin-top: 12px; display:none;">
+            <label for="f-demiJournee">Demi-journée</label>
             <select class="input" id="f-demiJournee" name="demiJournee">
               <option value="">Journée entière</option>
               <option value="matin" ${request.demiJournee === 'matin' ? 'selected' : ''}>Matin</option>
@@ -5951,6 +6015,20 @@ function openRegulariserModal(requestId) {
   modalRoot.innerHTML = html;
   modalRoot.classList.add('open');
 
+  // Même condition que updateLeaveRequestHints (création) : la demi-journée n'a de sens que sur
+  // une seule journée ET si le type la permet — évite de la proposer puis de l'ignorer en silence.
+  const updateDemiJourneeVisibility = () => {
+    const type = leaveTypeRepository.getLeaveTypeById(document.getElementById('f-typeId').value);
+    const dateDebut = document.getElementById('f-dateDebut').value;
+    const dateFin = document.getElementById('f-dateFin').value;
+    document.getElementById('field-demi-journee-regul').style.display =
+      type && type.autoriserDemiJournee && dateDebut && dateDebut === dateFin ? 'block' : 'none';
+  };
+  updateDemiJourneeVisibility();
+  ['f-typeId', 'f-dateDebut', 'f-dateFin'].forEach(fieldId => {
+    document.getElementById(fieldId).addEventListener('change', updateDemiJourneeVisibility);
+  });
+
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('regulariser-form').addEventListener('submit', (evt) => {
@@ -5958,7 +6036,7 @@ function openRegulariserModal(requestId) {
     const typeId = document.getElementById('f-typeId').value;
     const dateDebut = document.getElementById('f-dateDebut').value;
     const dateFin = document.getElementById('f-dateFin').value;
-    const demiJournee = dateDebut === dateFin ? (document.getElementById('f-demiJournee').value || null) : null;
+    const demiJournee = document.getElementById('field-demi-journee-regul').style.display === 'block' ? (document.getElementById('f-demiJournee').value || null) : null;
     const motif = document.getElementById('f-motif').value;
     const result = leaveRepository.regulariser(requestId, { typeId, dateDebut, dateFin, demiJournee, motif });
     if (!result.success) { showToast(result.error, 'error'); return; }
@@ -6044,7 +6122,9 @@ function openLeaveAttestationModal(requestId) {
   if (!r) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
-  const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
+  const periode = r.dateDebut === r.dateFin
+    ? formatDate(r.dateDebut) + (r.demiJournee ? ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : '')
+    : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
 
   const html = `
     <div class="modal">
@@ -7042,6 +7122,46 @@ function buildCalendarSharedData(cells) {
   };
 }
 
+/** Catalogue des catégories filtrables du calendrier (légende + filtres cliquables, §sprint
+ * calendrier légende/filtres) — une seule source de vérité pour le libellé, l'icône et la classe de
+ * couleur, réutilisée à la fois par la légende et par les badges de case pour rester cohérentes. */
+const CALENDAR_FILTER_CATEGORIES = [
+  { key: 'conge', label: 'Congé', icon: '🏖️', swatchClass: 'legend-conge' },
+  { key: 'anniversaire', label: 'Anniversaire', icon: '🎂', swatchClass: 'legend-anniversaire' },
+  { key: 'teletravail', label: 'Télétravail', icon: '💻', swatchClass: 'legend-teletravail' },
+  { key: 'arrivee', label: 'Arrivée', icon: '🎉', swatchClass: 'legend-arrivee' },
+  { key: 'depart', label: 'Départ', icon: '👋', swatchClass: 'legend-depart' },
+  { key: 'ferie', label: 'Jour férié', icon: null, swatchClass: 'legend-holiday' },
+  { key: 'vacances', label: 'Vacances scolaires', icon: null, swatchClass: 'legend-school' }
+];
+
+/** Toutes les catégories actives par défaut — un filtre désactivé n'efface jamais la donnée sous-
+ * jacente (getCalendarDayInfo ne change pas), seul l'affichage des badges/tags en tient compte. */
+function getCalendarFilters() {
+  if (!state.calendarFilters) {
+    state.calendarFilters = {};
+    CALENDAR_FILTER_CATEGORIES.forEach(c => { state.calendarFilters[c.key] = true; });
+  }
+  return state.calendarFilters;
+}
+
+function renderCalendarLegend(settings) {
+  const filters = getCalendarFilters();
+  return `
+    <div class="card calendar-legend">
+      ${CALENDAR_FILTER_CATEGORIES.map(c => {
+        const active = filters[c.key] !== false;
+        const label = c.key === 'vacances' ? `Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})` : c.label;
+        return `
+          <button type="button" class="legend-item${active ? '' : ' legend-item-inactive'}" data-calendar-filter="${c.key}" aria-pressed="${active}" title="Afficher/masquer : ${escapeHtml(c.label)}">
+            <span class="legend-swatch ${c.swatchClass}"></span>${c.icon ? ` ${c.icon}` : ''} ${label}
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
 function renderCalendrier() {
   const cells = buildMonthGridCells(state.calendarYear, state.calendarMonth);
   const sharedData = buildCalendarSharedData(cells);
@@ -7069,16 +7189,6 @@ function renderCalendrier() {
 
     ${hasWiderView && state.calendrierVue === 'personnel' ? renderCalendrierValidationsCard(user) : ''}
 
-    <div class="card calendar-legend">
-      <span class="legend-item">🏖️ Congé</span>
-      <span class="legend-item">🎂 Anniversaire</span>
-      <span class="legend-item">💻 Télétravail</span>
-      <span class="legend-item">🎉 Arrivée</span>
-      <span class="legend-item">👋 Départ</span>
-      <span class="legend-item"><span class="legend-swatch legend-holiday"></span> Jour férié</span>
-      <span class="legend-item"><span class="legend-swatch legend-school"></span> Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})</span>
-    </div>
-
     <div class="calendar-card-wrap">
       <button type="button" class="calendar-side-nav" id="btn-cal-prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
       <div class="card calendar-card">
@@ -7091,6 +7201,8 @@ function renderCalendrier() {
       </div>
       <button type="button" class="calendar-side-nav" id="btn-cal-next" aria-label="Mois suivant" title="Mois suivant">›</button>
     </div>
+
+    ${renderCalendarLegend(settings)}
   `;
 }
 
@@ -7106,6 +7218,14 @@ function bindCalendrierEvents() {
   document.querySelectorAll('[data-calendrier-vue]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.calendrierVue = btn.dataset.calendrierVue;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-calendar-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const filters = getCalendarFilters();
+      const key = btn.dataset.calendarFilter;
+      filters[key] = filters[key] === false; // toggle : false -> true, sinon -> false
       render();
     });
   });
@@ -7161,7 +7281,7 @@ function getCalendarDayInfo(dateStr, sharedData) {
     .map(r => {
       const emp = employees.find(e => e.id === r.employeeId);
       const type = leaveTypes.find(t => t.id === r.typeId);
-      return emp && type ? { emp, type, statut: r.statut } : null;
+      return emp && type ? { emp, type, statut: r.statut, demiJournee: r.demiJournee || null } : null;
     })
     .filter(Boolean);
 
@@ -7188,13 +7308,18 @@ function renderCalendarCell(cell, sharedData) {
   const info = getCalendarDayInfo(dateStr, sharedData);
   const isToday = dateStr === toISODate(new Date());
   const isWeekend = [0, 6].includes(cell.date.getDay());
+  // §sprint calendrier légende/filtres : un filtre désactivé ne touche jamais getCalendarDayInfo
+  // (la donnée reste intacte) — il retire seulement l'affichage correspondant ci-dessous.
+  const filters = getCalendarFilters();
+  const ferieVisible = Boolean(info.ferie) && filters.ferie !== false;
+  const vacancesVisible = Boolean(info.vacances) && filters.vacances !== false;
 
   const classes = ['calendar-cell'];
   if (!cell.inMonth) classes.push('out-month');
   if (isToday) classes.push('today');
   if (isWeekend) classes.push('weekend');
-  if (info.ferie) classes.push('holiday');
-  if (info.vacances) classes.push('school-holiday');
+  if (ferieVisible) classes.push('holiday');
+  if (vacancesVisible) classes.push('school-holiday');
 
   // Sprint SIRH premium §2 : "Les demandes non validées doivent être visibles [...] facilement
   // identifiables" — séparées des demandes validées dans un badge distinct, semi-transparent
@@ -7205,13 +7330,13 @@ function renderCalendarCell(cell, sharedData) {
   const teletravailEnAttente = info.teletravail.filter(t => t.statut !== 'Validé');
 
   const badges = [
-    congesValides.length ? calendarBadge('🏖️', congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}`)) : '',
-    congesEnAttente.length ? calendarBadge('🏖️', congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom} (en attente)`), true) : '',
-    teletravailValide.length ? calendarBadge('💻', teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
-    teletravailEnAttente.length ? calendarBadge('💻', teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
-    info.anniversaires.length ? calendarBadge('🎂', info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
-    info.arrivees.length ? calendarBadge('🎉', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
-    info.departs.length ? calendarBadge('👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
+    congesValides.length && filters.conge !== false ? calendarBadge('conge', '🏖️', congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}`)) : '',
+    congesEnAttente.length && filters.conge !== false ? calendarBadge('conge', '🏖️', congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''} (en attente)`), true) : '',
+    teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
+    teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
+    info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', '🎂', info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
+    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', '🎉', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
+    info.departs.length && filters.depart !== false ? calendarBadge('depart', '👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
   ].join('');
 
   // §4 (reprise) : le survol des badges (.calendar-tooltip) reste utile sur desktop mais est
@@ -7233,15 +7358,15 @@ function renderCalendarCell(cell, sharedData) {
       <div class="calendar-cell-header">
         <span class="calendar-day-number">${cell.date.getDate()}</span>
       </div>
-      ${info.ferie ? `<div class="calendar-tag calendar-tag-holiday">${escapeHtml(info.ferie.label)}</div>` : ''}
+      ${ferieVisible ? `<div class="calendar-tag calendar-tag-holiday">${escapeHtml(info.ferie.label)}</div>` : ''}
       <div class="calendar-badges">${badges}</div>
     </div>
   `;
 }
 
-function calendarBadge(icon, names, pending = false) {
+function calendarBadge(category, icon, names, pending = false) {
   return `
-    <span class="calendar-badge${pending ? ' calendar-badge-pending' : ''}" ${pending ? 'title="En attente de validation"' : ''}>
+    <span class="calendar-badge calendar-badge-${category}${pending ? ' calendar-badge-pending' : ''}" ${pending ? 'title="En attente de validation"' : ''}>
       ${icon}${names.length > 1 ? names.length : ''}
       <span class="calendar-tooltip">${names.map(escapeHtml).join('<br>')}</span>
     </span>
@@ -7258,7 +7383,7 @@ function openCalendarDayModal(dateStr) {
   const info = getCalendarDayInfo(dateStr, sharedData);
 
   const sections = [
-    { label: 'Congés / absences', items: info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.icone} ${c.type.nom}${c.statut !== 'Validé' ? ' (en attente)' : ''}`) },
+    { label: 'Congés / absences', items: info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.icone} ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}`) },
     { label: 'Télétravail', items: info.teletravail.map(t => `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}`) },
     { label: 'Anniversaires', items: info.anniversaires.map(e => `🎂 ${e.prenom} ${e.nom}`) },
     { label: 'Arrivées', items: info.arrivees.map(e => `🎉 ${e.prenom} ${e.nom}`) },

@@ -1612,11 +1612,13 @@ const DB = {
     return all.filter(t => t.employeeId === employee.id);
   },
 
-  /** L'insertion puis la notification email à BERTOLIS sont volontairement SÉQUENCÉES (jamais en
-   * parallèle) : notify-bertolis-ticket relit le ticket depuis la base par intégrité (voir ce
-   * fichier), donc l'insertion doit avoir réussi avant de la déclencher. Un échec de l'une ou
-   * l'autre étape prévient l'utilisateur (comme _pushInBackground) mais ne perd jamais le ticket,
-   * déjà enregistré localement au moment de l'appel. */
+  /** L'insertion doit réussir AVANT la notification email et l'analyse IA (les deux relisent le
+   * ticket depuis la base par intégrité) — mais ces deux dernières ne dépendent PAS l'une de
+   * l'autre, donc lancées en parallèle plutôt qu'en chaîne pour ne pas faire attendre l'email si
+   * Claude est lent/indisponible (et vice-versa). Un échec de n'importe laquelle des trois étapes
+   * prévient l'utilisateur (comme _pushInBackground) mais ne perd jamais le ticket, déjà
+   * enregistré localement au moment de l'appel synchrone ci-dessous. Si l'analyse IA réussit, le
+   * cache local est mis à jour pour que l'écran affiche la suggestion sans recharger la page. */
   addSupportTicket(data) {
     const list = this.getSupportTickets();
     const now = new Date().toISOString();
@@ -1630,27 +1632,47 @@ const DB = {
     company.supportTickets = list;
     this.saveCurrentCompany(company);
     this._pushInBackground(
-      window.SupabaseSync.pushSupportTickets([ticket], company.id)
-        .then(() => window.SupabaseSync.notifyNewTicket(ticket.id))
+      window.SupabaseSync.pushSupportTickets([ticket], company.id).then(() => Promise.all([
+        window.SupabaseSync.notifyNewTicket(ticket.id),
+        window.SupabaseSync.analyzeTicket(ticket.id).then(result => {
+          if (!result.success) return;
+          const c = this.getCurrentCompany();
+          const t = (c.supportTickets || []).find(x => x.id === ticket.id);
+          if (t) { t.aiAnalysis = result.analysis; this.saveCurrentCompany(c); }
+        })
+      ]))
     );
     const employee = this.getEmployeeById(ticket.employeeId);
     this.logAudit('Création', 'Ticket support', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${ticket.titre}`);
     return ticket;
   },
 
-  /** Ne touche QUE la colonne statut côté serveur (voir SupabaseSync.updateTicketStatus) — jamais
-   * un push de la ligne complète, qui écraserait `data.comments` avec une version locale
-   * potentiellement périmée (ex. une réponse BERTOLIS pas encore rafraîchie dans ce cache). */
-  updateSupportTicketStatus(id, statut) {
+  /** Passe par la fonction SQL atomique update_ticket_statut (0018_ticket_suivi_livraison.sql) —
+   * même raison qu'addTicketComment ci-dessous : jamais de lire-modifier-réécrire de la ligne
+   * complète (écraserait `data.comments`/`data.historique` avec une version locale potentiellement
+   * périmée). Alimente aussi l'historique horodaté et, pour le statut "livre", la date de
+   * livraison (auto, une seule fois — coalesce côté SQL). Cache local mis à jour APRÈS confirmation
+   * du serveur uniquement. */
+  async updateSupportTicketStatus(id, statut) {
+    const employee = this.getCurrentUser();
+    const auteur = employee ? `${employee.prenom} ${employee.nom}` : 'Salarié';
+    const result = await window.SupabaseSync.updateTicketStatus(id, statut, auteur);
+    if (!result.success) return result;
     const company = this.getCurrentCompany();
     const ticket = (company.supportTickets || []).find(t => t.id === id);
-    if (!ticket) return null;
-    ticket.statut = statut;
-    ticket.dateModification = new Date().toISOString();
-    this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.updateTicketStatus(id, statut, company.id));
-    this.logAudit('Modification', 'Ticket support', ticket.titre, `Statut changé en « ${statut} »`);
-    return ticket;
+    if (ticket) {
+      const now = new Date().toISOString();
+      ticket.statut = statut;
+      ticket.dateLivraison = statut === 'livre' ? (ticket.dateLivraison || now) : null;
+      // Libellé dupliqué localement (plutôt qu'importé d'app.js, couche UI) — reste correct même si
+      // TICKET_STATUT_LABELS change de forme, seul le texte de l'historique en pâtirait.
+      const statutLabels = { ouvert: 'Nouvelle demande', en_cours: 'En cours', resolu: 'Terminé', livre: 'Livré', ferme: 'Fermé' };
+      ticket.historique = [...(ticket.historique || []), { date: now, action: `Statut changé en « ${statutLabels[statut] || statut} »`, auteur }];
+      ticket.dateModification = now;
+      this.saveCurrentCompany(company);
+      this.logAudit('Modification', 'Ticket support', ticket.titre, `Statut changé en « ${statut} »`);
+    }
+    return result;
   },
 
   /** Passe par la fonction SQL atomique append_ticket_comment (voir 0017_support_tickets.sql) au
@@ -2554,9 +2576,12 @@ function makeEmptyTicket() {
     description: '',
     categorie: '',
     priorite: 'normale', // 'basse' | 'normale' | 'haute'
-    statut: 'ouvert', // 'ouvert' | 'en_cours' | 'resolu' | 'ferme'
+    statut: 'ouvert', // 'ouvert' | 'en_cours' | 'resolu' | 'livre' | 'ferme'
     pieceJointe: null, // { nom, dataUrl } | null
     comments: [], // [{ auteur, texte, date }]
+    historique: [], // [{ date, action, auteur }] — un changement de statut par entrée
+    dateLivraison: null, // renseignée automatiquement quand statut passe à 'livre'
+    aiAnalysis: null, // { categorieSuggeree, prioriteSuggeree, resume, pointsCles } | null — suggestion IA, jamais appliquée automatiquement
     dateCreation: null,
     dateModification: null
   };

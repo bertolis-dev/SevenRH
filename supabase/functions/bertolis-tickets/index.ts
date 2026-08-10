@@ -75,7 +75,9 @@ Deno.serve(async (req) => {
 
     if (body.action === "updateStatus") {
       const { ticketId, statut } = body;
-      if (!ticketId || !["ouvert", "en_cours", "resolu", "ferme"].includes(statut)) {
+      // "livre" (§0018) s'ajoute au parcours — whitelist en dur à synchroniser avec la contrainte
+      // SQL support_tickets_statut_check si elle évolue à nouveau.
+      if (!ticketId || !["ouvert", "en_cours", "resolu", "livre", "ferme"].includes(statut)) {
         return jsonResponse({ error: "Requête invalide." }, 400);
       }
       const { data: ticket, error: fetchErr } = await supabaseAdmin
@@ -85,13 +87,42 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (fetchErr || !ticket) return jsonResponse({ error: "Ticket introuvable." }, 404);
 
-      const { error: updateErr } = await supabaseAdmin
-        .from("support_tickets")
-        .update({ statut, updated_at: new Date().toISOString() })
-        .eq("id", ticketId);
-      if (updateErr) throw updateErr;
+      // update_ticket_statut (0018_ticket_suivi_livraison.sql) : alimente aussi l'historique
+      // horodaté et la date de livraison auto — jamais un simple `.update({statut})`.
+      const { error: rpcErr } = await supabaseAdmin.rpc("update_ticket_statut", {
+        p_ticket_id: ticketId,
+        p_statut: statut,
+        p_auteur: "Support BERTOLIS",
+      });
+      if (rpcErr) throw rpcErr;
 
       await logToCompanyAuditLog(supabaseAdmin, ticket.company_id, ticket.titre, `Statut changé en « ${statut} » par BERTOLIS`);
+      return jsonResponse({ success: true });
+    }
+
+    if (body.action === "applyAiSuggestion") {
+      // Action manuelle explicite (bouton "Appliquer la suggestion", jamais automatique) : copie la
+      // suggestion déjà stockée dans data.aiAnalysis vers les vrais champs categorie/priorite —
+      // jamais l'inverse, et jamais déclenché par analyze-ticket lui-même.
+      const { ticketId } = body;
+      if (!ticketId) return jsonResponse({ error: "Requête invalide." }, 400);
+
+      const { data: ticket, error: fetchErr } = await supabaseAdmin
+        .from("support_tickets")
+        .select("id, company_id, titre, data")
+        .eq("id", ticketId)
+        .maybeSingle();
+      if (fetchErr || !ticket) return jsonResponse({ error: "Ticket introuvable." }, 404);
+      const ai = ticket.data?.aiAnalysis;
+      if (!ai) return jsonResponse({ error: "Aucune suggestion IA sur ce ticket." }, 400);
+
+      const patch: Record<string, unknown> = {};
+      if (ai.categorieSuggeree) patch.categorie = ai.categorieSuggeree;
+      if (ai.prioriteSuggeree && ["basse", "normale", "haute"].includes(ai.prioriteSuggeree)) patch.priorite = ai.prioriteSuggeree;
+      const { error: updateErr } = await supabaseAdmin.from("support_tickets").update(patch).eq("id", ticketId);
+      if (updateErr) throw updateErr;
+
+      await logToCompanyAuditLog(supabaseAdmin, ticket.company_id, ticket.titre, "Suggestion IA appliquée par BERTOLIS");
       return jsonResponse({ success: true });
     }
 

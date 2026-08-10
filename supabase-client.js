@@ -214,6 +214,8 @@ function ticketFromRow(row) {
     contexte: data.contexte || {}, titre: row.titre, description: row.description || '',
     categorie: row.categorie || '', priorite: row.priorite, statut: row.statut,
     pieceJointe: data.pieceJointe || null, comments: data.comments || [],
+    historique: data.historique || [], aiAnalysis: data.aiAnalysis || null,
+    dateLivraison: row.date_livraison || null,
     dateCreation: row.created_at, dateModification: row.updated_at
   };
 }
@@ -320,8 +322,11 @@ function ticketToRow(t, companyId) {
   return {
     id: t.id, company_id: companyId, employee_id: t.employeeId, route: t.route || null,
     titre: t.titre || '', description: t.description || '', categorie: t.categorie || null,
-    priorite: t.priorite || 'normale', statut: t.statut || 'ouvert',
-    data: { contexte: t.contexte || {}, pieceJointe: t.pieceJointe || null, comments: t.comments || [] }
+    priorite: t.priorite || 'normale', statut: t.statut || 'ouvert', date_livraison: t.dateLivraison || null,
+    data: {
+      contexte: t.contexte || {}, pieceJointe: t.pieceJointe || null, comments: t.comments || [],
+      historique: t.historique || [], aiAnalysis: t.aiAnalysis || null
+    }
   };
 }
 
@@ -660,11 +665,13 @@ const pushDocuments = (rows, companyId) => syncTable('documents', rows, document
 // existant n'est jamais réécrit via cette fonction.
 const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
 
-async function updateTicketStatus(ticketId, statut, companyId) {
-  const { error } = await supabase.from('support_tickets')
-    .update({ statut, updated_at: new Date().toISOString() })
-    .eq('id', ticketId).eq('company_id', companyId);
-  if (error) throw error;
+/** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
+ * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
+ * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
+async function updateTicketStatus(ticketId, statut, auteur) {
+  const { error } = await supabase.rpc('update_ticket_statut', { p_ticket_id: ticketId, p_statut: statut, p_auteur: auteur });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 /** Append atomique via la fonction SQL append_ticket_comment (0017_support_tickets.sql) — jamais
@@ -682,6 +689,24 @@ async function appendTicketComment(ticketId, auteur, texte) {
 async function notifyNewTicket(ticketId) {
   const { error } = await supabase.functions.invoke('notify-bertolis-ticket', { body: { ticketId } });
   if (error) throw error;
+}
+
+/** Déclenche l'analyse IA d'un ticket (Edge Function analyze-ticket, Claude) juste après sa
+ * création — en PARALLÈLE de notifyNewTicket (voir DB.addSupportTicket, data.js), jamais en série :
+ * aucune des deux ne dépend de l'autre, seulement de l'insertion déjà faite. Un échec ici (API
+ * indisponible, clé absente, quota dépassé...) ne doit jamais empêcher la création du ticket ni
+ * l'email de notification — jamais de throw, toujours un résultat {success, error} inspectable. */
+async function analyzeTicket(ticketId) {
+  const { data, error } = await supabase.functions.invoke('analyze-ticket', { body: { ticketId } });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, analysis: data.analysis };
 }
 
 /** Seul point d'accès de la console BERTOLIS aux tickets — CROSS-ENTREPRISES, donc jamais via RLS
@@ -731,6 +756,6 @@ window.SupabaseSync = {
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
-  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket,
+  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   deleteRow
 };
