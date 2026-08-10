@@ -1594,21 +1594,6 @@ const DB = {
     return (this.getCurrentCompany().supportTickets || []).slice();
   },
 
-  /** Insertion uniquement (jamais de modification) — contrairement à saveLeaveRequests, ne gère
-   * QUE l'ajout d'un nouveau ticket. Un ticket existant n'est jamais réécrit en entier : le
-   * statut passe par updateSupportTicketStatus (colonne dédiée) et les commentaires par
-   * addTicketComment (RPC atomique) — pousser la ligne complète à chaque modification écraserait
-   * `data.comments` avec une version locale potentiellement périmée (ex. une réponse BERTOLIS pas
-   * encore rafraîchie dans ce cache) dès qu'un RH changerait juste le statut. */
-  saveSupportTickets(list) {
-    const company = this.getCurrentCompany();
-    const previous = company.supportTickets || [];
-    company.supportTickets = list;
-    this.saveCurrentCompany(company);
-    const added = list.filter(t => !previous.some(p => p.id === t.id));
-    if (added.length) this._pushInBackground(window.SupabaseSync.pushSupportTickets(added, company.id));
-  },
-
   getTicketById(id) {
     return this.getSupportTickets().find(t => t.id === id) || null;
   },
@@ -1627,6 +1612,11 @@ const DB = {
     return all.filter(t => t.employeeId === employee.id);
   },
 
+  /** L'insertion puis la notification email à BERTOLIS sont volontairement SÉQUENCÉES (jamais en
+   * parallèle) : notify-bertolis-ticket relit le ticket depuis la base par intégrité (voir ce
+   * fichier), donc l'insertion doit avoir réussi avant de la déclencher. Un échec de l'une ou
+   * l'autre étape prévient l'utilisateur (comme _pushInBackground) mais ne perd jamais le ticket,
+   * déjà enregistré localement au moment de l'appel. */
   addSupportTicket(data) {
     const list = this.getSupportTickets();
     const now = new Date().toISOString();
@@ -1636,14 +1626,21 @@ const DB = {
       dateModification: now
     });
     list.push(ticket);
-    this.saveSupportTickets(list);
+    const company = this.getCurrentCompany();
+    company.supportTickets = list;
+    this.saveCurrentCompany(company);
+    this._pushInBackground(
+      window.SupabaseSync.pushSupportTickets([ticket], company.id)
+        .then(() => window.SupabaseSync.notifyNewTicket(ticket.id))
+    );
     const employee = this.getEmployeeById(ticket.employeeId);
     this.logAudit('Création', 'Ticket support', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${ticket.titre}`);
     return ticket;
   },
 
   /** Ne touche QUE la colonne statut côté serveur (voir SupabaseSync.updateTicketStatus) — jamais
-   * un push de la ligne complète, pour la même raison que documentée sur saveSupportTickets. */
+   * un push de la ligne complète, qui écraserait `data.comments` avec une version locale
+   * potentiellement périmée (ex. une réponse BERTOLIS pas encore rafraîchie dans ce cache). */
   updateSupportTicketStatus(id, statut) {
     const company = this.getCurrentCompany();
     const ticket = (company.supportTickets || []).find(t => t.id === id);

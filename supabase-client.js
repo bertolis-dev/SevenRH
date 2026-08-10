@@ -656,7 +656,7 @@ const pushEtablissements = (rows, companyId) => syncTable('etablissements', rows
 const pushServices = (rows, companyId) => syncTable('services', rows, serviceToRow, companyId);
 const pushLeaveTypes = (rows, companyId) => syncTable('leave_types', rows, leaveTypeToRow, companyId);
 const pushDocuments = (rows, companyId) => syncTable('documents', rows, documentToRow, companyId);
-// Insertion uniquement, jamais un resync complet (voir DB.saveSupportTickets, data.js) — un ticket
+// Insertion uniquement, jamais un resync complet (voir DB.addSupportTicket, data.js) — un ticket
 // existant n'est jamais réécrit via cette fonction.
 const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
 
@@ -673,6 +673,15 @@ async function appendTicketComment(ticketId, auteur, texte) {
   const { error } = await supabase.rpc('append_ticket_comment', { p_ticket_id: ticketId, p_auteur: auteur, p_texte: texte });
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+/** Notifie BERTOLIS par email (Edge Function notify-bertolis-ticket) juste après la création d'un
+ * ticket — voir DB.addSupportTicket (data.js). Un échec ici ne doit jamais remonter comme une
+ * erreur de "synchronisation" au salarié (son ticket est bien créé) : l'appelant se contente de
+ * logguer, jamais de bloquer/avertir l'utilisateur. */
+async function notifyNewTicket(ticketId) {
+  const { error } = await supabase.functions.invoke('notify-bertolis-ticket', { body: { ticketId } });
+  if (error) throw error;
 }
 
 /** Seul point d'accès de la console BERTOLIS aux tickets — CROSS-ENTREPRISES, donc jamais via RLS
@@ -722,6 +731,6 @@ window.SupabaseSync = {
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
-  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets,
+  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket,
   deleteRow
 };

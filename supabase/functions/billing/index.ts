@@ -174,6 +174,10 @@ Deno.serve(async (req) => {
         // contrôle fait maison côté frontend. Stripe affiche son propre champ "Code promo" sur la
         // page de paiement hébergée et valide/applique le code lui-même.
         allow_promotion_codes: true,
+        // Un code promo à 100% (ex. SEVENSEPT, réduction à vie) ramène le montant dû à 0 € : sans ce
+        // réglage, Stripe demande quand même une carte par défaut pour tout abonnement. "if_required"
+        // ne la demande que si le montant réellement facturé n'est pas nul.
+        payment_method_collection: "if_required",
         success_url: `${base}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${base}?checkout=cancel`,
       });
