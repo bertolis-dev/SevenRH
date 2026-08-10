@@ -1160,6 +1160,7 @@ function renderUserMenuPanel() {
     </div>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">⚙️ Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">💳 Abonnement</button>` : ''}
+    <button type="button" class="user-menu-item" id="btn-user-menu-support">🆘 Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
@@ -1178,6 +1179,10 @@ function renderUserMenuPanel() {
       navigateTo('parametres');
     });
   }
+  document.getElementById('btn-user-menu-support').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    openSupportTicketModal();
+  });
   document.getElementById('btn-change-password').addEventListener('click', () => {
     document.getElementById('user-menu-panel').classList.remove('open');
     openChangePasswordModal();
@@ -1683,7 +1688,6 @@ function openHelpModal() {
 
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
-  document.getElementById('btn-support-ticket').addEventListener('click', () => openSupportTicketModal());
 
   const modalRoot = document.getElementById('modal-root');
   // Une modale marquée data-blocking (ex. changement de mot de passe obligatoire) ne doit pouvoir
