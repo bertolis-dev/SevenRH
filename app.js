@@ -191,11 +191,13 @@ const NAV_ITEMS = [
   // ---- Équipe ----
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
   { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe' },
-  { key: 'planning', label: 'Planning équipe', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { planningVue: 'equipe' } },
-  { key: 'calendrier', label: 'Calendrier équipe', icon: '📅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: { calendrierVue: 'entreprise' } },
-  { key: 'conges', label: 'Congés à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: NAVPARAMS_CONGES_A_VALIDER },
-  { key: 'teletravail', label: 'Télétravail à valider', icon: '✅', roles: ['manager', 'rh', 'directeur'], group: 'equipe', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER },
-  { key: 'frais', label: 'Notes de frais à valider', icon: '✅', roles: ['manager', 'rh', 'directeur', 'comptabilite'], group: 'equipe', navParams: NAVPARAMS_FRAIS_A_VALIDER },
+  // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
+  // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
+  // vers exactement la même vue que leur pendant "Personnel", juste avec des navParams différents.
+  // Planning/Calendrier ont déjà un bouton interne "Mon .../... équipe" (state.planningVue/
+  // calendrierVue) ; Congés/Télétravail/Notes de frais ont désormais un bouton "Voir les demandes à
+  // valider" dans leur propre vue (voir renderConges/renderTeletravail/renderFrais) plutôt qu'une
+  // entrée de menu séparée pour un simple préréglage de filtre.
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
   { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
 
@@ -5505,10 +5507,15 @@ function bindEmployeeDetailEvents() {
 // ---------------------------------------------------------------------------
 
 function renderConges() {
+  const user = authRepository.getCurrentUser();
+  const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
   return `
-    <div class="view-header">
-      <h1>Congés</h1>
-      <p class="view-subtitle">Demandes, validations et types de congés payés/RTT/ancienneté (§14)</p>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Congés</h1>
+        <p class="view-subtitle">Demandes, validations et types de congés payés/RTT/ancienneté (§14)</p>
+      </div>
+      ${canValider ? `<div class="detail-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-conges-a-valider">Voir les demandes à valider</button></div>` : ''}
     </div>
     <div class="tabs">
       <button class="tab ${state.congesTab === 'demandes' ? 'active' : ''}" data-conges-tab="demandes">Demandes</button>
@@ -5527,6 +5534,14 @@ function bindCongesEvents() {
       render();
     });
   });
+
+  const btnAValider = document.getElementById('btn-conges-a-valider');
+  if (btnAValider) {
+    btnAValider.addEventListener('click', () => {
+      Object.assign(state, NAVPARAMS_CONGES_A_VALIDER);
+      render();
+    });
+  }
 
   if (state.congesTab === 'types') {
     bindCongesTypesEvents('conge');
@@ -9343,10 +9358,15 @@ function shiftPlanningMonth(delta) {
 // ---------------------------------------------------------------------------
 
 function renderTeletravail() {
+  const user = authRepository.getCurrentUser();
+  const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
   return `
-    <div class="view-header">
-      <h1>Télétravail</h1>
-      <p class="view-subtitle">Demandes, validations et planning hebdomadaire</p>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Télétravail</h1>
+        <p class="view-subtitle">Demandes, validations et planning hebdomadaire</p>
+      </div>
+      ${canValider ? `<div class="detail-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-teletravail-a-valider">Voir les demandes à valider</button></div>` : ''}
     </div>
     <div class="tabs">
       <button class="tab ${state.teletravailTab === 'demandes' ? 'active' : ''}" data-teletravail-tab="demandes">Demandes</button>
@@ -9362,6 +9382,14 @@ function bindTeletravailEvents() {
   document.querySelectorAll('[data-teletravail-tab]').forEach(btn => {
     btn.addEventListener('click', () => { state.teletravailTab = btn.dataset.teletravailTab; render(); });
   });
+
+  const btnAValider = document.getElementById('btn-teletravail-a-valider');
+  if (btnAValider) {
+    btnAValider.addEventListener('click', () => {
+      Object.assign(state, NAVPARAMS_TELETRAVAIL_A_VALIDER);
+      render();
+    });
+  }
 
   if (state.teletravailTab === 'planning') bindTeletravailPlanningEvents();
   else bindTeletravailDemandesEvents();
@@ -9881,6 +9909,8 @@ function renderFrais() {
   const expenses = getFilteredExpenses();
   const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
   const { pageItems, totalPages, page, pageStart } = paginate(expenses, 'fraisPage');
+  const user = authRepository.getCurrentUser();
+  const canValider = ['manager', 'rh', 'directeur', 'comptabilite'].includes(user.role);
 
   return `
     <div class="view-header-row">
@@ -9889,6 +9919,7 @@ function renderFrais() {
         <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC</p>
       </div>
       <div class="detail-header-actions">
+        ${canValider ? `<button type="button" class="btn btn-secondary" id="btn-frais-a-valider">Voir les notes à valider</button>` : ''}
         <button class="btn btn-secondary" id="btn-export-frais">Exporter CSV</button>
         <button class="btn btn-primary" id="btn-new-expense">+ Nouvelle note</button>
       </div>
@@ -9954,6 +9985,15 @@ function bindFraisEvents() {
   document.getElementById('btn-new-expense').addEventListener('click', () => openExpenseModal());
   document.getElementById('btn-export-frais').addEventListener('click', exportExpensesCSV);
   bindDraftsCardEvents((draft) => openExpenseModal(undefined, draft));
+
+  const btnAValider = document.getElementById('btn-frais-a-valider');
+  if (btnAValider) {
+    btnAValider.addEventListener('click', () => {
+      Object.assign(state, NAVPARAMS_FRAIS_A_VALIDER);
+      state.fraisPage = 1;
+      render();
+    });
+  }
 
   document.getElementById('frais-filter-employee').addEventListener('change', (e) => {
     state.fraisFilters.employeeId = e.target.value;
