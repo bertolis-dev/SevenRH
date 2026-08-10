@@ -4397,7 +4397,7 @@ function bindMesDocumentsEvents() {
 
 const TICKET_STATUT_LABELS = { ouvert: 'Ouvert', en_cours: 'En cours', resolu: 'Résolu', ferme: 'Fermé' };
 const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', ferme: 'muted' };
-const TICKET_CATEGORIES = ['Bug', 'Question', 'Suggestion', 'Autre'];
+const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 
 /** Libellé humain de l'écran courant, utilisé comme contexte auto-capturé à la création d'un
  * ticket — pas de capture d'écran (décision actée précédemment pour des raisons de confidentialité
