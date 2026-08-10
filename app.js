@@ -184,6 +184,9 @@ const NAV_ITEMS = [
   { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
+  // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
+  // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
+  { key: 'mes-tickets', label: 'Mes tickets', icon: '🆘', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
@@ -460,7 +463,7 @@ function showBertolisConsole() {
 
 function renderBertolisConsole() {
   const admin = DB.getCurrentBertolisAdmin();
-  const companies = DB.getAllCompaniesForBertolis();
+  const activeTab = state.bertolisTab || 'entreprises';
   const root = document.getElementById('bertolis-root');
 
   root.innerHTML = `
@@ -472,43 +475,12 @@ function renderBertolisConsole() {
       </div>
     </header>
     <main class="bertolis-main">
-      <div class="view-header">
-        <h1>Entreprises clientes</h1>
-        <p class="view-subtitle">${companies.length} entreprise${companies.length > 1 ? 's' : ''} · aperçu limité aux métadonnées d'abonnement (§9.6 : aucune donnée RH sensible n'est accessible depuis cette console)</p>
+      <div class="tabs">
+        <button type="button" class="tab ${activeTab === 'entreprises' ? 'active' : ''}" data-bertolis-tab="entreprises">Entreprises clientes</button>
+        <button type="button" class="tab ${activeTab === 'tickets' ? 'active' : ''}" data-bertolis-tab="tickets">Tickets support</button>
       </div>
-      <div class="card table-card">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Entreprise</th>
-              <th>Offre</th>
-              <th>Statut</th>
-              <th>Salariés</th>
-              <th>Établissements</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${companies.map(c => {
-              const offre = OFFRES_BERTOLIS[c.abonnement.offre] || OFFRES_BERTOLIS.essai;
-              const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[c.abonnement.statut] || 'muted';
-              return `
-                <tr>
-                  <td>${escapeHtml(c.raisonSociale)}</td>
-                  <td>${escapeHtml(offre.label)}</td>
-                  <td><span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[c.abonnement.statut] || c.abonnement.statut)}</span></td>
-                  <td>${c.nombreSalaries}${c.abonnement.nombreSalariesMax !== null ? ` / ${c.abonnement.nombreSalariesMax}` : ''}</td>
-                  <td>${c.nombreEtablissements}</td>
-                  <td class="table-actions">
-                    <select class="input" data-bertolis-statut="${c.id}" style="width: auto;">
-                      ${Object.keys(ABONNEMENT_STATUT_LABELS).map(s => `<option value="${s}" ${c.abonnement.statut === s ? 'selected' : ''}>${escapeHtml(ABONNEMENT_STATUT_LABELS[s])}</option>`).join('')}
-                    </select>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+      <div id="bertolis-tab-content">
+        ${activeTab === 'entreprises' ? renderBertolisEntreprisesTab() : renderBertolisTicketsTab()}
       </div>
     </main>
   `;
@@ -518,6 +490,63 @@ function renderBertolisConsole() {
     showLogin();
   });
 
+  document.querySelectorAll('[data-bertolis-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.bertolisTab = btn.dataset.bertolisTab;
+      state.bertolisCurrentTicketId = null;
+      renderBertolisConsole();
+    });
+  });
+
+  if (activeTab === 'entreprises') bindBertolisEntreprisesEvents();
+  else bindBertolisTicketsEvents();
+}
+
+function renderBertolisEntreprisesTab() {
+  const companies = DB.getAllCompaniesForBertolis();
+  return `
+    <div class="view-header">
+      <h1>Entreprises clientes</h1>
+      <p class="view-subtitle">${companies.length} entreprise${companies.length > 1 ? 's' : ''} · aperçu limité aux métadonnées d'abonnement (§9.6 : aucune donnée RH sensible n'est accessible depuis cette console)</p>
+    </div>
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Entreprise</th>
+            <th>Offre</th>
+            <th>Statut</th>
+            <th>Salariés</th>
+            <th>Établissements</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${companies.map(c => {
+            const offre = OFFRES_BERTOLIS[c.abonnement.offre] || OFFRES_BERTOLIS.essai;
+            const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[c.abonnement.statut] || 'muted';
+            return `
+              <tr>
+                <td>${escapeHtml(c.raisonSociale)}</td>
+                <td>${escapeHtml(offre.label)}</td>
+                <td><span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[c.abonnement.statut] || c.abonnement.statut)}</span></td>
+                <td>${c.nombreSalaries}${c.abonnement.nombreSalariesMax !== null ? ` / ${c.abonnement.nombreSalariesMax}` : ''}</td>
+                <td>${c.nombreEtablissements}</td>
+                <td class="table-actions">
+                  <select class="input" data-bertolis-statut="${c.id}" style="width: auto;">
+                    ${Object.keys(ABONNEMENT_STATUT_LABELS).map(s => `<option value="${s}" ${c.abonnement.statut === s ? 'selected' : ''}>${escapeHtml(ABONNEMENT_STATUT_LABELS[s])}</option>`).join('')}
+                  </select>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function bindBertolisEntreprisesEvents() {
   document.querySelectorAll('[data-bertolis-statut]').forEach(select => {
     select.addEventListener('change', (e) => {
       DB.updateCompanyAbonnementStatut(e.target.dataset.bertolisStatut, e.target.value);
@@ -525,6 +554,145 @@ function renderBertolisConsole() {
       renderBertolisConsole();
     });
   });
+}
+
+/** Seul accès de la console BERTOLIS aux tickets support — cross-entreprises, donc jamais via le
+ * cache local (qui ne connaît que la/les entreprises déjà visitées dans CE navigateur) : passe par
+ * l'Edge Function bertolis-tickets (secret partagé, voir data.js:BERTOLIS_TICKETS_SECRET). Comme
+ * rien dans ce projet ne rafraîchit les données en tâche de fond (tout se resynchronise à la
+ * connexion), on déclenche ce chargement explicitement au premier affichage de l'onglet, puis à
+ * chaque action (changement de statut, réponse) plutôt que de retoucher un cache local à la main. */
+function renderBertolisTicketsTab() {
+  if (!state.bertolisTicketsData && !state.bertolisTicketsLoading) {
+    state.bertolisTicketsLoading = true;
+    loadBertolisTickets();
+  }
+  if (state.bertolisCurrentTicketId && state.bertolisTicketsData && !state.bertolisTicketsData.error) {
+    return renderBertolisTicketDetail();
+  }
+  if (state.bertolisTicketsLoading && !state.bertolisTicketsData) {
+    return '<p class="text-muted">Chargement des tickets...</p>';
+  }
+  if (state.bertolisTicketsData.error) {
+    return `<div class="empty-state"><p>Erreur lors du chargement des tickets : ${escapeHtml(state.bertolisTicketsData.error)}</p></div>`;
+  }
+  const tickets = state.bertolisTicketsData.tickets || [];
+  return `
+    <div class="view-header">
+      <h1>Tickets support</h1>
+      <p class="view-subtitle">${tickets.length} ticket${tickets.length > 1 ? 's' : ''} (fermés exclus)</p>
+    </div>
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr><th>Entreprise</th><th>Titre</th><th>Statut</th><th>Priorité</th><th>Créé le</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${tickets.length === 0 ? '<tr><td colspan="6" class="text-muted">Aucun ticket.</td></tr>' : tickets.map(t => `
+            <tr>
+              <td>${escapeHtml((t.companies && t.companies.raison_sociale) || '—')}</td>
+              <td>${escapeHtml(t.titre)}</td>
+              <td><span class="badge badge-${TICKET_STATUT_BADGE_CLASS[t.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[t.statut] || t.statut)}</span></td>
+              <td>${escapeHtml(t.priorite)}</td>
+              <td>${formatDate(t.created_at)}</td>
+              <td class="table-actions"><button type="button" class="btn btn-secondary btn-sm" data-open-bertolis-ticket="${t.id}">Ouvrir</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function loadBertolisTickets() {
+  const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'list', {});
+  state.bertolisTicketsLoading = false;
+  state.bertolisTicketsData = result.success ? { tickets: result.tickets } : { error: result.error || 'Erreur inconnue.' };
+  if (state.bertolisTab === 'tickets') renderBertolisConsole();
+}
+
+function renderBertolisTicketDetail() {
+  const ticket = (state.bertolisTicketsData.tickets || []).find(t => t.id === state.bertolisCurrentTicketId);
+  if (!ticket) return '<p class="text-muted">Ticket introuvable — il a peut-être été fermé.</p><button class="btn-link" id="btn-back-to-bertolis-tickets">← Retour aux tickets</button>';
+  const data = ticket.data || {};
+  const comments = data.comments || [];
+  return `
+    <button class="btn-link" id="btn-back-to-bertolis-tickets">← Retour aux tickets</button>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>${escapeHtml(ticket.titre)}</h1>
+        <p class="view-subtitle">
+          ${escapeHtml((ticket.companies && ticket.companies.raison_sociale) || '—')} · ${escapeHtml(ticket.categorie || '—')} · Priorité ${escapeHtml(ticket.priorite)} · ${formatDateTime(ticket.created_at)}
+        </p>
+      </div>
+      <div class="detail-header-actions">
+        <select class="input" id="f-bertolis-ticket-statut" style="width: auto;">
+          ${Object.keys(TICKET_STATUT_LABELS).map(s => `<option value="${s}" ${s === ticket.statut ? 'selected' : ''}>${TICKET_STATUT_LABELS[s]}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
+      ${data.contexte && data.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(data.contexte.vue)}</p>` : ''}
+      ${data.pieceJointe ? `<p><a href="${data.pieceJointe.dataUrl}" download="${escapeHtml(data.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(data.pieceJointe.nom)}</a></p>` : ''}
+    </div>
+    <div class="card">
+      <div class="ticket-thread">
+        ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
+      </div>
+      <form id="bertolis-ticket-comment-form" class="ticket-comment-form">
+        <textarea class="input" id="f-bertolis-ticket-comment" rows="2" placeholder="Répondre..." required></textarea>
+        <button type="submit" class="btn btn-primary">Envoyer</button>
+      </form>
+    </div>
+  `;
+}
+
+function bindBertolisTicketsEvents() {
+  document.querySelectorAll('[data-open-bertolis-ticket]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.bertolisCurrentTicketId = btn.dataset.openBertolisTicket;
+      renderBertolisConsole();
+    });
+  });
+
+  const backBtn = document.getElementById('btn-back-to-bertolis-tickets');
+  if (backBtn) backBtn.addEventListener('click', () => {
+    state.bertolisCurrentTicketId = null;
+    renderBertolisConsole();
+  });
+
+  const statutSelect = document.getElementById('f-bertolis-ticket-statut');
+  if (statutSelect) {
+    statutSelect.addEventListener('change', async () => {
+      statutSelect.disabled = true;
+      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'updateStatus', {
+        ticketId: state.bertolisCurrentTicketId, statut: statutSelect.value
+      });
+      if (!result.success) { showToast(result.error || 'Erreur.', 'error'); statutSelect.disabled = false; return; }
+      state.bertolisTicketsData = null;
+      renderBertolisConsole();
+    });
+  }
+
+  const commentForm = document.getElementById('bertolis-ticket-comment-form');
+  if (commentForm) {
+    commentForm.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const textarea = document.getElementById('f-bertolis-ticket-comment');
+      const texte = textarea.value.trim();
+      if (!texte) return;
+      const submitBtn = commentForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'addComment', {
+        ticketId: state.bertolisCurrentTicketId, texte
+      });
+      submitBtn.disabled = false;
+      if (!result.success) { showToast(result.error || 'Erreur.', 'error'); return; }
+      state.bertolisTicketsData = null;
+      renderBertolisConsole();
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1515,6 +1683,7 @@ function openHelpModal() {
 
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
+  document.getElementById('btn-support-ticket').addEventListener('click', () => openSupportTicketModal());
 
   const modalRoot = document.getElementById('modal-root');
   // Une modale marquée data-blocking (ex. changement de mot de passe obligatoire) ne doit pouvoir
@@ -2389,6 +2558,14 @@ function render() {
     case 'mes-documents':
       root.innerHTML = renderMesDocuments();
       bindMesDocumentsEvents();
+      break;
+    case 'mes-tickets':
+      root.innerHTML = renderMesTickets();
+      bindMesTicketsEvents();
+      break;
+    case 'ticket-detail':
+      root.innerHTML = renderTicketDetail(state.currentTicketId);
+      bindTicketDetailEvents();
       break;
     case 'employee-detail':
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
@@ -4208,6 +4385,244 @@ function renderMesDocuments() {
 
 function bindMesDocumentsEvents() {
   bindDocumentRowEvents('#mes-documents-list');
+}
+
+// ---------------------------------------------------------------------------
+// Tickets support (Phase 2 sprint amélioration RH, §16-17) — envoyés à BERTOLIS
+// ---------------------------------------------------------------------------
+
+const TICKET_STATUT_LABELS = { ouvert: 'Ouvert', en_cours: 'En cours', resolu: 'Résolu', ferme: 'Fermé' };
+const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', ferme: 'muted' };
+const TICKET_CATEGORIES = ['Bug', 'Question', 'Suggestion', 'Autre'];
+
+/** Libellé humain de l'écran courant, utilisé comme contexte auto-capturé à la création d'un
+ * ticket — pas de capture d'écran (décision actée précédemment pour des raisons de confidentialité
+ * RH), juste de quoi orienter BERTOLIS sans que le salarié ait à le décrire lui-même. */
+function currentViewLabel() {
+  const item = NAV_ITEMS.find(i => i.key === state.view);
+  return item ? item.label : state.view;
+}
+
+function openSupportTicketModal() {
+  state.pendingAttachment = null;
+  const contexteLabel = currentViewLabel();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Signaler un problème / demander de l'aide</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="support-ticket-form">
+        <div class="modal-body">
+          <p class="text-muted" style="margin-top:0;">Contexte transmis automatiquement : <strong>${escapeHtml(contexteLabel)}</strong></p>
+          <div class="form-field">
+            <label for="f-ticket-titre">Titre *</label>
+            <input class="input" type="text" id="f-ticket-titre" placeholder="Résumez votre problème en quelques mots" required>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-ticket-description">Description</label>
+            <textarea class="input" id="f-ticket-description" rows="4" placeholder="Décrivez le problème, ce que vous attendiez, ce qui s'est passé..."></textarea>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field">
+              <label for="f-ticket-categorie">Catégorie</label>
+              <select class="input" id="f-ticket-categorie">
+                ${TICKET_CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-ticket-priorite">Priorité</label>
+              <select class="input" id="f-ticket-priorite">
+                <option value="basse">Basse</option>
+                <option value="normale" selected>Normale</option>
+                <option value="haute">Haute</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-ticket-fichier">Pièce jointe (optionnel, 2 Mo max)</label>
+            <input class="input" type="file" id="f-ticket-fichier">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Envoyer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('f-ticket-fichier').addEventListener('change', handleAttachmentChange);
+  document.getElementById('support-ticket-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const titre = document.getElementById('f-ticket-titre').value.trim();
+    if (!titre) return;
+    const user = authRepository.getCurrentUser();
+    supportTicketRepository.create({
+      employeeId: user.id,
+      titre,
+      description: document.getElementById('f-ticket-description').value.trim(),
+      categorie: document.getElementById('f-ticket-categorie').value,
+      priorite: document.getElementById('f-ticket-priorite').value,
+      route: state.view,
+      contexte: { vue: contexteLabel },
+      pieceJointe: state.pendingAttachment
+    });
+    closeModal();
+    showToast('Ticket envoyé — vous pouvez suivre sa réponse dans « Mes tickets ».');
+    if (state.view === 'mes-tickets') render();
+  });
+}
+
+function renderTicketRow(t, showAuthor) {
+  const author = showAuthor ? employeeRepository.getById(t.employeeId) : null;
+  return `
+    <div class="mini-list-item ticket-row" data-open-ticket="${t.id}">
+      <span>
+        <span class="badge badge-${TICKET_STATUT_BADGE_CLASS[t.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[t.statut] || t.statut)}</span>
+        ${escapeHtml(t.titre)}
+        ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+      </span>
+      <span class="detail-header-actions">
+        <span class="text-muted">${formatDate(t.dateCreation)}</span>
+      </span>
+    </div>
+  `;
+}
+
+function renderMesTickets() {
+  const user = authRepository.getCurrentUser();
+  const tickets = supportTicketRepository.getVisibleTo(user);
+  const canSeeAll = hasPermission(user, PERMISSIONS.GERER_TICKETS);
+
+  return `
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Mes tickets</h1>
+        <p class="view-subtitle">${tickets.length} ticket${tickets.length > 1 ? 's' : ''}</p>
+      </div>
+      <div class="detail-header-actions">
+        <button class="btn btn-primary" id="btn-nouveau-ticket">+ Nouveau ticket</button>
+      </div>
+    </div>
+    <div class="card">
+      <div id="tickets-list">
+        ${tickets.length === 0 ? '<p class="text-muted">Aucun ticket pour le moment.</p>' : tickets.map(t => renderTicketRow(t, canSeeAll)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindMesTicketsEvents() {
+  document.getElementById('btn-nouveau-ticket').addEventListener('click', () => openSupportTicketModal());
+  document.querySelectorAll('[data-open-ticket]').forEach(el => {
+    el.addEventListener('click', () => navigateTo('ticket-detail', { currentTicketId: el.dataset.openTicket }));
+  });
+}
+
+function renderTicketComment(c) {
+  const isBertolis = c.auteur === 'Support BERTOLIS';
+  return `
+    <div class="ticket-comment ${isBertolis ? 'ticket-comment-bertolis' : 'ticket-comment-salarie'}">
+      <div class="ticket-comment-meta"><strong>${escapeHtml(c.auteur)}</strong> · ${formatDateTime(c.date)}</div>
+      <div class="ticket-comment-body">${escapeHtml(c.texte).replace(/\n/g, '<br>')}</div>
+    </div>
+  `;
+}
+
+function renderTicketDetail(id) {
+  const ticket = supportTicketRepository.getById(id);
+  if (!ticket) return `<button class="btn-link" id="btn-back-to-tickets">← Retour</button><div class="empty-state"><p>Ticket introuvable.</p></div>`;
+
+  const user = authRepository.getCurrentUser();
+  const canManage = hasPermission(user, PERMISSIONS.GERER_TICKETS);
+  const isAuthor = ticket.employeeId === user.id;
+  if (!canManage && !isAuthor) {
+    return `<button class="btn-link" id="btn-back-to-tickets">← Retour</button><div class="empty-state"><p>Vous n'avez pas accès à ce ticket.</p></div>`;
+  }
+
+  const author = employeeRepository.getById(ticket.employeeId);
+  const comments = ticket.comments || [];
+
+  // Un salarié ne peut pas se fermer lui-même un ticket encore ouvert/en cours (voir décision de
+  // conception : le statut resolu/ferme reste piloté par BERTOLIS ou RH via gererTickets) — un
+  // auteur ordinaire ne peut que rouvrir un ticket marqué résolu, ou confirmer sa clôture.
+  const statutControls = canManage
+    ? `<select class="input" id="f-ticket-statut" style="width:auto;">
+        ${Object.keys(TICKET_STATUT_LABELS).map(s => `<option value="${s}" ${s === ticket.statut ? 'selected' : ''}>${TICKET_STATUT_LABELS[s]}</option>`).join('')}
+      </select>`
+    : ticket.statut === 'resolu'
+      ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ticket-reopen">Rouvrir</button>
+         <button type="button" class="btn btn-primary btn-sm" id="btn-ticket-close">Confirmer et clôturer</button>`
+      : '';
+
+  return `
+    <button class="btn-link" id="btn-back-to-tickets">← Retour à mes tickets</button>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>${escapeHtml(ticket.titre)}</h1>
+        <p class="view-subtitle">
+          <span class="badge badge-${TICKET_STATUT_BADGE_CLASS[ticket.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[ticket.statut] || ticket.statut)}</span>
+          · ${escapeHtml(ticket.categorie || '—')} · Priorité ${escapeHtml(ticket.priorite)}
+          ${canManage && author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+          · ${formatDateTime(ticket.dateCreation)}
+        </p>
+      </div>
+      <div class="detail-header-actions">${statutControls}</div>
+    </div>
+    <div class="card">
+      ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
+      ${ticket.contexte && ticket.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(ticket.contexte.vue)}</p>` : ''}
+      ${ticket.pieceJointe ? `<p><a href="${ticket.pieceJointe.dataUrl}" download="${escapeHtml(ticket.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(ticket.pieceJointe.nom)}</a></p>` : ''}
+    </div>
+    <div class="card">
+      <div id="ticket-thread" class="ticket-thread">
+        ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
+      </div>
+      <form id="ticket-comment-form" class="ticket-comment-form">
+        <textarea class="input" id="f-ticket-comment" rows="2" placeholder="Répondre..." required></textarea>
+        <button type="submit" class="btn btn-primary">Envoyer</button>
+      </form>
+    </div>
+  `;
+}
+
+function bindTicketDetailEvents() {
+  const backBtn = document.getElementById('btn-back-to-tickets');
+  if (backBtn) backBtn.addEventListener('click', () => navigateTo('mes-tickets'));
+  if (!supportTicketRepository.getById(state.currentTicketId)) return;
+
+  const statutSelect = document.getElementById('f-ticket-statut');
+  if (statutSelect) {
+    statutSelect.addEventListener('change', () => {
+      supportTicketRepository.updateStatus(state.currentTicketId, statutSelect.value);
+      render();
+    });
+  }
+  const reopenBtn = document.getElementById('btn-ticket-reopen');
+  if (reopenBtn) reopenBtn.addEventListener('click', () => { supportTicketRepository.updateStatus(state.currentTicketId, 'ouvert'); render(); });
+  const closeBtn = document.getElementById('btn-ticket-close');
+  if (closeBtn) closeBtn.addEventListener('click', () => { supportTicketRepository.updateStatus(state.currentTicketId, 'ferme'); render(); });
+
+  const form = document.getElementById('ticket-comment-form');
+  if (form) {
+    form.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const textarea = document.getElementById('f-ticket-comment');
+      const texte = textarea.value.trim();
+      if (!texte) return;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      const result = await supportTicketRepository.addComment(state.currentTicketId, texte);
+      submitBtn.disabled = false;
+      if (!result.success) { showToast(result.error || 'Erreur lors de l\'envoi.', 'error'); return; }
+      render();
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

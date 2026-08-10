@@ -207,6 +207,17 @@ function documentFromRow(row) {
   };
 }
 
+function ticketFromRow(row) {
+  const data = row.data || {};
+  return {
+    id: row.id, employeeId: row.employee_id, route: row.route || '',
+    contexte: data.contexte || {}, titre: row.titre, description: row.description || '',
+    categorie: row.categorie || '', priorite: row.priorite, statut: row.statut,
+    pieceJointe: data.pieceJointe || null, comments: data.comments || [],
+    dateCreation: row.created_at, dateModification: row.updated_at
+  };
+}
+
 function draftFromRow(row) {
   return {
     id: row.id, ownerId: row.owner_id, type: row.type, champs: row.champs || {},
@@ -300,6 +311,18 @@ function documentToRow(d, companyId) {
 
 function draftToRow(d, companyId) {
   return { id: d.id, company_id: companyId, owner_id: d.ownerId, type: d.type, champs: d.champs || {} };
+}
+
+// Utilisé uniquement à la CRÉATION d'un ticket (voir insertRows dans pushSupportTickets) — un
+// ticket existant n'est jamais réécrit via cette fonction (statut/commentaires ont leurs propres
+// chemins dédiés, voir updateTicketStatus/appendTicketComment).
+function ticketToRow(t, companyId) {
+  return {
+    id: t.id, company_id: companyId, employee_id: t.employeeId, route: t.route || null,
+    titre: t.titre || '', description: t.description || '', categorie: t.categorie || null,
+    priorite: t.priorite || 'normale', statut: t.statut || 'ouvert',
+    data: { contexte: t.contexte || {}, pieceJointe: t.pieceJointe || null, comments: t.comments || [] }
+  };
 }
 
 function notificationToRow(n, companyId) {
@@ -470,7 +493,7 @@ async function hydrateCurrentCompany() {
   const [
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
-    expensesRes, documentsRes, draftsRes, notificationsRes, favoritesRes,
+    expensesRes, documentsRes, supportTicketsRes, draftsRes, notificationsRes, favoritesRes,
     auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
@@ -484,6 +507,7 @@ async function hydrateCurrentCompany() {
     supabase.from('telework_requests_calendar').select('*').eq('company_id', companyId),
     supabase.from('expenses').select('*').eq('company_id', companyId),
     supabase.from('documents').select('*').eq('company_id', companyId),
+    supabase.from('support_tickets').select('*').eq('company_id', companyId),
     supabase.from('drafts').select('*').eq('company_id', companyId),
     supabase.from('notifications').select('*').eq('company_id', companyId),
     supabase.from('favorites').select('*').eq('company_id', companyId),
@@ -521,6 +545,7 @@ async function hydrateCurrentCompany() {
     teleworkRequests: mergeCalendar(teleworkRequestsRes.data || [], teleworkCalendarRes.data || [], teleworkRequestFromRow, teleworkRequestFromCalendarRow),
     expenses: (expensesRes.data || []).map(expenseFromRow),
     documents: (documentsRes.data || []).map(documentFromRow),
+    supportTickets: (supportTicketsRes.data || []).map(ticketFromRow),
     schoolHolidays: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
     auditLog: (auditLogRes.data || []).map(auditLogFromRow),
     favorites: favoritesFromRows(favoritesRes.data),
@@ -631,6 +656,44 @@ const pushEtablissements = (rows, companyId) => syncTable('etablissements', rows
 const pushServices = (rows, companyId) => syncTable('services', rows, serviceToRow, companyId);
 const pushLeaveTypes = (rows, companyId) => syncTable('leave_types', rows, leaveTypeToRow, companyId);
 const pushDocuments = (rows, companyId) => syncTable('documents', rows, documentToRow, companyId);
+// Insertion uniquement, jamais un resync complet (voir DB.saveSupportTickets, data.js) — un ticket
+// existant n'est jamais réécrit via cette fonction.
+const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
+
+async function updateTicketStatus(ticketId, statut, companyId) {
+  const { error } = await supabase.from('support_tickets')
+    .update({ statut, updated_at: new Date().toISOString() })
+    .eq('id', ticketId).eq('company_id', companyId);
+  if (error) throw error;
+}
+
+/** Append atomique via la fonction SQL append_ticket_comment (0017_support_tickets.sql) — jamais
+ * un lire-modifier-réécrire de la ligne complète côté client, voir DB.addTicketComment (data.js). */
+async function appendTicketComment(ticketId, auteur, texte) {
+  const { error } = await supabase.rpc('append_ticket_comment', { p_ticket_id: ticketId, p_auteur: auteur, p_texte: texte });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/** Seul point d'accès de la console BERTOLIS aux tickets — CROSS-ENTREPRISES, donc jamais via RLS
+ * (la console BERTOLIS n'a pas de compte Supabase Auth, voir data.js:BERTOLIS_TICKETS_SECRET). Le
+ * secret est fourni par l'appelant (data.js/app.js, chargés APRÈS ce module — pas visible ici tant
+ * qu'il n'est pas passé en paramètre). action : "list" | "updateStatus" | "addComment". */
+async function invokeBertolisTickets(secret, action, payload) {
+  const { data, error } = await supabase.functions.invoke('bertolis-tickets', {
+    body: { action, ...payload },
+    headers: { 'x-bertolis-secret': secret }
+  });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, ...data };
+}
 const pushDrafts = (rows, companyId) => syncTable('drafts', rows, draftToRow, companyId);
 const pushNotifications = (rows, companyId) => syncTable('notifications', rows, notificationToRow, companyId);
 const pushFavorites = (companyId, map) => syncFavorites(companyId, map);
@@ -659,5 +722,6 @@ window.SupabaseSync = {
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
+  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets,
   deleteRow
 };

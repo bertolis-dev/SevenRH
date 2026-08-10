@@ -1275,6 +1275,34 @@ textarea.input { resize: vertical; font-family: inherit; }
 .timeline-label { font-size: 14px; margin-top: 2px; }
 
 /* ---------------------------------------------------------------------
+   Tickets support (Phase 2 sprint amélioration RH, §16-17) — fil de discussion salarié ↔ BERTOLIS
+   --------------------------------------------------------------------- */
+
+.ticket-row { cursor: pointer; }
+.ticket-row:hover { background: var(--color-muted-soft); }
+
+.ticket-thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+
+.ticket-comment {
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+/* Le salarié à gauche, BERTOLIS à droite — même convention visuelle qu'une messagerie classique,
+   pour distinguer les deux parties du fil sans avoir à relire "auteur" à chaque ligne. */
+.ticket-comment-salarie { align-self: flex-start; }
+.ticket-comment-bertolis { align-self: flex-end; background: var(--color-primary-soft); }
+
+.ticket-comment-meta { font-size: 12px; color: var(--color-text-muted); margin-bottom: 4px; }
+.ticket-comment-body { font-size: 14px; white-space: pre-wrap; }
+
+.ticket-comment-form { display: flex; gap: 8px; align-items: flex-start; }
+.ticket-comment-form textarea { flex: 1; resize: vertical; }
+
+/* ---------------------------------------------------------------------
    Organigramme — arbre hiérarchique en CSS pur (lignes de connexion via ::before/::after)
    --------------------------------------------------------------------- */
 

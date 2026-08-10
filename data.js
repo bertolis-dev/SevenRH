@@ -19,6 +19,22 @@ const BERTOLIS_ADMINS_KEY = 'sevenrh_bertolis_admins';
 const BERTOLIS_SESSION_KEY = 'sevenrh_bertolis_session';
 
 /**
+ * Secret partagé avec l'Edge Function "bertolis-tickets" (voir supabase/functions/bertolis-tickets)
+ * — la console BERTOLIS garde son login local (ci-dessus) plutôt qu'un vrai compte Supabase Auth,
+ * donc elle ne peut pas passer par les policies RLS habituelles pour lire les tickets support de
+ * TOUTES les entreprises. Ce secret joue ce rôle à sa place.
+ *
+ * ⚠️ COMPROMIS DE SÉCURITÉ ASSUMÉ : ce fichier est servi tel quel dans le bundle JS public
+ * (GitHub Pages) — n'importe qui peut lire ce secret en inspectant app.js/data.js, et donc appeler
+ * l'Edge Function pour lire/répondre aux tickets de toutes les entreprises clientes. Contrairement
+ * au login BERTOLIS local (qui n'accède aujourd'hui à AUCUNE donnée réelle), ce secret donne un
+ * accès réel en lecture/écriture via service-role. Acceptable pour une v1 avec peu de clients ; à
+ * remplacer par un vrai compte Supabase Auth pour BERTOLIS si le nombre de clients grandit.
+ * Doit correspondre EXACTEMENT au secret Supabase "BERTOLIS_TICKETS_SECRET" de la fonction.
+ */
+const BERTOLIS_TICKETS_SECRET = '9cedfffcd52b0afa010476d1bd528473a6eb267925ab8611';
+
+/**
  * Rôles disponibles et niveau d'accès associé. IMPORTANT — ceci est une simulation
  * de rôles côté navigateur, pas un vrai contrôle d'accès serveur : toute personne
  * ouvrant les outils de développement peut lire/modifier localStorage directement.
@@ -78,7 +94,8 @@ const PERMISSIONS = {
   GERER_UTILISATEURS: 'gererUtilisateurs',
   GERER_PERMISSIONS: 'gererPermissions',
   VOIR_JOURNAL_AUDIT: 'voirJournalAudit',
-  GERER_ABONNEMENTS: 'gererAbonnements'
+  GERER_ABONNEMENTS: 'gererAbonnements',
+  GERER_TICKETS: 'gererTickets'
 };
 
 /** Permissions accordées par défaut à chaque rôle — reproduit le comportement actuel de l'app
@@ -112,7 +129,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.ANNULER_ABSENCE, PERMISSIONS.SAISIR_MALADIE,
     PERMISSIONS.PROLONGER_MALADIE, PERMISSIONS.VALIDER_NOTE_FRAIS, PERMISSIONS.CALCULER_TICKETS_RESTAURANT,
     PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, PERMISSIONS.EXPORTER_PAIE, PERMISSIONS.GERER_PARAMETRES,
-    PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT
+    PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT, PERMISSIONS.GERER_TICKETS
   ],
   comptabilite: [
     PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
@@ -268,6 +285,7 @@ function makeEmptyCompany() {
     teleworkRequests: [],
     expenses: [],
     documents: [],
+    supportTickets: [],
     schoolHolidays: null,
     auditLog: [],
     favorites: {}, // { [idDuSalariéConnecté]: [idsSalariésFavoris] } — personnel à chaque utilisateur, pas partagé
@@ -1570,6 +1588,96 @@ const DB = {
     }
   },
 
+  // ---- Tickets support (Phase 2 sprint amélioration RH, §16-17) ----
+
+  getSupportTickets() {
+    return (this.getCurrentCompany().supportTickets || []).slice();
+  },
+
+  /** Insertion uniquement (jamais de modification) — contrairement à saveLeaveRequests, ne gère
+   * QUE l'ajout d'un nouveau ticket. Un ticket existant n'est jamais réécrit en entier : le
+   * statut passe par updateSupportTicketStatus (colonne dédiée) et les commentaires par
+   * addTicketComment (RPC atomique) — pousser la ligne complète à chaque modification écraserait
+   * `data.comments` avec une version locale potentiellement périmée (ex. une réponse BERTOLIS pas
+   * encore rafraîchie dans ce cache) dès qu'un RH changerait juste le statut. */
+  saveSupportTickets(list) {
+    const company = this.getCurrentCompany();
+    const previous = company.supportTickets || [];
+    company.supportTickets = list;
+    this.saveCurrentCompany(company);
+    const added = list.filter(t => !previous.some(p => p.id === t.id));
+    if (added.length) this._pushInBackground(window.SupabaseSync.pushSupportTickets(added, company.id));
+  },
+
+  getTicketById(id) {
+    return this.getSupportTickets().find(t => t.id === id) || null;
+  },
+
+  getMySupportTickets(employeeId) {
+    return this.getSupportTickets()
+      .filter(t => t.employeeId === employeeId)
+      .sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+  },
+
+  /** Visibles par un salarié donné : ses propres tickets, ou tous ceux de l'entreprise s'il a
+   * gererTickets (RH/Directeur) — cohérent avec la policy RLS support_tickets_select. */
+  getSupportTicketsVisibleTo(employee) {
+    const all = this.getSupportTickets().sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+    if (hasPermission(employee, PERMISSIONS.GERER_TICKETS)) return all;
+    return all.filter(t => t.employeeId === employee.id);
+  },
+
+  addSupportTicket(data) {
+    const list = this.getSupportTickets();
+    const now = new Date().toISOString();
+    const ticket = Object.assign(makeEmptyTicket(), data, {
+      id: generateId('tick'),
+      dateCreation: now,
+      dateModification: now
+    });
+    list.push(ticket);
+    this.saveSupportTickets(list);
+    const employee = this.getEmployeeById(ticket.employeeId);
+    this.logAudit('Création', 'Ticket support', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${ticket.titre}`);
+    return ticket;
+  },
+
+  /** Ne touche QUE la colonne statut côté serveur (voir SupabaseSync.updateTicketStatus) — jamais
+   * un push de la ligne complète, pour la même raison que documentée sur saveSupportTickets. */
+  updateSupportTicketStatus(id, statut) {
+    const company = this.getCurrentCompany();
+    const ticket = (company.supportTickets || []).find(t => t.id === id);
+    if (!ticket) return null;
+    ticket.statut = statut;
+    ticket.dateModification = new Date().toISOString();
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateTicketStatus(id, statut, company.id));
+    this.logAudit('Modification', 'Ticket support', ticket.titre, `Statut changé en « ${statut} »`);
+    return ticket;
+  },
+
+  /** Passe par la fonction SQL atomique append_ticket_comment (voir 0017_support_tickets.sql) au
+   * lieu de lire-modifier-réécrire toute la ligne : un fil de support est un échange rapide à deux
+   * parties (salarié ↔ BERTOLIS), le cas le plus défavorable pour perdre un message en cas
+   * d'écritures presque simultanées. Le cache local n'est mis à jour qu'APRÈS confirmation du
+   * serveur, et seulement en local (le commentaire est déjà écrit côté serveur par la RPC — pas de
+   * second push). */
+  async addTicketComment(ticketId, texte) {
+    const employee = this.getCurrentUser();
+    const auteur = employee ? `${employee.prenom} ${employee.nom}` : 'Salarié';
+    const result = await window.SupabaseSync.appendTicketComment(ticketId, auteur, texte);
+    if (!result.success) return result;
+    const company = this.getCurrentCompany();
+    const ticket = (company.supportTickets || []).find(t => t.id === ticketId);
+    if (ticket) {
+      const comment = { auteur, texte, date: new Date().toISOString() };
+      ticket.comments = [...(ticket.comments || []), comment];
+      ticket.dateModification = comment.date;
+      this.saveCurrentCompany(company);
+    }
+    return result;
+  },
+
   // ---- Journal d'audit ----
 
   getAuditLog() {
@@ -1936,6 +2044,15 @@ const documentRepository = {
   getForEmployee: (employeeId) => DB.getDocumentsForEmployee(employeeId),
   create: (data) => DB.addDocument(data),
   delete: (id) => DB.deleteDocument(id)
+};
+
+const supportTicketRepository = {
+  getById: (id) => DB.getTicketById(id),
+  getMine: (employeeId) => DB.getMySupportTickets(employeeId),
+  getVisibleTo: (employee) => DB.getSupportTicketsVisibleTo(employee),
+  create: (data) => DB.addSupportTicket(data),
+  updateStatus: (id, statut) => DB.updateSupportTicketStatus(id, statut),
+  addComment: (id, texte) => DB.addTicketComment(id, texte)
 };
 
 const serviceRepository = {
@@ -2420,6 +2537,29 @@ function makeEmptyDocument() {
     nom: '',
     dateExpiration: '', // optionnel — utilisé pour les alertes d'échéance (permis, CNI, visite médicale...)
     fichier: null, // { nom, dataUrl } | null
+    dateCreation: null,
+    dateModification: null
+  };
+}
+
+/** Ticket support envoyé à BERTOLIS (Phase 2 sprint amélioration RH, §16-17) — voir
+ * supabase/migrations/0017_support_tickets.sql. Les commentaires ne se manipulent JAMAIS en lisant
+ * puis réécrivant ce tableau directement (risque de perte de message si salarié et BERTOLIS
+ * répondent presque en même temps) : toujours passer par DB.addTicketComment(), qui appelle la
+ * fonction SQL atomique append_ticket_comment(). */
+function makeEmptyTicket() {
+  return {
+    id: null,
+    employeeId: null,
+    route: '',
+    contexte: {}, // vue courante + éventuel identifiant déjà en state au moment de la création
+    titre: '',
+    description: '',
+    categorie: '',
+    priorite: 'normale', // 'basse' | 'normale' | 'haute'
+    statut: 'ouvert', // 'ouvert' | 'en_cours' | 'resolu' | 'ferme'
+    pieceJointe: null, // { nom, dataUrl } | null
+    comments: [], // [{ auteur, texte, date }]
     dateCreation: null,
     dateModification: null
   };
