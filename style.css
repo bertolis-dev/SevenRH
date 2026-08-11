@@ -883,34 +883,34 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .calendar-nav { display: flex; gap: 8px; flex-wrap: wrap; }
 
-.calendar-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  align-items: center;
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
+/* §sprint refonte UX : l'ancienne légende occupait une rangée complète, toujours visible, sous la
+   grille (cf. .legend-item ci-dessous, désormais réservé au contenu du popover) — remplacée par une
+   bande compacte (pastilles de couleur seules) + un bouton "Filtres" ouvrant .dropdown-panel. */
+.calendar-filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.calendar-filter-dots { display: flex; align-items: center; gap: 6px; }
+.calendar-filter-dot { width: 12px; height: 12px; border-radius: 4px; transition: opacity 0.15s ease; }
+.calendar-filter-dot.legend-item-inactive { opacity: 0.25; }
 
-/* §sprint calendrier légende/filtres : la légende est aussi le système de filtrage — chaque entrée
-   est un vrai <button>, remis à plat pour ressembler au <span> d'avant (pas de style de bouton par
-   défaut du navigateur), plus un état "inactif" pour la catégorie masquée. */
+/* Contenu du popover "Filtres" (voir .dropdown-panel) — chaque entrée est un vrai <button> avec un
+   état "inactif" pour la catégorie masquée. Réutilisé aussi par le popover d'ajout rapide (case
+   vide du calendrier), même patron "liste de lignes cliquables verticales". */
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
   border: none;
   background: none;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  color: inherit;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text);
   cursor: pointer;
   transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
 .legend-item:hover { background: var(--color-muted-soft); }
-.legend-item-inactive { opacity: 0.4; }
+.legend-item-inactive { opacity: 0.5; }
 
 .legend-swatch {
   display: inline-block;
@@ -929,28 +929,31 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* Précédent/Suivant sur les côtés du calendrier plutôt qu'en haut (retour utilisateur : plus
    accessible) — "Aujourd'hui" reste en haut, ce n'est pas une navigation mois par mois. */
-.calendar-card-wrap { display: flex; align-items: stretch; gap: 8px; margin-bottom: 18px; }
-.calendar-card-wrap .calendar-card { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
-.calendar-side-nav {
-  flex-shrink: 0;
-  width: 36px;
+/* §sprint refonte UX : la navigation mois précédent/suivant a quitté les côtés de la grille (qui
+   perdaient ~90px de largeur inutilement, cf. .calendar-side-nav ci-dessous, retiré) pour rejoindre
+   le nom du mois dans l'en-tête ("‹ Octobre 2026 ›") — voir .calendar-month-nav. La grille profite
+   maintenant de toute la largeur de #view-root. */
+.calendar-month-nav { display: flex; align-items: center; gap: 8px; }
+.calendar-month-nav-btn {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text-muted);
-  font-size: 26px;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
-.calendar-side-nav:hover { background: var(--color-muted-soft); color: var(--color-text); border-color: var(--color-text-muted); }
+.calendar-month-nav-btn:hover { background: var(--color-muted-soft); color: var(--color-text); border-color: var(--color-text-muted); }
+.calendar-month-nav .view-subtitle { margin: 0; min-width: 140px; text-align: center; }
 
-.calendar-card { padding: 12px; overflow-x: auto; }
+.calendar-card { padding: 12px; margin-bottom: 12px; overflow-x: auto; }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
-  min-width: 640px;
 }
 
 .calendar-grid-header { margin-bottom: 6px; }
@@ -1550,6 +1553,30 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .user-menu-item:hover { background: var(--color-muted-soft); }
+
+/* §sprint refonte UX : patron générique de popover, dérivé de .notif-panel/.user-menu-panel — pour
+   ne plus avoir un système de "petit panneau flottant" différent à chaque nouvel usage (filtres
+   calendrier, ajout rapide depuis une case). */
+.dropdown-wrapper { position: relative; display: inline-block; }
+
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+  display: none;
+}
+
+.dropdown-panel.open { display: block; }
+.dropdown-panel.align-left { right: auto; left: 0; }
+
 
 /* ---------------------------------------------------------------------
    Écran de connexion

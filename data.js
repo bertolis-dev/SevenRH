@@ -3197,6 +3197,18 @@ function findSchoolHolidayPeriod(dateStr, zone, schoolHolidays) {
   return schoolHolidays.periodes.find(p => p.zones.includes(zone) && dateStr >= p.debut && dateStr <= p.fin) || null;
 }
 
+/** §sprint refonte UX : le "bug d'octobre" venait de ce que le mois affiché tombait au-delà de la
+ * dernière période connue de l'année scolaire configurée (le seed ne couvre qu'une seule année,
+ * jamais mise à jour automatiquement — des dates de vacances scolaires officielles ne peuvent pas
+ * être calculées, seulement saisies). Utilitaire GÉNÉRAL (pas spécifique à un mois) pour détecter ce
+ * manque de couverture, réutilisé par le calendrier et par Paramètres → Vacances scolaires. */
+function isMonthBeyondSchoolYearCoverage(year, month, schoolHolidays) {
+  if (!schoolHolidays || !schoolHolidays.periodes || !schoolHolidays.periodes.length) return true;
+  const coverageEnd = schoolHolidays.periodes.reduce((max, p) => (p.fin > max ? p.fin : max), schoolHolidays.periodes[0].fin);
+  const monthStart = toISODate(new Date(year, month, 1));
+  return monthStart > coverageEnd;
+}
+
 /**
  * Vacances scolaires françaises par zone (données officielles, à mettre à jour chaque
  * année scolaire). Stockées comme données paramétrables plutôt que codées dans le calcul,

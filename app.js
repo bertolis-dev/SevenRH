@@ -122,6 +122,7 @@ function getInitialViewState() {
     calendarMonth: new Date().getMonth(),
     parametresTab: 'listes',
     parametresTypesCategorie: 'conge', // Sprint SIRH premium §1 : sous-onglet de Paramètres > Types d'absences
+    absencesHubTab: 'conges', // 'conges' | 'autres' | 'teletravail' — voir renderAbsencesHub
     parametresFeriesYear: new Date().getFullYear(),
     teletravailTab: 'demandes',
     teletravailFilters: { employeeId: '', statut: '' },
@@ -131,6 +132,9 @@ function getInitialViewState() {
     fraisPage: 1,
     ticketsYear: new Date().getFullYear(),
     ticketsMonth: new Date().getMonth(),
+    ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel' — même principe que calendrierVue/planningVue
+    mesTicketsYear: new Date().getFullYear(),
+    mesTicketsMonth: new Date().getMonth(),
     notifTab: 'non-lues',
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
@@ -160,8 +164,8 @@ const state = getInitialViewState();
 /** Sprint SIRH premium §5/§7 : navParams "aller aux demandes en attente" — partagés entre l'entrée
  * de sidebar équipe (NAV_ITEMS) et le Centre d'action du tableau de bord (renderDashboardActionCenter),
  * pour que les deux points d'entrée vers le même filtre ne puissent pas silencieusement diverger. */
-const NAVPARAMS_CONGES_A_VALIDER = { congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } };
-const NAVPARAMS_TELETRAVAIL_A_VALIDER = { teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
+const NAVPARAMS_CONGES_A_VALIDER = { absencesHubTab: 'conges', congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } };
+const NAVPARAMS_TELETRAVAIL_A_VALIDER = { absencesHubTab: 'teletravail', teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
 const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
 
 /** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
@@ -179,9 +183,11 @@ const NAV_ITEMS = [
   // ---- Personnel ----
   { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' } },
   { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' } },
-  { key: 'conges', label: 'Congés', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
-  { key: 'autres-absences', label: 'Absences', icon: '🩺', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
-  { key: 'teletravail', label: 'Télétravail', icon: '💻', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
+  // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
+  // logique de regroupement que Planning/Calendrier ci-dessus, appliquée cette fois à 3 écrans
+  // distincts plutôt qu'à 2 navParams du même écran.
+  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
@@ -198,15 +204,22 @@ const NAV_ITEMS = [
   // calendrierVue) ; Congés/Télétravail/Notes de frais ont désormais un bouton "Voir les demandes à
   // valider" dans leur propre vue (voir renderConges/renderTeletravail/renderFrais) plutôt qu'une
   // entrée de menu séparée pour un simple préréglage de filtre.
-  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['rh', 'comptabilite', 'directeur'], permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe' },
+  // §sprint refonte UX §10 : ouvert à tous désormais (vue personnelle par défaut) — RH/Comptabilité/
+  // Directeur gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2 entrées
+  // de menu distinctes pour un même écran.
+  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
 
-  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
+  // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
+  // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
+  // sur un petit écran, n'apporte rien. Desktop inchangé (renderSidebar filtre uniquement en dessous
+  // de 860px, voir bindMobileNavVisibility).
+  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES], hideOnMobile: true },
   // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
   // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
-  { key: 'parametres', label: 'Abonnement', icon: '💳', roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
+  { key: 'parametres', label: 'Abonnement', icon: '💳', roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' }, hideOnMobile: true }
 ];
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
@@ -231,6 +244,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindGlobalSearchEvents();
   bindNotificationEvents();
   bindUserMenuEvents();
+  // §sprint refonte UX §12 : re-filtre la barre de nav au franchissement du seuil mobile (ex.
+  // rotation d'un tablette, redimensionnement de fenêtre) — un seul listener posé une fois, jamais
+  // par render() lui-même (qui tourne bien trop souvent pour ça).
+  MOBILE_NAV_QUERY.addEventListener('change', renderSidebar);
 
   // La console BERTOLIS (super-admin multi-entreprise) est un système entièrement séparé, basé sur
   // localStorage, qui n'a besoin d'aucune donnée Supabase — une session BERTOLIS déjà active ne doit
@@ -634,12 +651,7 @@ function renderBertolisTicketDetail() {
       </div>
     </div>
     ${renderTicketDeliveryBanner(ticket.statut, ticket.date_livraison)}
-    <div class="card">
-      ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
-      ${data.contexte && data.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(data.contexte.vue)}</p>` : ''}
-      ${data.pieceJointe ? `<p><a href="${data.pieceJointe.dataUrl}" download="${escapeHtml(data.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(data.pieceJointe.nom)}</a></p>` : ''}
-    </div>
-    ${renderTicketAiSuggestion(data.aiAnalysis, true)}
+    ${renderTicketDescriptionAndAi(ticket.description, data.contexte, data.pieceJointe, data.aiAnalysis, true)}
     <div class="card">
       <div class="ticket-thread">
         ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
@@ -1602,21 +1614,17 @@ const HELP_CONTENT = {
     body: `<p>Arbre hiérarchique basé sur les rattachements managers de chaque salarié. Filtrez par établissement/service/équipe, repliez/dépliez les branches, cliquez une personne pour ouvrir sa fiche.</p>`,
     faq: [{ q: 'Un salarié apparaît au mauvais endroit ?', r: 'L\'arbre suit strictement le champ "Manager(s)" de la fiche salarié — corrigez-le depuis sa fiche, l\'organigramme se met à jour automatiquement.' }]
   },
-  conges: {
-    title: 'Congés',
-    body: `<p>Onglet <strong>Demandes</strong> : créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
-           <p>Onglet <strong>Types de congés</strong> (RH/Directeur) : créez/modifiez les types (congés payés, RTT...), leurs règles d'acquisition, workflow de validation et justificatif obligatoire.</p>`,
+  absences: {
+    title: 'Congés & absences',
+    body: `<p>3 onglets : <strong>Congés</strong> (congés payés, RTT, ancienneté...), <strong>Absences</strong> (maladie, événements familiaux, et tout autre type paramétrable), <strong>Télétravail</strong> (demandes + planning hebdomadaire). Dans Congés/Absences, créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
+           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...) — règles d'acquisition, workflow de validation, justificatif obligatoire — se fait désormais uniquement dans Paramètres > Types d'absences.</p>`,
     faq: [
       { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée — seuls Manager/RH/Directeur le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
-      { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer — l\'historique garde la trace de la correction et le motif.' }
+      { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer — l\'historique garde la trace de la correction et le motif.' },
+      { q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche — un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' },
+      { q: 'Le quota de télétravail semble faux ?', r: 'Il se recalcule par semaine ISO (lundi à dimanche) en cumulant toutes les demandes Validées/En attente de cette semaine, pas seulement la demande en cours de saisie.' }
     ],
-    bonnesPratiques: ['Enregistrez en brouillon dès que les dates ne sont pas encore certaines, plutôt que d\'attendre d\'avoir toutes les informations pour ouvrir le formulaire.', 'Vérifiez le solde affiché dans le formulaire avant de valider une demande d\'équipe — un compteur négatif remontera de toute façon en Préparation de paie.']
-  },
-  'autres-absences': {
-    title: 'Autres absences',
-    body: `<p>Même moteur que Congés (demandes, validation, historique, brouillons), pour les absences hors congés payés/RTT : maladie, événements familiaux, et tout autre type paramétrable dans l'onglet Types. Un salarié peut être autorisé/restreint à certains types spécifiquement depuis sa fiche.</p>`,
-    faq: [{ q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche — un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' }],
-    bonnesPratiques: ['Cochez "Justificatif obligatoire" sur les types qui légalement en exigent un (arrêt maladie...) — cela remonte comme anomalie en Préparation de paie si oublié.']
+    bonnesPratiques: ['Enregistrez en brouillon dès que les dates ne sont pas encore certaines, plutôt que d\'attendre d\'avoir toutes les informations pour ouvrir le formulaire.', 'Vérifiez le solde affiché dans le formulaire avant de valider une demande d\'équipe — un compteur négatif remontera de toute façon en Préparation de paie.', 'Cochez "Justificatif obligatoire" sur les types qui légalement en exigent un (arrêt maladie...) — cela remonte comme anomalie en Préparation de paie si oublié.']
   },
   calendrier: {
     title: 'Calendrier',
@@ -1631,11 +1639,6 @@ const HELP_CONTENT = {
       { q: 'Le glisser-déposer est refusé, pourquoi ?', r: 'Les mêmes règles qu\'à la création s\'appliquent (chevauchement, quota télétravail hebdomadaire, période contractuelle) — le message affiché indique la règle précise en cause.' }
     ],
     bonnesPratiques: ['Utilisez la vue Mois pour repérer un déséquilibre de service en un coup d\'œil, puis la vue Semaine pour ajuster au jour près.']
-  },
-  teletravail: {
-    title: 'Télétravail',
-    body: `<p>Onglet <strong>Demandes</strong> : créez/validez le télétravail, avec un quota hebdomadaire configurable (Paramètres) qui bloque une demande en dépassement. Onglet <strong>Planning</strong> : vue hebdomadaire de qui est en télétravail.</p>`,
-    faq: [{ q: 'Le quota semble faux ?', r: 'Il se recalcule par semaine ISO (lundi à dimanche) en cumulant toutes les demandes Validées/En attente de cette semaine, pas seulement la demande en cours de saisie.' }]
   },
   frais: {
     title: 'Notes de frais',
@@ -2061,8 +2064,8 @@ function performGlobalSearch(term) {
         icon: type.icone,
         label: `${employee.prenom} ${employee.nom} · ${type.nom}`,
         sublabel: `Congé · ${formatDate(r.dateDebut)} · ${r.statut}`,
-        nav: 'conges',
-        params: { congesTab: 'demandes' }
+        nav: 'absences',
+        params: { absencesHubTab: 'conges', congesTab: 'demandes' }
       });
     }
   });
@@ -2075,8 +2078,8 @@ function performGlobalSearch(term) {
         icon: '💻',
         label: `${employee.prenom} ${employee.nom}`,
         sublabel: `Télétravail · ${formatDate(r.dateDebut)} · ${r.statut}`,
-        nav: 'teletravail',
-        params: { teletravailTab: 'demandes' }
+        nav: 'absences',
+        params: { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }
       });
     }
   });
@@ -2287,14 +2290,14 @@ function syncNotifications() {
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
     candidates.push(makeNotification(`leave-${r.id}`, '🏖️', 'Demande de congé en attente',
-      `${employee.prenom} ${employee.nom} · ${type.nom}`, 'conges', { congesTab: 'demandes' }, employee.id));
+      `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' }, employee.id));
   });
 
   teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`telework-${r.id}`, '💻', 'Demande de télétravail en attente',
-      `${employee.prenom} ${employee.nom}`, 'teletravail', { teletravailTab: 'demandes' }, employee.id));
+      `${employee.prenom} ${employee.nom}`, 'absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }, employee.id));
   });
 
   expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
@@ -2513,10 +2516,15 @@ function isNavItemActive(item, allItems) {
   return !moreSpecificSiblingActive;
 }
 
+const MOBILE_NAV_QUERY = window.matchMedia('(max-width: 860px)');
+
 function renderSidebar() {
   const user = authRepository.getCurrentUser();
   if (!user) return;
-  const items = navItemsForRole(user);
+  // §sprint refonte UX §12 : sur mobile, "Paramètres"/"Abonnement" restent accessibles via le menu
+  // utilisateur (renderUserMenuPanel) — pas besoin de les dupliquer dans une barre du bas déjà à
+  // l'étroit. Desktop (même #sidebar-nav, juste réorienté en CSS) n'est jamais filtré.
+  const items = navItemsForRole(user).filter(i => !(i.hideOnMobile && MOBILE_NAV_QUERY.matches));
   const nav = document.getElementById('sidebar-nav');
 
   const renderItem = (item, index) => {
@@ -2594,13 +2602,9 @@ function render() {
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
       bindEmployeeDetailEvents();
       break;
-    case 'conges':
-      root.innerHTML = renderConges();
-      bindCongesEvents();
-      break;
-    case 'autres-absences':
-      root.innerHTML = renderAutresAbsences();
-      bindAutresAbsencesEvents();
+    case 'absences':
+      root.innerHTML = renderAbsencesHub();
+      bindAbsencesHubEvents();
       break;
     case 'calendrier':
       root.innerHTML = renderCalendrier();
@@ -2614,17 +2618,13 @@ function render() {
       root.innerHTML = renderParametres();
       bindParametresEvents();
       break;
-    case 'teletravail':
-      root.innerHTML = renderTeletravail();
-      bindTeletravailEvents();
-      break;
     case 'frais':
       root.innerHTML = renderFrais();
       bindFraisEvents();
       break;
     case 'tickets':
-      root.innerHTML = renderTickets();
-      bindTicketsEvents();
+      root.innerHTML = renderTicketsHub();
+      bindTicketsHubEvents();
       break;
     case 'export-paie':
       root.innerHTML = renderExportPaie();
@@ -2830,8 +2830,8 @@ function renderDashboardActionCenter(employees, employeeIds) {
     const congesEnAttente = pendingFor(leaveRepository);
     const teletravailEnAttente = pendingFor(teleworkRepository);
     const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
-    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER });
-    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'teletravail', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
+    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'absences', navParams: NAVPARAMS_CONGES_A_VALIDER });
+    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     if (contractEnds.length) items.push({ icon: '📄', label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
   }
 
@@ -4601,6 +4601,22 @@ function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
   `;
 }
 
+/** §sprint refonte UX §11 : description et suggestion IA côte à côte sur desktop large (contenu
+ * court, comparaison naturelle) — seulement quand l'IA a une suggestion à montrer, sinon la
+ * description reste seule (pas de grille à une seule case). Partagé entre la vue salarié
+ * (renderTicketDetail) et la vue BERTOLIS (renderBertolisTicketDetail). */
+function renderTicketDescriptionAndAi(description, contexte, pieceJointe, aiAnalysis, showApplyButton) {
+  const descriptionCard = `
+    <div class="card">
+      ${description ? `<p>${escapeHtml(description).replace(/\n/g, '<br>')}</p>` : ''}
+      ${contexte && contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(contexte.vue)}</p>` : ''}
+      ${pieceJointe ? `<p><a href="${pieceJointe.dataUrl}" download="${escapeHtml(pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(pieceJointe.nom)}</a></p>` : ''}
+    </div>
+  `;
+  if (!aiAnalysis) return descriptionCard;
+  return `<div class="detail-grid">${descriptionCard}${renderTicketAiSuggestion(aiAnalysis, showApplyButton)}</div>`;
+}
+
 function renderTicketDetail(id) {
   const ticket = supportTicketRepository.getById(id);
   if (!ticket) return `<button class="btn-link" id="btn-back-to-tickets">← Retour</button><div class="empty-state"><p>Ticket introuvable.</p></div>`;
@@ -4642,12 +4658,7 @@ function renderTicketDetail(id) {
       <div class="detail-header-actions">${statutControls}</div>
     </div>
     ${renderTicketDeliveryBanner(ticket.statut, ticket.dateLivraison)}
-    <div class="card">
-      ${ticket.description ? `<p>${escapeHtml(ticket.description).replace(/\n/g, '<br>')}</p>` : ''}
-      ${ticket.contexte && ticket.contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(ticket.contexte.vue)}</p>` : ''}
-      ${ticket.pieceJointe ? `<p><a href="${ticket.pieceJointe.dataUrl}" download="${escapeHtml(ticket.pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(ticket.pieceJointe.nom)}</a></p>` : ''}
-    </div>
-    ${renderTicketAiSuggestion(ticket.aiAnalysis, false)}
+    ${renderTicketDescriptionAndAi(ticket.description, ticket.contexte, ticket.pieceJointe, ticket.aiAnalysis, false)}
     <div class="card">
       <div id="ticket-thread" class="ticket-thread">
         ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
@@ -5570,82 +5581,76 @@ function bindEmployeeDetailEvents() {
 // Vue : Congés (demandes + types paramétrables)
 // ---------------------------------------------------------------------------
 
-function renderConges() {
+/** §sprint refonte UX §7+8 : fusion Congés/Absences/Télétravail (nav "absences") — un seul écran à
+ * 3 onglets de premier niveau, chacun réutilisant tel quel son moteur existant (renderCongesDemandes/
+ * renderTeletravail*). L'onglet "Types" disparaît ici : la gestion des types reste UNIQUEMENT dans
+ * Paramètres > Types d'absences (renderParametresTypesAbsences, déjà en place) — une seule source de
+ * vérité, comme demandé (§8). Télétravail garde son propre sous-onglet Demandes/Planning en 2ᵉ niveau
+ * (pas un doublon : le Planning hebdomadaire n'existe pas pour Congés/Absences). */
+function renderAbsencesHub() {
   const user = authRepository.getCurrentUser();
   const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
+  const tab = state.absencesHubTab || 'conges';
+  const TABS = {
+    conges: { label: 'Congés', subtitle: 'Demandes de congés payés, RTT, ancienneté...', btnId: 'btn-conges-a-valider' },
+    autres: { label: 'Absences', subtitle: 'Maladie, événements familiaux et autres absences paramétrables', btnId: 'btn-autres-absences-a-valider' },
+    teletravail: { label: 'Télétravail', subtitle: 'Demandes, validations et planning hebdomadaire', btnId: 'btn-teletravail-a-valider' }
+  };
+
   return `
     <div class="view-header view-header-row">
       <div>
-        <h1>Congés</h1>
-        <p class="view-subtitle">Demandes, validations et types de congés payés/RTT/ancienneté (§14)</p>
+        <h1>Congés & absences</h1>
+        <p class="view-subtitle">${TABS[tab].subtitle}</p>
       </div>
-      ${canValider ? `<div class="detail-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-conges-a-valider">Voir les demandes à valider</button></div>` : ''}
+      ${canValider ? `<div class="detail-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="${TABS[tab].btnId}">Voir les demandes à valider</button></div>` : ''}
     </div>
     <div class="tabs">
-      <button class="tab ${state.congesTab === 'demandes' ? 'active' : ''}" data-conges-tab="demandes">Demandes</button>
-      <button class="tab ${state.congesTab === 'types' ? 'active' : ''}" data-conges-tab="types">Types de congés</button>
+      ${Object.keys(TABS).map(key => `<button class="tab ${tab === key ? 'active' : ''}" data-absences-hub-tab="${key}">${TABS[key].label}</button>`).join('')}
     </div>
-    <div id="conges-tab-content">
-      ${state.congesTab === 'types' ? renderCongesTypes('conge') : renderCongesDemandes('conge')}
+    <div id="absences-hub-tab-content">
+      ${tab === 'conges' ? renderCongesDemandes('conge') : tab === 'autres' ? renderCongesDemandes('autre') : renderAbsencesHubTeletravail()}
     </div>
   `;
 }
 
-function bindCongesEvents() {
-  document.querySelectorAll('[data-conges-tab]').forEach(btn => {
+function renderAbsencesHubTeletravail() {
+  return `
+    <div class="tabs" style="margin-bottom: 14px;">
+      <button class="tab ${state.teletravailTab === 'demandes' ? 'active' : ''}" data-teletravail-tab="demandes">Demandes</button>
+      <button class="tab ${state.teletravailTab === 'planning' ? 'active' : ''}" data-teletravail-tab="planning">Planning</button>
+    </div>
+    ${state.teletravailTab === 'planning' ? renderTeletravailPlanning() : renderTeletravailDemandes()}
+  `;
+}
+
+function bindAbsencesHubEvents() {
+  const tab = state.absencesHubTab || 'conges';
+
+  document.querySelectorAll('[data-absences-hub-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.congesTab = btn.dataset.congesTab;
+      state.absencesHubTab = btn.dataset.absencesHubTab;
       render();
     });
   });
 
-  const btnAValider = document.getElementById('btn-conges-a-valider');
+  const btnAValider = document.getElementById('btn-conges-a-valider') || document.getElementById('btn-autres-absences-a-valider') || document.getElementById('btn-teletravail-a-valider');
   if (btnAValider) {
     btnAValider.addEventListener('click', () => {
-      Object.assign(state, NAVPARAMS_CONGES_A_VALIDER);
+      if (tab === 'teletravail') Object.assign(state, NAVPARAMS_TELETRAVAIL_A_VALIDER);
+      else Object.assign(state, NAVPARAMS_CONGES_A_VALIDER);
       render();
     });
   }
 
-  if (state.congesTab === 'types') {
-    bindCongesTypesEvents('conge');
-  } else {
-    bindCongesDemandesEvents('conge');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Vue : Autres absences (§15) — même moteur que Congés, filtré par categorie
-// ---------------------------------------------------------------------------
-
-function renderAutresAbsences() {
-  return `
-    <div class="view-header">
-      <h1>Autres absences</h1>
-      <p class="view-subtitle">Maladie, événements familiaux et autres absences paramétrables (§15)</p>
-    </div>
-    <div class="tabs">
-      <button class="tab ${state.autresAbsencesTab === 'demandes' ? 'active' : ''}" data-autres-absences-tab="demandes">Demandes</button>
-      <button class="tab ${state.autresAbsencesTab === 'types' ? 'active' : ''}" data-autres-absences-tab="types">Types d'absence</button>
-    </div>
-    <div id="conges-tab-content">
-      ${state.autresAbsencesTab === 'types' ? renderCongesTypes('autre') : renderCongesDemandes('autre')}
-    </div>
-  `;
-}
-
-function bindAutresAbsencesEvents() {
-  document.querySelectorAll('[data-autres-absences-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.autresAbsencesTab = btn.dataset.autresAbsencesTab;
-      render();
+  if (tab === 'conges') bindCongesDemandesEvents('conge');
+  else if (tab === 'autres') bindCongesDemandesEvents('autre');
+  else {
+    document.querySelectorAll('[data-teletravail-tab]').forEach(btn => {
+      btn.addEventListener('click', () => { state.teletravailTab = btn.dataset.teletravailTab; render(); });
     });
-  });
-
-  if (state.autresAbsencesTab === 'types') {
-    bindCongesTypesEvents('autre');
-  } else {
-    bindCongesDemandesEvents('autre');
+    if (state.teletravailTab === 'planning') bindTeletravailPlanningEvents();
+    else bindTeletravailDemandesEvents();
   }
 }
 
@@ -6610,8 +6615,8 @@ function submitLeaveRequestForm(evt) {
   if (state._leaveRequestReturnToCalendar) {
     state._leaveRequestReturnToCalendar = false;
     navigateTo('calendrier');
-  } else if (type.categorie === 'conge') navigateTo('conges', { congesTab: 'demandes' });
-  else navigateTo('autres-absences', { autresAbsencesTab: 'demandes' });
+  } else if (type.categorie === 'conge') navigateTo('absences', { absencesHubTab: 'conges', congesTab: 'demandes' });
+  else navigateTo('absences', { absencesHubTab: 'autres', congesTab: 'demandes' });
 }
 
 // ---- Sous-vue : Types de congés ----
@@ -7040,8 +7045,9 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = []) {
     showToast('Type de congé créé.');
   }
   closeModal();
-  if (categorie === 'conge') navigateTo('conges', { congesTab: 'types' });
-  else navigateTo('autres-absences', { autresAbsencesTab: 'types' });
+  // §sprint refonte UX §8 : la gestion des types ne vit plus que dans Paramètres (plus de sous-onglet
+  // "Types" dans Congés & absences) — seul point d'entrée restant vers ce formulaire.
+  navigateTo('parametres', { parametresTab: 'types-absences', parametresTypesCategorie: categorie });
 }
 
 // ---------------------------------------------------------------------------
@@ -7081,8 +7087,8 @@ function renderCalendrierValidationsCard(user) {
     <div class="card action-center" style="margin-bottom: 16px;">
       <h2>Vos validations</h2>
       <div class="action-center-list">
-        ${item(congesEnAttente, 'demande de congé', 'conges', NAVPARAMS_CONGES_A_VALIDER)}
-        ${item(teletravailEnAttente, 'demande de télétravail', 'teletravail', NAVPARAMS_TELETRAVAIL_A_VALIDER)}
+        ${item(congesEnAttente, 'demande de congé', 'absences', NAVPARAMS_CONGES_A_VALIDER)}
+        ${item(teletravailEnAttente, 'demande de télétravail', 'absences', NAVPARAMS_TELETRAVAIL_A_VALIDER)}
         ${item(fraisEnAttente, 'note de frais', 'frais', NAVPARAMS_FRAIS_A_VALIDER)}
       </div>
     </div>
@@ -7122,6 +7128,36 @@ function buildCalendarSharedData(cells) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Composant partagé "Moi / Équipe" (§sprint refonte UX §9) — Calendrier, Planning et Tickets
+// restaurant utilisaient chacun leur propre bascule dupliquée ; un seul composant maintenant, même
+// style/comportement partout. `stateKey` est le nom de la clé d'état ('calendrierVue',
+// 'planningVue', 'ticketsRestaurantVue'), `teamValue`/`teamLabel` restent propres à chaque écran
+// (ex. "Calendrier équipe" pour un manager, "Calendrier entreprise" pour RH/Directeur) pour ne pas
+// avoir à renommer les valeurs d'état déjà lues ailleurs dans le code (buildCalendarSharedData...).
+// ---------------------------------------------------------------------------
+
+function renderMoiEquipeToggle(stateKey, teamValue, teamLabel) {
+  const user = authRepository.getCurrentUser();
+  if (user.role === ROLES.SALARIE) return '';
+  const isPersonnel = state[stateKey] === 'personnel';
+  return `
+    <div class="tabs moi-equipe-toggle" style="margin-bottom: 12px;">
+      <button class="tab ${!isPersonnel ? 'active' : ''}" data-moi-equipe="${stateKey}" data-moi-equipe-value="${teamValue}">${escapeHtml(teamLabel)}</button>
+      <button class="tab ${isPersonnel ? 'active' : ''}" data-moi-equipe="${stateKey}" data-moi-equipe-value="personnel">Moi</button>
+    </div>
+  `;
+}
+
+function bindMoiEquipeToggleEvents() {
+  document.querySelectorAll('[data-moi-equipe]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state[btn.dataset.moiEquipe] = btn.dataset.moiEquipeValue;
+      render();
+    });
+  });
+}
+
 /** Catalogue des catégories filtrables du calendrier (légende + filtres cliquables, §sprint
  * calendrier légende/filtres) — une seule source de vérité pour le libellé, l'icône et la classe de
  * couleur, réutilisée à la fois par la légende et par les badges de case pour rester cohérentes. */
@@ -7129,7 +7165,8 @@ const CALENDAR_FILTER_CATEGORIES = [
   { key: 'conge', label: 'Congé', icon: '🏖️', swatchClass: 'legend-conge' },
   { key: 'anniversaire', label: 'Anniversaire', icon: '🎂', swatchClass: 'legend-anniversaire' },
   { key: 'teletravail', label: 'Télétravail', icon: '💻', swatchClass: 'legend-teletravail' },
-  { key: 'arrivee', label: 'Arrivée', icon: '🎉', swatchClass: 'legend-arrivee' },
+  // §sprint refonte UX : 🎉 remplacé par 🚀, moins ambigu (fête générique vs prise de poste).
+  { key: 'arrivee', label: 'Arrivée', icon: '🚀', swatchClass: 'legend-arrivee' },
   { key: 'depart', label: 'Départ', icon: '👋', swatchClass: 'legend-depart' },
   { key: 'ferie', label: 'Jour férié', icon: null, swatchClass: 'legend-holiday' },
   { key: 'vacances', label: 'Vacances scolaires', icon: null, swatchClass: 'legend-school' }
@@ -7145,21 +7182,35 @@ function getCalendarFilters() {
   return state.calendarFilters;
 }
 
-function renderCalendarLegend(settings) {
+/** §sprint refonte UX §3-4 : bande compacte toujours visible (pastilles seules) — le détail
+ * (libellés + toggle) vit désormais dans le popover "Filtres" (`renderCalendarFiltersPanelContent`),
+ * jamais affiché en permanence. Logique de filtrage inchangée (`state.calendarFilters`). */
+function renderCalendarFilterBar() {
   const filters = getCalendarFilters();
   return `
-    <div class="card calendar-legend">
-      ${CALENDAR_FILTER_CATEGORIES.map(c => {
-        const active = filters[c.key] !== false;
-        const label = c.key === 'vacances' ? `Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})` : c.label;
-        return `
-          <button type="button" class="legend-item${active ? '' : ' legend-item-inactive'}" data-calendar-filter="${c.key}" aria-pressed="${active}" title="Afficher/masquer : ${escapeHtml(c.label)}">
-            <span class="legend-swatch ${c.swatchClass}"></span>${c.icon ? ` ${c.icon}` : ''} ${label}
-          </button>
-        `;
-      }).join('')}
+    <div class="calendar-filter-bar">
+      <div class="calendar-filter-dots">
+        ${CALENDAR_FILTER_CATEGORIES.map(c => `<span class="calendar-filter-dot ${c.swatchClass}${filters[c.key] === false ? ' legend-item-inactive' : ''}" title="${escapeHtml(c.label)}"></span>`).join('')}
+      </div>
+      <div class="dropdown-wrapper">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-calendar-filters">Filtres</button>
+        <div class="dropdown-panel align-left" id="calendar-filters-panel"></div>
+      </div>
     </div>
   `;
+}
+
+function renderCalendarFiltersPanelContent(settings) {
+  const filters = getCalendarFilters();
+  return CALENDAR_FILTER_CATEGORIES.map(c => {
+    const active = filters[c.key] !== false;
+    const label = c.key === 'vacances' ? `Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})` : c.label;
+    return `
+      <button type="button" class="legend-item${active ? '' : ' legend-item-inactive'}" data-calendar-filter="${c.key}" aria-pressed="${active}" title="Afficher/masquer : ${escapeHtml(c.label)}">
+        <span class="legend-swatch ${c.swatchClass}"></span>${c.icon ? ` ${c.icon}` : ''} ${label}
+      </button>
+    `;
+  }).join('');
 }
 
 function renderCalendrier() {
@@ -7168,41 +7219,41 @@ function renderCalendrier() {
   const settings = settingsRepository.getSettings();
   const user = authRepository.getCurrentUser();
   const hasWiderView = user.role !== ROLES.SALARIE;
+  // §sprint refonte UX §2 : signale un manque de couverture des vacances scolaires de façon
+  // générale (n'importe quel mois hors couverture), jamais une correction figée pour "octobre".
+  const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
+  const coverageGap = isMonthBeyondSchoolYearCoverage(state.calendarYear, state.calendarMonth, schoolHolidays);
 
   return `
     <div class="view-header-row">
-      <div>
-        <h1>Calendrier</h1>
-        <p class="view-subtitle">${MONTH_NAMES[state.calendarMonth]} ${state.calendarYear}</p>
+      <div class="calendar-month-nav">
+        <button type="button" class="calendar-month-nav-btn" id="btn-cal-prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
+        <div>
+          <h1 style="margin: 0;">Calendrier</h1>
+          <p class="view-subtitle">${MONTH_NAMES[state.calendarMonth]} ${state.calendarYear}</p>
+        </div>
+        <button type="button" class="calendar-month-nav-btn" id="btn-cal-next" aria-label="Mois suivant" title="Mois suivant">›</button>
       </div>
       <div class="calendar-nav">
         <button class="btn btn-secondary btn-sm" id="btn-cal-today">Aujourd'hui</button>
       </div>
     </div>
 
-    ${hasWiderView ? `
-      <div class="tabs" style="margin-bottom: 12px;">
-        <button class="tab ${state.calendrierVue !== 'personnel' ? 'active' : ''}" data-calendrier-vue="entreprise">${user.role === ROLES.MANAGER ? 'Calendrier équipe' : 'Calendrier entreprise'}</button>
-        <button class="tab ${state.calendrierVue === 'personnel' ? 'active' : ''}" data-calendrier-vue="personnel">Mon calendrier</button>
-      </div>
-    ` : ''}
+    ${hasWiderView ? renderMoiEquipeToggle('calendrierVue', 'entreprise', user.role === ROLES.MANAGER ? 'Calendrier équipe' : 'Calendrier entreprise') : ''}
 
     ${hasWiderView && state.calendrierVue === 'personnel' ? renderCalendrierValidationsCard(user) : ''}
 
-    <div class="calendar-card-wrap">
-      <button type="button" class="calendar-side-nav" id="btn-cal-prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
-      <div class="card calendar-card">
-        <div class="calendar-grid calendar-grid-header">
-          ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
-        </div>
-        <div class="calendar-grid">
-          ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
-        </div>
+    <div class="card calendar-card">
+      <div class="calendar-grid calendar-grid-header">
+        ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
       </div>
-      <button type="button" class="calendar-side-nav" id="btn-cal-next" aria-label="Mois suivant" title="Mois suivant">›</button>
+      <div class="calendar-grid">
+        ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
+      </div>
     </div>
 
-    ${renderCalendarLegend(settings)}
+    ${renderCalendarFilterBar()}
+    ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">📅 Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
   `;
 }
 
@@ -7215,12 +7266,43 @@ function bindCalendrierEvents() {
     state.calendarMonth = now.getMonth();
     render();
   });
-  document.querySelectorAll('[data-calendrier-vue]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.calendrierVue = btn.dataset.calendrierVue;
-      render();
+  bindMoiEquipeToggleEvents();
+
+  const btnGotoVacances = document.getElementById('btn-cal-goto-vacances-settings');
+  if (btnGotoVacances) {
+    btnGotoVacances.addEventListener('click', () => navigateTo('parametres', { parametresTab: 'vacances' }));
+  }
+
+  const filtersBtn = document.getElementById('btn-calendar-filters');
+  const filtersPanel = document.getElementById('calendar-filters-panel');
+  if (filtersBtn && filtersPanel) {
+    filtersBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (filtersPanel.classList.contains('open')) { filtersPanel.classList.remove('open'); return; }
+      filtersPanel.innerHTML = renderCalendarFiltersPanelContent(settingsRepository.getSettings());
+      bindCalendarFilterToggles();
+      filtersPanel.classList.add('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.dropdown-wrapper')) filtersPanel.classList.remove('open');
+    });
+  }
+
+  document.querySelectorAll('[data-calendar-day]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const dateStr = cell.dataset.calendarDay;
+      if (cell.dataset.calendarCreate) {
+        openCalendarQuickAddModal(dateStr);
+      } else {
+        openCalendarDayModal(dateStr);
+      }
     });
   });
+}
+
+/** Extrait de bindCalendrierEvents : le contenu du popover Filtres est régénéré à chaque ouverture
+ * (voir bindCalendrierEvents), donc ses propres écouteurs doivent être re-posés à chaque fois. */
+function bindCalendarFilterToggles() {
   document.querySelectorAll('[data-calendar-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       const filters = getCalendarFilters();
@@ -7229,16 +7311,41 @@ function bindCalendrierEvents() {
       render();
     });
   });
-  document.querySelectorAll('[data-calendar-day]').forEach(cell => {
-    cell.addEventListener('click', () => {
-      const dateStr = cell.dataset.calendarDay;
-      if (cell.dataset.calendarCreate) {
-        state._leaveRequestReturnToCalendar = true;
-        openLeaveRequestModal(authRepository.getCurrentUser().id, undefined, undefined, dateStr);
-      } else {
-        openCalendarDayModal(dateStr);
-      }
-    });
+}
+
+/** §sprint refonte UX §6 : petit choix rapide (Congé/absence vs Télétravail) au clic sur un jour
+ * vide, plutôt qu'ouvrir directement openLeaveRequestModal — réutilise le patron modal existant. */
+function openCalendarQuickAddModal(dateStr) {
+  const user = authRepository.getCurrentUser();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${escapeHtml(formatDate(dateStr))}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-top: 0;">Que souhaitez-vous ajouter ?</p>
+        <button type="button" class="legend-item" id="btn-quick-add-conge" style="margin-bottom: 8px;">
+          🏖️ Congé / absence
+        </button>
+        <button type="button" class="legend-item" id="btn-quick-add-teletravail">
+          💻 Télétravail
+        </button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-quick-add-conge').addEventListener('click', () => {
+    state._leaveRequestReturnToCalendar = true;
+    openLeaveRequestModal(user.id, undefined, undefined, dateStr);
+  });
+  document.getElementById('btn-quick-add-teletravail').addEventListener('click', () => {
+    state._leaveRequestReturnToCalendar = true;
+    openTeleworkRequestModal(user.id, undefined, dateStr);
   });
 }
 
@@ -7335,7 +7442,7 @@ function renderCalendarCell(cell, sharedData) {
     teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
     teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
     info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', '🎂', info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
-    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', '🎉', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
+    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', '🚀', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
     info.departs.length && filters.depart !== false ? calendarBadge('depart', '👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
   ].join('');
 
@@ -7386,7 +7493,7 @@ function openCalendarDayModal(dateStr) {
     { label: 'Congés / absences', items: info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.icone} ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}`) },
     { label: 'Télétravail', items: info.teletravail.map(t => `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}`) },
     { label: 'Anniversaires', items: info.anniversaires.map(e => `🎂 ${e.prenom} ${e.nom}`) },
-    { label: 'Arrivées', items: info.arrivees.map(e => `🎉 ${e.prenom} ${e.nom}`) },
+    { label: 'Arrivées', items: info.arrivees.map(e => `🚀 ${e.prenom} ${e.nom}`) },
     { label: 'Départs', items: info.departs.map(e => `👋 ${e.prenom} ${e.nom}`) }
   ].filter(s => s.items.length);
 
@@ -8184,8 +8291,16 @@ function bindParametresListesEvents() {
 function renderParametresVacances() {
   const settings = settingsRepository.getSettings();
   const schoolData = schoolHolidayRepository.getSchoolHolidays();
+  // §sprint refonte UX §2 : avertissement général (pas propre à un mois précis) — se déclenche dès
+  // que le calendrier affiché aujourd'hui sort de la couverture des périodes saisies.
+  const coverageGap = isMonthBeyondSchoolYearCoverage(new Date().getFullYear(), new Date().getMonth(), schoolData);
 
   return `
+    ${coverageGap ? `
+      <div class="card" style="border-color: var(--color-warning); background: var(--color-warning-soft); margin-bottom: 16px;">
+        <p style="margin: 0;">⚠️ Aucune période de vacances scolaires n'est définie pour le mois en cours. Ajoutez l'année scolaire suivante ci-dessous pour que le calendrier reste à jour.</p>
+      </div>
+    ` : ''}
     <div class="card">
       <h2>Zone de l'entreprise</h2>
       <p class="text-muted">Détermine quelles vacances scolaires apparaissent dans le calendrier et les compteurs.</p>
@@ -8911,10 +9026,7 @@ function renderPlanning() {
       <h1>Planning</h1>
       <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail — congés et télétravail validés</p>
     </div>
-    <div class="tabs" style="margin-bottom: 10px;">
-      <button class="tab ${state.planningVue !== 'personnel' ? 'active' : ''}" data-planning-vue="equipe">Planning équipe</button>
-      <button class="tab ${state.planningVue === 'personnel' ? 'active' : ''}" data-planning-vue="personnel">Mon planning</button>
-    </div>
+    ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
     <div class="tabs">
       <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
       <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
@@ -9333,9 +9445,7 @@ function bindPlanningEvents() {
   document.querySelectorAll('[data-planning-view]').forEach(btn => {
     btn.addEventListener('click', () => { state.planningView = btn.dataset.planningView; render(); });
   });
-  document.querySelectorAll('[data-planning-vue]').forEach(btn => {
-    btn.addEventListener('click', () => { state.planningVue = btn.dataset.planningVue; render(); });
-  });
+  bindMoiEquipeToggleEvents();
 
   document.getElementById('planning-filter-service').addEventListener('change', (e) => {
     state.planningFilters.service = e.target.value;
@@ -9482,44 +9592,6 @@ function shiftPlanningMonth(delta) {
 // Vue : Télétravail (demandes + planning)
 // ---------------------------------------------------------------------------
 
-function renderTeletravail() {
-  const user = authRepository.getCurrentUser();
-  const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
-  return `
-    <div class="view-header view-header-row">
-      <div>
-        <h1>Télétravail</h1>
-        <p class="view-subtitle">Demandes, validations et planning hebdomadaire</p>
-      </div>
-      ${canValider ? `<div class="detail-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-teletravail-a-valider">Voir les demandes à valider</button></div>` : ''}
-    </div>
-    <div class="tabs">
-      <button class="tab ${state.teletravailTab === 'demandes' ? 'active' : ''}" data-teletravail-tab="demandes">Demandes</button>
-      <button class="tab ${state.teletravailTab === 'planning' ? 'active' : ''}" data-teletravail-tab="planning">Planning</button>
-    </div>
-    <div id="teletravail-tab-content">
-      ${state.teletravailTab === 'planning' ? renderTeletravailPlanning() : renderTeletravailDemandes()}
-    </div>
-  `;
-}
-
-function bindTeletravailEvents() {
-  document.querySelectorAll('[data-teletravail-tab]').forEach(btn => {
-    btn.addEventListener('click', () => { state.teletravailTab = btn.dataset.teletravailTab; render(); });
-  });
-
-  const btnAValider = document.getElementById('btn-teletravail-a-valider');
-  if (btnAValider) {
-    btnAValider.addEventListener('click', () => {
-      Object.assign(state, NAVPARAMS_TELETRAVAIL_A_VALIDER);
-      render();
-    });
-  }
-
-  if (state.teletravailTab === 'planning') bindTeletravailPlanningEvents();
-  else bindTeletravailDemandesEvents();
-}
-
 // ---- Sous-vue : Demandes ----
 
 function getFilteredTeleworkRequests() {
@@ -9661,9 +9733,18 @@ function handleCancelTelework(id) {
 
 // ---- Modale : Nouvelle demande de télétravail ----
 
-function openTeleworkRequestModal(presetEmployeeId, draft) {
+/** presetDate : préremplit début ET fin (choix rapide "Télétravail" depuis une case du calendrier,
+ * §sprint refonte UX) — ignoré si un brouillon fournit déjà ses propres dates. Contrairement aux
+ * congés/absences, une demande de télétravail n'a pas de notion de demi-journée dans ce modèle
+ * (champ absent de makeEmptyTeleworkRequest) — pas ajouté ici pour ne pas étendre le modèle de
+ * données au-delà de ce qui est demandé. */
+function openTeleworkRequestModal(presetEmployeeId, draft, presetDate) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const champs = (draft && draft.champs) || {};
+  if (!draft && presetDate) {
+    champs.dateDebut = presetDate;
+    champs.dateFin = presetDate;
+  }
   beginDraftEdit(draft);
 
   const html = `
@@ -9899,7 +9980,13 @@ function submitTeleworkRequestForm(evt) {
   finalizeDraftEdit();
   showToast('Demande de télétravail envoyée.');
   closeModal();
-  navigateTo('teletravail', { teletravailTab: 'demandes' });
+  // Ouverte depuis un clic sur le calendrier : on y retourne (même logique que openLeaveRequestModal).
+  if (state._leaveRequestReturnToCalendar) {
+    state._leaveRequestReturnToCalendar = false;
+    navigateTo('calendrier');
+  } else {
+    navigateTo('absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' });
+  }
 }
 
 // ---- Sous-vue : Planning hebdomadaire ----
@@ -10403,6 +10490,144 @@ function openExpenseDetailModal(id) {
 // Vue : Tickets restaurant (calcul automatique, aucune saisie)
 // ---------------------------------------------------------------------------
 
+/** §sprint refonte UX §9-10 : point d'entrée unique du nav "tickets" — RH/Comptabilité/Directeur
+ * gardent la vue équipe historique via la bascule Moi/Équipe partagée ; tous les autres (et ces
+ * mêmes rôles en "Moi") tombent sur la nouvelle vue personnelle ci-dessous. Avant ce sprint, un
+ * salarié sans la permission CALCULER_TICKETS_RESTAURANT n'avait accès à AUCUNE vue de ses tickets. */
+function renderTicketsHub() {
+  const user = authRepository.getCurrentUser();
+  const canVoirEquipe = hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT);
+  const vueEquipe = canVoirEquipe && state.ticketsRestaurantVue !== 'personnel';
+  return `
+    ${canVoirEquipe ? renderMoiEquipeToggle('ticketsRestaurantVue', 'equipe', 'Tickets restaurant équipe') : ''}
+    ${vueEquipe ? renderTicketsEquipe() : renderMesTicketsRestaurant()}
+  `;
+}
+
+function bindTicketsHubEvents() {
+  const user = authRepository.getCurrentUser();
+  const canVoirEquipe = hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT);
+  if (canVoirEquipe) bindMoiEquipeToggleEvents();
+  const vueEquipe = canVoirEquipe && state.ticketsRestaurantVue !== 'personnel';
+  if (vueEquipe) bindTicketsEquipeEvents();
+  else bindMesTicketsRestaurantEvents();
+}
+
+/** Vue salarié : historique mensuel de ses propres tickets restaurant. Réutilise directement
+ * calculateTicketsRestaurant() (aucun nouveau calcul) et le journal d'audit existant pour le motif
+ * d'une éventuelle régularisation — DB.ajusterTicketsRestaurant() y écrit déjà ce motif en texte,
+ * pas besoin d'un nouveau champ structuré pour l'exposer ici. */
+function renderMesTicketsRestaurant() {
+  const user = authRepository.getCurrentUser();
+  const employee = employeeRepository.getById(user.id);
+  if (!employee) return '<p class="text-muted">Fiche salarié introuvable.</p>';
+  const settings = settingsRepository.getSettings();
+  const leaveRequests = leaveRepository.getAll();
+  const teleworkRequests = teleworkRepository.getAll();
+  const year = state.mesTicketsYear;
+  const month = state.mesTicketsMonth;
+  const result = calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings);
+  const regularisation = result.ajustement ? findTicketsRegularisationMotif(employee, year, month) : null;
+
+  const historique = [];
+  for (let i = 1; i <= 6; i++) {
+    const d = new Date(year, month - i, 1);
+    historique.push({
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      result: calculateTicketsRestaurant(employee, d.getFullYear(), d.getMonth(), leaveRequests, teleworkRequests, settings)
+    });
+  }
+
+  return `
+    <div class="view-header-row">
+      <div>
+        <h1>Mes tickets restaurant</h1>
+        <p class="view-subtitle">${MONTH_NAMES[month]} ${year} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur)</p>
+      </div>
+      <div class="detail-header-actions">
+        <button class="btn btn-secondary btn-sm" id="btn-mes-tickets-prev">← Précédent</button>
+        <button class="btn btn-secondary btn-sm" id="btn-mes-tickets-today">Ce mois-ci</button>
+        <button class="btn btn-secondary btn-sm" id="btn-mes-tickets-next">Suivant →</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      ${kpiCard('Jours éligibles', result.nbTickets, '📅')}
+      ${kpiCard('Tickets attribués', result.nbTickets, '🍽️')}
+      ${kpiCard('Valeur unitaire', formatCurrencyFR(settings.ticketsValeurFaciale), '💶')}
+      ${kpiCard('Montant total', formatCurrencyFR(result.montantTotal), '💰')}
+      ${kpiCard('Part employeur', formatCurrencyFR(result.partEmployeur), '🏢')}
+      ${kpiCard('Part salarié', formatCurrencyFR(result.partSalarie), '👤')}
+    </div>
+
+    ${result.ajustement ? `
+      <div class="card" style="margin-top: 12px;">
+        <p style="margin: 0;">⚖️ Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? ` — ${escapeHtml(regularisation)}` : ''}</p>
+      </div>
+    ` : ''}
+
+    <div class="card table-card" style="margin-top: 16px;">
+      <div class="view-header-row" style="padding: 16px 20px 0;">
+        <h2>Historique</h2>
+      </div>
+      <table class="table">
+        <thead><tr><th>Mois</th><th>Tickets</th><th>Montant total</th><th>Part salarié</th></tr></thead>
+        <tbody>
+          ${historique.map(h => `
+            <tr class="table-row" data-mes-tickets-month="${h.year}-${h.month}">
+              <td>${MONTH_NAMES[h.month]} ${h.year}</td>
+              <td>${h.result.nbTickets}${h.result.ajustement ? ` <span class="text-muted">(correction ${h.result.ajustement >= 0 ? '+' : ''}${h.result.ajustement})</span>` : ''}</td>
+              <td>${formatCurrencyFR(h.result.montantTotal)}</td>
+              <td>${formatCurrencyFR(h.result.partSalarie)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function findTicketsRegularisationMotif(employee, year, month) {
+  const monthKey = ticketsMonthKey(year, month);
+  const entry = DB.getAuditLog().find(e =>
+    e.entite === 'Tickets restaurant' &&
+    e.cible.startsWith(`${employee.prenom} ${employee.nom}`) &&
+    e.cible.includes(monthKey));
+  if (!entry) return null;
+  const parts = entry.cible.split(' · ');
+  return parts.length > 2 ? parts.slice(2).join(' · ') : null;
+}
+
+function bindMesTicketsRestaurantEvents() {
+  document.getElementById('btn-mes-tickets-prev').addEventListener('click', () => shiftMesTicketsMonth(-1));
+  document.getElementById('btn-mes-tickets-next').addEventListener('click', () => shiftMesTicketsMonth(1));
+  document.getElementById('btn-mes-tickets-today').addEventListener('click', () => {
+    const now = new Date();
+    state.mesTicketsYear = now.getFullYear();
+    state.mesTicketsMonth = now.getMonth();
+    render();
+  });
+  document.querySelectorAll('[data-mes-tickets-month]').forEach(row => {
+    row.addEventListener('click', () => {
+      const [y, m] = row.dataset.mesTicketsMonth.split('-').map(Number);
+      state.mesTicketsYear = y;
+      state.mesTicketsMonth = m;
+      render();
+    });
+  });
+}
+
+function shiftMesTicketsMonth(delta) {
+  let month = state.mesTicketsMonth + delta;
+  let year = state.mesTicketsYear;
+  if (month < 0) { month = 11; year -= 1; }
+  if (month > 11) { month = 0; year += 1; }
+  state.mesTicketsMonth = month;
+  state.mesTicketsYear = year;
+  render();
+}
+
 function getTicketsRows() {
   const year = state.ticketsYear;
   const month = state.ticketsMonth;
@@ -10423,7 +10648,10 @@ function getTicketsRows() {
   }));
 }
 
-function renderTickets() {
+/** §sprint refonte UX §9-10 : vue équipe historique de Tickets restaurant (RH/Comptabilité/
+ * Directeur), désormais atteinte via la bascule Moi/Équipe (renderTicketsHub) plutôt qu'une entrée
+ * de menu séparée. Corps inchangé. */
+function renderTicketsEquipe() {
   const settings = settingsRepository.getSettings();
   const rows = getTicketsRows();
   const canCorriger = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.CORRIGER_TICKETS_RESTAURANT);
@@ -10527,7 +10755,7 @@ function openCorrigerTicketsModal(employeeId) {
   });
 }
 
-function bindTicketsEvents() {
+function bindTicketsEquipeEvents() {
   document.getElementById('btn-tickets-prev').addEventListener('click', () => shiftTicketsMonth(-1));
   document.getElementById('btn-tickets-next').addEventListener('click', () => shiftTicketsMonth(1));
   document.getElementById('btn-tickets-today').addEventListener('click', () => {
