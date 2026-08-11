@@ -6807,7 +6807,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               ${selectField('acquisition', 'Mode d\'acquisition', ['Mensuelle', 'Annuelle', 'Illimitée'], type.acquisition)}
               <div class="form-field" id="field-nombre-annuel">
                 <label for="f-nombreAnnuel" id="label-nombre-annuel">Nombre de jours par an</label>
-                <input class="input" type="number" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
+                <input class="input" type="number" step="any" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
               </div>
             </div>
             <div class="form-grid" style="margin-top:14px;">
@@ -6832,7 +6832,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               </div>
               <div class="form-field" id="field-report-limite" style="display:${type.reportCompteur === 'limite' ? 'flex' : 'none'};">
                 <label for="f-reportLimiteJours">Plafond de report (jours)</label>
-                <input class="input" type="number" min="0" id="f-reportLimiteJours" name="reportLimiteJours" value="${escapeHtml(type.reportLimiteJours || '')}">
+                <input class="input" type="number" step="any" min="0" id="f-reportLimiteJours" name="reportLimiteJours" value="${escapeHtml(type.reportLimiteJours || '')}">
               </div>
             </div>
           </fieldset>
@@ -6924,7 +6924,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   function renderRegleValueInput(regle, index) {
     const criterion = RULE_CRITERIA[regle.critere];
     if (criterion.valueType === 'number') {
-      return `<input class="input" type="number" data-regle-valeur="${index}" value="${escapeHtml(regle.valeur ?? '')}" style="flex:1;">`;
+      return `<input class="input" type="number" step="any" data-regle-valeur="${index}" value="${escapeHtml(regle.valeur ?? '')}" style="flex:1;">`;
     }
     const options = criterion.valueType === 'categorieSalarie' ? categoriesSalarieOptions.map(c => ({ value: c.id, label: c.nom }))
       : criterion.valueType === 'etablissement' ? etablissementsOptions.map(e => ({ value: e.id, label: e.nom }))
@@ -8129,7 +8129,7 @@ function renderParametresListes() {
         </div>
         <div class="form-field">
           <label for="f-tickets-part">Part employeur (%)</label>
-          <input class="input" type="number" min="0" max="100" id="f-tickets-part" value="${escapeHtml(settings.ticketsPartEmployeurPct)}">
+          <input class="input" type="number" step="any" min="0" max="100" id="f-tickets-part" value="${escapeHtml(settings.ticketsPartEmployeurPct)}">
         </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
@@ -10595,8 +10595,10 @@ function findTicketsRegularisationMotif(employee, year, month) {
     e.cible.startsWith(`${employee.prenom} ${employee.nom}`) &&
     e.cible.includes(monthKey));
   if (!entry) return null;
+  // cible = "Prénom Nom · AAAA-MM · correction ±N[ · motif]" (voir DB.ajusterTicketsRestaurant) —
+  // le motif éventuel est tout ce qui suit le segment technique "correction ±N", jamais celui-ci.
   const parts = entry.cible.split(' · ');
-  return parts.length > 2 ? parts.slice(2).join(' · ') : null;
+  return parts.length > 3 ? parts.slice(3).join(' · ') : null;
 }
 
 function bindMesTicketsRestaurantEvents() {
@@ -11452,11 +11454,15 @@ function companyNameAutocompleteField(name, label, value, required, siretName, a
   `;
 }
 
-function textField(name, label, value, required, type = 'text') {
+/** type='number' sans step : le navigateur applique step="1" par défaut et rejette silencieusement
+ * toute décimale (aucun message d'erreur applicatif, juste un blocage natif facile à manquer) — donc
+ * "any" par défaut ici, jamais 1, puisqu'aucun des champs numériques du formulaire (montants,
+ * pourcentages, heures...) n'a de raison métier d'interdire les décimales. */
+function textField(name, label, value, required, type = 'text', step = 'any') {
   return `
     <div class="form-field">
       <label for="f-${name}">${escapeHtml(label)}${required ? ' *' : ''}</label>
-      <input class="input" type="${type}" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}" ${required ? 'required' : ''}>
+      <input class="input" type="${type}" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}" ${type === 'number' ? `step="${step}"` : ''} ${required ? 'required' : ''}>
     </div>
   `;
 }
