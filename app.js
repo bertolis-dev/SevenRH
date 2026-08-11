@@ -7194,7 +7194,7 @@ function renderCalendarFilterBar() {
       </div>
       <div class="dropdown-wrapper">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-calendar-filters">Filtres</button>
-        <div class="dropdown-panel align-left" id="calendar-filters-panel"></div>
+        <div class="dropdown-panel" id="calendar-filters-panel"></div>
       </div>
     </div>
   `;
