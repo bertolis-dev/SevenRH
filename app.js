@@ -197,7 +197,7 @@ const NAV_ITEMS = [
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
-  { key: 'mes-tickets', label: 'Mes tickets', icon: '🆘', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'mes-tickets', label: 'Mes tickets', icon: '🎫', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
@@ -1196,7 +1196,7 @@ function renderUserMenuPanel() {
     </div>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">⚙️ Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">💳 Abonnement</button>` : ''}
-    <button type="button" class="user-menu-item" id="btn-user-menu-support">🆘 Aide / Signaler un problème</button>
+    <button type="button" class="user-menu-item" id="btn-user-menu-support">🎫 Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
