@@ -3,39 +3,78 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Installer Nexus</title>
+  <title>Nexus — Le SIRH simple pour piloter congés, planning, paie et notes de frais</title>
   <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
   <link rel="stylesheet" href="style.css?v=20260812">
   <style>
-    .install-page {
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 48px 20px 80px;
+    body { overflow-x: hidden; }
+
+    .lp-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
     }
-    .install-hero {
-      text-align: center;
-      margin-bottom: 32px;
+    .lp-topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+    .lp-topbar-brand .logo-mark { width: 32px; height: 32px; }
+    .lp-topbar-nav { display: flex; align-items: center; gap: 20px; }
+    .lp-topbar-nav a.btn-link { font-size: 14px; }
+
+    .lp-section { max-width: 1140px; margin: 0 auto; padding: 64px 24px; }
+    .lp-section-head { text-align: center; max-width: 620px; margin: 0 auto 40px; }
+    .lp-section-head h2 { margin: 0 0 10px; font-size: 28px; }
+    .lp-section-head p { color: var(--color-text-muted); margin: 0; }
+
+    /* Hero */
+    .lp-hero { max-width: 1140px; margin: 0 auto; padding: 56px 24px 40px; display: flex; align-items: center; gap: 48px; }
+    .lp-hero-text { flex: 1; min-width: 0; }
+    .lp-hero-text .badge { margin-bottom: 14px; }
+    .lp-hero-text h1 { font-size: 38px; line-height: 1.15; margin: 0 0 16px; }
+    .lp-hero-text p { font-size: 16px; color: var(--color-text-muted); margin: 0 0 28px; max-width: 480px; }
+    .lp-hero-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .lp-hero-cta .btn { font-size: 15px; padding: 12px 24px; }
+    .lp-hero-note { margin-top: 12px; font-size: 13px; color: var(--color-text-muted); }
+
+    .lp-hero-mock { flex: 1; min-width: 0; display: flex; justify-content: center; }
+    .lp-mock-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: 20px;
     }
-    .install-hero .logo-mark { width: 64px; height: 64px; margin: 0 auto 16px; }
-    .install-hero h1 { margin: 0 0 8px; font-size: 26px; }
-    .install-hero p { color: var(--color-text-muted); margin: 0; }
-    .install-cta {
-      text-align: center;
-      margin: 28px 0 36px;
-    }
-    #btn-install-native {
-      font-size: 15px;
-      padding: 12px 28px;
-    }
-    .install-status {
-      margin-top: 10px;
-      font-size: 13px;
-      color: var(--color-text-muted);
-    }
-    .install-methods { display: grid; gap: 14px; }
+    .lp-mock-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .lp-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-border); }
+    .lp-mock-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .lp-mock-kpi { background: var(--color-muted-soft); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+    .lp-mock-kpi strong { display: block; font-size: 18px; }
+    .lp-mock-kpi span { font-size: 11px; color: var(--color-text-muted); }
+    .lp-mock-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); background: var(--color-muted-soft); margin-bottom: 8px; font-size: 13px; }
+    .lp-mock-row .badge { margin-left: auto; }
+
+    /* Features */
+    .lp-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .lp-feature-card { text-align: left; }
+    .lp-feature-icon { font-size: 26px; margin-bottom: 10px; }
+    .lp-feature-card h3 { margin: 0 0 6px; font-size: 16px; }
+    .lp-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
+
+    /* Pricing (repris de l'écran Abonnement) */
+    .lp-pricing-toggle { display: flex; justify-content: center; margin-bottom: 28px; }
+
+    /* Install */
+    .lp-install-section { background: var(--color-muted-soft); }
+    .install-methods { display: grid; gap: 14px; max-width: 640px; margin: 0 auto; }
     .install-method summary {
       cursor: pointer;
       font-weight: 600;
@@ -50,36 +89,146 @@
     .install-method ol { margin: 12px 0 0; padding-left: 22px; color: var(--color-text-muted); }
     .install-method ol li { margin-bottom: 6px; }
     .install-method .badge { margin-left: auto; }
-    .install-back { text-align: center; margin-top: 32px; }
+    .install-status { text-align: center; margin: 16px 0 0; font-size: 13px; color: var(--color-text-muted); }
+
+    .lp-footer { text-align: center; padding: 32px 24px 48px; color: var(--color-text-muted); font-size: 13px; }
+    .lp-footer a { color: inherit; }
+
+    @media (max-width: 860px) {
+      .lp-topbar-nav a:not(.btn) { display: none; }
+      .lp-hero { flex-direction: column; text-align: center; padding-top: 36px; }
+      .lp-hero-text p { max-width: none; }
+      .lp-hero-cta { justify-content: center; }
+      .lp-hero-text h1 { font-size: 30px; }
+      .lp-section { padding: 48px 20px; }
+      .lp-mock-card { max-width: 340px; }
+    }
+    @media (max-width: 480px) {
+      .lp-hero-cta { flex-direction: column; align-items: stretch; }
+      .lp-hero-cta .btn { width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <div class="install-page">
-    <div class="install-hero">
+  <header class="lp-topbar">
+    <div class="lp-topbar-brand">
       <span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>
-      <h1>Installer Nexus</h1>
-      <p>Ajoutez Nexus sur votre bureau ou votre écran d'accueil pour l'ouvrir comme une application, en un clic — pas de magasin d'applications, pas de fichier à télécharger.</p>
+      Nexus
     </div>
+    <nav class="lp-topbar-nav">
+      <a class="btn-link" href="#fonctionnalites">Fonctionnalités</a>
+      <a class="btn-link" href="#tarifs">Tarifs</a>
+      <a class="btn btn-secondary" href="index.html">Se connecter</a>
+    </nav>
+  </header>
 
-    <div class="install-cta">
-      <button type="button" class="btn btn-primary" id="btn-install-native" style="display: none;">📲 Installer Nexus</button>
-      <p class="install-status" id="install-status"></p>
+  <section class="lp-hero">
+    <div class="lp-hero-text">
+      <span class="badge badge-info">Nouveau · Installable comme une application</span>
+      <h1>Le SIRH simple pour piloter congés, planning, paie et notes de frais</h1>
+      <p>Nexus centralise la gestion RH de votre entreprise dans un seul outil clair — sans papier, sans tableur, accessible à toute votre équipe selon son rôle.</p>
+      <div class="lp-hero-cta">
+        <button type="button" class="btn btn-primary" id="btn-install-native" style="display: none;">📲 Installer Nexus</button>
+        <a class="btn btn-secondary" href="index.html?signup=1">Créer mon entreprise</a>
+      </div>
+      <p class="lp-hero-note" id="install-status">Fonctionne directement dans votre navigateur — aucune installation obligatoire.</p>
     </div>
+    <div class="lp-hero-mock" aria-hidden="true">
+      <div class="lp-mock-card">
+        <div class="lp-mock-header">
+          <span class="lp-mock-dot"></span><span class="lp-mock-dot"></span><span class="lp-mock-dot"></span>
+        </div>
+        <div class="lp-mock-kpis">
+          <div class="lp-mock-kpi"><strong>24</strong><span>Salariés</span></div>
+          <div class="lp-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
+          <div class="lp-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
+        </div>
+        <div class="lp-mock-row">🏖️ Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
+        <div class="lp-mock-row">💻 Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
+        <div class="lp-mock-row">🧾 Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
+      </div>
+    </div>
+  </section>
 
+  <section class="lp-section" id="fonctionnalites">
+    <div class="lp-section-head">
+      <h2>Tout ce qu'il faut, rien de superflu</h2>
+      <p>Toutes les fonctionnalités sont incluses dans chaque offre — seul le nombre de salariés change.</p>
+    </div>
+    <div class="lp-features-grid">
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🏖️</div><h3>Congés & absences</h3><p>Demandes, validation par workflow, compteurs automatiques et export.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🗓️</div><h3>Planning & télétravail</h3><p>Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">📤</div><h3>Préparation de paie</h3><p>Anomalies détectées automatiquement avant l'export vers votre logiciel de paie.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🧾</div><h3>Notes de frais</h3><p>Justificatifs, validation et remboursement suivis de bout en bout.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🍽️</div><h3>Tickets restaurant</h3><p>Calcul automatique selon les jours travaillés, part employeur incluse.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🗂️</div><h3>Organigramme</h3><p>Hiérarchie, services et équipes visualisés en un coup d'œil.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">📁</div><h3>Documents RH</h3><p>Contrats, attestations et documents générés automatiquement.</p></div>
+      <div class="card lp-feature-card"><div class="lp-feature-icon">🎫</div><h3>Support intégré</h3><p>Vos salariés posent leurs questions directement depuis l'application.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-section" id="tarifs">
+    <div class="lp-section-head">
+      <h2>Une offre pour chaque taille d'équipe</h2>
+      <p>Paiement sécurisé par Stripe. Annulation possible à tout moment.</p>
+    </div>
+    <div class="lp-pricing-toggle">
+      <div class="tabs">
+        <button class="tab active" data-lp-periodicite="mensuel">Mensuel</button>
+        <button class="tab" data-lp-periodicite="annuel">Annuel (2 mois offerts)</button>
+      </div>
+    </div>
+    <div class="offres-grid" id="lp-offres-grid"></div>
+  </section>
+
+  <section class="lp-section lp-install-section" id="installer">
+    <div class="lp-section-head">
+      <h2>Comment installer Nexus ?</h2>
+      <p>Ajoutez Nexus sur votre bureau ou votre écran d'accueil pour l'ouvrir comme une application, en un clic.</p>
+    </div>
     <div class="install-methods" id="install-methods"></div>
+  </section>
 
-    <div class="install-back">
-      <a class="btn-link" href="index.html">← Retour à la connexion</a>
-    </div>
-  </div>
+  <footer class="lp-footer">
+    <a href="index.html">Se connecter</a> · <a href="index.html?signup=1">Créer mon entreprise</a>
+  </footer>
 
   <script>
+    const OFFRES = [
+      { key: 'essentiel', icon: '🌱', label: 'Essentiel', accroche: "Pour démarrer avec une petite équipe.", mensuel: 29, annuel: 290, seats: 'Jusqu\'à 10 salariés' },
+      { key: 'professionnel', icon: '🚀', label: 'Professionnel', accroche: 'Pour une entreprise en croissance.', mensuel: 79, annuel: 790, seats: 'Jusqu\'à 25 salariés', misEnAvant: true },
+      { key: 'premium', icon: '👑', label: 'Premium', accroche: 'Pour une grande structure, sans limite de salariés.', mensuel: 149, annuel: 1490, seats: '50 salariés et plus' }
+    ];
+
+    function renderOffres(periodicite) {
+      document.getElementById('lp-offres-grid').innerHTML = OFFRES.map(o => `
+        <div class="offre-card ${o.misEnAvant ? 'offre-card-recommandee' : ''}">
+          ${o.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
+          <div class="offre-card-icon">${o.icon}</div>
+          <h3>${o.label}</h3>
+          <p class="text-muted offre-card-accroche">${o.accroche}</p>
+          <p class="offre-prix">${periodicite === 'annuel' ? o.annuel : o.mensuel} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
+          ${periodicite === 'annuel' ? `<p class="text-muted offre-card-mensualise">soit ${(o.annuel / 12).toFixed(2).replace('.', ',')} €/mois</p>` : ''}
+          <div class="offre-card-condition"><span>👥</span> ${o.seats}</div>
+          <a class="btn btn-primary" style="width: 100%; margin-top: 14px;" href="index.html?signup=1">Souscrire</a>
+        </div>
+      `).join('');
+    }
+    renderOffres('mensuel');
+    document.querySelectorAll('[data-lp-periodicite]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-lp-periodicite]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderOffres(btn.dataset.lpPeriodicite);
+      });
+    });
+
     const METHODS = {
       androidChrome: {
         label: 'Android (Chrome)',
         steps: [
           'Ouvrez ce site dans Chrome.',
-          'Appuyez sur le bouton "Installer Nexus" ci-dessus.',
+          'Appuyez sur le bouton "Installer Nexus" en haut de page.',
           'Confirmez dans la fenêtre qui s\'affiche — l\'icône Nexus apparaît sur votre écran d\'accueil.'
         ]
       },
@@ -94,7 +243,7 @@
       desktopChrome: {
         label: 'Ordinateur (Chrome / Edge)',
         steps: [
-          'Appuyez sur le bouton "Installer Nexus" ci-dessus.',
+          'Appuyez sur le bouton "Installer Nexus" en haut de page.',
           'Ou cliquez sur l\'icône d\'installation ⊕ dans la barre d\'adresse, à droite.',
           'Confirmez — Nexus s\'ouvre alors dans sa propre fenêtre, avec son icône dans le menu Démarrer / Launchpad.'
         ]
@@ -132,7 +281,6 @@
         `;
       }).join('');
     }
-
     renderMethods(detectPrimaryMethod());
 
     let deferredPrompt = null;

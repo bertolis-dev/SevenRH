@@ -326,6 +326,10 @@ function showLogin() {
   } else if (pendingResetEmail) {
     state.authView = 'forgot';
     state.pendingReset = { email: pendingResetEmail };
+  } else if (new URLSearchParams(window.location.search).get('signup') === '1') {
+    // Lien "Créer mon entreprise" depuis telecharger.html (page de présentation publique).
+    history.replaceState({}, '', window.location.pathname);
+    state.authView = 'signup-company';
   } else {
     state.authView = 'login';
   }
@@ -779,7 +783,7 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
-      <a class="btn-link" href="telecharger.html">📲 Installer l'application</a>
+      <a class="btn-link" href="telecharger.html">🖥️ Découvrir Nexus</a>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
