@@ -28,29 +28,48 @@ const NEXUS_LOGO_MARK = `<span class="logo-mark"><img class="logo-icon" src="log
 
 /** Installation PWA (voir renderLandingScreen) — l'événement beforeinstallprompt peut arriver avant
  * même que l'écran d'accueil soit affiché, donc capté au niveau module plutôt que dans un handler de
- * vue précis. Un seul bouton "actif" à la fois : le déclencheur est consommé dès le premier clic. */
+ * vue précis. Ce signal du navigateur n'est ni fiable ni garanti (certains Chrome/Edge à jour et
+ * réellement installables ne le déclenchent pas systématiquement, sans qu'il existe d'API web pour
+ * le forcer) — le bouton reste donc toujours visible et affiche, en repli, où cliquer dans le
+ * navigateur lui-même plutôt que de dépendre uniquement de ce signal. */
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
-  refreshInstallButtons();
 });
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  refreshInstallButtons();
 });
-function refreshInstallButtons() {
-  document.querySelectorAll('[data-install-trigger]').forEach(btn => {
-    btn.style.display = deferredInstallPrompt ? '' : 'none';
-  });
-}
 async function triggerInstallPrompt() {
-  if (!deferredInstallPrompt) return;
+  if (!deferredInstallPrompt) {
+    showInstallHintModal();
+    return;
+  }
   const prompt = deferredInstallPrompt;
   deferredInstallPrompt = null;
-  refreshInstallButtons();
   prompt.prompt();
   await prompt.userChoice;
+}
+
+/** Repli quand le navigateur n'a pas proposé le signal d'installation natif (voir
+ * triggerInstallPrompt) — indique où se trouve le vrai bouton d'installation du navigateur, déjà
+ * confirmé présent dans son menu ⋮ même quand beforeinstallprompt ne se déclenche pas. */
+function showInstallHintModal() {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header"><h2>Comment installer Nexus</h2></div>
+      <div class="modal-body">
+        <p>Votre navigateur n'a pas proposé l'installation automatiquement, mais Nexus reste installable directement depuis son propre menu :</p>
+        <p>Cliquez sur le menu <strong>⋮</strong> en haut à droite de votre navigateur, puis choisissez <strong>« Installer Nexus... »</strong> (ou « Ajouter à l'écran d'accueil »).</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btn-install-hint-ok">Compris</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-install-hint-ok').addEventListener('click', closeModal);
 }
 
 /** Détection grossière de plateforme (écran d'accueil public, voir renderLandingScreen) — sert
@@ -499,7 +518,7 @@ function renderLandingScreen() {
           <div class="card landing-install-card">
             <h3>💻 Ordinateur</h3>
             ${platform === 'desktop' ? `
-              <button type="button" class="btn btn-gold" data-install-trigger style="display: none;">📲 Installer Nexus</button>
+              <button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>
               <p class="text-muted" style="margin-top: 10px;">Ou cliquez sur l'icône d'installation ⊕ dans la barre d'adresse, à droite (Chrome / Edge).</p>
             ` : `<p class="text-muted">Ouvrez ce lien depuis un ordinateur (Chrome ou Edge) pour installer directement depuis le navigateur.</p>`}
           </div>
@@ -508,7 +527,7 @@ function renderLandingScreen() {
             <div class="landing-install-subblock">
               <strong>Android (Chrome)</strong>
               ${platform === 'android' ? `
-                <button type="button" class="btn btn-gold" data-install-trigger style="display: none;">📲 Installer Nexus</button>
+                <button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>
                 <p class="text-muted" style="margin-top: 8px;">Ou ouvrez le menu ⋮ de Chrome → "Installer l'application" (versions plus anciennes : "Ajouter à l'écran d'accueil" puis "Installer").</p>
               ` : `<p class="text-muted">Ouvrez ce lien dans Chrome, puis menu ⋮ → "Installer l'application".</p>`}
             </div>
@@ -528,7 +547,6 @@ function renderLandingScreen() {
   `;
 
   bindLandingScreenEvents();
-  refreshInstallButtons();
 }
 
 function bindLandingScreenEvents() {
