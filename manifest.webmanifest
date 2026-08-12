@@ -1,11 +1,14 @@
 {
+  "id": "/",
   "name": "Nexus",
   "short_name": "Nexus",
+  "description": "Le SIRH simple pour piloter conges, planning, paie et notes de frais.",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1c2b4a"
