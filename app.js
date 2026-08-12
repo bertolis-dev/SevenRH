@@ -419,6 +419,11 @@ function showLogin(defaultView) {
  * (voir DOMContentLoaded) : présentation du produit, tarifs réels et installation, avec un accès
  * direct à la connexion/création de compte. Ne remplace jamais l'écran de connexion pour un flux
  * d'authentification déjà en cours (voir les conditions dans DOMContentLoaded). */
+/** Installeur Windows réel (Electron, voir desktop-app/) — hébergé en GitHub Release plutôt que
+ * dans ce dépôt (fichier binaire de ~80 Mo, ne doit jamais être commité). À mettre à jour à chaque
+ * nouvelle version publiée avec `gh release create`. */
+const DESKTOP_APP_DOWNLOAD_URL = 'https://github.com/thomasaubert-star/SevenRH/releases/download/v1.0.0/Nexus-Setup-1.0.0.exe';
+
 const LANDING_FEATURES = [
   { icon: '🏖️', title: 'Congés & absences', text: "Demandes, validation par workflow, compteurs automatiques et export." },
   { icon: '🗓️', title: 'Planning & télétravail', text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.' },
@@ -527,11 +532,12 @@ function renderLandingScreen() {
         </div>
         <div class="landing-install-columns">
           <div class="card landing-install-card">
-            <h3>💻 Ordinateur</h3>
+            <h3>💻 Ordinateur (Windows)</h3>
+            <a class="btn btn-gold" style="width: 100%;" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger Nexus (.exe)</a>
+            <p class="text-muted" style="margin-top: 10px;">Windows affichera peut-être "Windows a protégé votre PC" (pas de certificat de signature payant) — cliquez sur "Informations complémentaires" puis "Exécuter quand même".</p>
             ${platform === 'desktop' ? `
-              <button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>
-              <p class="text-muted" style="margin-top: 10px;">Ou cliquez sur l'icône d'installation ⊕ dans la barre d'adresse, à droite (Chrome / Edge).</p>
-            ` : `<p class="text-muted">Ouvrez ce lien depuis un ordinateur (Chrome ou Edge) pour installer directement depuis le navigateur.</p>`}
+              <p class="text-muted" style="margin-top: 14px;">Vous préférez ne rien installer ? <button type="button" class="btn-link" data-install-trigger style="display: inline;">Installer depuis le navigateur</button> à la place.</p>
+            ` : ''}
           </div>
           <div class="card landing-install-card">
             <h3>📱 Téléphone</h3>
