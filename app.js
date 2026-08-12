@@ -3923,9 +3923,13 @@ function openImportSalariesModal() {
     const okCount = preview.filter(r => r.status === 'ok').length;
     const dupCount = preview.filter(r => r.status === 'duplicate').length;
     const errCount = preview.filter(r => r.status === 'error').length;
-    const unmapped = Object.keys(IMPORT_EMPLOYEE_FIELD_ALIASES).filter(f => mapping[f] === undefined);
+    // Colonnes présentes dans le FICHIER qui ne correspondent à aucun champ reconnu (ex. en-tête mal
+    // orthographié) — pas l'inverse (un champ optionnel simplement absent du fichier, ex. téléphone,
+    // n'est jamais une anomalie à signaler ici).
+    const mappedIndexes = new Set(Object.values(mapping));
+    const unmapped = headerRow.filter((h, i) => !mappedIndexes.has(i));
     document.getElementById('import-preview-zone').innerHTML = `
-      ${unmapped.length ? `<p class="field-warning visible">⚠ Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces champs resteront vides, modifiables ensuite sur chaque fiche.</p>` : ''}
+      ${unmapped.length ? `<p class="field-warning visible">⚠ Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces colonnes seront ignorées.</p>` : ''}
       <p><span class="badge badge-success">${okCount} à créer</span> <span class="badge badge-warning">${dupCount} doublon${dupCount > 1 ? 's' : ''} ignoré${dupCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
