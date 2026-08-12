@@ -5806,10 +5806,18 @@ function isCurrentWorkflowStepFor(request, user, domain) {
   return true;
 }
 
+/** Le Directeur n'a personne au-dessus de lui dans la hiérarchie pour valider ses propres congés —
+ * seul cas où la séparation des tâches est levée, et seulement pour les congés/absences/télétravail
+ * (domain 'absence'), jamais pour les notes de frais : le circuit financier reste séparé même pour lui. */
+function canSelfServiceAsDirecteur(user, domain) {
+  return domain === 'absence' && user.role === ROLES.DIRECTEUR;
+}
+
 function canActOnRequestFor(request, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
-  if (request.employeeId === user.id) return false; // séparation des tâches : personne ne valide sa propre demande, même RH/Directeur
+  // séparation des tâches : personne ne valide sa propre demande, même RH — sauf le Directeur (§ci-dessus).
+  if (request.employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
   return isCurrentWorkflowStepFor(request, user, domain);
 }
@@ -5821,7 +5829,7 @@ function canActOnRequestFor(request, domain = 'absence') {
 function canRefuserRequestFor(request, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
-  if (request.employeeId === user.id) return false;
+  if (request.employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.REFUSER_ABSENCE)) return true;
   return isCurrentWorkflowStepFor(request, user, domain);
 }
@@ -5831,7 +5839,8 @@ function canRefuserRequestFor(request, domain = 'absence') {
 function canManageRequestFor(employeeId, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
-  if (employeeId === user.id) return false; // séparation des tâches : personne ne gère sa propre demande, même RH/Directeur
+  // séparation des tâches : personne ne gère sa propre demande, même RH — sauf le Directeur (congés/absences).
+  if (employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
   if (user.role === ROLES.MANAGER) {
     const emp = employeeRepository.getById(employeeId);
