@@ -187,7 +187,12 @@ const NAV_ITEMS = [
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
   // logique de regroupement que Planning/Calendrier ci-dessus, appliquée cette fois à 3 écrans
   // distincts plutôt qu'à 2 navParams du même écran.
-  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'directeur'], group: 'personnel' },
+  // comptabilite ajouté ici : DEFAULT_ROLE_PERMISSIONS (data.js) lui accorde CREER_DEMANDE_ABSENCE
+  // comme à tous les autres rôles, mais cette entrée de nav (héritée de l'ancien menu Congés/
+  // Autres absences/Télétravail, jamais mise à jour) était la seule à l'exclure, la privant de tout
+  // moyen d'exercer cette permission — un salarié Comptabilité a autant besoin de poser des congés
+  // que les autres.
+  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
