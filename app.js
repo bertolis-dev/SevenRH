@@ -7717,6 +7717,17 @@ const OFFRE_TARIFS = {
   premium: { label: 'Premium', mensuel: 149, annuel: 1490 }
 };
 
+/** Présentation (icône, accroche, mise en avant) — purement visuel, séparé de OFFRE_TARIFS/
+ * OFFRES_BERTOLIS pour ne pas mélanger la donnée de facturation avec le texte marketing. Pas de
+ * fonctionnalité listée par offre : le produit ne différencie réellement les offres que par le
+ * nombre de salariés (voir le commentaire au-dessus de OFFRES_BERTOLIS, data.js) — toutes les
+ * fonctionnalités du logiciel sont incluses dans les 3 offres payantes, inutile de le prétendre autrement. */
+const OFFRE_PRESENTATION = {
+  essentiel: { icon: '🌱', accroche: "Pour démarrer avec une petite équipe." },
+  professionnel: { icon: '🚀', accroche: 'Pour une entreprise en croissance.', misEnAvant: true },
+  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.' }
+};
+
 /** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing) — remplace
  * l'ancien aperçu en lecture seule : l'entreprise cliente choisit et paie elle-même son offre,
  * la gestion (changer d'offre, annuler, moyen de paiement) passe par le portail Stripe hébergé. */
@@ -7727,40 +7738,67 @@ function renderParametresAbonnement() {
   const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
   const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[abo.statut] || 'muted';
   const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
-  const plafondLabel = abo.nombreSalariesMax === null ? 'illimité' : `${nbSalaries} / ${abo.nombreSalariesMax}`;
+  const plafondActuel = abo.nombreSalariesMax;
+  const plafondLabel = plafondActuel === null ? `${nbSalaries} (illimité)` : `${nbSalaries} / ${plafondActuel}`;
+  const jaugePct = plafondActuel === null ? 0 : Math.min(100, Math.round((nbSalaries / plafondActuel) * 100));
   const dejaAbonne = abo.offre !== 'essai' && abo.statut !== 'resilie';
   const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
 
   return `
-    <div class="card">
-      <h2>Votre abonnement</h2>
-      <div class="badge-row" style="margin: 8px 0 12px;">
-        <span class="badge badge-info">${escapeHtml(offre.label)}</span>
-        <span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[abo.statut] || abo.statut)}</span>
+    <div class="card abonnement-summary-card">
+      <div class="abonnement-summary-header">
+        <div class="abonnement-summary-icon">${escapeHtml((OFFRE_PRESENTATION[abo.offre] || {}).icon || '💳')}</div>
+        <div>
+          <h2 style="margin-bottom: 4px;">${escapeHtml(offre.label)}</h2>
+          <div class="badge-row">
+            <span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[abo.statut] || abo.statut)}</span>
+            <span class="badge badge-info">${abo.periodicite === 'annuel' ? 'Facturation annuelle' : 'Facturation mensuelle'}</span>
+          </div>
+        </div>
       </div>
-      ${infoRow('Périodicité', abo.periodicite === 'annuel' ? 'Annuelle' : 'Mensuelle')}
-      ${infoRow('Date de début', formatDate(abo.dateDebut))}
-      ${infoRow('Date de renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
-      ${infoRow('Salariés actifs', plafondLabel)}
-      ${dejaAbonne ? `<button class="btn btn-secondary" id="btn-gerer-abonnement" style="margin-top: 12px;">Gérer mon abonnement</button>` : ''}
+      <div class="detail-grid" style="margin-top: 16px;">
+        ${infoRow('Date de début', formatDate(abo.dateDebut))}
+        ${infoRow('Prochain renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
+      </div>
+      <div class="abonnement-jauge">
+        <div class="abonnement-jauge-label">
+          <span>Salariés actifs</span>
+          <strong>${plafondLabel}</strong>
+        </div>
+        ${plafondActuel !== null ? `<div class="abonnement-jauge-bar"><div class="abonnement-jauge-fill" style="width: ${jaugePct}%;"></div></div>` : ''}
+      </div>
+      ${dejaAbonne ? `<button class="btn btn-secondary" id="btn-gerer-abonnement" style="margin-top: 16px;">Gérer mon abonnement</button>` : ''}
     </div>
     <div class="card">
       <h2>Changer d'offre</h2>
-      <p class="text-muted">Paiement sécurisé par Stripe. Annulation possible à tout moment depuis "Gérer mon abonnement".</p>
+      <p class="text-muted">Paiement sécurisé par Stripe. Toutes les fonctionnalités du logiciel sont incluses dans chaque offre — seul le nombre de salariés change. Annulation possible à tout moment depuis "Gérer mon abonnement".</p>
       <div class="tabs" style="margin: 12px 0;">
         <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
         <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-abonnement-periodicite="annuel">Annuel (2 mois offerts)</button>
       </div>
       <div class="offres-grid">
-        ${Object.entries(OFFRE_TARIFS).map(([key, o]) => `
-          <div class="offre-card ${abo.offre === key ? 'offre-card-active' : ''}">
-            <h3>${escapeHtml(o.label)}</h3>
-            <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
-            ${abo.offre === key && abo.periodicite === periodicite && dejaAbonne
-              ? `<span class="badge badge-success">Offre actuelle</span>`
-              : `<button class="btn btn-primary" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}">Souscrire</button>`}
-          </div>
-        `).join('')}
+        ${Object.entries(OFFRE_TARIFS).map(([key, o]) => {
+          const presentation = OFFRE_PRESENTATION[key] || {};
+          const plafondOffre = OFFRES_BERTOLIS[key] ? OFFRES_BERTOLIS[key].nombreSalariesMax : null;
+          const estActuelle = abo.offre === key && abo.periodicite === periodicite && dejaAbonne;
+          const mensualise = periodicite === 'annuel' ? `soit ${formatCurrencyFR(o.annuel / 12)}/mois` : '';
+          return `
+            <div class="offre-card ${estActuelle ? 'offre-card-active' : ''} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}">
+              ${presentation.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
+              <div class="offre-card-icon">${escapeHtml(presentation.icon || '💳')}</div>
+              <h3>${escapeHtml(o.label)}</h3>
+              <p class="text-muted offre-card-accroche">${escapeHtml(presentation.accroche || '')}</p>
+              <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
+              ${mensualise ? `<p class="text-muted offre-card-mensualise">${mensualise}</p>` : ''}
+              <div class="offre-card-condition">
+                <span>👥</span> ${plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`}
+              </div>
+              ${estActuelle
+                ? `<span class="badge badge-success" style="margin-top: 12px;">Offre actuelle</span>`
+                : `<button class="btn ${presentation.misEnAvant ? 'btn-primary' : 'btn-secondary'}" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}" style="margin-top: 12px;">Souscrire</button>`}
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>
   `;

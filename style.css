@@ -1187,25 +1187,103 @@ textarea.input { resize: vertical; font-family: inherit; }
    Paramètres > Abonnement — offres Stripe
    --------------------------------------------------------------------- */
 
+.abonnement-summary-card { position: relative; overflow: hidden; }
+.abonnement-summary-header { display: flex; align-items: center; gap: 16px; }
+.abonnement-summary-icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+}
+
+.abonnement-jauge { margin-top: 16px; }
+.abonnement-jauge-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+.abonnement-jauge-label strong { color: var(--color-text); font-size: 14px; }
+.abonnement-jauge-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-muted-soft);
+  overflow: hidden;
+}
+.abonnement-jauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: width 0.2s ease;
+}
+
 .offres-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .offre-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 24px 18px;
   text-align: center;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+.offre-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
 .offre-card-active { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.offre-card-recommandee { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
 
-.offre-card h3 { font-size: 15px; margin-bottom: 8px; }
+.offre-card-ribbon {
+  position: absolute;
+  top: -1px;
+  right: 16px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
 
-.offre-prix { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+.offre-card-icon { font-size: 28px; margin-bottom: 8px; }
+
+.offre-card h3 { font-size: 16px; margin-bottom: 4px; }
+
+.offre-card-accroche { font-size: 12px; margin-bottom: 14px; min-height: 32px; }
+
+.offre-prix { font-size: 24px; font-weight: 700; margin-bottom: 2px; }
 .offre-prix .text-muted { font-size: 13px; font-weight: 500; }
+
+.offre-card-mensualise { font-size: 12px; margin-bottom: 14px; }
+
+.offre-card-condition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-muted-soft);
+  margin-top: auto;
+}
 
 .chart-card { display: flex; flex-direction: column; }
 .chart-subtitle { margin-top: -8px; margin-bottom: 10px; }
