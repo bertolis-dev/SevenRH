@@ -28,7 +28,7 @@ const PRICE_TO_PLAN = new Map<string, { offre: string; periodicite: string }>([
 ]);
 
 // Plafond de salariés par offre — reflète OFFRES_BERTOLIS (data.js) pour cette même offre.
-const SEATS_MAX: Record<string, number | null> = { essentiel: 25, professionnel: 100, premium: null };
+const SEATS_MAX: Record<string, number | null> = { essentiel: 10, professionnel: 25, premium: null };
 
 function statutFromStripeStatus(stripeStatus: string): string {
   switch (stripeStatus) {

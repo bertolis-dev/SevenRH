@@ -162,8 +162,8 @@ const TVA_RATES = [20, 10, 5.5, 2.1, 0];
  */
 const OFFRES_BERTOLIS = {
   essai: { label: 'Essai gratuit', nombreSalariesMax: null },
-  essentiel: { label: 'Essentiel', nombreSalariesMax: 25 },
-  professionnel: { label: 'Professionnel', nombreSalariesMax: 100 },
+  essentiel: { label: 'Essentiel', nombreSalariesMax: 10 },
+  professionnel: { label: 'Professionnel', nombreSalariesMax: 25 },
   premium: { label: 'Premium', nombreSalariesMax: null }
 };
 

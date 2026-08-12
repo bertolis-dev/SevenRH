@@ -7725,7 +7725,10 @@ const OFFRE_TARIFS = {
 const OFFRE_PRESENTATION = {
   essentiel: { icon: '🌱', accroche: "Pour démarrer avec une petite équipe." },
   professionnel: { icon: '🚀', accroche: 'Pour une entreprise en croissance.', misEnAvant: true },
-  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.' }
+  // conditionLabel : nombreSalariesMax vaut null (illimité) pour Premium, mais "50 salariés et
+  // plus" reflète mieux à qui l'offre s'adresse (au-delà du plafond Professionnel) qu'un vague
+  // "illimité" — voir renderParametresAbonnement, qui l'utilise à la place du texte générique.
+  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '50 salariés et plus' }
 };
 
 /** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing) — remplace
@@ -7791,7 +7794,7 @@ function renderParametresAbonnement() {
               <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
               ${mensualise ? `<p class="text-muted offre-card-mensualise">${mensualise}</p>` : ''}
               <div class="offre-card-condition">
-                <span>👥</span> ${plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`}
+                <span>👥</span> ${presentation.conditionLabel || (plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`)}
               </div>
               ${estActuelle
                 ? `<span class="badge badge-success" style="margin-top: 12px;">Offre actuelle</span>`
