@@ -15,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-bertolis-secret",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info, x-bertolis-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
