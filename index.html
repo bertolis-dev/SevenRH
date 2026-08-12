@@ -8,7 +8,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260812c">
 </head>
 <body>
   <button class="btn-icon" id="btn-theme-toggle" title="Changer de thème"></button>
@@ -58,12 +58,12 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260812"></script>
-  <script src="data.js?v=20260812"></script>
-  <script src="app.js?v=20260812"></script>
+  <script type="module" src="supabase-client.js?v=20260812c"></script>
+  <script src="data.js?v=20260812c"></script>
+  <script src="app.js?v=20260812c"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260812'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260812c'));
     }
   </script>
 </body>
