@@ -1,0 +1,38 @@
+{
+  "name": "nexus-desktop",
+  "version": "1.0.0",
+  "description": "Nexus (Seven RH) - application de bureau",
+  "main": "main.js",
+  "author": "Seven RH",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.sevenrh.nexus",
+    "productName": "Nexus",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nexus"
+    }
+  }
+}
