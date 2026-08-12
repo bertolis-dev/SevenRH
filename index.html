@@ -59,5 +59,10 @@
   <script type="module" src="supabase-client.js?v=20260812"></script>
   <script src="data.js?v=20260812"></script>
   <script src="app.js?v=20260812"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260812'));
+    }
+  </script>
 </body>
 </html>

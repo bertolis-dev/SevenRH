@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Installer Nexus</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c2b4a">
+  <link rel="stylesheet" href="style.css?v=20260812">
+  <style>
+    .install-page {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+    .install-hero {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .install-hero .logo-mark { width: 64px; height: 64px; margin: 0 auto 16px; }
+    .install-hero h1 { margin: 0 0 8px; font-size: 26px; }
+    .install-hero p { color: var(--color-text-muted); margin: 0; }
+    .install-cta {
+      text-align: center;
+      margin: 28px 0 36px;
+    }
+    #btn-install-native {
+      font-size: 15px;
+      padding: 12px 28px;
+    }
+    .install-status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+    .install-methods { display: grid; gap: 14px; }
+    .install-method summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .install-method summary::-webkit-details-marker { display: none; }
+    .install-method summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--color-text-muted); }
+    .install-method[open] summary::before { transform: rotate(90deg); }
+    .install-method ol { margin: 12px 0 0; padding-left: 22px; color: var(--color-text-muted); }
+    .install-method ol li { margin-bottom: 6px; }
+    .install-method .badge { margin-left: auto; }
+    .install-back { text-align: center; margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <div class="install-page">
+    <div class="install-hero">
+      <span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>
+      <h1>Installer Nexus</h1>
+      <p>Ajoutez Nexus sur votre bureau ou votre écran d'accueil pour l'ouvrir comme une application, en un clic — pas de magasin d'applications, pas de fichier à télécharger.</p>
+    </div>
+
+    <div class="install-cta">
+      <button type="button" class="btn btn-primary" id="btn-install-native" style="display: none;">📲 Installer Nexus</button>
+      <p class="install-status" id="install-status"></p>
+    </div>
+
+    <div class="install-methods" id="install-methods"></div>
+
+    <div class="install-back">
+      <a class="btn-link" href="index.html">← Retour à la connexion</a>
+    </div>
+  </div>
+
+  <script>
+    const METHODS = {
+      androidChrome: {
+        label: 'Android (Chrome)',
+        steps: [
+          'Ouvrez ce site dans Chrome.',
+          'Appuyez sur le bouton "Installer Nexus" ci-dessus.',
+          'Confirmez dans la fenêtre qui s\'affiche — l\'icône Nexus apparaît sur votre écran d\'accueil.'
+        ]
+      },
+      iosSafari: {
+        label: 'iPhone / iPad (Safari)',
+        steps: [
+          'Ouvrez ce site dans Safari (obligatoire — pas Chrome sur iOS).',
+          'Appuyez sur l\'icône de partage <strong>􀈂</strong> en bas de l\'écran.',
+          'Choisissez "Sur l\'écran d\'accueil", puis "Ajouter".'
+        ]
+      },
+      desktopChrome: {
+        label: 'Ordinateur (Chrome / Edge)',
+        steps: [
+          'Appuyez sur le bouton "Installer Nexus" ci-dessus.',
+          'Ou cliquez sur l\'icône d\'installation ⊕ dans la barre d\'adresse, à droite.',
+          'Confirmez — Nexus s\'ouvre alors dans sa propre fenêtre, avec son icône dans le menu Démarrer / Launchpad.'
+        ]
+      },
+      desktopSafari: {
+        label: 'Mac (Safari)',
+        steps: [
+          'Menu "Fichier" → "Ajouter au Dock".',
+          'Confirmez — l\'icône Nexus apparaît dans le Dock.'
+        ]
+      }
+    };
+
+    function detectPrimaryMethod() {
+      const ua = navigator.userAgent;
+      const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/.test(ua);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+      if (isIOS) return 'iosSafari';
+      if (isAndroid) return 'androidChrome';
+      if (isSafari) return 'desktopSafari';
+      return 'desktopChrome';
+    }
+
+    function renderMethods(primaryKey) {
+      const container = document.getElementById('install-methods');
+      const order = [primaryKey, ...Object.keys(METHODS).filter(k => k !== primaryKey)];
+      container.innerHTML = order.map(key => {
+        const m = METHODS[key];
+        return `
+          <details class="card install-method" ${key === primaryKey ? 'open' : ''}>
+            <summary>${m.label} ${key === primaryKey ? '<span class="badge badge-info">Votre appareil</span>' : ''}</summary>
+            <ol>${m.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+          </details>
+        `;
+      }).join('');
+    }
+
+    renderMethods(detectPrimaryMethod());
+
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('btn-install-native');
+    const statusEl = document.getElementById('install-status');
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      installBtn.style.display = '';
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      installBtn.disabled = true;
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      statusEl.textContent = choice.outcome === 'accepted' ? 'Installation en cours…' : 'Installation annulée.';
+      deferredPrompt = null;
+      installBtn.style.display = 'none';
+    });
+
+    window.addEventListener('appinstalled', () => {
+      statusEl.textContent = 'Nexus est installé ✓';
+      installBtn.style.display = 'none';
+    });
+
+    if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+      statusEl.textContent = 'Nexus est déjà installé sur cet appareil.';
+    }
+  </script>
+</body>
+</html>

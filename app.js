@@ -779,6 +779,7 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
+      <a class="btn-link" href="telecharger.html">📲 Installer l'application</a>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
