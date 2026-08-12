@@ -26,6 +26,44 @@ function computePasswordStrengthLevel(password) {
  * console BERTOLIS) pour n'avoir qu'un seul endroit à modifier. */
 const NEXUS_LOGO_MARK = `<span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>`;
 
+/** Installation PWA (voir renderLandingScreen) — l'événement beforeinstallprompt peut arriver avant
+ * même que l'écran d'accueil soit affiché, donc capté au niveau module plutôt que dans un handler de
+ * vue précis. Un seul bouton "actif" à la fois : le déclencheur est consommé dès le premier clic. */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  refreshInstallButtons();
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  refreshInstallButtons();
+});
+function refreshInstallButtons() {
+  document.querySelectorAll('[data-install-trigger]').forEach(btn => {
+    btn.style.display = deferredInstallPrompt ? '' : 'none';
+  });
+}
+async function triggerInstallPrompt() {
+  if (!deferredInstallPrompt) return;
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  refreshInstallButtons();
+  prompt.prompt();
+  await prompt.userChoice;
+}
+
+/** Détection grossière de plateforme (écran d'accueil public, voir renderLandingScreen) — sert
+ * uniquement à mettre en avant la méthode d'installation la plus probable, jamais pour du contenu
+ * applicatif (l'appli elle-même reste responsive via CSS, pas via cette détection). */
+function detectDevicePlatform() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
 /** Un onglet oublié/épinglé ouvert sur l'écran "vérifiez vos emails" resterait sinon bloqué là
  * indéfiniment (sessionStorage ne s'efface qu'à la fermeture de l'onglet) même si l'inscription a
  * été abandonnée depuis longtemps — au-delà de ce délai, on retombe silencieusement sur l'écran de
@@ -294,14 +332,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   // persisté), il ne faut jamais laisser restoreSession() envoyer directement dans l'appli.
   if (restored && !window.SupabaseSync.wasPasswordRecoveryDetected() && !sessionStorage.getItem('sevenrh_password_recovery_pending')) {
     showApp();
-  } else {
+  } else if (
+    getPendingSignup()
+    || sessionStorage.getItem('sevenrh_password_recovery_pending')
+    || sessionStorage.getItem('sevenrh_pending_reset_email')
+    || new URLSearchParams(window.location.search).get('signup') === '1'
+  ) {
+    // Un flux d'authentification est déjà en cours (confirmation d'email, récupération de mot de
+    // passe, lien "Créer mon entreprise" partagé) — aller droit à l'écran de connexion plutôt que
+    // de faire repasser par la page d'accueil publique.
     showLogin();
+  } else {
+    showLanding();
   }
 });
 
-function showLogin() {
+function showLogin(defaultView) {
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
   document.getElementById('login-root').style.display = 'flex';
   // Remet le bouton de thème en position flottante (coin haut-droit) : il n'y a pas de topbar sur l'écran de connexion.
   const themeToggle = document.getElementById('btn-theme-toggle');
@@ -327,13 +376,177 @@ function showLogin() {
     state.authView = 'forgot';
     state.pendingReset = { email: pendingResetEmail };
   } else if (new URLSearchParams(window.location.search).get('signup') === '1') {
-    // Lien "Créer mon entreprise" depuis telecharger.html (page de présentation publique).
+    // Lien "Créer mon entreprise" partagé (ex. campagne email) pointant directement vers le signup.
     history.replaceState({}, '', window.location.pathname);
     state.authView = 'signup-company';
   } else {
-    state.authView = 'login';
+    state.authView = defaultView || 'login';
   }
   renderLoginScreen();
+}
+
+/** Page d'accueil publique — atterrissage par défaut sur nexus-rh.com pour un visiteur sans session
+ * (voir DOMContentLoaded) : présentation du produit, tarifs réels et installation, avec un accès
+ * direct à la connexion/création de compte. Ne remplace jamais l'écran de connexion pour un flux
+ * d'authentification déjà en cours (voir les conditions dans DOMContentLoaded). */
+const LANDING_FEATURES = [
+  { icon: '🏖️', title: 'Congés & absences', text: "Demandes, validation par workflow, compteurs automatiques et export." },
+  { icon: '🗓️', title: 'Planning & télétravail', text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.' },
+  { icon: '📤', title: 'Préparation de paie', text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie." },
+  { icon: '🧾', title: 'Notes de frais', text: 'Justificatifs, validation et remboursement suivis de bout en bout.' },
+  { icon: '🍽️', title: 'Tickets restaurant', text: 'Calcul automatique selon les jours travaillés, part employeur incluse.' },
+  { icon: '🗂️', title: 'Organigramme', text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.' },
+  { icon: '📁', title: 'Documents RH', text: 'Contrats, attestations et documents générés automatiquement.' },
+  { icon: '🎫', title: 'Support intégré', text: 'Vos salariés posent leurs questions directement depuis l\'application.' }
+];
+
+function showLanding() {
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('bertolis-root').style.display = 'none';
+  document.getElementById('login-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'block';
+  const themeToggle = document.getElementById('btn-theme-toggle');
+  themeToggle.classList.remove('theme-toggle-inline');
+  document.body.prepend(themeToggle);
+  renderLandingScreen();
+}
+
+function renderLandingScreen() {
+  const root = document.getElementById('landing-root');
+  const platform = detectDevicePlatform();
+  const periodicite = state.landingPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+
+  root.innerHTML = `
+    <div class="landing-page">
+      <header class="landing-topbar">
+        <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+        <nav class="landing-topbar-nav">
+          <a class="btn-link" href="#landing-fonctionnalites">Fonctionnalités</a>
+          <a class="btn-link" href="#landing-tarifs">Tarifs</a>
+          <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
+        </nav>
+      </header>
+
+      <section class="landing-hero">
+        <div class="landing-hero-inner">
+          <div class="landing-hero-text">
+            <span class="badge landing-badge-gold">Nouveau · Installable comme une application</span>
+            <h1>Le SIRH simple pour piloter congés, planning, paie et notes de frais</h1>
+            <p>Nexus centralise la gestion RH de votre entreprise dans un seul outil clair — sans papier, sans tableur, accessible à toute votre équipe selon son rôle.</p>
+            <div class="landing-hero-cta">
+              <button type="button" class="btn btn-gold" data-landing-action="signup">Créer mon entreprise</button>
+              <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
+            </div>
+          </div>
+          <div class="landing-hero-mock" aria-hidden="true">
+            <div class="landing-mock-card">
+              <div class="landing-mock-header">
+                <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+              </div>
+              <div class="landing-mock-kpis">
+                <div class="landing-mock-kpi"><strong>24</strong><span>Salariés</span></div>
+                <div class="landing-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
+                <div class="landing-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
+              </div>
+              <div class="landing-mock-row">🏖️ Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
+              <div class="landing-mock-row">💻 Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
+              <div class="landing-mock-row">🧾 Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section" id="landing-fonctionnalites">
+        <div class="landing-section-head">
+          <h2>Tout ce qu'il faut, rien de superflu</h2>
+          <p>Toutes les fonctionnalités sont incluses dans chaque offre — seul le nombre de salariés change.</p>
+        </div>
+        <div class="landing-features-grid">
+          ${LANDING_FEATURES.map(f => `
+            <div class="card landing-feature-card">
+              <div class="landing-feature-icon">${f.icon}</div>
+              <h3>${escapeHtml(f.title)}</h3>
+              <p>${escapeHtml(f.text)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section" id="landing-tarifs">
+        <div class="landing-section-head">
+          <h2>Une offre pour chaque taille d'équipe</h2>
+          <p>Paiement sécurisé par Stripe. Annulation possible à tout moment.</p>
+        </div>
+        <div class="landing-pricing-toggle">
+          <div class="tabs">
+            <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-landing-periodicite="mensuel">Mensuel</button>
+            <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-landing-periodicite="annuel">Annuel (2 mois offerts)</button>
+          </div>
+        </div>
+        <div class="offres-grid">
+          ${Object.entries(OFFRE_TARIFS).map(([key, o]) =>
+            renderOffreCard(key, o, periodicite, `<button type="button" class="btn ${(OFFRE_PRESENTATION[key] || {}).misEnAvant ? 'btn-primary' : 'btn-secondary'}" style="width: 100%; margin-top: 12px;" data-landing-action="signup">Souscrire</button>`)
+          ).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section landing-install-section" id="landing-installer">
+        <div class="landing-section-head">
+          <h2>Installer</h2>
+          <p>Ajoutez Nexus sur votre bureau ou votre écran d'accueil pour l'ouvrir comme une application, en un clic.</p>
+        </div>
+        <div class="landing-install-columns">
+          <div class="card landing-install-card">
+            <h3>💻 Ordinateur</h3>
+            ${platform === 'desktop' ? `
+              <button type="button" class="btn btn-gold" data-install-trigger style="display: none;">📲 Installer Nexus</button>
+              <p class="text-muted" style="margin-top: 10px;">Ou cliquez sur l'icône d'installation ⊕ dans la barre d'adresse, à droite (Chrome / Edge).</p>
+            ` : `<p class="text-muted">Ouvrez ce lien depuis un ordinateur (Chrome ou Edge) pour installer directement depuis le navigateur.</p>`}
+          </div>
+          <div class="card landing-install-card">
+            <h3>📱 Téléphone</h3>
+            <div class="landing-install-subblock">
+              <strong>Android (Chrome)</strong>
+              ${platform === 'android' ? `
+                <button type="button" class="btn btn-gold" data-install-trigger style="display: none;">📲 Installer Nexus</button>
+                <p class="text-muted" style="margin-top: 8px;">Ou ouvrez le menu ⋮ de Chrome → "Installer l'application" (versions plus anciennes : "Ajouter à l'écran d'accueil" puis "Installer").</p>
+              ` : `<p class="text-muted">Ouvrez ce lien dans Chrome, puis menu ⋮ → "Installer l'application".</p>`}
+            </div>
+            <div class="landing-install-subblock">
+              <strong>iPhone / iPad (Safari)</strong>
+              <p class="text-muted">Ouvrez ce lien dans Safari, appuyez sur l'icône de partage <strong>􀈂</strong> en bas de l'écran, puis choisissez "Sur l'écran d'accueil" → "Ajouter".</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <button type="button" class="btn-link" data-landing-action="login">Se connecter</button> ·
+        <button type="button" class="btn-link" data-landing-action="signup">Créer mon entreprise</button>
+      </footer>
+    </div>
+  `;
+
+  bindLandingScreenEvents();
+  refreshInstallButtons();
+}
+
+function bindLandingScreenEvents() {
+  document.querySelectorAll('[data-landing-action="login"]').forEach(btn => {
+    btn.addEventListener('click', () => showLogin());
+  });
+  document.querySelectorAll('[data-landing-action="signup"]').forEach(btn => {
+    btn.addEventListener('click', () => showLogin('signup-company'));
+  });
+  document.querySelectorAll('[data-landing-periodicite]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.landingPeriodicite = btn.dataset.landingPeriodicite;
+      renderLandingScreen();
+    });
+  });
+  document.querySelectorAll('[data-install-trigger]').forEach(btn => {
+    btn.addEventListener('click', triggerInstallPrompt);
+  });
 }
 
 function showApp() {
@@ -343,6 +556,7 @@ function showApp() {
   Object.assign(state, getInitialViewState());
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
   renderSidebar();
   renderUserMenuButton();
@@ -485,6 +699,7 @@ function handleCheckoutReturn() {
 function showBertolisConsole() {
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'block';
   renderBertolisConsole();
 }
@@ -783,7 +998,7 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
-      <a class="btn-link" href="telecharger.html">🖥️ Découvrir Nexus</a>
+      <button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
@@ -1100,6 +1315,9 @@ function bindLoginScreenEvents() {
     state.authError = '';
     renderLoginScreen();
   });
+
+  const gotoLandingBtn = document.getElementById('btn-goto-landing');
+  if (gotoLandingBtn) gotoLandingBtn.addEventListener('click', () => showLanding());
 
   const signupCompanyForm = document.getElementById('signup-company-form');
   if (signupCompanyForm) signupCompanyForm.addEventListener('submit', async (evt) => {
@@ -7736,6 +7954,30 @@ const OFFRE_PRESENTATION = {
   premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '50 salariés et plus' }
 };
 
+/** Une seule carte d'offre, réutilisée par l'écran Paramètres > Abonnement ET par la page
+ * d'accueil publique (renderLandingScreen) — même présentation partout, un seul endroit à modifier
+ * si le contenu marketing change. `ctaHtml` diffère selon le contexte (bouton Souscrire vs badge
+ * "Offre actuelle" vs simple lien vers la création de compte). */
+function renderOffreCard(key, o, periodicite, ctaHtml, extraClass = '') {
+  const presentation = OFFRE_PRESENTATION[key] || {};
+  const plafondOffre = OFFRES_BERTOLIS[key] ? OFFRES_BERTOLIS[key].nombreSalariesMax : null;
+  const mensualise = periodicite === 'annuel' ? `soit ${formatCurrencyFR(o.annuel / 12)}/mois` : '';
+  return `
+    <div class="offre-card ${extraClass} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}">
+      ${presentation.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
+      <div class="offre-card-icon">${escapeHtml(presentation.icon || '💳')}</div>
+      <h3>${escapeHtml(o.label)}</h3>
+      <p class="text-muted offre-card-accroche">${escapeHtml(presentation.accroche || '')}</p>
+      <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
+      ${mensualise ? `<p class="text-muted offre-card-mensualise">${mensualise}</p>` : ''}
+      <div class="offre-card-condition">
+        <span>👥</span> ${presentation.conditionLabel || (plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`)}
+      </div>
+      ${ctaHtml}
+    </div>
+  `;
+}
+
 /** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing) — remplace
  * l'ancien aperçu en lecture seule : l'entreprise cliente choisit et paie elle-même son offre,
  * la gestion (changer d'offre, annuler, moyen de paiement) passe par le portail Stripe hébergé. */
@@ -7786,26 +8028,11 @@ function renderParametresAbonnement() {
       </div>
       <div class="offres-grid">
         ${Object.entries(OFFRE_TARIFS).map(([key, o]) => {
-          const presentation = OFFRE_PRESENTATION[key] || {};
-          const plafondOffre = OFFRES_BERTOLIS[key] ? OFFRES_BERTOLIS[key].nombreSalariesMax : null;
           const estActuelle = abo.offre === key && abo.periodicite === periodicite && dejaAbonne;
-          const mensualise = periodicite === 'annuel' ? `soit ${formatCurrencyFR(o.annuel / 12)}/mois` : '';
-          return `
-            <div class="offre-card ${estActuelle ? 'offre-card-active' : ''} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}">
-              ${presentation.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
-              <div class="offre-card-icon">${escapeHtml(presentation.icon || '💳')}</div>
-              <h3>${escapeHtml(o.label)}</h3>
-              <p class="text-muted offre-card-accroche">${escapeHtml(presentation.accroche || '')}</p>
-              <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
-              ${mensualise ? `<p class="text-muted offre-card-mensualise">${mensualise}</p>` : ''}
-              <div class="offre-card-condition">
-                <span>👥</span> ${presentation.conditionLabel || (plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`)}
-              </div>
-              ${estActuelle
-                ? `<span class="badge badge-success" style="margin-top: 12px;">Offre actuelle</span>`
-                : `<button class="btn ${presentation.misEnAvant ? 'btn-primary' : 'btn-secondary'}" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}" style="margin-top: 12px;">Souscrire</button>`}
-            </div>
-          `;
+          const cta = estActuelle
+            ? `<span class="badge badge-success" style="margin-top: 12px;">Offre actuelle</span>`
+            : `<button class="btn ${(OFFRE_PRESENTATION[key] || {}).misEnAvant ? 'btn-primary' : 'btn-secondary'}" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}" style="margin-top: 12px;">Souscrire</button>`;
+          return renderOffreCard(key, o, periodicite, cta, estActuelle ? 'offre-card-active' : '');
         }).join('')}
       </div>
     </div>

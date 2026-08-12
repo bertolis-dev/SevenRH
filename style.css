@@ -1708,6 +1708,132 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 /* ---------------------------------------------------------------------
+   Page d'accueil publique (landing) — bleu marine/or repris du logo,
+   volontairement fixes (pas de variante sombre/claire) : c'est l'identité
+   visuelle de la marque, pas un écran applicatif.
+   --------------------------------------------------------------------- */
+
+#landing-root {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.landing-page {
+  --landing-navy-900: #0e1a33;
+  --landing-navy-700: #17284d;
+  --landing-navy-500: #24406e;
+  --landing-gold-500: #c99a54;
+  --landing-gold-300: #e3c08a;
+  --landing-gold-soft: #f8efe0;
+}
+
+.landing-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 32px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.landing-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--color-text); }
+.landing-brand .logo-mark { width: 32px; height: 32px; }
+.landing-topbar-nav { display: flex; align-items: center; gap: 22px; }
+
+.btn-gold { background: var(--landing-gold-500); color: #221704; }
+.btn-gold:hover { background: var(--landing-gold-300); }
+.btn-ghost-light { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+.btn-ghost-light:hover { background: rgba(255, 255, 255, 0.1); }
+
+.landing-badge-gold { background: var(--landing-gold-soft); color: var(--landing-navy-900); }
+
+.landing-hero {
+  background: linear-gradient(135deg, var(--landing-navy-900), var(--landing-navy-700) 60%, var(--landing-navy-500));
+  color: #fff;
+  padding: 64px 32px 72px;
+}
+.landing-hero-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+.landing-hero-text { flex: 1; min-width: 0; }
+.landing-hero-text h1 { font-size: 38px; line-height: 1.15; margin: 16px 0; color: #fff; }
+.landing-hero-text p { font-size: 16px; color: rgba(255, 255, 255, 0.78); margin: 0 0 28px; max-width: 480px; }
+.landing-hero-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.landing-hero-cta .btn { font-size: 15px; padding: 12px 24px; }
+
+.landing-hero-mock { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.landing-mock-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  color: var(--color-text);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  padding: 20px;
+}
+.landing-mock-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.landing-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-border); }
+.landing-mock-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.landing-mock-kpi { background: var(--color-muted-soft); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+.landing-mock-kpi strong { display: block; font-size: 18px; }
+.landing-mock-kpi span { font-size: 11px; color: var(--color-text-muted); }
+.landing-mock-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); background: var(--color-muted-soft); margin-bottom: 8px; font-size: 13px; }
+.landing-mock-row .badge { margin-left: auto; }
+
+.landing-section { max-width: 1140px; margin: 0 auto; padding: 64px 32px; }
+.landing-section-head { text-align: center; max-width: 620px; margin: 0 auto 40px; }
+.landing-section-head h2 { margin: 0 0 10px; font-size: 28px; }
+.landing-section-head p { color: var(--color-text-muted); margin: 0; }
+
+.landing-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.landing-feature-card { text-align: left; }
+.landing-feature-icon {
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--landing-gold-soft);
+  margin-bottom: 12px;
+}
+.landing-feature-card h3 { margin: 0 0 6px; font-size: 16px; }
+.landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
+
+.landing-pricing-toggle { display: flex; justify-content: center; margin-bottom: 28px; }
+
+.landing-install-section { background: var(--color-muted-soft); }
+.landing-install-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 900px; margin: 0 auto; }
+.landing-install-card h3 { margin: 0 0 14px; font-size: 17px; }
+.landing-install-subblock { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.landing-install-subblock:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+.landing-install-subblock strong { display: block; margin-bottom: 6px; font-size: 14px; }
+
+.landing-footer { text-align: center; padding: 32px 32px 56px; color: var(--color-text-muted); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .landing-topbar-nav a.btn-link { display: none; }
+  .landing-hero-inner { flex-direction: column; text-align: center; }
+  .landing-hero-text p { max-width: none; margin-left: auto; margin-right: auto; }
+  .landing-hero-cta { justify-content: center; }
+  .landing-hero-text h1 { font-size: 30px; }
+  .landing-section { padding: 48px 20px; }
+  .landing-mock-card { max-width: 340px; }
+}
+@media (max-width: 480px) {
+  .landing-hero-cta { flex-direction: column; align-items: stretch; }
+  .landing-hero-cta .btn { width: 100%; }
+  .landing-topbar { padding: 12px 16px; }
+}
+
+/* ---------------------------------------------------------------------
    Assistant de première installation (onboarding)
    --------------------------------------------------------------------- */
 
