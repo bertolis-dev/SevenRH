@@ -485,19 +485,22 @@ const LANDING_FAQ_ITEMS = [
   }
 ];
 
-/** Contenu factuel connu (société, SIREN/TVA, hébergeurs) — pas de champ inventé (adresse du
- * siège, forme juridique, capital social) tant qu'il n'a pas été communiqué explicitement. Le
- * CGU/CGV est un premier brouillon basé sur les faits réels du service (offres, résiliation via
- * Stripe, support par tickets) : à faire relire par un professionnel du droit avant de s'appuyer
+const LEGAL_CONTACT_EMAIL = 'b.bertolis@outlook.com';
+
+/** Le CGU/CGV est un premier brouillon basé sur les faits réels du service (offres, résiliation
+ * via Stripe, support par tickets) : à faire relire par un professionnel du droit avant de s'appuyer
  * dessus contractuellement. */
 const LEGAL_CONTENT = {
   mentions: {
     title: 'Mentions légales',
     body: `
       <p style="margin-top:0;"><strong>Éditeur du site</strong><br>
-      Nexus est édité par la société BERTOLIS.<br>
+      Nexus est édité par la société BERTOLIS, EURL au capital social de 1 000 €.<br>
+      Siège social : 3 Bis Bois Baudry, 77510 Doue<br>
       SIREN : 100 782 358<br>
-      Numéro de TVA intracommunautaire : FR26100782358</p>
+      Numéro de TVA intracommunautaire : FR26100782358<br>
+      Directrice de la publication : Betty Aubert<br>
+      Contact : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       <p><strong>Hébergement</strong><br>
       Hébergement du site : GitHub Pages (GitHub Inc.)<br>
       Hébergement des données applicatives : Supabase</p>
@@ -527,6 +530,7 @@ const LEGAL_CONTENT = {
       <p>Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface).</p>
       <p>Chaque salarié peut demander l'export de ses propres données personnelles à tout moment depuis l'application.</p>
       <p>Les paiements sont traités directement par Stripe — Nexus ne stocke aucune donnée de carte bancaire.</p>
+      <p>Pour toute question relative à vos données personnelles : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
     `
   }
 };
@@ -755,7 +759,7 @@ function renderLandingScreen() {
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
           </nav>
         </div>
-        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus</p>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       </footer>
     </div>
 

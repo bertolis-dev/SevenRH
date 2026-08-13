@@ -733,6 +733,8 @@ p { margin: 0; line-height: 1.5; }
   min-height: 0;
 }
 
+.modal-body a { color: var(--color-primary); }
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -1916,6 +1918,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
 .landing-footer-links .btn-link { margin-bottom: 0; }
 .landing-footer-bottom { max-width: 1140px; margin: 16px auto 0; text-align: center; }
+.landing-footer-bottom a { color: var(--color-text-muted); }
 
 .landing-sticky-cta {
   position: fixed;
