@@ -402,14 +402,84 @@ const LANDING_SVG_ICONS = {
 };
 
 const LANDING_FEATURES = [
-  { icon: LANDING_SVG_ICONS.calendar, title: 'Congés & absences', text: "Demandes, validation par workflow, compteurs automatiques et export." },
-  { icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail', text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.' },
-  { icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie', text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie." },
-  { icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais', text: 'Justificatifs, validation et remboursement suivis de bout en bout.' },
-  { icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant', text: 'Calcul automatique selon les jours travaillés, part employeur incluse.' },
-  { icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme', text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.' },
-  { icon: LANDING_SVG_ICONS.folder, title: 'Documents RH', text: 'Contrats, attestations et documents générés automatiquement.' },
-  { icon: LANDING_SVG_ICONS.headset, title: 'Support intégré', text: 'Vos salariés posent leurs questions directement depuis l\'application.' }
+  {
+    icon: LANDING_SVG_ICONS.calendar, title: 'Congés & absences',
+    text: "Demandes, validation par workflow, compteurs automatiques et export.",
+    detail: [
+      "Types de congés et d'absences entièrement paramétrables (acquisition, plafond, report)",
+      "Workflow de validation manager puis RH",
+      "Compteurs automatiques par salarié, mis à jour à chaque demande",
+      "Calendrier partagé avec filtres par type d'événement",
+      "Jours fériés et vacances scolaires intégrés au calendrier"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail',
+    text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.',
+    detail: [
+      "Vue personnelle et vue équipe du planning",
+      "Demandes et validation du télétravail",
+      "Calendrier partagé, filtrable par type d'événement",
+      "Suivi au jour le jour de qui est au bureau, en télétravail ou en congé"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie',
+    text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie.",
+    detail: [
+      "Détection automatique des anomalies avant l'export",
+      "Export vers votre logiciel de paie",
+      "Récapitulatif mensuel par salarié (absences, primes, variables)",
+      "Confirmation obligatoire en cas d'anomalie bloquante, pas d'export silencieux"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais',
+    text: 'Justificatifs, validation et remboursement suivis de bout en bout.',
+    detail: [
+      "Justificatif joint à chaque dépense",
+      "Remboursement kilométrique inclus",
+      "Workflow de validation manager puis RH/comptabilité",
+      "Export CSV des notes de frais"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant',
+    text: 'Calcul automatique selon les jours travaillés, part employeur incluse.',
+    detail: [
+      "Calcul automatique selon les jours réellement travaillés",
+      "Répartition employeur/salarié paramétrable (60 % / 40 % par défaut)",
+      "Historique mensuel et régularisations tracées avec leur motif",
+      "Chaque salarié consulte son propre solde depuis l'application"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme',
+    text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.',
+    detail: [
+      "Généré automatiquement à partir des managers renseignés sur chaque fiche salarié",
+      "Vue par service et par équipe",
+      "Détection et correction automatique des cycles hiérarchiques"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.folder, title: 'Documents RH',
+    text: 'Contrats, attestations et documents générés automatiquement.',
+    detail: [
+      "Coffre-fort documentaire par salarié",
+      "Génération automatique d'attestations et de certificats de travail",
+      "Alertes d'échéance (titres de séjour, visites médicales, contrats à durée déterminée...)"
+    ]
+  },
+  {
+    icon: LANDING_SVG_ICONS.headset, title: 'Support intégré',
+    text: 'Vos salariés posent leurs questions directement depuis l\'application.',
+    detail: [
+      "Tickets support ouverts directement depuis l'application, sans outil externe",
+      "Analyse assistée par IA pour accélérer le traitement",
+      "Suivi de statut et date de livraison pour chaque demande"
+    ]
+  }
 ];
 
 const ABOUT_CATEGORIES = [
@@ -573,6 +643,29 @@ function openLegalModal(type) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
+function openFeatureDetailModal(index) {
+  const feature = LANDING_FEATURES[index];
+  if (!feature) return;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2><span class="feature-detail-icon">${feature.icon}</span> ${escapeHtml(feature.title)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <ul class="feature-detail-list">${feature.detail.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+}
+
 function openAboutModal() {
   const modalRoot = document.getElementById('modal-root');
   modalRoot.innerHTML = `
@@ -714,11 +807,12 @@ function renderLandingScreen() {
           <p>Toutes les fonctionnalités sont incluses dans chaque offre — seul le nombre de salariés change.</p>
         </div>
         <div class="landing-features-grid">
-          ${LANDING_FEATURES.map(f => `
-            <div class="card landing-feature-card">
+          ${LANDING_FEATURES.map((f, i) => `
+            <div class="card landing-feature-card" role="button" tabindex="0" data-feature-detail="${i}" aria-label="En savoir plus sur ${escapeHtml(f.title)}">
               <div class="landing-feature-icon">${f.icon}</div>
               <h3>${escapeHtml(f.title)}</h3>
               <p>${escapeHtml(f.text)}</p>
+              <span class="landing-feature-more">En savoir plus →</span>
             </div>
           `).join('')}
         </div>
@@ -952,6 +1046,9 @@ function bindLandingScreenEvents() {
   });
   document.querySelectorAll('[data-landing-action="changelog"]').forEach(btn => {
     btn.addEventListener('click', openChangelogModal);
+  });
+  document.querySelectorAll('[data-feature-detail]').forEach(card => {
+    card.addEventListener('click', () => openFeatureDetailModal(parseInt(card.dataset.featureDetail, 10)));
   });
   document.querySelectorAll('[data-legal-trigger]').forEach(btn => {
     btn.addEventListener('click', () => openLegalModal(btn.dataset.legalTrigger));

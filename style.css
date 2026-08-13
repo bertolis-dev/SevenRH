@@ -1857,8 +1857,16 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-section-head p { color: var(--color-text-muted); margin: 0; }
 
 .landing-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.landing-feature-card { text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.landing-feature-card { text-align: left; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .landing-feature-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.landing-feature-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
+.landing-feature-more { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--color-primary); }
+
+.feature-detail-icon { display: inline-flex; vertical-align: middle; }
+.feature-detail-icon svg { width: 22px; height: 22px; }
+.feature-detail-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.feature-detail-list li { font-size: 13.5px; color: var(--color-text); line-height: 1.5; padding-left: 16px; position: relative; }
+.feature-detail-list li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
 .landing-feature-icon {
   width: 44px;
   height: 44px;
