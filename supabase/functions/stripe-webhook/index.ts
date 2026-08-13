@@ -19,12 +19,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 // Prix Stripe (mode PRODUCTION — voir git blame pour les anciens Price ID de test).
 const PRICE_TO_PLAN = new Map<string, { offre: string; periodicite: string }>([
-  ["price_1TzGUpCAcL94JssKUQXchzW2", { offre: "essentiel", periodicite: "mensuel" }],
-  ["price_1TzGUqCAcL94JssKhPj74tfu", { offre: "essentiel", periodicite: "annuel" }],
-  ["price_1TzGUlCAcL94JssKETzTuocx", { offre: "professionnel", periodicite: "mensuel" }],
-  ["price_1TzGUlCAcL94JssKpkRCtXfD", { offre: "professionnel", periodicite: "annuel" }],
-  ["price_1TzGUkCAcL94JssKziG5RV4C", { offre: "premium", periodicite: "mensuel" }],
-  ["price_1TzGUlCAcL94JssKD3XSdpN0", { offre: "premium", periodicite: "annuel" }],
+  ["price_1TzGXFCAcL94JssKcYV67hON", { offre: "essentiel", periodicite: "mensuel" }],
+  ["price_1TzGXFCAcL94JssKSGtncWWL", { offre: "essentiel", periodicite: "annuel" }],
+  ["price_1TzGXpCAcL94JssKm7eW7z2S", { offre: "professionnel", periodicite: "mensuel" }],
+  ["price_1TzGXpCAcL94JssKszqeXYG7", { offre: "professionnel", periodicite: "annuel" }],
+  ["price_1TzGYOCAcL94JssKIR4YmNJS", { offre: "premium", periodicite: "mensuel" }],
+  ["price_1TzGYOCAcL94JssKmwB7qudN", { offre: "premium", periodicite: "annuel" }],
 ]);
 
 // Plafond de salariés par offre — reflète OFFRES_BERTOLIS (data.js) pour cette même offre.

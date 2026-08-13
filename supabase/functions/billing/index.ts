@@ -33,9 +33,9 @@ const CORS_HEADERS = {
 // offre/périodicité Seven RH. Les Price ID ne sont pas sensibles, donc pas besoin d'en faire un
 // secret Supabase.
 const PRICE_IDS: Record<string, { mensuel: string; annuel: string }> = {
-  essentiel: { mensuel: "price_1TzGUpCAcL94JssKUQXchzW2", annuel: "price_1TzGUqCAcL94JssKhPj74tfu" },
-  professionnel: { mensuel: "price_1TzGUlCAcL94JssKETzTuocx", annuel: "price_1TzGUlCAcL94JssKpkRCtXfD" },
-  premium: { mensuel: "price_1TzGUkCAcL94JssKziG5RV4C", annuel: "price_1TzGUlCAcL94JssKD3XSdpN0" },
+  essentiel: { mensuel: "price_1TzGXFCAcL94JssKcYV67hON", annuel: "price_1TzGXFCAcL94JssKSGtncWWL" },
+  professionnel: { mensuel: "price_1TzGXpCAcL94JssKm7eW7z2S", annuel: "price_1TzGXpCAcL94JssKszqeXYG7" },
+  premium: { mensuel: "price_1TzGYOCAcL94JssKIR4YmNJS", annuel: "price_1TzGYOCAcL94JssKmwB7qudN" },
 };
 
 // Plafond de salariés par offre — reflète OFFRES_BERTOLIS (data.js) pour cette même offre.
