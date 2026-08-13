@@ -398,7 +398,8 @@ const LANDING_SVG_ICONS = {
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
   headset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M20 19v1a3 3 0 0 1-3 3h-3"/></svg>',
   desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>',
-  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/></svg>'
+  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>'
 };
 
 const LANDING_FEATURES = [
@@ -549,6 +550,7 @@ const LANDING_FEATURES = [
       { role: 'Direction', text: "Maîtrise le coût mensuel réel, avec la répartition employeur configurée une fois pour toutes." }
     ],
     related: [0, 1],
+    simulator: true,
     mock: {
       title: 'Tickets restaurant',
       kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
@@ -812,6 +814,78 @@ function openLegalModal(type) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
+/** Menu déroulant unique pour les liens de navigation (Fonctionnalités/Tarifs/Installer/À propos),
+ * partagé par la topbar de la home ET celle des pages de fonctionnalité (qui n'avaient auparavant
+ * aucun de ces liens). Remplace les boutons/ancres séparés d'avant : sur mobile, ces liens étaient
+ * soit masqués (display:none, inaccessibles), soit entassés avec les autres boutons de la topbar
+ * jusqu'au débordement horizontal — un seul déclencheur compact règle les deux problèmes d'un coup. */
+function renderLandingNavMenu() {
+  return `
+    <div class="landing-nav-menu">
+      <button type="button" class="btn btn-secondary btn-sm landing-nav-menu-trigger" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+        ${LANDING_SVG_ICONS.menu} <span class="landing-nav-menu-label">Menu</span>
+      </button>
+      <div class="landing-nav-menu-panel">
+        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
+        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-tarifs">Tarifs</button>
+        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-installer">Installer</button>
+        <button type="button" class="landing-nav-menu-item" data-landing-action="about">À propos</button>
+      </div>
+    </div>
+  `;
+}
+
+/** Navigue vers une section de la home et y défile — appelable depuis une page de fonctionnalité
+ * (qui remplace tout #landing-root, ces sections n'existent alors pas dans le DOM courant) : on
+ * revient d'abord à la home via history.replaceState (pas pushState, pour ne pas empiler une entrée
+ * d'historique supplémentaire pour un simple déplacement latéral) + un rendu synchrone, avant de
+ * défiler — plus fiable qu'attendre l'évènement hashchange (asynchrone) posé par bindLandingHashRouting. */
+function goToLandingSection(sectionId) {
+  if (/^#fonctionnalite-\d+$/.test(window.location.hash)) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    renderLandingScreen();
+  }
+  requestAnimationFrame(() => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
+let landingNavMenuOutsideCloseBound = false;
+function closeAllLandingNavMenus() {
+  document.querySelectorAll('.landing-nav-menu-panel.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.landing-nav-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
+}
+function bindLandingNavMenuEvents() {
+  document.querySelectorAll('.landing-nav-menu-trigger').forEach(trigger => {
+    trigger.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      const panel = trigger.nextElementSibling;
+      const wasOpen = panel.classList.contains('open');
+      closeAllLandingNavMenus();
+      panel.classList.toggle('open', !wasOpen);
+      trigger.setAttribute('aria-expanded', String(!wasOpen));
+    });
+  });
+  document.querySelectorAll('[data-landing-goto]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      closeAllLandingNavMenus();
+      goToLandingSection(btn.dataset.landingGoto);
+    });
+  });
+  document.querySelectorAll('.landing-nav-menu-panel [data-landing-action]').forEach(btn => {
+    btn.addEventListener('click', closeAllLandingNavMenus);
+  });
+  if (!landingNavMenuOutsideCloseBound) {
+    landingNavMenuOutsideCloseBound = true;
+    document.addEventListener('click', (evt) => {
+      if (!evt.target.closest('.landing-nav-menu')) closeAllLandingNavMenus();
+    });
+    document.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape') closeAllLandingNavMenus();
+    });
+  }
+}
+
 /** Maquette stylisée (pas une vraie capture d'écran — voir aussi bindLandingHeroCarousel) réutilisée
  * pour donner un aperçu visuel concret à chaque page de fonctionnalité, plutôt qu'un mur de texte. */
 function renderMockCard(mock) {
@@ -843,17 +917,22 @@ function renderFeatureDetailPage(index) {
       <header class="landing-topbar">
         <div class="landing-topbar-left">
           <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
-          <button type="button" class="btn btn-secondary btn-sm" data-feature-page-back>← Toutes les fonctionnalités</button>
+          <button type="button" class="btn btn-secondary btn-sm feature-page-back-btn" data-feature-page-back aria-label="Retour à toutes les fonctionnalités">
+            <span class="feature-page-back-full">← Toutes les fonctionnalités</span>
+            <span class="feature-page-back-short" aria-hidden="true">←</span>
+          </button>
+          ${renderLandingNavMenu()}
         </div>
         <nav class="landing-topbar-nav">
           <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
-          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup"><span class="landing-topbar-cta-full">Créer mon entreprise</span><span class="landing-topbar-cta-short">S'inscrire</span> <span class="btn-arrow">→</span></button>
         </nav>
       </header>
 
-      <section class="landing-hero feature-page-hero">
+      <section class="feature-page-hero">
         <div class="landing-hero-inner">
           <div class="landing-hero-text">
+            <span class="feature-page-eyebrow">Fonctionnalité</span>
             <div class="feature-page-icon-badge">${feature.icon}</div>
             <h1>${escapeHtml(feature.title)}</h1>
             <p>${escapeHtml(feature.text)}</p>
@@ -873,6 +952,8 @@ function renderFeatureDetailPage(index) {
         </div>
         <ul class="feature-detail-list feature-page-list">${feature.detail.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
       </section>
+
+      ${feature.simulator ? renderTicketsSimulatorSection() : ''}
 
       <section class="landing-section landing-section-alt">
         <div class="landing-section-head">
@@ -1051,14 +1132,11 @@ function renderLandingScreen() {
       <header class="landing-topbar">
         <div class="landing-topbar-left">
           <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
-          <button type="button" class="btn btn-secondary btn-sm" data-landing-action="about">À propos</button>
-          <a class="btn btn-secondary btn-sm landing-topbar-anchor" href="#landing-fonctionnalites">Fonctionnalités</a>
-          <a class="btn btn-secondary btn-sm landing-topbar-anchor" href="#landing-tarifs">Tarifs</a>
-          <a class="btn btn-secondary btn-sm" href="#landing-installer">Installer</a>
+          ${renderLandingNavMenu()}
         </div>
         <nav class="landing-topbar-nav">
           <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
-          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup"><span class="landing-topbar-cta-full">Créer mon entreprise</span><span class="landing-topbar-cta-short">S'inscrire</span> <span class="btn-arrow">→</span></button>
         </nav>
       </header>
 
@@ -1161,48 +1239,6 @@ function renderLandingScreen() {
               <span class="landing-feature-more">En savoir plus →</span>
             </div>
           `).join('')}
-        </div>
-      </section>
-
-      <section class="landing-section" id="landing-simulateur">
-        <div class="landing-section-head">
-          <h2>Combien coûteraient vos tickets restaurant ?</h2>
-          <p>Estimation rapide avec les valeurs par défaut — entièrement personnalisable une fois votre compte créé.</p>
-        </div>
-        <div class="landing-simulator-card">
-          <div class="landing-simulator-inputs">
-            <div class="landing-simulator-field">
-              <label for="sim-employees">Nombre de salariés</label>
-              <input type="number" id="sim-employees" class="input" min="1" max="500" value="10">
-            </div>
-            <div class="landing-simulator-field">
-              <label for="sim-days">Jours travaillés / mois / salarié</label>
-              <input type="number" id="sim-days" class="input" min="1" max="31" value="20">
-            </div>
-            <div class="landing-simulator-field">
-              <label for="sim-valeur-faciale">Valeur faciale du ticket (€)</label>
-              <input type="number" id="sim-valeur-faciale" class="input" min="1" max="30" step="0.1" value="9">
-            </div>
-            <div class="landing-simulator-field">
-              <label for="sim-part-employeur">Part employeur (%)</label>
-              <input type="number" id="sim-part-employeur" class="input" min="50" max="60" step="1" value="60">
-            </div>
-          </div>
-          <div class="landing-simulator-results">
-            <div class="landing-simulator-result">
-              <strong id="sim-result-total">—</strong>
-              <span>Coût total / mois</span>
-            </div>
-            <div class="landing-simulator-result">
-              <strong id="sim-result-employeur">—</strong>
-              <span id="sim-result-employeur-label">Part employeur</span>
-            </div>
-            <div class="landing-simulator-result">
-              <strong id="sim-result-salarie">—</strong>
-              <span id="sim-result-salarie-label">Part salarié</span>
-            </div>
-          </div>
-          <p class="landing-simulator-note" id="sim-urssaf-note">Ces deux paramètres sont personnalisables dans l'application. Le calcul réel tient aussi compte des congés, absences et télétravail de chaque salarié.</p>
         </div>
       </section>
 
@@ -1426,6 +1462,7 @@ function bindLandingScreenEvents() {
   bindLandingEmployeeSlider();
   bindLandingSimulator();
   bindLandingHeroCarousel();
+  bindLandingNavMenuEvents();
 }
 
 /** Carrousel de maquettes (pas de vraies captures d'écran — même esprit que le mock déjà en place
@@ -1473,6 +1510,58 @@ function bindLandingHashRouting() {
  * à l'exonération de charges sociales (7,32 € en 2026, source URSSAF/Pluxee/Edenred) — au-delà, la
  * part qui dépasse ce plafond est soumise à cotisations, d'où l'avertissement affiché dans ce cas. */
 const PLAFOND_EXONERATION_URSSAF_2026 = 7.32;
+
+/** Extrait dans sa propre fonction pour vivre uniquement sur la page de fonctionnalité "Tickets
+ * restaurant" (feature.simulator === true) plutôt que sur la page d'accueil — demande explicite :
+ * l'endroit qui calcule le coût des tickets doit être avec le reste du contenu sur les tickets
+ * restaurant, pas séparé sur la home. bindLandingSimulator() reste appelée sans condition sur
+ * chaque rendu de la landing (elle se protège déjà en sortant tôt si les champs sont absents du DOM). */
+function renderTicketsSimulatorSection(alt) {
+  return `
+    <section class="landing-section${alt ? ' landing-section-alt' : ''}" id="landing-simulateur">
+      <div class="landing-section-head">
+        <h2>Combien coûteraient vos tickets restaurant ?</h2>
+        <p>Estimation rapide avec les valeurs par défaut — entièrement personnalisable une fois votre compte créé.</p>
+      </div>
+      <div class="landing-simulator-card">
+        <div class="landing-simulator-inputs">
+          <div class="landing-simulator-field">
+            <label for="sim-employees">Nombre de salariés</label>
+            <input type="number" id="sim-employees" class="input" min="1" max="500" value="10">
+          </div>
+          <div class="landing-simulator-field">
+            <label for="sim-days">Jours travaillés / mois / salarié</label>
+            <input type="number" id="sim-days" class="input" min="1" max="31" value="20">
+          </div>
+          <div class="landing-simulator-field">
+            <label for="sim-valeur-faciale">Valeur faciale du ticket (€)</label>
+            <input type="number" id="sim-valeur-faciale" class="input" min="1" max="30" step="0.1" value="9">
+          </div>
+          <div class="landing-simulator-field">
+            <label for="sim-part-employeur">Part employeur (%)</label>
+            <input type="number" id="sim-part-employeur" class="input" min="50" max="60" step="1" value="60">
+          </div>
+        </div>
+        <div class="landing-simulator-results">
+          <div class="landing-simulator-result">
+            <strong id="sim-result-total">—</strong>
+            <span>Coût total / mois</span>
+          </div>
+          <div class="landing-simulator-result">
+            <strong id="sim-result-employeur">—</strong>
+            <span id="sim-result-employeur-label">Part employeur</span>
+          </div>
+          <div class="landing-simulator-result">
+            <strong id="sim-result-salarie">—</strong>
+            <span id="sim-result-salarie-label">Part salarié</span>
+          </div>
+        </div>
+        <p class="landing-simulator-note" id="sim-urssaf-note">Ces deux paramètres sont personnalisables dans l'application. Le calcul réel tient aussi compte des congés, absences et télétravail de chaque salarié.</p>
+      </div>
+    </section>
+  `;
+}
+
 function bindLandingSimulator() {
   const employeesInput = document.getElementById('sim-employees');
   const daysInput = document.getElementById('sim-days');

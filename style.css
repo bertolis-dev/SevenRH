@@ -1809,6 +1809,46 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-brand .logo-mark { width: 32px; height: 32px; }
 .landing-topbar-nav { display: flex; align-items: center; gap: 22px; }
 
+/* Un seul déclencheur pour Fonctionnalités/Tarifs/Installer/À propos, plutôt que 4 boutons/ancres
+   séparés — remplace un empilement qui débordait sur mobile (certains étaient masqués en display:none,
+   donc inaccessibles) par un menu compact identique partout, y compris sur les pages de fonctionnalité
+   qui n'avaient auparavant aucun de ces liens. */
+.landing-nav-menu { position: relative; }
+.landing-nav-menu-trigger { display: inline-flex; align-items: center; gap: 6px; }
+.landing-nav-menu-trigger svg { width: 15px; height: 15px; }
+.landing-nav-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 190px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  z-index: 30;
+}
+.landing-nav-menu-panel.open { display: flex; }
+.landing-nav-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.landing-nav-menu-item:hover { background: var(--color-muted-soft); }
+
+.feature-page-back-short { display: none; }
+.landing-topbar-cta-short { display: none; }
+
 .btn-gold { background: var(--landing-gold-500); color: #221704; }
 .btn-gold:hover { background: var(--landing-gold-300); }
 .btn-ghost-light { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
@@ -1907,44 +1947,35 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
 .landing-feature-more { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--color-primary); }
 
-/* Bandeau façon hero de la landing (même dégradé marine) plutôt qu'un simple .modal-header plat —
-   ces modales sont le contenu le plus détaillé du site, elles méritent le même soin visuel que le
-   reste de la page plutôt que le style neutre des modales applicatives. */
-.feature-detail-header {
-  background: linear-gradient(135deg, var(--landing-navy-900), var(--landing-navy-700) 60%, var(--landing-navy-500));
-  align-items: flex-start;
-  gap: 16px;
-  padding: 26px 26px 24px;
+/* Page de fonctionnalité (#fonctionnalite-N) : fond clair volontairement DIFFÉRENT du dégradé marine
+   de la hero d'accueil (.landing-hero) — sans ce contraste, cliquer sur une carte "En savoir plus"
+   donnait l'impression de rester sur la même page (même bandeau bleu marine partout). Réutilise
+   .landing-hero-inner/.landing-hero-text/.landing-hero-mock pour la mise en page (texte à gauche,
+   maquette à droite), mais définit son propre fond/couleurs plutôt que d'étendre .landing-hero. */
+.feature-page-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--color-muted-soft), var(--color-surface) 70%);
+  border-bottom: 1px solid var(--color-border);
+  padding: 48px 32px 56px;
 }
-.feature-detail-header-icon {
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--landing-gold-300);
+.feature-page-hero .landing-hero-text h1 { color: var(--landing-navy-900); }
+.feature-page-hero .landing-hero-text p { color: var(--color-text-muted); }
+.feature-page-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--landing-navy-700);
+  margin-bottom: 10px;
 }
-.feature-detail-header-icon svg { width: 26px; height: 26px; }
-.feature-detail-header-text { flex: 1; min-width: 0; }
-.feature-detail-header-text h2 { color: #fff; margin: 0 0 6px; font-size: 22px; }
-.feature-detail-header-text p { color: rgba(255, 255, 255, 0.78); margin: 0; font-size: 13.5px; font-weight: 400; }
-.feature-detail-header .btn-icon { color: rgba(255, 255, 255, 0.75); flex-shrink: 0; }
-.feature-detail-header .btn-icon:hover { color: #fff; }
-
-/* Vraie page (#fonctionnalite-N) plutôt qu'une modale — même bandeau visuel que la modale
-   d'origine (.feature-detail-header-icon réutilisée), mais centré en pleine largeur façon hero. */
-/* La hero d'une page de fonctionnalité réutilise .landing-hero-inner/.landing-hero-text/
-   .landing-hero-mock (texte à gauche, maquette à droite) — même schéma que la hero principale,
-   juste ce badge d'icône en plus au-dessus du titre. */
 .feature-page-icon-badge {
   display: inline-flex;
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--landing-navy-900);
   align-items: center;
   justify-content: center;
   color: var(--landing-gold-300);
@@ -2209,11 +2240,8 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-sticky-cta span { font-size: 13px; font-weight: 600; white-space: nowrap; }
 
 @media (max-width: 860px) {
-  .landing-topbar-anchor { display: none; }
-  /* La CTA dorée du menu double celle du bouton flottant (visible dès qu'on scrolle) — sur un
-     écran étroit, la topbar (déjà chargée à gauche : logo/À propos/Installer) n'a pas la place
-     pour les deux sans provoquer le même débordement horizontal corrigé plus tôt. */
-  .landing-topbar-cta { display: none; }
+  .feature-page-back-full { display: none; }
+  .feature-page-back-short { display: inline; }
   .landing-hero-inner { flex-direction: column; text-align: center; }
   .landing-hero-text p { max-width: none; margin-left: auto; margin-right: auto; }
   .landing-hero-cta { justify-content: center; }
@@ -2231,13 +2259,17 @@ textarea.input { resize: vertical; font-family: inherit; }
   .landing-topbar { padding: 10px 12px; }
   .landing-sticky-cta { left: 16px; right: 16px; bottom: 16px; justify-content: space-between; }
   .landing-sticky-cta span { display: none; }
-  /* Sur un petit écran, marque + "À propos" + "Installer" + "Se connecter" dépassaient de ~13px
-     (débordement horizontal de toute la page) — resserré plutôt que masqué, les 4 éléments restent
-     tous accessibles en un tap sans sous-menu supplémentaire. */
-  .landing-topbar-left { gap: 8px; }
-  .landing-topbar-left .btn-sm { padding: 6px 9px; font-size: 12px; }
-  .landing-topbar-nav { gap: 10px; }
-  .landing-topbar-nav > button.btn { padding: 8px 12px; font-size: 13px; }
+  /* Marque + (bouton retour sur une page de fonctionnalité) + déclencheur du menu à gauche, "Se
+     connecter" + "Créer mon entreprise" à droite — resserré plutôt que masqué, tous les boutons
+     restent visibles et accessibles en un tap sur les plus petits écrans. */
+  .landing-topbar-left { gap: 6px; }
+  .landing-topbar-left .btn-sm { padding: 6px 8px; font-size: 12px; }
+  .landing-topbar-nav { gap: 6px; }
+  .landing-topbar-nav > button.btn { padding: 8px 10px; font-size: 12.5px; }
+  .landing-topbar-nav .btn-arrow { display: none; }
+  .landing-nav-menu-label { display: none; }
+  .landing-topbar-cta-full { display: none; }
+  .landing-topbar-cta-short { display: inline; }
 }
 
 /* ---------------------------------------------------------------------
