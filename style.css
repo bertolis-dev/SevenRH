@@ -1925,6 +1925,11 @@ textarea.input { resize: vertical; font-family: inherit; }
   font-size: 13.5px;
   color: var(--color-text);
 }
+/* Tout le texte d'une étape (y compris le <strong> imbriqué) doit rester UN SEUL bloc flex — sans
+   ce wrapper, chaque <strong> devient lui-même un flex item séparé (les éléments inline ne sont
+   pas fusionnés dans la boîte anonyme comme le texte brut), ce qui fragmentait la phrase avec des
+   espaces disproportionnés et un retour à la ligne incohérent entre les morceaux. */
+.landing-step-text { flex: 1; min-width: 0; }
 .landing-step-num {
   flex-shrink: 0;
   width: 22px;
