@@ -2066,6 +2066,7 @@ const documentRepository = {
 };
 
 const supportTicketRepository = {
+  getAll: () => DB.getSupportTickets(),
   getById: (id) => DB.getTicketById(id),
   getMine: (employeeId) => DB.getMySupportTickets(employeeId),
   getVisibleTo: (employee) => DB.getSupportTicketsVisibleTo(employee),

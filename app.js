@@ -3489,6 +3489,18 @@ function syncNotifications() {
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
   });
 
+  // Sans ce bloc, le salarié qui a envoyé un ticket n'était jamais prévenu de sa résolution — il
+  // devait aller vérifier manuellement dans "Mes tickets". dateModification (pas juste l'id+statut)
+  // dans le sourceKey : un ticket réouvert puis re-résolu doit renotifier, pas rester silencieux au
+  // 2e passage à ce même statut (addNotificationsIfNew ne recrée jamais un sourceKey déjà vu).
+  supportTicketRepository.getAll().filter(t => t.statut === 'resolu' || t.statut === 'livre').forEach(t => {
+    const employee = employeeRepository.getById(t.employeeId);
+    if (!employee) return;
+    candidates.push(makeNotification(`ticket-status-${t.id}-${t.statut}-${t.dateModification}`, '🎫',
+      t.statut === 'livre' ? 'Ticket livré' : 'Ticket résolu',
+      `${employee.prenom} ${employee.nom} · ${t.titre}`, 'mes-tickets', {}, employee.id));
+  });
+
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
   // widgets d'aperçu du tableau de bord) — sinon le 6e salarié et au-delà n'est simplement jamais notifié.
   getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
