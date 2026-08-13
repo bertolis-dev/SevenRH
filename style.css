@@ -51,6 +51,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Uniquement des ancres internes (menu de la landing) déclenchent un scroll natif dans toute
+   l'app — aucun scrollIntoView()/scrollTo() programmatique ailleurs qui pourrait en pâtir. */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
 h2 { font-size: 16px; font-weight: 600; margin: 0 0 14px; }
 p { margin: 0; line-height: 1.5; }
@@ -1739,6 +1746,9 @@ textarea.input { resize: vertical; font-family: inherit; }
 .btn-ghost-light { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
 .btn-ghost-light:hover { background: rgba(255, 255, 255, 0.1); }
 
+.btn-arrow-cta .btn-arrow { display: inline-block; transition: transform 0.15s ease; }
+.btn-arrow-cta:hover .btn-arrow { transform: translateX(3px); }
+
 .landing-badge-gold { background: var(--landing-gold-soft); color: var(--landing-navy-900); }
 
 .landing-hero {
@@ -1784,7 +1794,8 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-section-head p { color: var(--color-text-muted); margin: 0; }
 
 .landing-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.landing-feature-card { text-align: left; }
+.landing-feature-card { text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.landing-feature-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .landing-feature-icon {
   font-size: 22px;
   width: 44px;
@@ -1800,6 +1811,26 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
 
 .landing-pricing-toggle { display: flex; justify-content: center; margin-bottom: 28px; }
+
+.landing-section-alt { background: var(--color-muted-soft); }
+
+.landing-steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1040px; margin: 0 auto; }
+.landing-step-card { text-align: center; }
+.landing-step-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--landing-navy-900);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+}
+.landing-step-card h3 { margin: 0 0 6px; font-size: 16px; }
+.landing-step-card p { margin: 0; font-size: 13.5px; }
 
 .landing-install-section { background: var(--color-muted-soft); }
 .landing-install-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1040px; margin: 0 auto; align-items: stretch; }
@@ -1943,6 +1974,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 @media (max-width: 860px) {
   .landing-topbar-nav a.btn-link { display: none; }
+  /* La CTA dorée du menu double celle du bouton flottant (visible dès qu'on scrolle) — sur un
+     écran étroit, la topbar (déjà chargée à gauche : logo/À propos/Installer) n'a pas la place
+     pour les deux sans provoquer le même débordement horizontal corrigé plus tôt. */
+  .landing-topbar-cta { display: none; }
   .landing-hero-inner { flex-direction: column; text-align: center; }
   .landing-hero-text p { max-width: none; margin-left: auto; margin-right: auto; }
   .landing-hero-cta { justify-content: center; }
@@ -1950,6 +1985,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .landing-section { padding: 48px 20px; }
   .landing-mock-card { max-width: 340px; }
   .landing-install-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .landing-steps-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
   .landing-trust-row { justify-content: center; }
   .landing-footer-top { justify-content: center; text-align: center; }
 }

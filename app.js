@@ -610,6 +610,7 @@ function renderLandingScreen() {
           <a class="btn-link" href="#landing-fonctionnalites">Fonctionnalités</a>
           <a class="btn-link" href="#landing-tarifs">Tarifs</a>
           <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
+          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
         </nav>
       </header>
 
@@ -620,7 +621,7 @@ function renderLandingScreen() {
             <h1>Le SIRH simple pour piloter congés, planning, paie et notes de frais</h1>
             <p>Nexus centralise la gestion RH de votre entreprise dans un seul outil clair — sans papier, sans tableur, accessible à toute votre équipe selon son rôle.</p>
             <div class="landing-hero-cta">
-              <button type="button" class="btn btn-gold" data-landing-action="signup">Créer mon entreprise</button>
+              <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
               <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
             </div>
             <div class="landing-trust-row">
@@ -660,6 +661,29 @@ function renderLandingScreen() {
               <p>${escapeHtml(f.text)}</p>
             </div>
           `).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section landing-section-alt" id="landing-comment">
+        <div class="landing-section-head">
+          <h2>Comment ça marche</h2>
+        </div>
+        <div class="landing-steps-grid">
+          <div class="landing-step-card">
+            <div class="landing-step-badge">1</div>
+            <h3>Créez votre entreprise</h3>
+            <p class="text-muted">Renseignez le nom de votre entreprise — aucune carte bancaire requise pour commencer.</p>
+          </div>
+          <div class="landing-step-card">
+            <div class="landing-step-badge">2</div>
+            <h3>Ajoutez vos salariés</h3>
+            <p class="text-muted">En masse (import CSV/Excel) ou un par un — chacun reçoit un accès adapté à son rôle.</p>
+          </div>
+          <div class="landing-step-card">
+            <div class="landing-step-badge">3</div>
+            <h3>C'est prêt</h3>
+            <p class="text-muted">Congés, planning, notes de frais, tickets restaurant... toute l'équipe peut commencer immédiatement.</p>
+          </div>
         </div>
       </section>
 
@@ -743,7 +767,7 @@ function renderLandingScreen() {
         <h2>Prêt à simplifier votre gestion RH ?</h2>
         <p>Créez votre entreprise en quelques minutes — aucune carte bancaire requise pour commencer.</p>
         <div class="landing-cta-banner-actions">
-          <button type="button" class="btn btn-gold" data-landing-action="signup">Créer mon entreprise</button>
+          <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
         </div>
       </section>
@@ -765,7 +789,7 @@ function renderLandingScreen() {
 
     <div class="landing-sticky-cta" id="landing-sticky-cta">
       <span>Prêt à essayer Nexus ?</span>
-      <button type="button" class="btn btn-gold btn-sm" data-landing-action="signup">Créer mon entreprise</button>
+      <button type="button" class="btn btn-gold btn-sm btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
     </div>
   `;
 
