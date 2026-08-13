@@ -395,6 +395,102 @@ const LANDING_FEATURES = [
   { icon: '🎫', title: 'Support intégré', text: 'Vos salariés posent leurs questions directement depuis l\'application.' }
 ];
 
+const ABOUT_CATEGORIES = [
+  {
+    icon: '👥',
+    title: 'Salariés & organisation',
+    items: [
+      "Fiche complète par salarié : contrat, coordonnées, documents, historique",
+      "Organigramme hiérarchique généré automatiquement à partir des managers",
+      "Catégories de salariés personnalisables",
+      "Alertes automatiques : anniversaires d'ancienneté (médailles du travail), entretiens professionnels (tous les 2 ans) et bilans (tous les 6 ans)",
+      "Import en masse de salariés depuis un fichier CSV/Excel"
+    ]
+  },
+  {
+    icon: '🏖️',
+    title: 'Congés, absences & télétravail',
+    items: [
+      "Types de congés et d'absences entièrement paramétrables (acquisition, plafond, report)",
+      "Workflow de validation manager puis RH",
+      "Compteurs automatiques par salarié, mis à jour à chaque demande",
+      "Calendrier partagé avec filtres par type d'événement",
+      "Demandes et planning de télétravail",
+      "Jours fériés et vacances scolaires intégrés au calendrier"
+    ]
+  },
+  {
+    icon: '📤',
+    title: 'Paie & notes de frais',
+    items: [
+      "Préparation de paie avec détection automatique des anomalies avant export",
+      "Export vers votre logiciel de paie",
+      "Notes de frais avec justificatifs, workflow de validation et remboursement (y compris kilométrique)",
+      "Tickets restaurant calculés automatiquement selon les jours travaillés, part employeur incluse"
+    ]
+  },
+  {
+    icon: '📁',
+    title: 'Documents & conformité',
+    items: [
+      "Coffre-fort documentaire par salarié",
+      "Génération automatique d'attestations et de certificats de travail",
+      "Journal d'audit complet des actions sensibles",
+      "Export RGPD des données personnelles d'un salarié"
+    ]
+  },
+  {
+    icon: '🎫',
+    title: 'Support & pilotage',
+    items: [
+      "Tickets support intégrés, avec suivi de statut et date de livraison",
+      "Analyse automatique des tickets assistée par IA",
+      "Tableaux de bord adaptés à chaque rôle (salarié, manager, RH, comptabilité, directeur)",
+      "Recherche globale instantanée (Ctrl+K)",
+      "Notifications en temps réel"
+    ]
+  },
+  {
+    icon: '⚙️',
+    title: 'Accès, sécurité & installation',
+    items: [
+      "Gestion fine des rôles et des permissions, avec surcharges individuelles possibles",
+      "Hébergement et authentification sécurisés (Supabase)",
+      "Facturation et abonnement gérés par Stripe, résiliable à tout moment",
+      "Installable comme une vraie application sur PC, iPhone et Android"
+    ]
+  }
+];
+
+function openAboutModal() {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${NEXUS_LOGO_MARK} À propos de Nexus</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-top: 0;">Nexus est un SIRH pensé pour réunir, dans un seul outil, tout ce qu'une équipe RH gère habituellement dans plusieurs logiciels séparés.</p>
+        <div class="about-modal-grid">
+          ${ABOUT_CATEGORIES.map(cat => `
+            <div class="about-category">
+              <h3>${cat.icon} ${escapeHtml(cat.title)}</h3>
+              <ul>${cat.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+}
+
 function showLanding() {
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
@@ -413,6 +509,7 @@ function renderLandingScreen() {
       <header class="landing-topbar">
         <div class="landing-topbar-left">
           <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+          <button type="button" class="btn btn-secondary btn-sm" data-landing-action="about">À propos</button>
           <a class="btn btn-secondary btn-sm" href="#landing-installer">Installer</a>
         </div>
         <nav class="landing-topbar-nav">
@@ -542,6 +639,9 @@ function bindLandingScreenEvents() {
   });
   document.querySelectorAll('[data-landing-action="signup"]').forEach(btn => {
     btn.addEventListener('click', () => showLogin('signup-company'));
+  });
+  document.querySelectorAll('[data-landing-action="about"]').forEach(btn => {
+    btn.addEventListener('click', openAboutModal);
   });
   document.querySelectorAll('[data-landing-periodicite]').forEach(btn => {
     btn.addEventListener('click', () => {

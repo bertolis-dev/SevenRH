@@ -624,6 +624,18 @@ p { margin: 0; line-height: 1.5; }
   gap: 16px;
 }
 
+.about-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.about-category { background: var(--color-muted-soft); border-radius: var(--radius-md); padding: 16px 18px; }
+.about-category h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
+.about-category ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.about-category li { font-size: 13px; color: var(--color-text-muted); line-height: 1.45; padding-left: 14px; position: relative; }
+.about-category li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
+
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -768,7 +780,14 @@ p { margin: 0; line-height: 1.5; }
   border-bottom: 1px solid var(--color-border);
   margin-bottom: 18px;
   overflow-x: auto;
+  /* La scrollbar native (avec ses flèches sur certains navigateurs/OS) apparaissait dès que le
+     contenu dépassait la largeur de quelques pixels et provoquait un léger décalage visuel au
+     survol. Le défilement tactile reste actif (overflow-x:auto), seule la barre est masquée. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab { flex-shrink: 0; }
 
@@ -1862,7 +1881,14 @@ textarea.input { resize: vertical; font-family: inherit; }
 @media (max-width: 480px) {
   .landing-hero-cta { flex-direction: column; align-items: stretch; }
   .landing-hero-cta .btn { width: 100%; }
-  .landing-topbar { padding: 12px 16px; }
+  .landing-topbar { padding: 10px 12px; }
+  /* Sur un petit écran, marque + "À propos" + "Installer" + "Se connecter" dépassaient de ~13px
+     (débordement horizontal de toute la page) — resserré plutôt que masqué, les 4 éléments restent
+     tous accessibles en un tap sans sous-menu supplémentaire. */
+  .landing-topbar-left { gap: 8px; }
+  .landing-topbar-left .btn-sm { padding: 6px 9px; font-size: 12px; }
+  .landing-topbar-nav { gap: 10px; }
+  .landing-topbar-nav > button.btn { padding: 8px 12px; font-size: 13px; }
 }
 
 /* ---------------------------------------------------------------------
