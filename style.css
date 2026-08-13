@@ -457,36 +457,6 @@ p { margin: 0; line-height: 1.5; }
   inset: -10px;
 }
 
-#btn-theme-toggle {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-}
-#btn-theme-toggle:hover { background: var(--color-muted-soft); }
-
-/* Une fois connecté, le bouton est déplacé dans .topbar-user (voir showApp) : la position fixe
-   chevauchait sinon la cloche/l'avatar, les rendant intouchables.
-   position: relative (pas static) — sinon le ::before de .btn-icon (zone tactile agrandie,
-   inset:-10px) perd son bloc de positionnement et s'étend jusqu'à l'ancêtre positionné suivant
-   (#topbar), recouvrant toute la barre dont la recherche globale. */
-#btn-theme-toggle.theme-toggle-inline {
-  position: relative;
-  top: auto;
-  right: auto;
-  z-index: auto;
-  box-shadow: none;
-}
-
 /* ---------------------------------------------------------------------
    Formulaires / filtres
    --------------------------------------------------------------------- */
@@ -1988,35 +1958,6 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-info-soft: #10203a;
     --color-danger-soft: #2a1414;
   }
-}
-
-/* Thème choisi manuellement (bouton topbar) : l'emporte sur la préférence système ci-dessus grâce au sélecteur d'attribut, plus spécifique que ":root" seul. */
-:root[data-theme="dark"] {
-  --color-bg: #14161a;
-  --color-surface: #1c1f26;
-  --color-border: #2a2d36;
-  --color-text: #f2f3f5;
-  --color-text-muted: #9aa0ab;
-  --color-primary-soft: #232244;
-  --color-muted-soft: #23262e;
-  --color-success-soft: #0f2a1c;
-  --color-warning-soft: #2a1f0f;
-  --color-info-soft: #10203a;
-  --color-danger-soft: #2a1414;
-}
-
-:root[data-theme="light"] {
-  --color-bg: #f6f7f9;
-  --color-surface: #ffffff;
-  --color-border: #e6e8eb;
-  --color-text: #1a1d24;
-  --color-text-muted: #6b7280;
-  --color-primary-soft: #eef2ff;
-  --color-muted-soft: #f1f2f4;
-  --color-success-soft: #ecfdf3;
-  --color-warning-soft: #fff7ed;
-  --color-info-soft: #eff6ff;
-  --color-danger-soft: #fef2f2;
 }
 
 /* ---------------------------------------------------------------------

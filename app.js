@@ -126,42 +126,6 @@ function getPendingSignup() {
 /** Élément qui avait le focus juste avant l'ouverture d'une modale — restauré par closeModal() à la fermeture. */
 let lastFocusedBeforeModal = null;
 
-// ---------------------------------------------------------------------------
-// Thème (clair / sombre / système) — préférence de l'appareil, pas liée à un
-// utilisateur (elle doit s'appliquer dès l'écran de connexion, avant tout login).
-// ---------------------------------------------------------------------------
-
-const THEME_KEY = 'sevenrh_theme';
-const THEME_CYCLE = ['system', 'light', 'dark'];
-const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' };
-const THEME_LABELS = { system: 'Système', light: 'Clair', dark: 'Sombre' };
-
-function getThemePreference() {
-  const stored = localStorage.getItem(THEME_KEY);
-  return THEME_CYCLE.includes(stored) ? stored : 'system';
-}
-
-function applyTheme() {
-  const pref = getThemePreference();
-  if (pref === 'system') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = pref;
-
-  const btn = document.getElementById('btn-theme-toggle');
-  if (btn) {
-    btn.textContent = THEME_ICONS[pref];
-    btn.title = `Thème : ${THEME_LABELS[pref]} (cliquer pour changer)`;
-  }
-}
-
-function cycleTheme() {
-  const current = getThemePreference();
-  const next = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
-  localStorage.setItem(THEME_KEY, next);
-  applyTheme();
-}
-
-applyTheme();
-
 /** Filtres/pagination/onglets propres à une session de vue — voir showApp(), qui les réinitialise
  * à chaque entrée dans l'application pour éviter qu'un filtre (ex. fraisFilters.employeeId) ne
  * survive à un changement d'entreprise ou de compte et masque silencieusement des données réelles
@@ -311,8 +275,6 @@ function navItemsForRole(user) {
 document.addEventListener('DOMContentLoaded', async () => {
   DB.onSaveError = (message) => showToast(message, 'error');
   DB.init();
-  applyTheme();
-  document.getElementById('btn-theme-toggle').addEventListener('click', cycleTheme);
   bindGlobalEvents();
   bindGlobalSearchEvents();
   bindNotificationEvents();
@@ -384,10 +346,6 @@ function showLogin(defaultView) {
   document.getElementById('bertolis-root').style.display = 'none';
   document.getElementById('landing-root').style.display = 'none';
   document.getElementById('login-root').style.display = 'flex';
-  // Remet le bouton de thème en position flottante (coin haut-droit) : il n'y a pas de topbar sur l'écran de connexion.
-  const themeToggle = document.getElementById('btn-theme-toggle');
-  themeToggle.classList.remove('theme-toggle-inline');
-  document.body.prepend(themeToggle);
   state.authError = '';
   // Si un rechargement survient pendant l'attente de confirmation d'email (typiquement parce que
   // l'utilisateur a changé d'appli pour consulter ses emails, ce qui peut faire recharger l'onglet
@@ -442,9 +400,6 @@ function showLanding() {
   document.getElementById('bertolis-root').style.display = 'none';
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('landing-root').style.display = 'block';
-  const themeToggle = document.getElementById('btn-theme-toggle');
-  themeToggle.classList.remove('theme-toggle-inline');
-  document.body.prepend(themeToggle);
   renderLandingScreen();
 }
 
@@ -597,11 +552,6 @@ function showApp() {
   document.getElementById('app-shell').style.display = 'flex';
   renderSidebar();
   renderUserMenuButton();
-  // Déplace le bouton de thème dans la topbar (à côté de la cloche/l'avatar) : en position fixe, il
-  // se superposait à ces icônes et les rendait intouchables (repéré à toutes les largeurs d'écran).
-  const themeToggle = document.getElementById('btn-theme-toggle');
-  themeToggle.classList.add('theme-toggle-inline');
-  document.querySelector('.topbar-user').prepend(themeToggle);
   navigateTo('dashboard');
   handleCheckoutReturn();
   const currentUser = authRepository.getCurrentUser();
