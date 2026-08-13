@@ -851,6 +851,14 @@ function renderLandingScreen() {
               <label for="sim-days">Jours travaillés / mois / salarié</label>
               <input type="number" id="sim-days" class="input" min="1" max="31" value="20">
             </div>
+            <div class="landing-simulator-field">
+              <label for="sim-valeur-faciale">Valeur faciale du ticket (€)</label>
+              <input type="number" id="sim-valeur-faciale" class="input" min="1" max="30" step="0.1" value="9">
+            </div>
+            <div class="landing-simulator-field">
+              <label for="sim-part-employeur">Part employeur (%)</label>
+              <input type="number" id="sim-part-employeur" class="input" min="50" max="60" step="1" value="60">
+            </div>
           </div>
           <div class="landing-simulator-results">
             <div class="landing-simulator-result">
@@ -859,14 +867,14 @@ function renderLandingScreen() {
             </div>
             <div class="landing-simulator-result">
               <strong id="sim-result-employeur">—</strong>
-              <span>Part employeur (60 %)</span>
+              <span id="sim-result-employeur-label">Part employeur</span>
             </div>
             <div class="landing-simulator-result">
               <strong id="sim-result-salarie">—</strong>
-              <span>Part salarié (40 %)</span>
+              <span id="sim-result-salarie-label">Part salarié</span>
             </div>
           </div>
-          <p class="landing-simulator-note">Estimation basée sur la valeur faciale par défaut (9 € / ticket) et une répartition employeur/salarié de 60 % / 40 % — ces paramètres sont modifiables dans Paramètres une fois votre compte créé. Le calcul réel dans l'application tient aussi compte des congés et absences de chaque salarié.</p>
+          <p class="landing-simulator-note" id="sim-urssaf-note">Ces deux paramètres sont personnalisables dans l'application. Le calcul réel tient aussi compte des congés, absences et télétravail de chaque salarié.</p>
         </div>
       </section>
 
@@ -1092,26 +1100,44 @@ function bindLandingScreenEvents() {
 
 /** Estimation volontairement simplifiée (pas de congés/absences pris en compte, contrairement à
  * calculateTicketsRestaurant réel dans data.js) — un visiteur public n'a pas de salariés/demandes
- * à faire tourner dans le vrai calcul. Les valeurs par défaut (9 €, 60 %) sont les mêmes que
- * settingsRepository.getSettings() à la création d'une entreprise (voir data.js). */
+ * à faire tourner dans le vrai calcul. Valeur faciale et part employeur sont désormais modifiables
+ * (au lieu d'être figées à 9 €/60 %) pour que le visiteur simule SA propre politique de tickets.
+ * PLAFOND_EXONERATION_URSSAF_2026 : plafond réel de participation employeur par titre ouvrant droit
+ * à l'exonération de charges sociales (7,32 € en 2026, source URSSAF/Pluxee/Edenred) — au-delà, la
+ * part qui dépasse ce plafond est soumise à cotisations, d'où l'avertissement affiché dans ce cas. */
+const PLAFOND_EXONERATION_URSSAF_2026 = 7.32;
 function bindLandingSimulator() {
   const employeesInput = document.getElementById('sim-employees');
   const daysInput = document.getElementById('sim-days');
-  if (!employeesInput || !daysInput) return;
-  const VALEUR_FACIALE = 9;
-  const PART_EMPLOYEUR_PCT = 60;
+  const valeurFacialeInput = document.getElementById('sim-valeur-faciale');
+  const partEmployeurInput = document.getElementById('sim-part-employeur');
+  if (!employeesInput || !daysInput || !valeurFacialeInput || !partEmployeurInput) return;
   const update = () => {
     const employees = Math.max(0, parseInt(employeesInput.value, 10) || 0);
     const days = Math.max(0, parseInt(daysInput.value, 10) || 0);
-    const total = employees * days * VALEUR_FACIALE;
-    const partEmployeur = total * PART_EMPLOYEUR_PCT / 100;
+    const valeurFaciale = Math.max(0, parseFloat(valeurFacialeInput.value) || 0);
+    const partEmployeurPct = Math.max(0, Math.min(100, parseFloat(partEmployeurInput.value) || 0));
+    const total = employees * days * valeurFaciale;
+    const partEmployeur = total * partEmployeurPct / 100;
     const partSalarie = total - partEmployeur;
     document.getElementById('sim-result-total').textContent = formatCurrencyFR(total);
     document.getElementById('sim-result-employeur').textContent = formatCurrencyFR(partEmployeur);
     document.getElementById('sim-result-salarie').textContent = formatCurrencyFR(partSalarie);
+    document.getElementById('sim-result-employeur-label').textContent = `Part employeur (${formatNumberFR(partEmployeurPct, 0)} %)`;
+    document.getElementById('sim-result-salarie-label').textContent = `Part salarié (${formatNumberFR(100 - partEmployeurPct, 0)} %)`;
+
+    const partEmployeurParTicket = valeurFaciale * partEmployeurPct / 100;
+    const note = document.getElementById('sim-urssaf-note');
+    if (partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026) {
+      note.innerHTML = `⚠️ Avec ces valeurs, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre — au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`;
+    } else {
+      note.textContent = `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre — dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Ces paramètres sont personnalisables dans l'application, qui tient aussi compte des congés, absences et télétravail de chaque salarié.`;
+    }
   };
   employeesInput.addEventListener('input', update);
   daysInput.addEventListener('input', update);
+  valeurFacialeInput.addEventListener('input', update);
+  partEmployeurInput.addEventListener('input', update);
   update();
 }
 
@@ -8509,10 +8535,10 @@ const OFFRE_TARIFS = {
 const OFFRE_PRESENTATION = {
   essentiel: { icon: '🌱', accroche: "Pour démarrer avec une petite équipe." },
   professionnel: { icon: '🚀', accroche: 'Pour une entreprise en croissance.', misEnAvant: true },
-  // conditionLabel : nombreSalariesMax vaut null (illimité) pour Premium, mais "50 salariés et
-  // plus" reflète mieux à qui l'offre s'adresse (au-delà du plafond Professionnel) qu'un vague
-  // "illimité" — voir renderParametresAbonnement, qui l'utilise à la place du texte générique.
-  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '50 salariés et plus' }
+  // conditionLabel : nombreSalariesMax vaut null (illimité) pour Premium, mais "25 salariés et
+  // plus" reflète mieux à qui l'offre s'adresse (au-delà du plafond Professionnel, fixé à 25) qu'un
+  // vague "illimité" — voir renderParametresAbonnement, qui l'utilise à la place du texte générique.
+  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '25 salariés et plus' }
 };
 
 /** Une seule carte d'offre, réutilisée par l'écran Paramètres > Abonnement ET par la page
