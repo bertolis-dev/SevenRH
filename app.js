@@ -424,7 +424,16 @@ const LANDING_FEATURES = [
       { role: 'Manager', text: "Valide ou refuse les demandes de son équipe, avec une vue calendrier claire." },
       { role: 'RH', text: "Paramètre les règles d'acquisition et de report, avec une vue d'ensemble par service." }
     ],
-    related: [1, 6]
+    related: [1, 6],
+    mock: {
+      title: 'Congés & absences',
+      kpis: [['18', 'Jours CP restants'], ['2', 'Demandes en attente'], ['5', 'Absents cette semaine']],
+      rows: [
+        ['🏖️ Congés payés — 22 au 26 sept.', 'success', 'Validé'],
+        ['🤒 Arrêt maladie — T. Bernard', 'info', 'Déclaré'],
+        ["📅 Vacances scolaires intégrées automatiquement", null, null]
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail',
@@ -447,7 +456,16 @@ const LANDING_FEATURES = [
       { role: 'Manager', text: "Valide les demandes et garde le quota hebdomadaire sous contrôle sans calcul manuel." },
       { role: 'RH', text: "Définit le quota de télétravail applicable à toute l'entreprise." }
     ],
-    related: [0, 4]
+    related: [0, 4],
+    mock: {
+      title: 'Planning & télétravail',
+      kpis: [['4/5', 'Jours au bureau'], ['1', 'Jour télétravail'], ['18', 'Salariés au bureau']],
+      rows: [
+        ['💻 Télétravail — C. Lefèvre', 'info', "Aujourd'hui"],
+        ['🏢 Présentiel cette semaine — 18 salariés', 'success', 'À jour'],
+        ['✅ Quota hebdomadaire vérifié automatiquement', null, null]
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie',
@@ -469,7 +487,16 @@ const LANDING_FEATURES = [
       { role: 'Direction', text: "A une visibilité claire sur les variables de paie avant validation." },
       { role: 'Comptabilité', text: "Reçoit un export prêt à intégrer, sans ressaisie." }
     ],
-    related: [3, 4]
+    related: [3, 4],
+    mock: {
+      title: 'Préparation de paie',
+      kpis: [['0', 'Anomalies détectées'], ['24', 'Salariés prêts'], ['15', 'Export le']],
+      rows: [
+        ['✅ Aucune anomalie détectée', 'success', 'Prêt'],
+        ["📤 Export vers votre logiciel de paie", null, null],
+        ['🧾 Bulletins distribués — 24 salariés', 'info', 'Ce mois']
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais',
@@ -491,7 +518,16 @@ const LANDING_FEATURES = [
       { role: 'Manager', text: "Valide rapidement, sans échange de mails ou de tableurs." },
       { role: 'Comptabilité', text: "Exporte les notes validées directement pour l'intégration comptable." }
     ],
-    related: [2, 4]
+    related: [2, 4],
+    mock: {
+      title: 'Notes de frais',
+      kpis: [['104,70 €', 'Ce mois-ci'], ['3', 'En attente'], ['0', 'Rejetées']],
+      rows: [
+        ['🧾 Taxi client — 32,50 €', 'warning', 'En attente'],
+        ["🧾 Repas d'affaires — 58,00 €", 'success', 'Validé'],
+        ['🚗 Trajet domicile-travail — 14,20 €', 'info', 'Remboursé']
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant',
@@ -512,7 +548,16 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "N'a plus à recalculer manuellement le nombre de tickets selon les absences." },
       { role: 'Direction', text: "Maîtrise le coût mensuel réel, avec la répartition employeur configurée une fois pour toutes." }
     ],
-    related: [0, 1]
+    related: [0, 1],
+    mock: {
+      title: 'Tickets restaurant',
+      kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
+      rows: [
+        ["🍽️ Calculé automatiquement selon les jours travaillés", null, null],
+        ['✅ Régularisation appliquée — J. Petit', 'info', 'Ce mois'],
+        ['📊 Historique consultable par chaque salarié', null, null]
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme',
@@ -533,7 +578,16 @@ const LANDING_FEATURES = [
       { role: 'Manager', text: "Visualise son équipe et les équipes voisines." },
       { role: 'RH', text: "N'a plus besoin de redessiner l'organigramme à chaque changement." }
     ],
-    related: [6, 0]
+    related: [6, 0],
+    mock: {
+      title: 'Organigramme',
+      kpis: [['4', 'Services'], ['6', 'Managers'], ['24', 'Salariés']],
+      rows: [
+        ['🗂️ Direction générale', null, null],
+        ['👥 Généré depuis les managers renseignés', null, null],
+        ['✅ Toujours à jour', 'success', 'Automatique']
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.folder, title: 'Documents RH',
@@ -554,7 +608,16 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Génère les documents administratifs sans ressaisie, et ne rate plus une échéance." },
       { role: 'Direction', text: "A la garantie que les documents obligatoires sont suivis, pas oubliés dans un tiroir." }
     ],
-    related: [0, 5]
+    related: [0, 5],
+    mock: {
+      title: 'Documents RH',
+      kpis: [['18', 'Documents ce mois'], ['3', 'Échéances proches'], ['0', 'Manquants']],
+      rows: [
+        ['📁 Contrat — J. Moreau', 'success', 'Archivé'],
+        ['⚠️ Titre de séjour — expire dans 25 jours', 'warning', 'À renouveler'],
+        ['✅ Certificat généré automatiquement', null, null]
+      ]
+    }
   },
   {
     icon: LANDING_SVG_ICONS.headset, title: 'Support intégré',
@@ -575,7 +638,16 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Traite les demandes avec l'aide de l'IA, sans changer d'outil." },
       { role: 'Direction', text: "A une vue d'ensemble du volume et du traitement des demandes internes." }
     ],
-    related: [6, 0]
+    related: [6, 0],
+    mock: {
+      title: 'Mes tickets',
+      kpis: [['2', 'Ouverts'], ['5', 'Résolus ce mois'], ['4h', 'Délai moyen']],
+      rows: [
+        ['🎫 Question sur mes congés', 'info', 'En cours'],
+        ["🤖 Analyse IA suggérée pour la RH", null, null],
+        ['✅ Ticket résolu', 'success', 'Terminé']
+      ]
+    }
   }
 ];
 
@@ -740,6 +812,25 @@ function openLegalModal(type) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
+/** Maquette stylisée (pas une vraie capture d'écran — voir aussi bindLandingHeroCarousel) réutilisée
+ * pour donner un aperçu visuel concret à chaque page de fonctionnalité, plutôt qu'un mur de texte. */
+function renderMockCard(mock) {
+  return `
+    <div class="landing-mock-card">
+      <div class="landing-mock-header">
+        <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+        <span class="landing-mock-title">${escapeHtml(mock.title)}</span>
+      </div>
+      <div class="landing-mock-kpis">
+        ${mock.kpis.map(([value, label]) => `<div class="landing-mock-kpi"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join('')}
+      </div>
+      ${mock.rows.map(([text, badgeType, badgeLabel]) => `
+        <div class="landing-mock-row">${escapeHtml(text)}${badgeType ? ` <span class="badge badge-${escapeHtml(badgeType)}">${escapeHtml(badgeLabel)}</span>` : ''}</div>
+      `).join('')}
+    </div>
+  `;
+}
+
 /** Vraie page (URL #fonctionnalite-N, partageable, retour navigateur fonctionnel) plutôt qu'une
  * modale par-dessus la landing — remplace complètement #landing-root, avec sa propre topbar (sans
  * les ancres Fonctionnalités/Tarifs/Installer, qui n'ont pas de sens depuis cette page) et son
@@ -761,10 +852,18 @@ function renderFeatureDetailPage(index) {
       </header>
 
       <section class="landing-hero feature-page-hero">
-        <div class="feature-page-hero-inner">
-          <div class="feature-detail-header-icon">${feature.icon}</div>
-          <h1>${escapeHtml(feature.title)}</h1>
-          <p>${escapeHtml(feature.text)}</p>
+        <div class="landing-hero-inner">
+          <div class="landing-hero-text">
+            <div class="feature-page-icon-badge">${feature.icon}</div>
+            <h1>${escapeHtml(feature.title)}</h1>
+            <p>${escapeHtml(feature.text)}</p>
+            <div class="landing-hero-cta">
+              <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+            </div>
+          </div>
+          <div class="landing-hero-mock" aria-hidden="true">
+            ${renderMockCard(feature.mock)}
+          </div>
         </div>
       </section>
 

@@ -1820,11 +1820,26 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-badge-gold { background: var(--landing-gold-soft); color: var(--landing-navy-900); }
 
 .landing-hero {
+  position: relative;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--landing-navy-900), var(--landing-navy-700) 60%, var(--landing-navy-500));
   color: #fff;
   padding: 64px 32px 72px;
 }
+/* Lueur douce purement décorative — profondeur "premium" façon SaaS haut de gamme, sans image. */
+.landing-hero::before {
+  content: '';
+  position: absolute;
+  top: -140px;
+  right: -100px;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(201, 154, 84, 0.22), transparent 70%);
+  pointer-events: none;
+}
 .landing-hero-inner {
+  position: relative;
+  z-index: 1;
   max-width: 1140px;
   margin: 0 auto;
   display: flex;
@@ -1921,10 +1936,21 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* Vraie page (#fonctionnalite-N) plutôt qu'une modale — même bandeau visuel que la modale
    d'origine (.feature-detail-header-icon réutilisée), mais centré en pleine largeur façon hero. */
-.feature-page-hero-inner { max-width: 640px; margin: 0 auto; text-align: center; }
-.feature-page-hero-inner .feature-detail-header-icon { margin: 0 auto 20px; }
-.feature-page-hero-inner h1 { color: #fff; font-size: 34px; margin: 0 0 12px; }
-.feature-page-hero-inner p { color: rgba(255, 255, 255, 0.8); font-size: 16px; margin: 0; }
+/* La hero d'une page de fonctionnalité réutilise .landing-hero-inner/.landing-hero-text/
+   .landing-hero-mock (texte à gauche, maquette à droite) — même schéma que la hero principale,
+   juste ce badge d'icône en plus au-dessus du titre. */
+.feature-page-icon-badge {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  align-items: center;
+  justify-content: center;
+  color: var(--landing-gold-300);
+  margin-bottom: 16px;
+}
+.feature-page-icon-badge svg { width: 22px; height: 22px; }
 .feature-page-list { max-width: 900px; margin: 0 auto; }
 
 .feature-audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
