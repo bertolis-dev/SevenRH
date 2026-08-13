@@ -411,11 +411,13 @@ function renderLandingScreen() {
   root.innerHTML = `
     <div class="landing-page">
       <header class="landing-topbar">
-        <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+        <div class="landing-topbar-left">
+          <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+          <a class="btn btn-secondary btn-sm" href="#landing-installer">Installer</a>
+        </div>
         <nav class="landing-topbar-nav">
           <a class="btn-link" href="#landing-fonctionnalites">Fonctionnalités</a>
           <a class="btn-link" href="#landing-tarifs">Tarifs</a>
-          <a class="btn btn-gold btn-sm" href="#landing-installer">📲 Installer</a>
           <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
         </nav>
       </header>
