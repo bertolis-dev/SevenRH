@@ -484,31 +484,41 @@ function renderLandingScreen() {
 
       <section class="landing-section landing-install-section" id="landing-installer">
         <div class="landing-section-head">
-          <h2>Installer</h2>
-          <p>Ajoutez Nexus sur votre bureau ou votre écran d'accueil pour l'ouvrir comme une application, en un clic.</p>
+          <h2>Installez Nexus en 1 minute</h2>
+          <p>Une icône sur votre bureau ou votre écran d'accueil — ouverture instantanée, comme une vraie application. Gratuit, sans magasin d'applications.</p>
         </div>
-        <div class="landing-install-columns">
-          <div class="card landing-install-card">
-            <h3>💻 Ordinateur (Windows)</h3>
-            <a class="btn btn-gold" style="width: 100%;" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger Nexus (.exe)</a>
-            <p class="text-muted" style="margin-top: 10px;">Windows affichera peut-être "Windows a protégé votre PC" (pas de certificat de signature payant) — cliquez sur "Informations complémentaires" puis "Exécuter quand même".</p>
-            ${platform === 'desktop' ? `
-              <p class="text-muted" style="margin-top: 14px;">Vous préférez ne rien installer ? <button type="button" class="btn-link" data-install-trigger style="display: inline;">Installer depuis le navigateur</button> à la place.</p>
-            ` : ''}
+        <div class="landing-install-grid">
+          <div class="card landing-platform-card ${platform === 'desktop' ? 'landing-platform-card-active' : ''}">
+            ${platform === 'desktop' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
+            <div class="landing-platform-icon">🖥️</div>
+            <h3>Ordinateur</h3>
+            <p class="text-muted">Windows, via Chrome ou Edge</p>
+            <a class="btn btn-gold" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger (.exe)</a>
+            <p class="landing-platform-note">Windows peut afficher "Windows a protégé votre PC" (pas de certificat payant) — cliquez "Informations complémentaires" puis "Exécuter quand même".</p>
+            <button type="button" class="btn-link" data-install-trigger style="margin-top: 6px;">Ou installer depuis le navigateur</button>
           </div>
-          <div class="card landing-install-card">
-            <h3>📱 Téléphone</h3>
-            <div class="landing-install-subblock">
-              <strong>Android (Chrome)</strong>
-              ${platform === 'android' ? `
-                <button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>
-                <p class="text-muted" style="margin-top: 8px;">Ou ouvrez le menu ⋮ de Chrome → "Installer l'application" (versions plus anciennes : "Ajouter à l'écran d'accueil" puis "Installer").</p>
-              ` : `<p class="text-muted">Ouvrez ce lien dans Chrome, puis menu ⋮ → "Installer l'application".</p>`}
-            </div>
-            <div class="landing-install-subblock">
-              <strong>iPhone / iPad (Safari)</strong>
-              <p class="text-muted">Ouvrez ce lien dans Safari, appuyez sur l'icône de partage <strong>􀈂</strong> en bas de l'écran, puis choisissez "Sur l'écran d'accueil" → "Ajouter".</p>
-            </div>
+          <div class="card landing-platform-card ${platform === 'ios' ? 'landing-platform-card-active' : ''}">
+            ${platform === 'ios' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
+            <div class="landing-platform-icon">📱</div>
+            <h3>iPhone & iPad</h3>
+            <p class="text-muted">Via Safari (obligatoire)</p>
+            <ol class="landing-steps">
+              <li><span class="landing-step-num">1</span> Ouvrez ce site dans <strong>Safari</strong></li>
+              <li><span class="landing-step-num">2</span> Appuyez sur <strong>􀈂 Partager</strong>, en bas de l'écran</li>
+              <li><span class="landing-step-num">3</span> Choisissez <strong>"Sur l'écran d'accueil"</strong>, puis "Ajouter"</li>
+            </ol>
+          </div>
+          <div class="card landing-platform-card ${platform === 'android' ? 'landing-platform-card-active' : ''}">
+            ${platform === 'android' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
+            <div class="landing-platform-icon">🤖</div>
+            <h3>Android</h3>
+            <p class="text-muted">Via Chrome</p>
+            ${platform === 'android' ? '<button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>' : ''}
+            <ol class="landing-steps">
+              <li><span class="landing-step-num">1</span> Ouvrez ce site dans <strong>Chrome</strong></li>
+              <li><span class="landing-step-num">2</span> Appuyez sur <strong>⋮</strong>, en haut à droite</li>
+              <li><span class="landing-step-num">3</span> Choisissez <strong>"Installer l'application"</strong></li>
+            </ol>
           </div>
         </div>
       </section>
