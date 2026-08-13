@@ -709,6 +709,13 @@ function renderLandingScreen() {
           <h2>Une offre pour chaque taille d'équipe</h2>
           <p>Paiement sécurisé par Stripe. Annulation possible à tout moment.</p>
         </div>
+        <div class="landing-employee-slider">
+          <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
+          <div class="landing-employee-slider-row">
+            <input type="range" id="landing-employee-count" min="1" max="60" value="10" step="1">
+            <span class="landing-employee-count-value" id="landing-employee-count-value">10 salariés</span>
+          </div>
+        </div>
         <div class="landing-pricing-toggle">
           <div class="tabs">
             <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-landing-periodicite="mensuel">Mensuel</button>
@@ -831,6 +838,30 @@ function bindLandingStickyCta() {
   window.addEventListener('scroll', updateVisibility, { passive: true });
 }
 
+/** Met en évidence l'offre correspondant au nombre de salariés saisi (OFFRES_BERTOLIS, data.js —
+ * mêmes seuils que ceux qui plafonnent réellement une entreprise cliente), plutôt que de laisser
+ * le visiteur comparer 3 cartes à la main. Recréé à chaque render (changement de périodicité), pas
+ * besoin de flag anti-doublon comme le scroll : pas de listener global ici, juste sur l'input lui-même. */
+function bindLandingEmployeeSlider() {
+  const slider = document.getElementById('landing-employee-count');
+  if (!slider) return;
+  const order = ['essentiel', 'professionnel', 'premium'];
+  const updateMatch = () => {
+    const n = parseInt(slider.value, 10);
+    const valueLabel = document.getElementById('landing-employee-count-value');
+    if (valueLabel) valueLabel.textContent = `${n} salarié${n > 1 ? 's' : ''}`;
+    const matchKey = order.find(key => {
+      const max = OFFRES_BERTOLIS[key].nombreSalariesMax;
+      return max === null || n <= max;
+    });
+    document.querySelectorAll('.offre-card').forEach(card => {
+      card.classList.toggle('offre-card-match', card.dataset.offreKey === matchKey);
+    });
+  };
+  slider.addEventListener('input', updateMatch);
+  updateMatch();
+}
+
 function bindLandingScreenEvents() {
   document.querySelectorAll('[data-landing-action="login"]').forEach(btn => {
     btn.addEventListener('click', () => showLogin());
@@ -859,6 +890,7 @@ function bindLandingScreenEvents() {
   document.querySelectorAll('[data-install-trigger]').forEach(btn => {
     btn.addEventListener('click', triggerInstallPrompt);
   });
+  bindLandingEmployeeSlider();
 }
 
 function showApp() {
@@ -8270,8 +8302,9 @@ function renderOffreCard(key, o, periodicite, ctaHtml, extraClass = '') {
   const plafondOffre = OFFRES_BERTOLIS[key] ? OFFRES_BERTOLIS[key].nombreSalariesMax : null;
   const mensualise = periodicite === 'annuel' ? `soit ${formatCurrencyFR(o.annuel / 12)}/mois` : '';
   return `
-    <div class="offre-card ${extraClass} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}">
+    <div class="offre-card ${extraClass} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}" data-offre-key="${key}">
       ${presentation.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
+      <div class="offre-card-match-badge">Pour votre équipe</div>
       <div class="offre-card-icon">${escapeHtml(presentation.icon || '💳')}</div>
       <h3>${escapeHtml(o.label)}</h3>
       <p class="text-muted offre-card-accroche">${escapeHtml(presentation.accroche || '')}</p>

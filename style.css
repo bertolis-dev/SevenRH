@@ -1261,6 +1261,25 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
+/* Badge dynamique du curseur "Combien de salariés ?" (landing uniquement — voir
+   bindLandingEmployeeSlider) : présent dans le DOM sur les deux écrans qui réutilisent
+   renderOffreCard, mais masqué par défaut, donc totalement inerte dans l'appli connectée. */
+.offre-card-match-badge {
+  display: none;
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  background: var(--landing-gold-500);
+  color: #221704;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.landing-page .offre-card-match { border-color: var(--landing-gold-500); box-shadow: 0 0 0 2px var(--landing-gold-500), var(--shadow-md); }
+.landing-page .offre-card-match .offre-card-match-badge { display: block; }
+
 .offre-card-icon { font-size: 28px; margin-bottom: 8px; }
 
 .offre-card h3 { font-size: 16px; margin-bottom: 4px; }
@@ -1847,6 +1866,19 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-icon svg { width: 22px; height: 22px; }
 .landing-feature-card h3 { margin: 0 0 6px; font-size: 16px; }
 .landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
+
+.landing-employee-slider { max-width: 420px; margin: 0 auto 28px; text-align: center; }
+.landing-employee-slider label { display: block; font-size: 13.5px; font-weight: 600; color: var(--color-text-muted); margin-bottom: 10px; }
+.landing-employee-slider-row { display: flex; align-items: center; gap: 14px; }
+.landing-employee-slider-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border);
+  accent-color: var(--landing-gold-500);
+  cursor: pointer;
+}
+.landing-employee-count-value { flex-shrink: 0; min-width: 84px; font-weight: 700; font-size: 14px; color: var(--landing-navy-900); }
 
 .landing-pricing-toggle { display: flex; justify-content: center; margin-bottom: 28px; }
 
