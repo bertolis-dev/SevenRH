@@ -644,6 +644,13 @@ p { margin: 0; line-height: 1.5; }
 .about-category li { font-size: 13px; color: var(--color-text-muted); line-height: 1.45; padding-left: 14px; position: relative; }
 .about-category li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
 
+.changelog-entry { margin-bottom: 20px; }
+.changelog-entry:last-child { margin-bottom: 0; }
+.changelog-entry h3 { margin: 0 0 10px; font-size: 14px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.changelog-entry ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.changelog-entry li { font-size: 13.5px; color: var(--color-text); line-height: 1.5; padding-left: 16px; position: relative; }
+.changelog-entry li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
+
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -1879,6 +1886,24 @@ textarea.input { resize: vertical; font-family: inherit; }
   cursor: pointer;
 }
 .landing-employee-count-value { flex-shrink: 0; min-width: 84px; font-weight: 700; font-size: 14px; color: var(--landing-navy-900); }
+
+.landing-simulator-card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 26px;
+}
+.landing-simulator-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+.landing-simulator-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--color-text-muted); margin-bottom: 6px; }
+.landing-simulator-field input { width: 100%; }
+.landing-simulator-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center; padding: 18px 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.landing-simulator-result { display: flex; flex-direction: column; gap: 4px; }
+.landing-simulator-result strong { font-size: 20px; color: var(--landing-navy-900); }
+.landing-simulator-result span { font-size: 12px; color: var(--color-text-muted); }
+.landing-simulator-note { font-size: 12px; color: var(--color-text-muted); margin: 16px 0 0; text-align: center; }
 
 .landing-pricing-toggle { display: flex; justify-content: center; margin-bottom: 28px; }
 

@@ -602,6 +602,49 @@ function openAboutModal() {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
+/** Historique réel des évolutions (résumé côté utilisateur des vrais changements livrés, pas une
+ * liste marketing inventée) — regroupé par mois plutôt que jour par jour, la plupart de ces
+ * changements ayant été livrés sur une courte période. */
+const CHANGELOG_ENTRIES = [
+  {
+    date: 'Août 2026',
+    items: [
+      "Nouvelle page d'accueil : présentation des fonctionnalités, FAQ, installation multi-plateforme et mentions légales complètes.",
+      "Un curseur « Combien de salariés ? » met en évidence l'offre adaptée à votre équipe sur la page des tarifs.",
+      "Un simulateur estime le coût mensuel des tickets restaurant selon la taille de votre équipe.",
+      "Nexus est désormais installable comme une vraie application sur PC, iPhone et Android.",
+      "L'écran Abonnement affiche plus clairement les conditions de chaque offre.",
+      "Le rôle Comptabilité peut désormais gérer ses propres congés et absences."
+    ]
+  }
+];
+
+function openChangelogModal() {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Nouveautés</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        ${CHANGELOG_ENTRIES.map(entry => `
+          <div class="changelog-entry">
+            <h3>${escapeHtml(entry.date)}</h3>
+            <ul>${entry.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+          </div>
+        `).join('')}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+}
+
 function showLanding() {
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
@@ -678,6 +721,40 @@ function renderLandingScreen() {
               <p>${escapeHtml(f.text)}</p>
             </div>
           `).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section" id="landing-simulateur">
+        <div class="landing-section-head">
+          <h2>Combien coûteraient vos tickets restaurant ?</h2>
+          <p>Estimation rapide avec les valeurs par défaut — entièrement personnalisable une fois votre compte créé.</p>
+        </div>
+        <div class="landing-simulator-card">
+          <div class="landing-simulator-inputs">
+            <div class="landing-simulator-field">
+              <label for="sim-employees">Nombre de salariés</label>
+              <input type="number" id="sim-employees" class="input" min="1" max="500" value="10">
+            </div>
+            <div class="landing-simulator-field">
+              <label for="sim-days">Jours travaillés / mois / salarié</label>
+              <input type="number" id="sim-days" class="input" min="1" max="31" value="20">
+            </div>
+          </div>
+          <div class="landing-simulator-results">
+            <div class="landing-simulator-result">
+              <strong id="sim-result-total">—</strong>
+              <span>Coût total / mois</span>
+            </div>
+            <div class="landing-simulator-result">
+              <strong id="sim-result-employeur">—</strong>
+              <span>Part employeur (60 %)</span>
+            </div>
+            <div class="landing-simulator-result">
+              <strong id="sim-result-salarie">—</strong>
+              <span>Part salarié (40 %)</span>
+            </div>
+          </div>
+          <p class="landing-simulator-note">Estimation basée sur la valeur faciale par défaut (9 € / ticket) et une répartition employeur/salarié de 60 % / 40 % — ces paramètres sont modifiables dans Paramètres une fois votre compte créé. Le calcul réel dans l'application tient aussi compte des congés et absences de chaque salarié.</p>
         </div>
       </section>
 
@@ -802,6 +879,7 @@ function renderLandingScreen() {
           <nav class="landing-footer-links">
             <button type="button" class="btn-link" data-landing-action="login">Se connecter</button>
             <button type="button" class="btn-link" data-landing-action="signup">Créer mon entreprise</button>
+            <button type="button" class="btn-link" data-landing-action="changelog">Nouveautés</button>
             <button type="button" class="btn-link" data-legal-trigger="mentions">Mentions légales</button>
             <button type="button" class="btn-link" data-legal-trigger="cgu">CGU / CGV</button>
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
@@ -872,6 +950,9 @@ function bindLandingScreenEvents() {
   document.querySelectorAll('[data-landing-action="about"]').forEach(btn => {
     btn.addEventListener('click', openAboutModal);
   });
+  document.querySelectorAll('[data-landing-action="changelog"]').forEach(btn => {
+    btn.addEventListener('click', openChangelogModal);
+  });
   document.querySelectorAll('[data-legal-trigger]').forEach(btn => {
     btn.addEventListener('click', () => openLegalModal(btn.dataset.legalTrigger));
   });
@@ -891,6 +972,32 @@ function bindLandingScreenEvents() {
     btn.addEventListener('click', triggerInstallPrompt);
   });
   bindLandingEmployeeSlider();
+  bindLandingSimulator();
+}
+
+/** Estimation volontairement simplifiée (pas de congés/absences pris en compte, contrairement à
+ * calculateTicketsRestaurant réel dans data.js) — un visiteur public n'a pas de salariés/demandes
+ * à faire tourner dans le vrai calcul. Les valeurs par défaut (9 €, 60 %) sont les mêmes que
+ * settingsRepository.getSettings() à la création d'une entreprise (voir data.js). */
+function bindLandingSimulator() {
+  const employeesInput = document.getElementById('sim-employees');
+  const daysInput = document.getElementById('sim-days');
+  if (!employeesInput || !daysInput) return;
+  const VALEUR_FACIALE = 9;
+  const PART_EMPLOYEUR_PCT = 60;
+  const update = () => {
+    const employees = Math.max(0, parseInt(employeesInput.value, 10) || 0);
+    const days = Math.max(0, parseInt(daysInput.value, 10) || 0);
+    const total = employees * days * VALEUR_FACIALE;
+    const partEmployeur = total * PART_EMPLOYEUR_PCT / 100;
+    const partSalarie = total - partEmployeur;
+    document.getElementById('sim-result-total').textContent = formatCurrencyFR(total);
+    document.getElementById('sim-result-employeur').textContent = formatCurrencyFR(partEmployeur);
+    document.getElementById('sim-result-salarie').textContent = formatCurrencyFR(partSalarie);
+  };
+  employeesInput.addEventListener('input', update);
+  daysInput.addEventListener('input', update);
+  update();
 }
 
 function showApp() {
