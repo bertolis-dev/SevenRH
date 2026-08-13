@@ -384,15 +384,32 @@ function showLogin(defaultView) {
  * nouvelle version publiée avec `gh release create`. */
 const DESKTOP_APP_DOWNLOAD_URL = 'https://github.com/thomasaubert-star/SevenRH/releases/download/v1.0.0/Nexus-Setup-1.0.0.exe';
 
+/** Icônes vectorielles de la landing (traits simples, cohérentes avec le bleu marine/or) — à la
+ * place des emoji d'origine, dont le rendu dépend de la police système du visiteur et casse le
+ * ton "logiciel professionnel" recherché. Formes génériques (calendrier, dossier...), pas de tracé
+ * complexe ni de bibliothèque d'icônes copiée. */
+const LANDING_SVG_ICONS = {
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="7" y1="3" x2="7" y2="7"/><line x1="17" y1="3" x2="17" y2="7"/><line x1="7" y1="13.5" x2="9" y2="13.5"/><line x1="12" y1="13.5" x2="14" y2="13.5"/><line x1="16" y1="13.5" x2="18" y2="13.5"/></svg>',
+  laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="9" rx="1.2"/><path d="M3 17h18l-1.5 3H4.5L3 17z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>',
+  utensils: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="3" x2="7" y2="21"/><line x1="5" y1="3" x2="5" y2="9"/><line x1="9" y1="3" x2="9" y2="9"/><path d="M5 9c0 1.5 1 2 2 2s2-.5 2-2"/><path d="M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
+  orgchart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="15" width="6" height="4" rx="1"/><rect x="15" y="15" width="6" height="4" rx="1"/><line x1="12" y1="7" x2="12" y2="11"/><line x1="6" y1="15" x2="6" y2="11"/><line x1="18" y1="15" x2="18" y2="11"/><line x1="6" y1="11" x2="18" y2="11"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
+  headset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M20 19v1a3 3 0 0 1-3 3h-3"/></svg>',
+  desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>',
+  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/></svg>'
+};
+
 const LANDING_FEATURES = [
-  { icon: '🏖️', title: 'Congés & absences', text: "Demandes, validation par workflow, compteurs automatiques et export." },
-  { icon: '🗓️', title: 'Planning & télétravail', text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.' },
-  { icon: '📤', title: 'Préparation de paie', text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie." },
-  { icon: '🧾', title: 'Notes de frais', text: 'Justificatifs, validation et remboursement suivis de bout en bout.' },
-  { icon: '🍽️', title: 'Tickets restaurant', text: 'Calcul automatique selon les jours travaillés, part employeur incluse.' },
-  { icon: '🗂️', title: 'Organigramme', text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.' },
-  { icon: '📁', title: 'Documents RH', text: 'Contrats, attestations et documents générés automatiquement.' },
-  { icon: '🎫', title: 'Support intégré', text: 'Vos salariés posent leurs questions directement depuis l\'application.' }
+  { icon: LANDING_SVG_ICONS.calendar, title: 'Congés & absences', text: "Demandes, validation par workflow, compteurs automatiques et export." },
+  { icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail', text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.' },
+  { icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie', text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie." },
+  { icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais', text: 'Justificatifs, validation et remboursement suivis de bout en bout.' },
+  { icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant', text: 'Calcul automatique selon les jours travaillés, part employeur incluse.' },
+  { icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme', text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.' },
+  { icon: LANDING_SVG_ICONS.folder, title: 'Documents RH', text: 'Contrats, attestations et documents générés automatiquement.' },
+  { icon: LANDING_SVG_ICONS.headset, title: 'Support intégré', text: 'Vos salariés posent leurs questions directement depuis l\'application.' }
 ];
 
 const ABOUT_CATEGORIES = [
@@ -730,7 +747,7 @@ function renderLandingScreen() {
         <div class="landing-install-grid">
           <div class="card landing-platform-card ${platform === 'desktop' ? 'landing-platform-card-active' : ''}">
             ${platform === 'desktop' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">🖥️</div>
+            <div class="landing-platform-icon">${LANDING_SVG_ICONS.desktop}</div>
             <h3>Ordinateur</h3>
             <p class="text-muted">Windows, via Chrome ou Edge</p>
             <a class="btn btn-gold" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger (.exe)</a>
@@ -739,7 +756,7 @@ function renderLandingScreen() {
           </div>
           <div class="card landing-platform-card ${platform === 'ios' ? 'landing-platform-card-active' : ''}">
             ${platform === 'ios' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">📱</div>
+            <div class="landing-platform-icon">${LANDING_SVG_ICONS.mobile}</div>
             <h3>iPhone & iPad</h3>
             <p class="text-muted">Via Safari (obligatoire)</p>
             <ol class="landing-steps">
@@ -750,7 +767,7 @@ function renderLandingScreen() {
           </div>
           <div class="card landing-platform-card ${platform === 'android' ? 'landing-platform-card-active' : ''}">
             ${platform === 'android' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">🤖</div>
+            <div class="landing-platform-icon">${LANDING_SVG_ICONS.mobile}</div>
             <h3>Android</h3>
             <p class="text-muted">Via Chrome</p>
             ${platform === 'android' ? '<button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>' : ''}

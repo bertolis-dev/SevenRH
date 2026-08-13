@@ -1716,6 +1716,38 @@ textarea.input { resize: vertical; font-family: inherit; }
   background: var(--color-bg);
 }
 
+/* Police de marque de la landing, auto-hébergée (fichiers dans /fonts) plutôt que chargée depuis
+   Google Fonts — évite d'envoyer l'IP des visiteurs à Google à chaque visite, cohérent avec les
+   mentions RGPD de la page. N'affecte que .landing-page, pas l'appli connectée. */
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/manrope-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/manrope-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/manrope-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('fonts/manrope-800.woff2') format('woff2');
+}
+
 .landing-page {
   --landing-navy-900: #0e1a33;
   --landing-navy-700: #17284d;
@@ -1723,7 +1755,11 @@ textarea.input { resize: vertical; font-family: inherit; }
   --landing-gold-500: #c99a54;
   --landing-gold-300: #e3c08a;
   --landing-gold-soft: #f8efe0;
+  font-family: 'Manrope', var(--font-sans);
 }
+
+.landing-page h1, .landing-page h2, .landing-page h3 { font-weight: 800; letter-spacing: -0.01em; }
+.landing-page .landing-hero-text h1 { letter-spacing: -0.02em; }
 
 .landing-topbar {
   position: sticky;
@@ -1797,7 +1833,6 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-card { text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .landing-feature-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .landing-feature-icon {
-  font-size: 22px;
   width: 44px;
   height: 44px;
   display: flex;
@@ -1806,7 +1841,9 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-radius: var(--radius-sm);
   background: var(--landing-gold-soft);
   margin-bottom: 12px;
+  color: var(--landing-navy-700);
 }
+.landing-feature-icon svg { width: 22px; height: 22px; }
 .landing-feature-card h3 { margin: 0 0 6px; font-size: 16px; }
 .landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
 
@@ -1861,14 +1898,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-platform-icon {
   width: 56px;
   height: 56px;
-  font-size: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: var(--landing-gold-soft);
   margin-bottom: 14px;
+  color: var(--landing-navy-700);
 }
+.landing-platform-icon svg { width: 26px; height: 26px; }
 .landing-platform-card h3 { margin: 0 0 6px; font-size: 17px; }
 .landing-platform-card > p.text-muted { margin: 0 0 18px; font-size: 13px; }
 
@@ -1901,12 +1939,22 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* Boutons — polish visuel propre à la landing (lift + ombre au survol), sans toucher .btn de
    l'appli connectée (outil de travail, pas une page marketing : pas le même objectif de design). */
-.landing-page .btn { border-radius: 10px; transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease; }
+/* "Profondeur douce" façon SaaS premium (Stripe/Linear/PayFit) : une fine bordure interne (inset)
+   + une ombre ambiante très diffuse au repos déjà, pas seulement au survol — évite l'effet plat
+   des boutons standards de l'appli, réservé ici à la landing (voir commentaire plus haut). */
+.landing-page .btn {
+  border-radius: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  box-shadow: 0 0 0 1px rgba(14, 26, 51, 0.06), 0 1px 2px rgba(14, 26, 51, 0.05);
+}
 .landing-page .btn:hover { transform: translateY(-2px); }
 .landing-page .btn:active { transform: translateY(0) scale(0.98); }
-.landing-page .btn-gold:hover { box-shadow: 0 10px 22px -8px rgba(201, 154, 84, 0.55); }
-.landing-page .btn-primary:hover, .landing-page .btn-secondary:hover { box-shadow: 0 8px 18px -8px rgba(14, 26, 51, 0.25); }
-.landing-page .btn-ghost-light:hover { box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.3); }
+.landing-page .btn-gold { box-shadow: 0 0 0 1px rgba(201, 154, 84, 0.4), 0 1px 2px rgba(14, 26, 51, 0.06); }
+.landing-page .btn-gold:hover { box-shadow: 0 0 0 1px rgba(201, 154, 84, 0.5), 0 10px 22px -8px rgba(201, 154, 84, 0.55); }
+.landing-page .btn-primary, .landing-page .btn-secondary { box-shadow: 0 0 0 1px rgba(14, 26, 51, 0.08), 0 1px 2px rgba(14, 26, 51, 0.05); }
+.landing-page .btn-primary:hover, .landing-page .btn-secondary:hover { box-shadow: 0 0 0 1px rgba(14, 26, 51, 0.1), 0 8px 18px -8px rgba(14, 26, 51, 0.25); }
+.landing-page .btn-ghost-light { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.landing-page .btn-ghost-light:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28), 0 8px 18px -8px rgba(0, 0, 0, 0.3); }
 
 .landing-trust-row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 22px; }
 .landing-trust-row span { font-size: 12.5px; color: rgba(255, 255, 255, 0.65); }
