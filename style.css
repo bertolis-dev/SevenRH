@@ -1919,6 +1919,14 @@ textarea.input { resize: vertical; font-family: inherit; }
 .feature-detail-header .btn-icon { color: rgba(255, 255, 255, 0.75); flex-shrink: 0; }
 .feature-detail-header .btn-icon:hover { color: #fff; }
 
+/* Vraie page (#fonctionnalite-N) plutôt qu'une modale — même bandeau visuel que la modale
+   d'origine (.feature-detail-header-icon réutilisée), mais centré en pleine largeur façon hero. */
+.feature-page-hero-inner { max-width: 640px; margin: 0 auto; text-align: center; }
+.feature-page-hero-inner .feature-detail-header-icon { margin: 0 auto 20px; }
+.feature-page-hero-inner h1 { color: #fff; font-size: 34px; margin: 0 0 12px; }
+.feature-page-hero-inner p { color: rgba(255, 255, 255, 0.8); font-size: 16px; margin: 0; }
+.feature-page-list { max-width: 900px; margin: 0 auto; }
+
 .feature-detail-list {
   margin: 0;
   padding: 0;

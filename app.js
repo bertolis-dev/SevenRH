@@ -652,35 +652,67 @@ function openLegalModal(type) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
-function openFeatureDetailModal(index) {
+/** Vraie page (URL #fonctionnalite-N, partageable, retour navigateur fonctionnel) plutôt qu'une
+ * modale par-dessus la landing — remplace complètement #landing-root, avec sa propre topbar (sans
+ * les ancres Fonctionnalités/Tarifs/Installer, qui n'ont pas de sens depuis cette page) et son
+ * propre footer, cohérente avec le reste du site. */
+function renderFeatureDetailPage(index) {
   const feature = LANDING_FEATURES[index];
-  if (!feature) return;
-  const modalRoot = document.getElementById('modal-root');
-  modalRoot.innerHTML = `
-    <div class="modal modal-large feature-detail-modal">
-      <div class="modal-header feature-detail-header">
-        <div class="feature-detail-header-icon">${feature.icon}</div>
-        <div class="feature-detail-header-text">
-          <h2>${escapeHtml(feature.title)}</h2>
+  const root = document.getElementById('landing-root');
+  root.innerHTML = `
+    <div class="landing-page">
+      <header class="landing-topbar">
+        <div class="landing-topbar-left">
+          <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+          <button type="button" class="btn btn-secondary btn-sm" data-feature-page-back>← Toutes les fonctionnalités</button>
+        </div>
+        <nav class="landing-topbar-nav">
+          <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
+          <button type="button" class="btn btn-gold landing-topbar-cta btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+        </nav>
+      </header>
+
+      <section class="landing-hero feature-page-hero">
+        <div class="feature-page-hero-inner">
+          <div class="feature-detail-header-icon">${feature.icon}</div>
+          <h1>${escapeHtml(feature.title)}</h1>
           <p>${escapeHtml(feature.text)}</p>
         </div>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
-      </div>
-      <div class="modal-body">
-        <ul class="feature-detail-list">${feature.detail.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
-        <button type="button" class="btn btn-gold btn-arrow-cta" id="btn-feature-detail-signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
-      </div>
+      </section>
+
+      <section class="landing-section">
+        <ul class="feature-detail-list feature-page-list">${feature.detail.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+      </section>
+
+      <section class="landing-cta-banner">
+        <h2>Prêt à simplifier votre gestion RH ?</h2>
+        <p>Créez votre entreprise en quelques minutes — aucune carte bancaire requise pour commencer.</p>
+        <div class="landing-cta-banner-actions">
+          <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+          <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <div class="landing-footer-top">
+          <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+          <nav class="landing-footer-links">
+            <button type="button" class="btn-link" data-landing-action="login">Se connecter</button>
+            <button type="button" class="btn-link" data-landing-action="signup">Créer mon entreprise</button>
+            <button type="button" class="btn-link" data-landing-action="changelog">Nouveautés</button>
+            <button type="button" class="btn-link" data-legal-trigger="mentions">Mentions légales</button>
+            <button type="button" class="btn-link" data-legal-trigger="cgu">CGU / CGV</button>
+            <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
+          </nav>
+        </div>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+      </footer>
     </div>
   `;
-  modalRoot.classList.add('open');
-  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('btn-feature-detail-signup').addEventListener('click', () => {
-    closeModal();
-    showLogin('signup-company');
+  window.scrollTo(0, 0);
+  bindLandingScreenEvents();
+  document.querySelectorAll('[data-feature-page-back]').forEach(btn => {
+    btn.addEventListener('click', () => { window.location.hash = ''; });
   });
 }
 
@@ -764,7 +796,16 @@ function showLanding() {
   renderLandingScreen();
 }
 
+/** #fonctionnalite-N est une vraie route (URL partageable, retour navigateur fonctionnel), pas une
+ * modale — voir bindLandingHashRouting(). Vérifié avant tout le reste : un lien direct vers cette
+ * URL doit afficher la page dédiée sans repasser par la landing complète. */
 function renderLandingScreen() {
+  const featureMatch = window.location.hash.match(/^#fonctionnalite-(\d+)$/);
+  if (featureMatch && LANDING_FEATURES[parseInt(featureMatch[1], 10)]) {
+    renderFeatureDetailPage(parseInt(featureMatch[1], 10));
+    return;
+  }
+
   const root = document.getElementById('landing-root');
   const platform = detectDevicePlatform();
   const periodicite = state.landingPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
@@ -1125,8 +1166,9 @@ function bindLandingScreenEvents() {
     btn.addEventListener('click', openChangelogModal);
   });
   document.querySelectorAll('[data-feature-detail]').forEach(card => {
-    card.addEventListener('click', () => openFeatureDetailModal(parseInt(card.dataset.featureDetail, 10)));
+    card.addEventListener('click', () => { window.location.hash = `fonctionnalite-${card.dataset.featureDetail}`; });
   });
+  bindLandingHashRouting();
   document.querySelectorAll('[data-legal-trigger]').forEach(btn => {
     btn.addEventListener('click', () => openLegalModal(btn.dataset.legalTrigger));
   });
@@ -1170,6 +1212,21 @@ function bindLandingHeroCarousel() {
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     landingCarouselInterval = setInterval(() => show((current + 1) % slides.length), 4500);
   }
+}
+
+/** #fonctionnalite-N (renderFeatureDetailPage) est une vraie route, pas une modale — ce listener
+ * (posé une seule fois, comme bindLandingStickyCta) fait fonctionner le bouton retour du
+ * navigateur et les liens directs, en réagissant à TOUT changement de hash pendant que la landing
+ * est affichée. */
+let landingHashListenerBound = false;
+function bindLandingHashRouting() {
+  if (landingHashListenerBound) return;
+  landingHashListenerBound = true;
+  window.addEventListener('hashchange', () => {
+    if (document.getElementById('landing-root').style.display !== 'none') {
+      renderLandingScreen();
+    }
+  });
 }
 
 /** Estimation volontairement simplifiée (pas de congés/absences pris en compte, contrairement à
