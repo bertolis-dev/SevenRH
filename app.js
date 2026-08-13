@@ -761,7 +761,7 @@ function renderLandingScreen() {
             <p class="text-muted">Via Safari (obligatoire)</p>
             <ol class="landing-steps">
               <li><span class="landing-step-num">1</span> Ouvrez ce site dans <strong>Safari</strong></li>
-              <li><span class="landing-step-num">2</span> Appuyez sur <strong>􀈂 Partager</strong>, en bas de l'écran</li>
+              <li><span class="landing-step-num">2</span> Appuyez sur <strong class="landing-step-inline-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> Partager</strong>, en bas de l'écran</li>
               <li><span class="landing-step-num">3</span> Choisissez <strong>"Sur l'écran d'accueil"</strong>, puis "Ajouter"</li>
             </ol>
           </div>
