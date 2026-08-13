@@ -26,12 +26,14 @@ function computePasswordStrengthLevel(password) {
  * console BERTOLIS) pour n'avoir qu'un seul endroit à modifier. */
 const NEXUS_LOGO_MARK = `<span class="logo-mark"><img class="logo-icon" src="logo.png" alt="Nexus"></span>`;
 
-/** Vrai quand le site est chargé depuis l'application de bureau (voir desktop-app/main.js, qui
- * ouvre https://nexus-rh.com/?desktop=1) — sert à sauter la page d'accueil publique (déjà "vue" au
- * moment d'installer l'appli) et à aller directement à l'écran de connexion, comme avant sur le
- * site. Lu une seule fois : ?desktop=1 reste dans l'URL tout le temps de la session (l'appli est
- * une SPA qui ne recharge jamais réellement la page). */
-function isDesktopApp() {
+/** Vrai quand le site est ouvert comme une application déjà installée — l'appli de bureau
+ * Electron (voir desktop-app/main.js, qui ouvre https://nexus-rh.com/?desktop=1) ET la PWA
+ * installée via le navigateur (voir manifest.webmanifest, start_url à "/?desktop=1") partagent le
+ * même signal. Sert à sauter la page d'accueil publique (déjà "vue" au moment d'installer) et à
+ * aller directement à l'écran de connexion, comme avant sur le site. Lu une seule fois : ?desktop=1
+ * reste dans l'URL tout le temps de la session (l'appli est une SPA qui ne recharge jamais
+ * réellement la page). */
+function isInstalledApp() {
   return new URLSearchParams(window.location.search).get('desktop') === '1';
 }
 
@@ -365,7 +367,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     || sessionStorage.getItem('sevenrh_password_recovery_pending')
     || sessionStorage.getItem('sevenrh_pending_reset_email')
     || new URLSearchParams(window.location.search).get('signup') === '1'
-    || isDesktopApp()
+    || isInstalledApp()
   ) {
     // Un flux d'authentification est déjà en cours (confirmation d'email, récupération de mot de
     // passe, lien "Créer mon entreprise" partagé), ou on est dans l'application de bureau (qui a
@@ -1033,7 +1035,7 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
-      ${isDesktopApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>'}
+      ${isInstalledApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>'}
 
       <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
     </div>
