@@ -406,69 +406,77 @@ const LANDING_FEATURES = [
     icon: LANDING_SVG_ICONS.calendar, title: 'Congés & absences',
     text: "Demandes, validation par workflow, compteurs automatiques et export.",
     detail: [
-      "Types de congés et d'absences entièrement paramétrables (acquisition, plafond, report)",
-      "Workflow de validation manager puis RH",
-      "Compteurs automatiques par salarié, mis à jour à chaque demande",
+      "Types de congés et d'absences entièrement paramétrables (règles d'acquisition, plafond, report d'une année sur l'autre)",
+      "Demande en quelques clics, avec gestion des demi-journées",
+      "Workflow de validation manager puis RH, avec historique complet de chaque décision",
+      "Compteurs automatiques par salarié, mis à jour en temps réel à chaque demande",
       "Calendrier partagé avec filtres par type d'événement",
-      "Jours fériés et vacances scolaires intégrés au calendrier"
+      "Jours fériés et vacances scolaires (par zone) intégrés automatiquement au calendrier",
+      "Journal d'audit de chaque validation et refus, pour la traçabilité RH"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail',
     text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.',
     detail: [
-      "Vue personnelle et vue équipe du planning",
-      "Demandes et validation du télétravail",
+      "Vue personnelle et vue équipe, avec bascule d'un clic",
+      "Demandes de télétravail avec validation manager",
+      "Quota hebdomadaire de télétravail paramétrable, appliqué automatiquement à chaque demande",
       "Calendrier partagé, filtrable par type d'événement",
-      "Suivi au jour le jour de qui est au bureau, en télétravail ou en congé"
+      "Suivi au jour le jour de qui est au bureau, en télétravail ou en congé",
+      "Ajout direct d'un congé ou d'un télétravail depuis une case vide du calendrier"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie',
     text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie.",
     detail: [
-      "Détection automatique des anomalies avant l'export",
+      "Détection automatique des anomalies (ex. compteur de congés négatif) avant l'export",
+      "Confirmation obligatoire en cas d'anomalie bloquante — jamais d'export silencieux",
       "Export vers votre logiciel de paie",
-      "Récapitulatif mensuel par salarié (absences, primes, variables)",
-      "Confirmation obligatoire en cas d'anomalie bloquante, pas d'export silencieux"
+      "Récapitulatif mensuel par salarié : absences, primes, variables saisies",
+      "Distribution dématérialisée des bulletins de paie"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais',
     text: 'Justificatifs, validation et remboursement suivis de bout en bout.',
     detail: [
-      "Justificatif joint à chaque dépense",
+      "Saisie rapide avec justificatif joint à chaque dépense",
       "Remboursement kilométrique inclus",
       "Workflow de validation manager puis RH/comptabilité",
-      "Export CSV des notes de frais"
+      "Suivi du statut de chaque note, de la saisie au remboursement",
+      "Export CSV pour la comptabilité"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant',
     text: 'Calcul automatique selon les jours travaillés, part employeur incluse.',
     detail: [
-      "Calcul automatique selon les jours réellement travaillés",
-      "Répartition employeur/salarié paramétrable (60 % / 40 % par défaut)",
-      "Historique mensuel et régularisations tracées avec leur motif",
-      "Chaque salarié consulte son propre solde depuis l'application"
+      "Calcul automatique selon les jours réellement travaillés (tient compte des congés, absences et télétravail)",
+      "Valeur faciale et répartition employeur/salarié entièrement paramétrables (60 % / 40 % par défaut)",
+      "Régularisations manuelles tracées avec leur motif",
+      "Historique mensuel consultable par chaque salarié pour son propre solde"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme',
     text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.',
     detail: [
-      "Généré automatiquement à partir des managers renseignés sur chaque fiche salarié",
+      "Généré automatiquement à partir du manager renseigné sur chaque fiche salarié — rien à redessiner à la main",
       "Vue par service et par équipe",
-      "Détection et correction automatique des cycles hiérarchiques"
+      "Détection et correction automatique des cycles hiérarchiques (ex. deux salariés qui se managent mutuellement)",
+      "Toujours à jour : une arrivée, un départ ou un changement de manager suffit"
     ]
   },
   {
     icon: LANDING_SVG_ICONS.folder, title: 'Documents RH',
     text: 'Contrats, attestations et documents générés automatiquement.',
     detail: [
-      "Coffre-fort documentaire par salarié",
+      "Coffre-fort documentaire par salarié, avec catégories personnalisables",
       "Génération automatique d'attestations et de certificats de travail",
-      "Alertes d'échéance (titres de séjour, visites médicales, contrats à durée déterminée...)"
+      "Alertes d'échéance (titres de séjour, visites médicales, fins de contrat à durée déterminée...)",
+      "Export RGPD des données personnelles à la demande de chaque salarié"
     ]
   },
   {
@@ -476,8 +484,9 @@ const LANDING_FEATURES = [
     text: 'Vos salariés posent leurs questions directement depuis l\'application.',
     detail: [
       "Tickets support ouverts directement depuis l'application, sans outil externe",
-      "Analyse assistée par IA pour accélérer le traitement",
-      "Suivi de statut et date de livraison pour chaque demande"
+      "Analyse assistée par IA pour accélérer le traitement par l'équipe RH",
+      "Suivi de statut et date de livraison pour chaque demande",
+      "Notification en temps réel à chaque mise à jour du ticket"
     ]
   }
 ];
@@ -648,9 +657,13 @@ function openFeatureDetailModal(index) {
   if (!feature) return;
   const modalRoot = document.getElementById('modal-root');
   modalRoot.innerHTML = `
-    <div class="modal modal-small">
-      <div class="modal-header">
-        <h2><span class="feature-detail-icon">${feature.icon}</span> ${escapeHtml(feature.title)}</h2>
+    <div class="modal modal-large feature-detail-modal">
+      <div class="modal-header feature-detail-header">
+        <div class="feature-detail-header-icon">${feature.icon}</div>
+        <div class="feature-detail-header-text">
+          <h2>${escapeHtml(feature.title)}</h2>
+          <p>${escapeHtml(feature.text)}</p>
+        </div>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
       </div>
       <div class="modal-body">
@@ -658,12 +671,17 @@ function openFeatureDetailModal(index) {
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-gold btn-arrow-cta" id="btn-feature-detail-signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
       </div>
     </div>
   `;
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-feature-detail-signup').addEventListener('click', () => {
+    closeModal();
+    showLogin('signup-company');
+  });
 }
 
 function openAboutModal() {

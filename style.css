@@ -34,6 +34,17 @@
   --topbar-height: 64px;
   --mobile-nav-height: 64px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+
+  /* Identité de marque de la landing (bleu marine/or) — définie ici plutôt que sur .landing-page :
+     le bouton flottant (#landing-sticky-cta) et les modales (#modal-root) sont des siblings de
+     .landing-page dans le DOM, pas des descendants, donc n'auraient jamais vu ces variables sinon
+     (bug réel trouvé en vérifiant la couleur réellement appliquée, pas juste sa présence). */
+  --landing-navy-900: #0e1a33;
+  --landing-navy-700: #17284d;
+  --landing-navy-500: #24406e;
+  --landing-gold-500: #c99a54;
+  --landing-gold-300: #e3c08a;
+  --landing-gold-soft: #f8efe0;
 }
 
 * { box-sizing: border-box; }
@@ -1776,12 +1787,6 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .landing-page {
-  --landing-navy-900: #0e1a33;
-  --landing-navy-700: #17284d;
-  --landing-navy-500: #24406e;
-  --landing-gold-500: #c99a54;
-  --landing-gold-300: #e3c08a;
-  --landing-gold-soft: #f8efe0;
   font-family: 'Manrope', var(--font-sans);
 }
 
@@ -1862,11 +1867,50 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
 .landing-feature-more { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--color-primary); }
 
-.feature-detail-icon { display: inline-flex; vertical-align: middle; }
-.feature-detail-icon svg { width: 22px; height: 22px; }
-.feature-detail-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.feature-detail-list li { font-size: 13.5px; color: var(--color-text); line-height: 1.5; padding-left: 16px; position: relative; }
-.feature-detail-list li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
+/* Bandeau façon hero de la landing (même dégradé marine) plutôt qu'un simple .modal-header plat —
+   ces modales sont le contenu le plus détaillé du site, elles méritent le même soin visuel que le
+   reste de la page plutôt que le style neutre des modales applicatives. */
+.feature-detail-header {
+  background: linear-gradient(135deg, var(--landing-navy-900), var(--landing-navy-700) 60%, var(--landing-navy-500));
+  align-items: flex-start;
+  gap: 16px;
+  padding: 26px 26px 24px;
+}
+.feature-detail-header-icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--landing-gold-300);
+}
+.feature-detail-header-icon svg { width: 26px; height: 26px; }
+.feature-detail-header-text { flex: 1; min-width: 0; }
+.feature-detail-header-text h2 { color: #fff; margin: 0 0 6px; font-size: 22px; }
+.feature-detail-header-text p { color: rgba(255, 255, 255, 0.78); margin: 0; font-size: 13.5px; font-weight: 400; }
+.feature-detail-header .btn-icon { color: rgba(255, 255, 255, 0.75); flex-shrink: 0; }
+.feature-detail-header .btn-icon:hover { color: #fff; }
+
+.feature-detail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px 24px;
+}
+.feature-detail-list li { font-size: 13.5px; color: var(--color-text); line-height: 1.5; padding-left: 22px; position: relative; }
+.feature-detail-list li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--landing-gold-500);
+  font-weight: 700;
+}
 .landing-feature-icon {
   width: 44px;
   height: 44px;
