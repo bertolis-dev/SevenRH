@@ -1837,7 +1837,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-hero-cta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .landing-hero-cta .btn { font-size: 15px; padding: 12px 24px; }
 
-.landing-hero-mock { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.landing-hero-mock { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .landing-mock-card {
   width: 100%;
   max-width: 420px;
@@ -1849,6 +1849,31 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .landing-mock-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .landing-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-border); }
+.landing-mock-title { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+
+.landing-mock-carousel { position: relative; }
+.landing-mock-slide { display: none; }
+.landing-mock-slide.active { display: block; animation: landing-mock-fade 0.4s ease; }
+@keyframes landing-mock-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.landing-mock-dots { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+.landing-carousel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.landing-carousel-dot:hover { background: rgba(255, 255, 255, 0.5); }
+.landing-carousel-dot.active { background: var(--landing-gold-500); transform: scale(1.2); }
+@media (prefers-reduced-motion: reduce) {
+  .landing-mock-slide.active { animation: none; }
+}
 .landing-mock-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
 .landing-mock-kpi { background: var(--color-muted-soft); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
 .landing-mock-kpi strong { display: block; font-size: 18px; }

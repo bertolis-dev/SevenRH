@@ -802,18 +802,69 @@ function renderLandingScreen() {
             </div>
           </div>
           <div class="landing-hero-mock" aria-hidden="true">
-            <div class="landing-mock-card">
-              <div class="landing-mock-header">
-                <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+            <div class="landing-mock-carousel">
+              <div class="landing-mock-card landing-mock-slide active">
+                <div class="landing-mock-header">
+                  <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+                  <span class="landing-mock-title">Tableau de bord</span>
+                </div>
+                <div class="landing-mock-kpis">
+                  <div class="landing-mock-kpi"><strong>24</strong><span>Salariés</span></div>
+                  <div class="landing-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
+                  <div class="landing-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
+                </div>
+                <div class="landing-mock-row">🏖️ Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">💻 Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
+                <div class="landing-mock-row">🧾 Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
               </div>
-              <div class="landing-mock-kpis">
-                <div class="landing-mock-kpi"><strong>24</strong><span>Salariés</span></div>
-                <div class="landing-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
-                <div class="landing-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
+              <div class="landing-mock-card landing-mock-slide">
+                <div class="landing-mock-header">
+                  <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+                  <span class="landing-mock-title">Congés & absences</span>
+                </div>
+                <div class="landing-mock-kpis">
+                  <div class="landing-mock-kpi"><strong>18</strong><span>Jours CP restants</span></div>
+                  <div class="landing-mock-kpi"><strong>2</strong><span>Demandes en attente</span></div>
+                  <div class="landing-mock-kpi"><strong>5</strong><span>Absents cette semaine</span></div>
+                </div>
+                <div class="landing-mock-row">🏖️ Congés payés — 22 au 26 sept. <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">🤒 Arrêt maladie — T. Bernard <span class="badge badge-info">Déclaré</span></div>
+                <div class="landing-mock-row">📅 Vacances scolaires intégrées automatiquement</div>
               </div>
-              <div class="landing-mock-row">🏖️ Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
-              <div class="landing-mock-row">💻 Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
-              <div class="landing-mock-row">🧾 Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
+              <div class="landing-mock-card landing-mock-slide">
+                <div class="landing-mock-header">
+                  <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+                  <span class="landing-mock-title">Notes de frais</span>
+                </div>
+                <div class="landing-mock-kpis">
+                  <div class="landing-mock-kpi"><strong>104,70 €</strong><span>Ce mois-ci</span></div>
+                  <div class="landing-mock-kpi"><strong>3</strong><span>En attente</span></div>
+                  <div class="landing-mock-kpi"><strong>0</strong><span>Rejetées</span></div>
+                </div>
+                <div class="landing-mock-row">🧾 Taxi client — 32,50 € <span class="badge badge-warning">En attente</span></div>
+                <div class="landing-mock-row">🧾 Repas d'affaires — 58,00 € <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">🚗 Trajet domicile-travail — 14,20 € <span class="badge badge-info">Remboursé</span></div>
+              </div>
+              <div class="landing-mock-card landing-mock-slide">
+                <div class="landing-mock-header">
+                  <span class="landing-mock-dot"></span><span class="landing-mock-dot"></span><span class="landing-mock-dot"></span>
+                  <span class="landing-mock-title">Tickets restaurant</span>
+                </div>
+                <div class="landing-mock-kpis">
+                  <div class="landing-mock-kpi"><strong>128</strong><span>Tickets ce mois</span></div>
+                  <div class="landing-mock-kpi"><strong>9,00 €</strong><span>Valeur faciale</span></div>
+                  <div class="landing-mock-kpi"><strong>60 %</strong><span>Part employeur</span></div>
+                </div>
+                <div class="landing-mock-row">🍽️ Calculé automatiquement selon les jours travaillés</div>
+                <div class="landing-mock-row">✅ Régularisation appliquée — J. Petit <span class="badge badge-info">Ce mois</span></div>
+                <div class="landing-mock-row">📊 Historique consultable par chaque salarié</div>
+              </div>
+            </div>
+            <div class="landing-mock-dots">
+              <button type="button" class="landing-carousel-dot active" data-mock-slide="0" aria-label="Aperçu tableau de bord"></button>
+              <button type="button" class="landing-carousel-dot" data-mock-slide="1" aria-label="Aperçu congés et absences"></button>
+              <button type="button" class="landing-carousel-dot" data-mock-slide="2" aria-label="Aperçu notes de frais"></button>
+              <button type="button" class="landing-carousel-dot" data-mock-slide="3" aria-label="Aperçu tickets restaurant"></button>
             </div>
           </div>
         </div>
@@ -1096,6 +1147,29 @@ function bindLandingScreenEvents() {
   });
   bindLandingEmployeeSlider();
   bindLandingSimulator();
+  bindLandingHeroCarousel();
+}
+
+/** Carrousel de maquettes (pas de vraies captures d'écran — même esprit que le mock déjà en place
+ * avant cet ajout, juste plusieurs). Recréé à chaque render (changement de périodicité) : l'ancien
+ * intervalle référencerait des <div> détruites, d'où le clearInterval avant d'en reposer un. Pas
+ * d'auto-défilement si prefers-reduced-motion — la navigation par points reste possible dans tous les cas. */
+let landingCarouselInterval = null;
+function bindLandingHeroCarousel() {
+  const slides = [...document.querySelectorAll('.landing-mock-slide')];
+  const dots = [...document.querySelectorAll('.landing-carousel-dot')];
+  if (landingCarouselInterval) { clearInterval(landingCarouselInterval); landingCarouselInterval = null; }
+  if (!slides.length) return;
+  let current = 0;
+  const show = (index) => {
+    current = index;
+    slides.forEach((s, i) => s.classList.toggle('active', i === index));
+    dots.forEach((d, i) => d.classList.toggle('active', i === index));
+  };
+  dots.forEach((dot, i) => dot.addEventListener('click', () => show(i)));
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    landingCarouselInterval = setInterval(() => show((current + 1) % slides.length), 4500);
+  }
 }
 
 /** Estimation volontairement simplifiée (pas de congés/absences pris en compte, contrairement à
