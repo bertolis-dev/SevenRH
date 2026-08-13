@@ -462,6 +462,96 @@ const ABOUT_CATEGORIES = [
   }
 ];
 
+const LANDING_FAQ_ITEMS = [
+  {
+    q: "Puis-je résilier mon abonnement à tout moment ?",
+    a: "Oui. Vous gérez votre abonnement en toute autonomie depuis Paramètres → Abonnement (portail Stripe sécurisé), sans engagement ni préavis."
+  },
+  {
+    q: "Que deviennent mes données si j'arrête ?",
+    a: "Vous gardez la main sur vos données : chaque salarié peut à tout moment exporter ses propres données personnelles (export RGPD), et les données de gestion (salariés, congés, notes de frais...) restent exportables en CSV depuis les écrans concernés."
+  },
+  {
+    q: "Le support est-il inclus ?",
+    a: "Oui, dans toutes les offres. Chaque salarié peut ouvrir un ticket directement depuis l'application (Mes tickets), sans surcoût ni module additionnel."
+  },
+  {
+    q: "Mes données sont-elles isolées des autres entreprises ?",
+    a: "Oui. Chaque entreprise cliente est strictement isolée des autres : l'accès aux données est déterminé par le rôle et les permissions de chaque utilisateur, contrôlé côté serveur."
+  },
+  {
+    q: "Faut-il installer un logiciel pour utiliser Nexus ?",
+    a: "Non, Nexus fonctionne directement dans votre navigateur. Vous pouvez aussi l'installer en un clic comme une application sur PC, iPhone ou Android pour un accès plus rapide."
+  }
+];
+
+/** Contenu factuel connu (société, SIREN/TVA, hébergeurs) — pas de champ inventé (adresse du
+ * siège, forme juridique, capital social) tant qu'il n'a pas été communiqué explicitement. Le
+ * CGU/CGV est un premier brouillon basé sur les faits réels du service (offres, résiliation via
+ * Stripe, support par tickets) : à faire relire par un professionnel du droit avant de s'appuyer
+ * dessus contractuellement. */
+const LEGAL_CONTENT = {
+  mentions: {
+    title: 'Mentions légales',
+    body: `
+      <p style="margin-top:0;"><strong>Éditeur du site</strong><br>
+      Nexus est édité par la société BERTOLIS.<br>
+      SIREN : 100 782 358<br>
+      Numéro de TVA intracommunautaire : FR26100782358</p>
+      <p><strong>Hébergement</strong><br>
+      Hébergement du site : GitHub Pages (GitHub Inc.)<br>
+      Hébergement des données applicatives : Supabase</p>
+      <p><strong>Paiement</strong><br>
+      Les paiements sont traités par Stripe.</p>
+    `
+  },
+  cgu: {
+    title: 'Conditions générales d\'utilisation et de vente',
+    body: `
+      <p style="margin-top:0;"><strong>Objet</strong><br>
+      Nexus est un logiciel de gestion des ressources humaines (SIRH), fourni en tant que service par abonnement par la société BERTOLIS.</p>
+      <p><strong>Abonnement et facturation</strong><br>
+      L'abonnement (offre Essentiel, Professionnel ou Premium, facturation mensuelle ou annuelle) est géré via Stripe. Il est résiliable à tout moment depuis Paramètres → Abonnement, sans préavis ; la résiliation prend effet à la fin de la période déjà payée.</p>
+      <p><strong>Comptes et accès</strong><br>
+      Un compte est créé par entreprise cliente. L'accès de chaque utilisateur (salarié, manager, RH, comptabilité, directeur) est déterminé par son rôle et ses permissions au sein de cette entreprise.</p>
+      <p><strong>Propriété des données</strong><br>
+      Les données saisies par une entreprise cliente lui appartiennent. Elles ne sont pas utilisées à d'autres fins que la fourniture du service.</p>
+      <p><strong>Support</strong><br>
+      Le support est inclus dans toutes les offres, via le système de tickets intégré à l'application.</p>
+    `
+  },
+  confidentialite: {
+    title: 'Politique de confidentialité',
+    body: `
+      <p style="margin-top:0;">Nexus traite les données nécessaires à la gestion des ressources humaines des entreprises clientes (salariés, congés, notes de frais, documents RH...).</p>
+      <p>Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface).</p>
+      <p>Chaque salarié peut demander l'export de ses propres données personnelles à tout moment depuis l'application.</p>
+      <p>Les paiements sont traités directement par Stripe — Nexus ne stocke aucune donnée de carte bancaire.</p>
+    `
+  }
+};
+
+function openLegalModal(type) {
+  const content = LEGAL_CONTENT[type];
+  if (!content) return;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${escapeHtml(content.title)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">${content.body}</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+}
+
 function openAboutModal() {
   const modalRoot = document.getElementById('modal-root');
   modalRoot.innerHTML = `
@@ -529,6 +619,11 @@ function renderLandingScreen() {
               <button type="button" class="btn btn-gold" data-landing-action="signup">Créer mon entreprise</button>
               <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
             </div>
+            <div class="landing-trust-row">
+              <span>🔒 Paiement sécurisé par Stripe</span>
+              <span>🛡️ Accès isolé par entreprise</span>
+              <span>↩️ Résiliable à tout moment</span>
+            </div>
           </div>
           <div class="landing-hero-mock" aria-hidden="true">
             <div class="landing-mock-card">
@@ -582,6 +677,23 @@ function renderLandingScreen() {
         </div>
       </section>
 
+      <section class="landing-section" id="landing-faq">
+        <div class="landing-section-head">
+          <h2>Questions fréquentes</h2>
+        </div>
+        <div class="landing-faq-list">
+          ${LANDING_FAQ_ITEMS.map((item, i) => `
+            <div class="landing-faq-item" data-faq-index="${i}">
+              <button type="button" class="landing-faq-question" data-faq-toggle="${i}">
+                <span>${escapeHtml(item.q)}</span>
+                <span class="landing-faq-chevron">⌄</span>
+              </button>
+              <div class="landing-faq-answer"><p>${escapeHtml(item.a)}</p></div>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
       <section class="landing-section landing-install-section" id="landing-installer">
         <div class="landing-section-head">
           <h2>Installez Nexus en 1 minute</h2>
@@ -623,14 +735,55 @@ function renderLandingScreen() {
         </div>
       </section>
 
+      <section class="landing-cta-banner">
+        <h2>Prêt à simplifier votre gestion RH ?</h2>
+        <p>Créez votre entreprise en quelques minutes — aucune carte bancaire requise pour commencer.</p>
+        <div class="landing-cta-banner-actions">
+          <button type="button" class="btn btn-gold" data-landing-action="signup">Créer mon entreprise</button>
+          <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
+        </div>
+      </section>
+
       <footer class="landing-footer">
-        <button type="button" class="btn-link" data-landing-action="login">Se connecter</button> ·
-        <button type="button" class="btn-link" data-landing-action="signup">Créer mon entreprise</button>
+        <div class="landing-footer-top">
+          <div class="landing-brand">${NEXUS_LOGO_MARK} Nexus</div>
+          <nav class="landing-footer-links">
+            <button type="button" class="btn-link" data-landing-action="login">Se connecter</button>
+            <button type="button" class="btn-link" data-landing-action="signup">Créer mon entreprise</button>
+            <button type="button" class="btn-link" data-legal-trigger="mentions">Mentions légales</button>
+            <button type="button" class="btn-link" data-legal-trigger="cgu">CGU / CGV</button>
+            <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
+          </nav>
+        </div>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus</p>
       </footer>
+    </div>
+
+    <div class="landing-sticky-cta" id="landing-sticky-cta">
+      <span>Prêt à essayer Nexus ?</span>
+      <button type="button" class="btn btn-gold btn-sm" data-landing-action="signup">Créer mon entreprise</button>
     </div>
   `;
 
   bindLandingScreenEvents();
+}
+
+/** Le bouton flottant est recréé à chaque renderLandingScreen() (changement de périodicité...),
+ * mais le listener de scroll ne doit être posé qu'une seule fois sur window (sinon il s'empile à
+ * chaque render) — d'où ce flag de module plutôt qu'un ré-abonnement dans bindLandingScreenEvents. */
+let landingStickyCtaBound = false;
+function bindLandingStickyCta() {
+  const updateVisibility = () => {
+    const cta = document.getElementById('landing-sticky-cta');
+    const hero = document.querySelector('.landing-hero');
+    if (!cta || !hero) return;
+    const past = window.scrollY > hero.offsetHeight - 80;
+    cta.classList.toggle('landing-sticky-cta-visible', past);
+  };
+  updateVisibility();
+  if (landingStickyCtaBound) return;
+  landingStickyCtaBound = true;
+  window.addEventListener('scroll', updateVisibility, { passive: true });
 }
 
 function bindLandingScreenEvents() {
@@ -643,6 +796,15 @@ function bindLandingScreenEvents() {
   document.querySelectorAll('[data-landing-action="about"]').forEach(btn => {
     btn.addEventListener('click', openAboutModal);
   });
+  document.querySelectorAll('[data-legal-trigger]').forEach(btn => {
+    btn.addEventListener('click', () => openLegalModal(btn.dataset.legalTrigger));
+  });
+  document.querySelectorAll('[data-faq-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.landing-faq-item').classList.toggle('landing-faq-item-open');
+    });
+  });
+  bindLandingStickyCta();
   document.querySelectorAll('[data-landing-periodicite]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.landingPeriodicite = btn.dataset.landingPeriodicite;
