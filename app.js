@@ -415,6 +415,7 @@ function renderLandingScreen() {
         <nav class="landing-topbar-nav">
           <a class="btn-link" href="#landing-fonctionnalites">Fonctionnalités</a>
           <a class="btn-link" href="#landing-tarifs">Tarifs</a>
+          <a class="btn btn-gold btn-sm" href="#landing-installer">📲 Installer</a>
           <button type="button" class="btn btn-secondary" data-landing-action="login">Se connecter</button>
         </nav>
       </header>
