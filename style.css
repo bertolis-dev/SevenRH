@@ -1927,6 +1927,18 @@ textarea.input { resize: vertical; font-family: inherit; }
 .feature-page-hero-inner p { color: rgba(255, 255, 255, 0.8); font-size: 16px; margin: 0; }
 .feature-page-list { max-width: 900px; margin: 0 auto; }
 
+.feature-audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
+.feature-audience-card { text-align: center; }
+.feature-audience-card h3 { margin: 0 0 8px; font-size: 15px; color: var(--landing-navy-900); }
+.feature-audience-card p { margin: 0; font-size: 13.5px; }
+
+.feature-related-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; max-width: 700px; margin: 0 auto; }
+.feature-related-card { cursor: pointer; text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.feature-related-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.feature-related-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
+.feature-related-card h3 { margin: 0 0 4px; font-size: 15px; }
+.feature-related-card p { margin: 0; font-size: 13px; }
+
 .feature-detail-list {
   margin: 0;
   padding: 0;

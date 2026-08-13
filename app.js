@@ -413,7 +413,18 @@ const LANDING_FEATURES = [
       "Calendrier partagé avec filtres par type d'événement",
       "Jours fériés et vacances scolaires (par zone) intégrés automatiquement au calendrier",
       "Journal d'audit de chaque validation et refus, pour la traçabilité RH"
-    ]
+    ],
+    howItWorks: [
+      "Le salarié pose sa demande depuis son calendrier, en choisissant le type et les dates (ou une demi-journée).",
+      "Le manager valide ou refuse, puis la RH confirme si le workflow le prévoit.",
+      "Le compteur du salarié se met à jour automatiquement, sans ressaisie."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Consulte son solde en temps réel et pose ses congés en quelques clics." },
+      { role: 'Manager', text: "Valide ou refuse les demandes de son équipe, avec une vue calendrier claire." },
+      { role: 'RH', text: "Paramètre les règles d'acquisition et de report, avec une vue d'ensemble par service." }
+    ],
+    related: [1, 6]
   },
   {
     icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail',
@@ -425,7 +436,18 @@ const LANDING_FEATURES = [
       "Calendrier partagé, filtrable par type d'événement",
       "Suivi au jour le jour de qui est au bureau, en télétravail ou en congé",
       "Ajout direct d'un congé ou d'un télétravail depuis une case vide du calendrier"
-    ]
+    ],
+    howItWorks: [
+      "Chaque salarié consulte son planning personnel, ou la vue équipe selon son rôle.",
+      "Une demande de télétravail se pose comme une demande de congé, avec validation manager.",
+      "Le quota hebdomadaire est vérifié automatiquement à chaque nouvelle demande."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Voit en un coup d'œil ses jours de télétravail et ceux de son équipe." },
+      { role: 'Manager', text: "Valide les demandes et garde le quota hebdomadaire sous contrôle sans calcul manuel." },
+      { role: 'RH', text: "Définit le quota de télétravail applicable à toute l'entreprise." }
+    ],
+    related: [0, 4]
   },
   {
     icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie',
@@ -436,7 +458,18 @@ const LANDING_FEATURES = [
       "Export vers votre logiciel de paie",
       "Récapitulatif mensuel par salarié : absences, primes, variables saisies",
       "Distribution dématérialisée des bulletins de paie"
-    ]
+    ],
+    howItWorks: [
+      "Nexus détecte automatiquement les anomalies (compteurs négatifs, incohérences) avant l'export.",
+      "Vous confirmez explicitement si une anomalie bloquante est détectée — jamais d'export silencieux.",
+      "Le récapitulatif mensuel (absences, primes, variables) part vers votre logiciel de paie."
+    ],
+    audience: [
+      { role: 'RH', text: "Gagne du temps sur la préparation mensuelle, avec les anomalies déjà identifiées." },
+      { role: 'Direction', text: "A une visibilité claire sur les variables de paie avant validation." },
+      { role: 'Comptabilité', text: "Reçoit un export prêt à intégrer, sans ressaisie." }
+    ],
+    related: [3, 4]
   },
   {
     icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais',
@@ -447,7 +480,18 @@ const LANDING_FEATURES = [
       "Workflow de validation manager puis RH/comptabilité",
       "Suivi du statut de chaque note, de la saisie au remboursement",
       "Export CSV pour la comptabilité"
-    ]
+    ],
+    howItWorks: [
+      "Le salarié saisit sa dépense et joint son justificatif directement depuis l'application.",
+      "Le manager puis la RH ou la comptabilité valident la note.",
+      "Le remboursement est suivi jusqu'à son versement, avec export CSV pour la comptabilité."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Envoie une note de frais en quelques minutes, justificatif compris." },
+      { role: 'Manager', text: "Valide rapidement, sans échange de mails ou de tableurs." },
+      { role: 'Comptabilité', text: "Exporte les notes validées directement pour l'intégration comptable." }
+    ],
+    related: [2, 4]
   },
   {
     icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant',
@@ -457,7 +501,18 @@ const LANDING_FEATURES = [
       "Valeur faciale et répartition employeur/salarié entièrement paramétrables (60 % / 40 % par défaut)",
       "Régularisations manuelles tracées avec leur motif",
       "Historique mensuel consultable par chaque salarié pour son propre solde"
-    ]
+    ],
+    howItWorks: [
+      "Nexus calcule automatiquement le nombre de tickets dus, à partir des jours réellement travaillés.",
+      "La valeur faciale et la répartition employeur/salarié sont appliquées selon vos réglages.",
+      "Une régularisation peut être ajoutée manuellement, avec son motif tracé."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Consulte son solde et son historique de tickets, mois par mois." },
+      { role: 'RH', text: "N'a plus à recalculer manuellement le nombre de tickets selon les absences." },
+      { role: 'Direction', text: "Maîtrise le coût mensuel réel, avec la répartition employeur configurée une fois pour toutes." }
+    ],
+    related: [0, 1]
   },
   {
     icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme',
@@ -467,7 +522,18 @@ const LANDING_FEATURES = [
       "Vue par service et par équipe",
       "Détection et correction automatique des cycles hiérarchiques (ex. deux salariés qui se managent mutuellement)",
       "Toujours à jour : une arrivée, un départ ou un changement de manager suffit"
-    ]
+    ],
+    howItWorks: [
+      "Chaque fiche salarié indique son manager direct.",
+      "L'organigramme se reconstruit automatiquement à partir de ces liens.",
+      "Une incohérence (ex. deux salariés qui se managent mutuellement) est détectée et corrigée."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Retrouve facilement qui fait quoi dans l'entreprise." },
+      { role: 'Manager', text: "Visualise son équipe et les équipes voisines." },
+      { role: 'RH', text: "N'a plus besoin de redessiner l'organigramme à chaque changement." }
+    ],
+    related: [6, 0]
   },
   {
     icon: LANDING_SVG_ICONS.folder, title: 'Documents RH',
@@ -477,7 +543,18 @@ const LANDING_FEATURES = [
       "Génération automatique d'attestations et de certificats de travail",
       "Alertes d'échéance (titres de séjour, visites médicales, fins de contrat à durée déterminée...)",
       "Export RGPD des données personnelles à la demande de chaque salarié"
-    ]
+    ],
+    howItWorks: [
+      "Chaque document est déposé dans le coffre-fort du salarié concerné, classé par catégorie.",
+      "Une attestation ou un certificat de travail se génère automatiquement en un clic.",
+      "Une alerte prévient avant l'échéance d'un document (titre de séjour, visite médicale...)."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Retrouve tous ses documents au même endroit, et peut exporter ses données personnelles." },
+      { role: 'RH', text: "Génère les documents administratifs sans ressaisie, et ne rate plus une échéance." },
+      { role: 'Direction', text: "A la garantie que les documents obligatoires sont suivis, pas oubliés dans un tiroir." }
+    ],
+    related: [0, 5]
   },
   {
     icon: LANDING_SVG_ICONS.headset, title: 'Support intégré',
@@ -487,7 +564,18 @@ const LANDING_FEATURES = [
       "Analyse assistée par IA pour accélérer le traitement par l'équipe RH",
       "Suivi de statut et date de livraison pour chaque demande",
       "Notification en temps réel à chaque mise à jour du ticket"
-    ]
+    ],
+    howItWorks: [
+      "Le salarié ouvre un ticket directement depuis l'application, sans outil externe.",
+      "Une analyse assistée par IA aide l'équipe RH à traiter la demande plus vite.",
+      "Le salarié suit le statut et la date de livraison jusqu'à la résolution."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Pose sa question sans chercher un contact ou un outil séparé." },
+      { role: 'RH', text: "Traite les demandes avec l'aide de l'IA, sans changer d'outil." },
+      { role: 'Direction', text: "A une vue d'ensemble du volume et du traitement des demandes internes." }
+    ],
+    related: [6, 0]
   }
 ];
 
@@ -681,7 +769,56 @@ function renderFeatureDetailPage(index) {
       </section>
 
       <section class="landing-section">
+        <div class="landing-section-head">
+          <h2>Ce que vous obtenez</h2>
+        </div>
         <ul class="feature-detail-list feature-page-list">${feature.detail.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+      </section>
+
+      <section class="landing-section landing-section-alt">
+        <div class="landing-section-head">
+          <h2>Comment ça fonctionne</h2>
+        </div>
+        <div class="landing-steps-grid">
+          ${feature.howItWorks.map((step, i) => `
+            <div class="landing-step-card">
+              <div class="landing-step-badge">${i + 1}</div>
+              <p class="text-muted">${escapeHtml(step)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section">
+        <div class="landing-section-head">
+          <h2>Qui l'utilise ?</h2>
+        </div>
+        <div class="feature-audience-grid">
+          ${feature.audience.map(a => `
+            <div class="card feature-audience-card">
+              <h3>${escapeHtml(a.role)}</h3>
+              <p class="text-muted">${escapeHtml(a.text)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="landing-section landing-section-alt">
+        <div class="landing-section-head">
+          <h2>Fonctionnalités liées</h2>
+        </div>
+        <div class="feature-related-grid">
+          ${feature.related.map(relatedIndex => {
+            const related = LANDING_FEATURES[relatedIndex];
+            return `
+              <div class="card feature-related-card" role="button" tabindex="0" data-feature-detail="${relatedIndex}" aria-label="Voir ${escapeHtml(related.title)}">
+                <div class="landing-feature-icon">${related.icon}</div>
+                <h3>${escapeHtml(related.title)}</h3>
+                <p class="text-muted">${escapeHtml(related.text)}</p>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </section>
 
       <section class="landing-cta-banner">
