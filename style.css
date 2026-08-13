@@ -416,6 +416,7 @@ p { margin: 0; line-height: 1.5; }
   padding: 9px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
+  text-decoration: none;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2021,7 +2022,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-sticky-cta span { font-size: 13px; font-weight: 600; white-space: nowrap; }
 
 @media (max-width: 860px) {
-  .landing-topbar-nav a.btn-link { display: none; }
+  .landing-topbar-anchor { display: none; }
   /* La CTA dorée du menu double celle du bouton flottant (visible dès qu'on scrolle) — sur un
      écran étroit, la topbar (déjà chargée à gauche : logo/À propos/Installer) n'a pas la place
      pour les deux sans provoquer le même débordement horizontal corrigé plus tôt. */
