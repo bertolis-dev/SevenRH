@@ -1539,7 +1539,7 @@ function renderTicketsSimulatorSection(alt) {
           </div>
           <div class="landing-simulator-field">
             <label for="sim-part-employeur">Part employeur (%)</label>
-            <input type="number" id="sim-part-employeur" class="input" min="50" max="60" step="1" value="60">
+            <input type="number" id="sim-part-employeur" class="input" min="50" max="60" step="1" value="50">
           </div>
         </div>
         <div class="landing-simulator-results">
