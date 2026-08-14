@@ -682,19 +682,22 @@ const LANDING_FEATURES = [
  * l'application — ce tableau ne pilote QUE l'estimateur public, voir la note affichée sous le total).
  * Noms alignés sur LANDING_FEATURES/le vocabulaire déjà utilisé ailleurs sur le site plutôt que ceux
  * de Lucca, pour ne jamais reprendre l'intitulé d'un module concurrent. */
+/** Chaque module correspond à UNE entrée réelle de NAV_ITEMS (ou à un regroupement de 2 entrées
+ * étroitement liées, ex. Planning+Calendrier) — jamais un module inventé sans écran derrière
+ * (contrairement à la première version, qui avait copié "Formation" depuis Lucca sans vérifier
+ * que Nexus l'ait vraiment construit). Revu le 14/08/2026 sur retour explicite de l'utilisateur. */
 const LANDING_ALACARTE_MODULES = [
-  { key: 'conges', label: 'Congés & absences', prix: 2.90 },
-  { key: 'planning', label: 'Planning & télétravail', prix: 2.10 },
-  { key: 'dossier', label: 'Dossier salarié', prix: 3.00 },
-  { key: 'frais', label: 'Notes de frais', prix: 5.20 },
-  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95 },
-  { key: 'paie', label: 'Préparation de paie', prix: 0.65 },
-  { key: 'formation', label: 'Suivi formation', prix: 2.30 },
-  { key: 'organigramme', label: 'Organigramme', prix: 1.40 },
-  { key: 'documents', label: 'Documents RH', prix: 2.50 },
-  { key: 'support', label: 'Support intégré', prix: 2.20 },
-  { key: 'entretiens', label: 'Entretiens', prix: 1.90 },
-  { key: 'idees', label: 'Boîte à idées', prix: 0.70 }
+  { key: 'conges', label: 'Congés, absences & télétravail', prix: 2.90 }, // NAV_ITEMS: absences
+  { key: 'planning', label: 'Planning & calendrier', prix: 2.10 }, // NAV_ITEMS: planning + calendrier
+  { key: 'salaries', label: 'Gestion des salariés', prix: 3.00 }, // NAV_ITEMS: employees
+  { key: 'frais', label: 'Notes de frais', prix: 5.20 }, // NAV_ITEMS: frais
+  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95 }, // NAV_ITEMS: tickets
+  { key: 'paie', label: 'Préparation de paie', prix: 0.65 }, // NAV_ITEMS: export-paie
+  { key: 'organigramme', label: 'Organigramme', prix: 1.40 }, // NAV_ITEMS: organigramme
+  { key: 'documents', label: 'Documents RH', prix: 2.50 }, // NAV_ITEMS: mes-documents
+  { key: 'support', label: 'Support intégré', prix: 2.20 }, // NAV_ITEMS: mes-tickets
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90 }, // NAV_ITEMS: entretiens
+  { key: 'idees', label: 'Boîte à idées', prix: 0.70 } // NAV_ITEMS: idees
 ];
 
 const ABOUT_CATEGORIES = [
