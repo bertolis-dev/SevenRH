@@ -1248,6 +1248,42 @@ textarea.input { resize: vertical; font-family: inherit; }
   align-items: stretch;
 }
 
+/* Compositeur à la carte (page Tarifs) — voir LANDING_ALACARTE_MODULES/computeAlacarteTotal
+   (app.js) : liste de cases à cocher à gauche, total qui se recalcule en direct dans une carte
+   collante à droite (comme le prix reste visible en scrollant la liste des modules sur un écran
+   qui en compte 12). Empile en une colonne sous 860px (voir media query). */
+.alacarte-builder { display: grid; grid-template-columns: 1fr 300px; gap: 24px; max-width: 900px; margin: 0 auto; align-items: start; }
+.alacarte-modules { display: flex; flex-direction: column; gap: 8px; }
+.alacarte-module {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.alacarte-module:hover { background: var(--color-muted-soft); }
+.alacarte-module-checkbox { width: 17px; height: 17px; accent-color: var(--landing-gold-500); flex-shrink: 0; }
+.alacarte-module-name { flex: 1; font-weight: 600; font-size: 14px; }
+.alacarte-module-price { font-size: 12.5px; color: var(--color-text-muted); white-space: nowrap; }
+.alacarte-total-card {
+  position: sticky;
+  top: 90px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 22px 20px;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+}
+.alacarte-total-label { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
+.alacarte-total-card strong { display: block; font-size: 30px; margin: 8px 0; color: var(--landing-navy-900); }
+@media (max-width: 860px) {
+  .alacarte-builder { grid-template-columns: 1fr; }
+  .alacarte-total-card { position: static; }
+}
+
 /* Comparaison volontairement générique ("la plupart des SIRH du marché"), pas de concurrent nommé
    — trois avantages réels de Nexus (tout inclus, support inclus, sans engagement) plutôt qu'une
    liste exhaustive façon Bizneo (7 concurrents) qu'il faudrait maintenir à jour indéfiniment. */

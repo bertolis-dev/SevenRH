@@ -676,6 +676,27 @@ const LANDING_FEATURES = [
   }
 ];
 
+/** Tarification à la carte (page Tarifs) — décision explicite du 14/08/2026 de s'inspirer du système
+ * Lucca (modules vendus séparément, prix par salarié/mois) plutôt que les 3 offres forfaitaires
+ * Essentiel/Professionnel/Premium (OFFRE_TARIFS, toujours utilisées par l'écran Abonnement réel de
+ * l'application — ce tableau ne pilote QUE l'estimateur public, voir la note affichée sous le total).
+ * Noms alignés sur LANDING_FEATURES/le vocabulaire déjà utilisé ailleurs sur le site plutôt que ceux
+ * de Lucca, pour ne jamais reprendre l'intitulé d'un module concurrent. */
+const LANDING_ALACARTE_MODULES = [
+  { key: 'conges', label: 'Congés & absences', prix: 2.90 },
+  { key: 'planning', label: 'Planning & télétravail', prix: 2.10 },
+  { key: 'dossier', label: 'Dossier salarié', prix: 3.00 },
+  { key: 'frais', label: 'Notes de frais', prix: 5.20 },
+  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95 },
+  { key: 'paie', label: 'Préparation de paie', prix: 0.65 },
+  { key: 'formation', label: 'Suivi formation', prix: 2.30 },
+  { key: 'organigramme', label: 'Organigramme', prix: 1.40 },
+  { key: 'documents', label: 'Documents RH', prix: 2.50 },
+  { key: 'support', label: 'Support intégré', prix: 2.20 },
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90 },
+  { key: 'idees', label: 'Boîte à idées', prix: 0.70 }
+];
+
 const ABOUT_CATEGORIES = [
   {
     icon: '👥',
@@ -1250,12 +1271,12 @@ function renderLandingScreen() {
 
       <section class="landing-stats-band">
         <div class="landing-stat-tile">
-          <strong>${LANDING_FEATURES.length}</strong>
-          <span>Modules inclus, aucun vendu séparément</span>
+          <strong>${LANDING_ALACARTE_MODULES.length}</strong>
+          <span>Modules à la carte, vous ne payez que ceux que vous utilisez</span>
         </div>
         <div class="landing-stat-tile">
-          <strong>1</strong>
-          <span>Seul prix par salarié, sans surcoût par module</span>
+          <strong>0</strong>
+          <span>Engagement de durée — ajoutez ou retirez un module quand vous voulez</span>
         </div>
         <div class="landing-stat-tile">
           <strong>0</strong>
@@ -1263,7 +1284,7 @@ function renderLandingScreen() {
         </div>
         <div class="landing-stat-tile">
           <strong>100%</strong>
-          <span>Des fonctionnalités disponibles dès l'offre Essentiel</span>
+          <span>Du prix affiché en clair, aucun devis obligatoire</span>
         </div>
       </section>
 
@@ -1309,8 +1330,8 @@ function renderLandingScreen() {
 
       <section class="landing-section" id="landing-tarifs">
         <div class="landing-section-head">
-          <h2>Une offre pour chaque taille d'équipe</h2>
-          <p>Paiement sécurisé par Stripe. Annulation possible à tout moment.</p>
+          <h2>Composez votre abonnement</h2>
+          <p>Choisissez uniquement les modules dont vous avez besoin — le prix s'ajuste en direct.</p>
         </div>
         <div class="landing-employee-slider">
           <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
@@ -1325,10 +1346,22 @@ function renderLandingScreen() {
             <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-landing-periodicite="annuel">Annuel (2 mois offerts)</button>
           </div>
         </div>
-        <div class="offres-grid">
-          ${Object.entries(OFFRE_TARIFS).map(([key, o]) =>
-            renderOffreCard(key, o, periodicite, `<button type="button" class="btn ${(OFFRE_PRESENTATION[key] || {}).misEnAvant ? 'btn-primary' : 'btn-secondary'}" style="width: 100%; margin-top: 12px;" data-landing-action="signup">Souscrire</button>`)
-          ).join('')}
+        <div class="alacarte-builder">
+          <div class="alacarte-modules">
+            ${LANDING_ALACARTE_MODULES.map(m => `
+              <label class="alacarte-module">
+                <input type="checkbox" class="alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" ${(state.landingAlacarteModules && state.landingAlacarteModules[m.key] === false) ? '' : 'checked'}>
+                <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
+                <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ salarié / mois</span></span>
+              </label>
+            `).join('')}
+          </div>
+          <div class="alacarte-total-card">
+            <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
+            <strong id="alacarte-total">—</strong>
+            <p class="landing-simulator-note">Estimation — le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
+            <button type="button" class="btn btn-primary btn-arrow-cta" style="width: 100%; margin-top: 8px;" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
+          </div>
         </div>
         <div class="landing-compare-table-wrap">
           <table class="landing-compare-table">
@@ -1336,11 +1369,11 @@ function renderLandingScreen() {
               <tr><th></th><th>Nexus</th><th>La plupart des SIRH du marché</th></tr>
             </thead>
             <tbody>
-              <tr><td>Tarification</td><td>Un seul prix par salarié, tout inclus</td><td>Modules facturés séparément</td></tr>
-              <tr><td>Support</td><td>Inclus dans toutes les offres, par ticket</td><td>Souvent en option ou limité</td></tr>
+              <tr><td>Tarification</td><td>À la carte, prix par module affiché en clair</td><td>Souvent un devis commercial obligatoire</td></tr>
+              <tr><td>Support</td><td>Inclus dans tous les modules, par ticket</td><td>Souvent en option ou limité</td></tr>
               <tr><td>Engagement</td><td>Résiliable à tout moment</td><td>Souvent un engagement annuel</td></tr>
               <tr><td>Mise en route</td><td>Aucune carte bancaire pour commencer</td><td>Démonstration commerciale obligatoire</td></tr>
-              <tr><td>Tickets restaurant</td><td>Calcul automatique inclus</td><td>Souvent un module à part</td></tr>
+              <tr><td>Tickets restaurant</td><td>Calcul automatique inclus dans le module</td><td>Souvent un module à part</td></tr>
             </tbody>
           </table>
         </div>
@@ -1472,12 +1505,34 @@ function bindLandingEmployeeSlider() {
       const max = OFFRES_BERTOLIS[key].nombreSalariesMax;
       return max === null || n <= max;
     });
+    // .offre-card n'existe plus que sur l'écran Abonnement réel de l'application (plus sur la
+    // landing, remplacée par le compositeur à la carte) — querySelectorAll renvoie alors une liste
+    // vide ici, sans effet, plutôt qu'une erreur : ce bind reste appelable dans les deux contextes.
     document.querySelectorAll('.offre-card').forEach(card => {
       card.classList.toggle('offre-card-match', card.dataset.offreKey === matchKey);
     });
+    computeAlacarteTotal();
   };
   slider.addEventListener('input', updateMatch);
   updateMatch();
+}
+
+/** Estimation volontairement simplifiée (comme le simulateur tickets restaurant) — somme des prix
+ * unitaires des modules cochés × nombre de salariés, ×10 en annuel (2 mois offerts, même convention
+ * que le reste du site). Ne pilote AUCUNE facturation réelle (voir la note affichée sous le total et
+ * le commentaire sur LANDING_ALACARTE_MODULES) — Stripe reste branché sur OFFRE_TARIFS tant que le
+ * vrai verrouillage par module n'est pas construit. */
+function computeAlacarteTotal() {
+  const totalEl = document.getElementById('alacarte-total');
+  if (!totalEl) return;
+  const employeeCount = Math.max(1, parseInt(document.getElementById('landing-employee-count')?.value, 10) || 1);
+  const periodicite = state.landingPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+  let perEmployee = 0;
+  document.querySelectorAll('.alacarte-module-checkbox').forEach(cb => {
+    if (cb.checked) perEmployee += parseFloat(cb.dataset.modulePrice) || 0;
+  });
+  const monthlyTotal = perEmployee * employeeCount;
+  totalEl.textContent = formatCurrencyFR(periodicite === 'annuel' ? monthlyTotal * 10 : monthlyTotal);
 }
 
 function bindLandingScreenEvents() {
@@ -1514,6 +1569,16 @@ function bindLandingScreenEvents() {
   });
   document.querySelectorAll('[data-install-trigger]').forEach(btn => {
     btn.addEventListener('click', triggerInstallPrompt);
+  });
+  document.querySelectorAll('.alacarte-module-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      // Persisté dans state (pas juste visuel) : un changement de périodicité juste après déclenche
+      // un renderLandingScreen() complet (voir data-landing-periodicite ci-dessus) qui perdrait les
+      // cases décochées sans ça.
+      state.landingAlacarteModules = state.landingAlacarteModules || {};
+      state.landingAlacarteModules[cb.dataset.moduleKey] = cb.checked;
+      computeAlacarteTotal();
+    });
   });
   bindLandingEmployeeSlider();
   bindLandingSimulator();
