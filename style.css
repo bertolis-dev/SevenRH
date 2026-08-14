@@ -1759,6 +1759,22 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-radius: var(--radius-sm);
 }
 
+.login-oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.login-oauth-divider::before, .login-oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.login-oauth-buttons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+
 /* ---------------------------------------------------------------------
    Page d'accueil publique (landing) — bleu marine/or repris du logo,
    volontairement fixes (pas de variante sombre/claire) : c'est l'identité

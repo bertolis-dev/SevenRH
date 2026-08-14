@@ -503,6 +503,16 @@ async function signOut() {
   await supabase.auth.signOut();
 }
 
+/** provider : 'google' | 'azure' (Microsoft). Redirige immédiatement hors de la page — la liaison au
+ * salarié existant se fait automatiquement côté serveur par email (trigger link_new_auth_user_to_
+ * employee, 0005_signup_auto_link.sql, déjà générique : il ne regarde jamais COMMENT le compte
+ * auth.users a été créé, seulement son email). Rien de spécifique à l'OAuth à ajouter côté base. */
+async function signInWithOAuth(provider) {
+  const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: currentSiteBase() } });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session || null;
@@ -743,6 +753,30 @@ async function appendTicketComment(ticketId, auteur, texte) {
   return { success: true };
 }
 
+/** Intégrations (0022_integrations.sql) : lecture/écriture directes via le client authentifié — RLS
+ * (gererParametres) suffit à protéger ces deux appels, pas besoin d'Edge Function (contrairement à
+ * notifySlack ci-dessous, appelée par N'IMPORTE QUEL salarié qui n'a pas le droit de lire le webhook
+ * lui-même). */
+async function getCompanyIntegrations(companyId) {
+  const { data, error } = await supabase.from('company_integrations').select('*').eq('company_id', companyId).maybeSingle();
+  if (error) throw error;
+  return data ? { slackWebhookUrl: data.slack_webhook_url || '' } : { slackWebhookUrl: '' };
+}
+async function saveCompanyIntegrations(companyId, { slackWebhookUrl }) {
+  const { error } = await supabase.from('company_integrations').upsert({ company_id: companyId, slack_webhook_url: slackWebhookUrl || null });
+  if (error) throw error;
+}
+
+/** Relaie une notification vers le webhook Slack de l'entreprise si configuré (voir supabase/
+ * functions/notify-slack) — passe TOUJOURS par l'Edge Function (jamais un accès direct à
+ * company_integrations), puisque l'appelant est souvent un salarié ordinaire qui n'a pas gererParametres
+ * et ne pourrait donc pas lire le webhook lui-même. Un échec ici ne doit jamais remonter comme une
+ * erreur de création de demande — voir DB.addLeaveRequest/addTeleworkRequest/addExpense (data.js). */
+async function notifySlack(icon, title, message) {
+  const { error } = await supabase.functions.invoke('notify-slack', { body: { icon, title, message } });
+  if (error) throw error;
+}
+
 /** Notifie BERTOLIS par email (Edge Function notify-bertolis-ticket) juste après la création d'un
  * ticket — voir DB.addSupportTicket (data.js). Un échec ici ne doit jamais remonter comme une
  * erreur de "synchronisation" au salarié (son ticket est bien créé) : l'appelant se contente de
@@ -812,7 +846,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signUpNewCompany, createCompanySelfService, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
@@ -820,5 +854,6 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
+  getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
   deleteRow
 };

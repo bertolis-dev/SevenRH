@@ -1120,6 +1120,12 @@ const DB = {
     this.saveLeaveRequests(list);
     const employee = this.getEmployeeById(request.employeeId);
     this.logAudit('Création', 'Demande de congé', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${leaveType ? leaveType.nom : '—'}`);
+    // Jamais .then/.catch chaîné sur _pushInBackground (déjà utilisé pour le sync cache ci-dessus,
+    // sémantique différente) : un échec Slack ne doit produire NI toast NI blocage, juste un
+    // .catch(()=>{}) silencieux — l'utilisateur n'a même pas besoin de savoir que Slack existe.
+    if (request.statut === 'En attente' && employee) {
+      window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${leaveType ? leaveType.nom : '—'}`).catch(() => {});
+    }
     return request;
   },
 
@@ -1433,6 +1439,9 @@ const DB = {
     this.saveTeleworkRequests(list);
     const employee = this.getEmployeeById(request.employeeId);
     this.logAudit('Création', 'Demande de télétravail', employee ? `${employee.prenom} ${employee.nom}` : '—');
+    if (request.statut === 'En attente' && employee) {
+      window.SupabaseSync.notifySlack('💻', 'Nouvelle demande de télétravail', `${employee.prenom} ${employee.nom}`).catch(() => {});
+    }
     return request;
   },
 
@@ -1491,6 +1500,9 @@ const DB = {
     this.saveExpenses(list);
     const employee = this.getEmployeeById(expense.employeeId);
     this.logAudit('Création', 'Note de frais', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${expense.categorie}`);
+    if (expense.statut === 'En attente' && employee) {
+      window.SupabaseSync.notifySlack('🧾', 'Nouvelle note de frais', `${employee.prenom} ${employee.nom} · ${expense.libelle || expense.categorie}`).catch(() => {});
+    }
     return expense;
   },
 
@@ -2129,7 +2141,26 @@ const DB = {
       const result = await this._finalizeCompanySelfServiceCreation();
       return result.success;
     }
+    // Session authentifiée sans fiche salarié correspondante — le cas le plus probable est une
+    // connexion Google/Microsoft (§ intégrations SSO) avec une adresse qui ne correspond à aucun
+    // salarié de l'entreprise. Jamais laisser une session à moitié valide traîner en silence
+    // (l'utilisateur atterrirait muettement sur la page d'accueil publique, sans comprendre
+    // pourquoi) : on déconnecte et on renseigne un message qu'app.js affichera à la place.
+    await window.SupabaseSync.signOut();
+    this._lastAuthError = 'Aucun salarié associé à ce compte. Contactez votre RH pour obtenir un accès.';
     return false;
+  },
+
+  /** Lu puis effacé une seule fois — évite qu'un message d'erreur d'authentification périmé
+   * réapparaisse après un rechargement de page qui n'a plus rien à voir. */
+  getLastAuthError() {
+    const msg = this._lastAuthError;
+    this._lastAuthError = null;
+    return msg;
+  },
+
+  async loginWithOAuth(provider) {
+    return window.SupabaseSync.signInWithOAuth(provider);
   },
 
   /** Vérifie l'ancien mot de passe en retentant une connexion (l'API Supabase Auth n'expose pas de
@@ -2308,6 +2339,7 @@ const authRepository = {
   getCurrentUser: () => DB.getCurrentUser(),
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
+  loginWithOAuth: (provider) => DB.loginWithOAuth(provider),
   signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
   resendSignupConfirmation: (email) => DB.resendSignupConfirmation(email),
   logout: () => DB.logout(),
@@ -2320,6 +2352,16 @@ const authRepository = {
 const settingsRepository = {
   getSettings: () => DB.getSettings(),
   saveSettings: (settings) => DB.saveSettings(settings)
+};
+
+/** Contrairement à settingsRepository, ne vit pas dans le cache local optimiste (company.settings) :
+ * le webhook Slack est un secret protégé par RLS (0022_integrations.sql), jamais rapatrié à
+ * l'hydratation pour un salarié sans gererParametres — ces deux appels vont donc lire/écrire
+ * directement Supabase, pas de lecture locale "instantanée" possible ici (léger flash de chargement
+ * assumé sur l'onglet Paramètres → Intégrations, seul endroit qui les appelle). */
+const integrationsRepository = {
+  get: () => window.SupabaseSync.getCompanyIntegrations(DB.getCurrentCompany().id),
+  save: (patch) => window.SupabaseSync.saveCompanyIntegrations(DB.getCurrentCompany().id, patch)
 };
 
 const categorieSalarieRepository = {

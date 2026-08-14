@@ -135,6 +135,12 @@ function getInitialViewState() {
   return {
     view: 'dashboard',
     currentEmployeeId: null,
+    // Secret par entreprise (webhook Slack, voir integrationsRepository) — DOIT être effacé au
+    // changement de compte/entreprise dans le même onglet navigateur, contrairement à un simple
+    // choix d'onglet Paramètres (parametresTab) : une valeur périmée ici fuiterait le webhook d'une
+    // entreprise vers l'écran d'une autre (même bug de fond que le fraisFilters d'origine, mais
+    // avec un vrai secret cette fois, pas juste un filtre d'affichage).
+    integrationsCache: undefined,
     search: '',
     filters: { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false },
     organigrammeFilters: { search: '', etablissementId: '', service: '', equipe: '' },
@@ -328,11 +334,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   const restored = await DB.restoreSession();
+  const lastAuthError = DB.getLastAuthError();
   // Une session de récupération de mot de passe est une session valide comme une autre : si
   // PASSWORD_RECOVERY a été détecté (maintenant ou lors d'un chargement précédent, via le flag
   // persisté), il ne faut jamais laisser restoreSession() envoyer directement dans l'appli.
   if (restored && !window.SupabaseSync.wasPasswordRecoveryDetected() && !sessionStorage.getItem('sevenrh_password_recovery_pending')) {
     showApp();
+  } else if (lastAuthError) {
+    // Retour d'une connexion Google/Microsoft (ou toute session authentifiée) sans fiche salarié
+    // correspondante — jamais retomber muettement sur la page d'accueil publique dans ce cas
+    // précis (voir DB.restoreSession) : direct sur l'écran de connexion avec le message clair.
+    showLogin();
+    state.authError = lastAuthError;
+    renderLoginScreen();
   } else if (
     getPendingSignup()
     || sessionStorage.getItem('sevenrh_password_recovery_pending')
@@ -2080,6 +2094,11 @@ function renderLoginView() {
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Se connecter</button>
       </form>
+      <div class="login-oauth-divider"><span>ou</span></div>
+      <div class="login-oauth-buttons">
+        <button type="button" class="btn btn-secondary" id="btn-oauth-google" style="width: 100%;">Continuer avec Google</button>
+        <button type="button" class="btn btn-secondary" id="btn-oauth-azure" style="width: 100%;">Continuer avec Microsoft</button>
+      </div>
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
@@ -2313,6 +2332,19 @@ function bindLoginScreenEvents() {
       showApp();
     });
   }
+
+  // La redirection quitte la page immédiatement (signInWithOAuth) — aucun état de chargement à
+  // gérer ici, contrairement au formulaire email/mot de passe qui reste sur place en cas d'erreur.
+  const googleBtn = document.getElementById('btn-oauth-google');
+  if (googleBtn) googleBtn.addEventListener('click', async () => {
+    const result = await authRepository.loginWithOAuth('google');
+    if (!result.success) { state.authError = result.error; renderLoginScreen(); }
+  });
+  const azureBtn = document.getElementById('btn-oauth-azure');
+  if (azureBtn) azureBtn.addEventListener('click', async () => {
+    const result = await authRepository.loginWithOAuth('azure');
+    if (!result.success) { state.authError = result.error; renderLoginScreen(); }
+  });
 
   const forgotBtn = document.getElementById('btn-forgot-password');
   if (forgotBtn) forgotBtn.addEventListener('click', () => {
@@ -9338,6 +9370,7 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>
       <button class="tab ${state.parametresTab === 'categories-salarie' ? 'active' : ''}" data-parametres-tab="categories-salarie">Catégories de salariés</button>
       <button class="tab ${state.parametresTab === 'qualite' ? 'active' : ''}" data-parametres-tab="qualite">Qualité des données</button>
+      <button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>
       ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
     </div>
     <div id="parametres-tab-content">
@@ -9351,6 +9384,7 @@ function renderParametres() {
         : state.parametresTab === 'fermetures' ? renderParametresFermetures()
         : state.parametresTab === 'categories-salarie' ? renderParametresCategoriesSalarie()
         : state.parametresTab === 'qualite' ? renderParametresQualite()
+        : state.parametresTab === 'integrations' ? renderParametresIntegrations()
         : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
         : renderParametresListes()}
     </div>
@@ -9382,6 +9416,54 @@ function bindParametresTypesAbsencesEvents() {
   bindCongesTypesEvents(categorie);
 }
 
+/** Contrairement aux autres onglets Paramètres (données déjà dans le cache local), le webhook Slack
+ * n'est jamais rapatrié à l'hydratation (secret protégé par RLS, voir integrationsRepository) — un
+ * état de chargement bref est donc assumé ici, unique onglet de cet écran à en avoir besoin. */
+function renderParametresIntegrations() {
+  if (state.integrationsCache === undefined) return '<p class="text-muted">Chargement...</p>';
+  if (state.integrationsCache === null) return '<p class="text-muted">Impossible de charger les intégrations pour le moment.</p>';
+  return `
+    <div class="card" style="max-width: 560px;">
+      <h3 style="margin-top:0;">Slack</h3>
+      <p class="text-muted">Reçoit une notification dans un canal Slack à chaque nouvelle demande de congé, de télétravail ou de note de frais nécessitant une validation.</p>
+      <form id="integrations-slack-form">
+        <div class="form-field">
+          <label for="f-slack-webhook">URL du webhook entrant Slack</label>
+          <input class="input" type="url" id="f-slack-webhook" placeholder="https://hooks.slack.com/services/..." value="${escapeHtml(state.integrationsCache.slackWebhookUrl)}">
+          <p class="form-hint">Créez un webhook entrant depuis les paramètres de votre espace Slack (Apps → Incoming Webhooks), puis collez son URL ici. Laissez vide pour désactiver.</p>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:12px;">Enregistrer</button>
+      </form>
+    </div>
+  `;
+}
+
+function bindParametresIntegrationsEvents() {
+  if (state.integrationsCache === undefined) {
+    integrationsRepository.get()
+      .then(data => { state.integrationsCache = data; render(); })
+      .catch(() => { state.integrationsCache = null; render(); });
+    return;
+  }
+  const form = document.getElementById('integrations-slack-form');
+  if (form) {
+    form.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const slackWebhookUrl = document.getElementById('f-slack-webhook').value.trim();
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        await integrationsRepository.save({ slackWebhookUrl });
+        state.integrationsCache = { slackWebhookUrl };
+        showToast('Intégrations enregistrées.');
+      } catch (err) {
+        showToast('Erreur lors de l\'enregistrement.', 'error');
+      }
+      submitBtn.disabled = false;
+    });
+  }
+}
+
 function bindParametresEvents() {
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {
     // renderSidebar() en plus de render() : "Abonnement" a maintenant sa propre entrée de menu
@@ -9392,6 +9474,7 @@ function bindParametresEvents() {
 
   if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
   else if (state.parametresTab === 'abonnement') bindParametresAbonnementEvents();
+  else if (state.parametresTab === 'integrations') bindParametresIntegrationsEvents();
   else if (state.parametresTab === 'etablissements') bindParametresEtablissementsEvents();
   else if (state.parametresTab === 'services') bindParametresServicesEvents();
   else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
