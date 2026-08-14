@@ -1351,7 +1351,7 @@ function renderLandingScreen() {
         <div class="landing-employee-slider">
           <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
           <div class="landing-employee-slider-row">
-            <input type="range" id="landing-employee-count" min="1" max="60" value="10" step="1">
+            <input type="range" id="landing-employee-count" min="1" max="150" value="10" step="1">
             <span class="landing-employee-count-value" id="landing-employee-count-value">10 salariés</span>
           </div>
         </div>
@@ -1382,6 +1382,7 @@ function renderLandingScreen() {
           <div class="alacarte-total-card">
             <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
             <strong id="alacarte-total">—</strong>
+            <p class="alacarte-discount-note" id="alacarte-discount-note"></p>
             <p class="landing-simulator-note">Estimation — le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
             <button type="button" class="btn btn-primary btn-arrow-cta" style="width: 100%; margin-top: 8px;" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           </div>
@@ -1540,11 +1541,27 @@ function bindLandingEmployeeSlider() {
   updateMatch();
 }
 
+/** Remise volume — ALTERNATIVE choisie à la place de l'opacité tarifaire de Lucca au-delà de 100
+ * salariés (devis commercial obligatoire, prix non public) : plutôt que cacher le prix des grandes
+ * entreprises, Nexus l'affiche toujours en clair mais le réduit automatiquement par palier
+ * d'effectif, remise visible dans le calcul (#alacarte-discount-note) — sert le même besoin réel
+ * (les grands comptes paient moins par tête) sans jamais forcer un contact commercial pour voir un
+ * prix. Décision du 14/08/2026, sur demande explicite de ne pas copier ce point précis de Lucca. */
+const ALACARTE_VOLUME_TIERS = [
+  { min: 100, rate: 0.15 },
+  { min: 50, rate: 0.10 },
+  { min: 25, rate: 0.05 },
+  { min: 0, rate: 0 }
+];
+function getAlacarteVolumeDiscount(employeeCount) {
+  return ALACARTE_VOLUME_TIERS.find(t => employeeCount >= t.min);
+}
+
 /** Estimation volontairement simplifiée (comme le simulateur tickets restaurant) — somme des prix
- * unitaires des modules cochés × nombre de salariés, ×10 en annuel (2 mois offerts, même convention
- * que le reste du site). Ne pilote AUCUNE facturation réelle (voir la note affichée sous le total et
- * le commentaire sur LANDING_ALACARTE_MODULES) — Stripe reste branché sur OFFRE_TARIFS tant que le
- * vrai verrouillage par module n'est pas construit. */
+ * unitaires des modules cochés × nombre de salariés, remise volume appliquée, ×10 en annuel (2 mois
+ * offerts, même convention que le reste du site). Ne pilote AUCUNE facturation réelle (voir la note
+ * affichée sous le total et le commentaire sur LANDING_ALACARTE_MODULES) — Stripe reste branché sur
+ * OFFRE_TARIFS tant que le vrai verrouillage par module n'est pas construit. */
 function computeAlacarteTotal() {
   const totalEl = document.getElementById('alacarte-total');
   if (!totalEl) return;
@@ -1564,7 +1581,17 @@ function computeAlacarteTotal() {
       monthlyTotal += prix * employeeCount;
     }
   });
-  totalEl.textContent = formatCurrencyFR(periodicite === 'annuel' ? monthlyTotal * 10 : monthlyTotal);
+
+  const tier = getAlacarteVolumeDiscount(employeeCount);
+  const discounted = monthlyTotal * (1 - tier.rate);
+  totalEl.textContent = formatCurrencyFR(periodicite === 'annuel' ? discounted * 10 : discounted);
+
+  const discountNote = document.getElementById('alacarte-discount-note');
+  if (discountNote) {
+    discountNote.textContent = tier.rate > 0
+      ? `🎉 Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${employeeCount} salariés)`
+      : '';
+  }
 }
 
 function bindLandingScreenEvents() {
