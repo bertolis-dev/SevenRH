@@ -230,6 +230,14 @@ function entretienFromRow(row) {
   };
 }
 
+function ideeFromRow(row) {
+  return {
+    id: row.id, employeeId: row.employee_id, titre: row.titre, description: row.description || '',
+    statut: row.statut, votes: row.votes || [], historique: row.historique || [],
+    dateCreation: row.created_at, dateModification: row.updated_at
+  };
+}
+
 function draftFromRow(row) {
   return {
     id: row.id, ownerId: row.owner_id, type: row.type, champs: row.champs || {},
@@ -346,6 +354,14 @@ function entretienToRow(e, companyId) {
     date_prevue: e.datePrevue, date_realisee: e.dateRealisee || null, statut: e.statut || 'a_planifier',
     objectifs: e.objectifs || null, auto_evaluation: e.autoEvaluation || null,
     retour_manager: e.retourManager || null, historique: e.historique || []
+  };
+}
+
+function ideeToRow(i, companyId) {
+  return {
+    id: i.id, company_id: companyId, employee_id: i.employeeId, titre: i.titre || '',
+    description: i.description || null, statut: i.statut || 'nouvelle', votes: i.votes || [],
+    historique: i.historique || []
   };
 }
 
@@ -517,7 +533,7 @@ async function hydrateCurrentCompany() {
   const [
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
-    expensesRes, documentsRes, supportTicketsRes, entretiensRes, draftsRes, notificationsRes, favoritesRes,
+    expensesRes, documentsRes, supportTicketsRes, entretiensRes, ideesRes, draftsRes, notificationsRes, favoritesRes,
     auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
@@ -533,6 +549,7 @@ async function hydrateCurrentCompany() {
     supabase.from('documents').select('*').eq('company_id', companyId),
     supabase.from('support_tickets').select('*').eq('company_id', companyId),
     supabase.from('entretiens').select('*').eq('company_id', companyId),
+    supabase.from('idees').select('*').eq('company_id', companyId),
     supabase.from('drafts').select('*').eq('company_id', companyId),
     supabase.from('notifications').select('*').eq('company_id', companyId),
     supabase.from('favorites').select('*').eq('company_id', companyId),
@@ -572,6 +589,7 @@ async function hydrateCurrentCompany() {
     documents: (documentsRes.data || []).map(documentFromRow),
     supportTickets: (supportTicketsRes.data || []).map(ticketFromRow),
     entretiens: (entretiensRes.data || []).map(entretienFromRow),
+    idees: (ideesRes.data || []).map(ideeFromRow),
     schoolHolidays: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
     auditLog: (auditLogRes.data || []).map(auditLogFromRow),
     favorites: favoritesFromRows(favoritesRes.data),
@@ -696,6 +714,18 @@ async function updateEntretien(entretien, companyId) {
   await updateRows('entretiens', [entretien], entretienToRow, companyId);
 }
 
+const pushIdees = (rows, companyId) => insertRows('idees', rows, ideeToRow, companyId);
+async function toggleIdeeVote(ideeId) {
+  const { data, error } = await supabase.rpc('toggle_idee_vote', { p_idee_id: ideeId });
+  if (error) return { success: false, error: error.message };
+  return { success: true, votes: data };
+}
+async function setIdeeStatut(ideeId, statut, auteur) {
+  const { error } = await supabase.rpc('set_idee_statut', { p_idee_id: ideeId, p_statut: statut, p_auteur: auteur });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
  * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
  * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
@@ -789,5 +819,6 @@ window.SupabaseSync = {
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   pushEntretiens, updateEntretien,
+  pushIdees, toggleIdeeVote, setIdeeStatut,
   deleteRow
 };

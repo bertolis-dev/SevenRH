@@ -96,7 +96,8 @@ const PERMISSIONS = {
   VOIR_JOURNAL_AUDIT: 'voirJournalAudit',
   GERER_ABONNEMENTS: 'gererAbonnements',
   GERER_TICKETS: 'gererTickets',
-  GERER_ENTRETIENS: 'gererEntretiens'
+  GERER_ENTRETIENS: 'gererEntretiens',
+  GERER_IDEES: 'gererIdees'
 };
 
 /** Permissions accordées par défaut à chaque rôle — reproduit le comportement actuel de l'app
@@ -131,7 +132,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.PROLONGER_MALADIE, PERMISSIONS.VALIDER_NOTE_FRAIS, PERMISSIONS.CALCULER_TICKETS_RESTAURANT,
     PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, PERMISSIONS.EXPORTER_PAIE, PERMISSIONS.GERER_PARAMETRES,
     PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT, PERMISSIONS.GERER_TICKETS,
-    PERMISSIONS.GERER_ENTRETIENS
+    PERMISSIONS.GERER_ENTRETIENS, PERMISSIONS.GERER_IDEES
   ],
   comptabilite: [
     PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
@@ -1811,6 +1812,78 @@ const DB = {
     return entretien;
   },
 
+  // ---- Boîte à idées (§14 modules futurs, construit — voir 0021_idees.sql) ----
+  // Contrairement aux entretiens, visible par toute l'entreprise (tableau collectif) — pas de
+  // getXxxVisibleTo ici, getIdees() suffit puisque la policy select côté serveur est déjà ouverte
+  // à toute l'entreprise (voir 0021_idees.sql).
+
+  getIdees() {
+    return (this.getCurrentCompany().idees || []).slice().sort((a, b) => (b.votes || []).length - (a.votes || []).length || new Date(b.dateCreation) - new Date(a.dateCreation));
+  },
+
+  getIdeeById(id) {
+    return (this.getCurrentCompany().idees || []).find(i => i.id === id) || null;
+  },
+
+  addIdee(data) {
+    const now = new Date().toISOString();
+    const idee = {
+      id: generateId('idee'),
+      employeeId: data.employeeId,
+      titre: data.titre,
+      description: data.description || '',
+      statut: 'nouvelle',
+      votes: [],
+      historique: [{ date: now, action: 'Idée proposée' }],
+      dateCreation: now,
+      dateModification: now
+    };
+    const company = this.getCurrentCompany();
+    company.idees = [...(company.idees || []), idee];
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushIdees([idee], company.id));
+    const employee = this.getEmployeeById(idee.employeeId);
+    this.logAudit('Création', 'Idée', employee ? `${employee.prenom} ${employee.nom}` : '—', idee.titre);
+    return idee;
+  },
+
+  /** Passe par la fonction SQL atomique toggle_idee_vote (0021_idees.sql) — jamais de lire-modifier-
+   * réécrire du tableau `votes` côté client, qui écraserait le vote d'un autre salarié posé entre
+   * l'hydratation locale et cet appel. Le cache local n'est mis à jour qu'APRÈS confirmation du
+   * serveur (qui renvoie le tableau votes à jour), pas de mise à jour optimiste ici — contrairement
+   * au reste de l'app, un double-clic sur "voter" ne doit jamais donner l'illusion d'un 2e vote. */
+  async toggleIdeeVote(id) {
+    const result = await window.SupabaseSync.toggleIdeeVote(id);
+    if (!result.success) return result;
+    const company = this.getCurrentCompany();
+    const idee = (company.idees || []).find(i => i.id === id);
+    if (idee) {
+      idee.votes = result.votes;
+      idee.dateModification = new Date().toISOString();
+      this.saveCurrentCompany(company);
+    }
+    return result;
+  },
+
+  /** Passe par set_idee_statut (0021_idees.sql), qui vérifie lui-même gererIdees côté serveur —
+   * défense en profondeur en plus du bouton masqué côté UI si l'utilisateur n'a pas la permission. */
+  async setIdeeStatut(id, statut) {
+    const employee = this.getCurrentUser();
+    const auteur = employee ? `${employee.prenom} ${employee.nom}` : 'RH';
+    const result = await window.SupabaseSync.setIdeeStatut(id, statut, auteur);
+    if (!result.success) return result;
+    const company = this.getCurrentCompany();
+    const idee = (company.idees || []).find(i => i.id === id);
+    if (idee) {
+      const now = new Date().toISOString();
+      idee.statut = statut;
+      idee.historique = [...(idee.historique || []), { date: now, action: `Statut changé en « ${statut} »`, auteur }];
+      idee.dateModification = now;
+      this.saveCurrentCompany(company);
+    }
+    return result;
+  },
+
   // ---- Journal d'audit ----
 
   getAuditLog() {
@@ -2198,6 +2271,14 @@ const entretienRepository = {
   submitAutoEvaluation: (id, texte) => DB.updateEntretienAutoEvaluation(id, texte),
   submitRetourManager: (id, texte) => DB.updateEntretienRetourManager(id, texte),
   cloturer: (id) => DB.clotureEntretien(id)
+};
+
+const ideeRepository = {
+  getAll: () => DB.getIdees(),
+  getById: (id) => DB.getIdeeById(id),
+  create: (data) => DB.addIdee(data),
+  toggleVote: (id) => DB.toggleIdeeVote(id),
+  setStatut: (id, statut) => DB.setIdeeStatut(id, statut)
 };
 
 const serviceRepository = {

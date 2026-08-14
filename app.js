@@ -234,6 +234,11 @@ const NAV_ITEMS = [
   // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
   // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
   { key: 'entretiens', label: 'Entretiens', icon: '🗒️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  // Contrairement aux autres entrées "personnel" (données propres au salarié), la boîte à idées est
+  // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
+  // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
+  // individuel (proposer/voter), pas un outil de pilotage d'équipe.
+  { key: 'idees', label: "Boîte à idées", icon: '💡', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
@@ -3937,6 +3942,14 @@ function render() {
       root.innerHTML = renderEntretienDetail(state.currentEntretienId);
       bindEntretienDetailEvents();
       break;
+    case 'idees':
+      root.innerHTML = renderIdees();
+      bindIdeesEvents();
+      break;
+    case 'idee-detail':
+      root.innerHTML = renderIdeeDetail(state.currentIdeeId);
+      bindIdeeDetailEvents();
+      break;
     case 'employee-detail':
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
       bindEmployeeDetailEvents();
@@ -6267,6 +6280,180 @@ function bindEntretienDetailEvents() {
     clotureBtn.addEventListener('click', () => {
       entretienRepository.cloturer(state.currentEntretienId);
       showToast('Entretien clôturé.');
+      render();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vue : Boîte à idées (§14 modules futurs, construit)
+// ---------------------------------------------------------------------------
+
+const IDEE_STATUT_LABELS = { nouvelle: 'Nouvelle', etudiee: 'À l\'étude', retenue: 'Retenue', refusee: 'Non retenue' };
+const IDEE_STATUT_BADGE_CLASS = { nouvelle: 'info', etudiee: 'warning', retenue: 'success', refusee: 'muted' };
+
+function renderIdeeRow(idee, userId) {
+  const author = employeeRepository.getById(idee.employeeId);
+  const votes = idee.votes || [];
+  const aVote = votes.includes(userId);
+  return `
+    <div class="mini-list-item ticket-row idee-row" data-open-idee="${idee.id}">
+      <span>
+        <span class="badge badge-${IDEE_STATUT_BADGE_CLASS[idee.statut] || 'muted'}">${escapeHtml(IDEE_STATUT_LABELS[idee.statut] || idee.statut)}</span>
+        ${escapeHtml(idee.titre)}
+        ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+      </span>
+      <span class="detail-header-actions">
+        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'} idee-vote-btn" data-vote-idee="${idee.id}" title="${aVote ? 'Retirer mon vote' : 'Voter pour cette idée'}">
+          👍 ${votes.length}
+        </button>
+      </span>
+    </div>
+  `;
+}
+
+function renderIdees() {
+  const user = authRepository.getCurrentUser();
+  const idees = ideeRepository.getAll();
+
+  return `
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Boîte à idées</h1>
+        <p class="view-subtitle">${idees.length} idée${idees.length > 1 ? 's' : ''} proposée${idees.length > 1 ? 's' : ''} par toute l'entreprise</p>
+      </div>
+      <div class="detail-header-actions">
+        <button class="btn btn-primary" id="btn-proposer-idee">+ Proposer une idée</button>
+      </div>
+    </div>
+    <div class="card">
+      <div id="idees-list">
+        ${idees.length === 0 ? '<p class="text-muted">Aucune idée pour le moment — soyez le premier à en proposer une !</p>' : idees.map(i => renderIdeeRow(i, user.id)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/** Le vote est géré directement depuis la liste (pas besoin d'ouvrir le détail pour un simple 👍) —
+ * seul le clic sur le titre/badge ouvre le détail, le bouton de vote est un stopPropagation implicite
+ * (élément séparé, pas imbriqué dans un lien cliquable). */
+function bindIdeesEvents() {
+  const proposeBtn = document.getElementById('btn-proposer-idee');
+  if (proposeBtn) proposeBtn.addEventListener('click', () => openProposeIdeeModal());
+  document.querySelectorAll('[data-vote-idee]').forEach(btn => {
+    btn.addEventListener('click', async (evt) => {
+      evt.stopPropagation();
+      const result = await ideeRepository.toggleVote(btn.dataset.voteIdee);
+      if (!result.success) { showToast(result.error || 'Erreur lors du vote.', 'error'); return; }
+      render();
+    });
+  });
+  document.querySelectorAll('[data-open-idee]').forEach(el => {
+    el.addEventListener('click', (evt) => {
+      if (evt.target.closest('[data-vote-idee]')) return;
+      navigateTo('idee-detail', { currentIdeeId: el.dataset.openIdee });
+    });
+  });
+}
+
+function openProposeIdeeModal() {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Proposer une idée</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="propose-idee-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-idee-titre">Titre *</label>
+            <input class="input" type="text" id="f-idee-titre" placeholder="Résumez votre idée en quelques mots" required>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-idee-description">Description (optionnel)</label>
+            <textarea class="input" id="f-idee-description" rows="4" placeholder="Détaillez votre idée, en quoi elle aiderait l'équipe..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Proposer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('propose-idee-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const titre = document.getElementById('f-idee-titre').value.trim();
+    if (!titre) return;
+    const user = authRepository.getCurrentUser();
+    ideeRepository.create({ employeeId: user.id, titre, description: document.getElementById('f-idee-description').value.trim() });
+    closeModal();
+    showToast('Idée proposée — merci !');
+    if (state.view === 'idees') render();
+  });
+}
+
+function renderIdeeDetail(id) {
+  const idee = ideeRepository.getById(id);
+  if (!idee) return `<button class="btn-link" id="btn-back-to-idees">← Retour</button><div class="empty-state"><p>Idée introuvable.</p></div>`;
+
+  const user = authRepository.getCurrentUser();
+  const canManage = hasPermission(user, PERMISSIONS.GERER_IDEES);
+  const author = employeeRepository.getById(idee.employeeId);
+  const votes = idee.votes || [];
+  const aVote = votes.includes(user.id);
+
+  const statutControls = canManage
+    ? `<select class="input" id="f-idee-statut" style="width:auto;">
+        ${Object.keys(IDEE_STATUT_LABELS).map(s => `<option value="${s}" ${s === idee.statut ? 'selected' : ''}>${IDEE_STATUT_LABELS[s]}</option>`).join('')}
+      </select>`
+    : '';
+
+  return `
+    <button class="btn-link" id="btn-back-to-idees">← Retour à la boîte à idées</button>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>${escapeHtml(idee.titre)}</h1>
+        <p class="view-subtitle">
+          <span class="badge badge-${IDEE_STATUT_BADGE_CLASS[idee.statut] || 'muted'}">${escapeHtml(IDEE_STATUT_LABELS[idee.statut] || idee.statut)}</span>
+          ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+          · ${formatDateTime(idee.dateCreation)}
+        </p>
+      </div>
+      <div class="detail-header-actions">
+        ${statutControls}
+        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'}" id="btn-vote-idee">👍 ${votes.length}</button>
+      </div>
+    </div>
+    ${idee.description ? `<div class="card"><p style="margin:0;">${escapeHtml(idee.description).replace(/\n/g, '<br>')}</p></div>` : ''}
+    ${renderTicketHistoryTimeline(idee.historique)}
+  `;
+}
+
+function bindIdeeDetailEvents() {
+  const backBtn = document.getElementById('btn-back-to-idees');
+  if (backBtn) backBtn.addEventListener('click', () => navigateTo('idees'));
+  if (!ideeRepository.getById(state.currentIdeeId)) return;
+
+  const voteBtn = document.getElementById('btn-vote-idee');
+  if (voteBtn) {
+    voteBtn.addEventListener('click', async () => {
+      const result = await ideeRepository.toggleVote(state.currentIdeeId);
+      if (!result.success) { showToast(result.error || 'Erreur lors du vote.', 'error'); return; }
+      render();
+    });
+  }
+
+  const statutSelect = document.getElementById('f-idee-statut');
+  if (statutSelect) {
+    statutSelect.addEventListener('change', async () => {
+      const result = await ideeRepository.setStatut(state.currentIdeeId, statutSelect.value);
+      if (!result.success) { showToast(result.error || 'Erreur lors du changement de statut.', 'error'); return; }
       render();
     });
   }
