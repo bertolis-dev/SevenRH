@@ -261,6 +261,11 @@ const NAV_ITEMS = [
   // de menu distinctes pour un même écran.
   { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
+  // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
+  // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
+  // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Directeur
+  // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
+  { key: 'remuneration', label: 'Rémunération', icon: '💰', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe' },
 
   // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
   // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
@@ -682,22 +687,23 @@ const LANDING_FEATURES = [
  * l'application — ce tableau ne pilote QUE l'estimateur public, voir la note affichée sous le total).
  * Noms alignés sur LANDING_FEATURES/le vocabulaire déjà utilisé ailleurs sur le site plutôt que ceux
  * de Lucca, pour ne jamais reprendre l'intitulé d'un module concurrent. */
-/** Chaque module correspond à UNE entrée réelle de NAV_ITEMS (ou à un regroupement de 2 entrées
- * étroitement liées, ex. Planning+Calendrier) — jamais un module inventé sans écran derrière
- * (contrairement à la première version, qui avait copié "Formation" depuis Lucca sans vérifier
- * que Nexus l'ait vraiment construit). Revu le 14/08/2026 sur retour explicite de l'utilisateur. */
+/** Chaque module correspond à UNE entrée réelle de NAV_ITEMS (ou à un regroupement d'entrées
+ * étroitement liées) — jamais un module inventé sans écran derrière (contrairement à la première
+ * version, qui avait copié "Formation" depuis Lucca sans vérifier que Nexus l'ait vraiment
+ * construit). Restructuré le 14/08/2026 sur retour explicite de l'utilisateur : regroupement en 7
+ * modules plus larges plutôt que 11 modules fins, "Module RH" combinant volontairement 4 écrans
+ * (gestion des salariés/préparation de paie/documents/organigramme) à un prix inférieur à la somme
+ * de leurs prix pris séparément. Support intégré/Boîte à idées volontairement absents de cette
+ * liste (retirés de la tarification à la carte sur demande, question de savoir s'ils restent
+ * inclus gratuitement encore ouverte). */
 const LANDING_ALACARTE_MODULES = [
-  { key: 'conges', label: 'Congés, absences & télétravail', prix: 2.90 }, // NAV_ITEMS: absences
-  { key: 'planning', label: 'Planning & calendrier', prix: 2.10 }, // NAV_ITEMS: planning + calendrier
-  { key: 'salaries', label: 'Gestion des salariés', prix: 3.00 }, // NAV_ITEMS: employees
+  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.90 }, // NAV_ITEMS: absences + calendrier
+  { key: 'planning', label: 'Planning, télétravail', prix: 2.10 }, // NAV_ITEMS: planning + (télétravail dans absences)
   { key: 'frais', label: 'Notes de frais', prix: 5.20 }, // NAV_ITEMS: frais
   { key: 'tickets', label: 'Tickets restaurant', prix: 0.95 }, // NAV_ITEMS: tickets
-  { key: 'paie', label: 'Préparation de paie', prix: 0.65 }, // NAV_ITEMS: export-paie
-  { key: 'organigramme', label: 'Organigramme', prix: 1.40 }, // NAV_ITEMS: organigramme
-  { key: 'documents', label: 'Documents RH', prix: 2.50 }, // NAV_ITEMS: mes-documents
-  { key: 'support', label: 'Support intégré', prix: 2.20 }, // NAV_ITEMS: mes-tickets
-  { key: 'entretiens', label: 'Entretiens', prix: 1.90 }, // NAV_ITEMS: entretiens
-  { key: 'idees', label: 'Boîte à idées', prix: 0.70 } // NAV_ITEMS: idees
+  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50 }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
+  { key: 'remuneration', label: 'Rémunération', prix: 1.50 }, // NAV_ITEMS: remuneration
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90 } // NAV_ITEMS: entretiens
 ];
 
 const ABOUT_CATEGORIES = [
@@ -4087,6 +4093,10 @@ function render() {
     case 'export-paie':
       root.innerHTML = renderExportPaie();
       bindExportPaieEvents();
+      break;
+    case 'remuneration':
+      root.innerHTML = renderRemuneration();
+      bindRemunerationEvents();
       break;
     default:
       root.innerHTML = renderDashboard();
@@ -13095,6 +13105,75 @@ function bindExportPaieEvents() {
 
   document.querySelectorAll('[data-adjust-variables]').forEach(btn => {
     btn.addEventListener('click', () => openVariablesPaieModal(btn.dataset.adjustVariables));
+  });
+}
+
+/** Nouvel écran dédié (module "Rémunération" du compositeur à la carte de la landing, 14/08/2026) —
+ * réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel, jusqu'ici affichés
+ * uniquement comme un seul chiffre agrégé sur le tableau de bord Direction (renderDashboard) : le
+ * réglage/la donnée existaient déjà, seul un vrai écran dédié manquait. */
+function renderRemuneration() {
+  const settings = settingsRepository.getSettings();
+  if (!settings.masseSalarialeActivee) {
+    return `
+      <div class="view-header">
+        <h1>Rémunération</h1>
+      </div>
+      <div class="empty-state">
+        <p>Le suivi de la masse salariale n'est pas activé pour votre entreprise.</p>
+        <button type="button" class="btn btn-primary" id="btn-activer-masse-salariale">Activer dans les paramètres</button>
+      </div>
+    `;
+  }
+
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const renseignes = employees.filter(e => e.salaireBrutMensuel > 0).sort((a, b) => b.salaireBrutMensuel - a.salaireBrutMensuel);
+  const nonRenseignes = employees.filter(e => !(e.salaireBrutMensuel > 0));
+  const total = renseignes.reduce((sum, e) => sum + e.salaireBrutMensuel, 0);
+  const moyenne = renseignes.length ? total / renseignes.length : 0;
+  const mediane = renseignes.length ? renseignes[Math.floor(renseignes.length / 2)].salaireBrutMensuel : 0;
+
+  return `
+    <div class="view-header">
+      <h1>Rémunération</h1>
+      <p class="view-subtitle">${renseignes.length} salarié${renseignes.length > 1 ? 's' : ''} avec un salaire renseigné sur ${employees.length}</p>
+    </div>
+    <div class="kpi-grid">
+      ${kpiCard('Masse salariale mensuelle', formatCurrencyFR(total), '💰')}
+      ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), '📊')}
+      ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), '📈')}
+    </div>
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr><th>Salarié</th><th>Service</th><th>Salaire brut mensuel</th></tr>
+        </thead>
+        <tbody>
+          ${renseignes.map(e => `
+            <tr class="table-row" data-open-employee="${e.id}">
+              <td>${escapeHtml(e.prenom + ' ' + e.nom)}</td>
+              <td>${escapeHtml(e.service || '—')}</td>
+              <td>${formatCurrencyFR(e.salaireBrutMensuel)}</td>
+            </tr>
+          `).join('')}
+          ${nonRenseignes.map(e => `
+            <tr class="table-row" data-open-employee="${e.id}">
+              <td>${escapeHtml(e.prenom + ' ' + e.nom)}</td>
+              <td>${escapeHtml(e.service || '—')}</td>
+              <td class="text-muted">Non renseigné</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function bindRemunerationEvents() {
+  const activerBtn = document.getElementById('btn-activer-masse-salariale');
+  if (activerBtn) activerBtn.addEventListener('click', () => navigateTo('parametres', { parametresTab: 'entreprise' }));
+  document.querySelectorAll('[data-open-employee]').forEach(row => {
+    row.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: row.dataset.openEmployee }));
   });
 }
 
