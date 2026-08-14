@@ -230,6 +230,10 @@ const NAV_ITEMS = [
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
   { key: 'mes-tickets', label: 'Mes tickets', icon: '🎫', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
+  // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
+  // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
+  { key: 'entretiens', label: 'Entretiens', icon: '🗒️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
   { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
@@ -1225,6 +1229,25 @@ function renderLandingScreen() {
         </div>
       </section>
 
+      <section class="landing-stats-band">
+        <div class="landing-stat-tile">
+          <strong>${LANDING_FEATURES.length}</strong>
+          <span>Modules inclus, aucun vendu séparément</span>
+        </div>
+        <div class="landing-stat-tile">
+          <strong>1</strong>
+          <span>Seul prix par salarié, sans surcoût par module</span>
+        </div>
+        <div class="landing-stat-tile">
+          <strong>0</strong>
+          <span>Ressaisie : congés, absences et télétravail alimentent directement le calcul des tickets restaurant et de la paie</span>
+        </div>
+        <div class="landing-stat-tile">
+          <strong>100%</strong>
+          <span>Des fonctionnalités disponibles dès l'offre Essentiel</span>
+        </div>
+      </section>
+
       <section class="landing-section" id="landing-fonctionnalites">
         <div class="landing-section-head">
           <h2>Tout ce qu'il faut, rien de superflu</h2>
@@ -1287,6 +1310,20 @@ function renderLandingScreen() {
           ${Object.entries(OFFRE_TARIFS).map(([key, o]) =>
             renderOffreCard(key, o, periodicite, `<button type="button" class="btn ${(OFFRE_PRESENTATION[key] || {}).misEnAvant ? 'btn-primary' : 'btn-secondary'}" style="width: 100%; margin-top: 12px;" data-landing-action="signup">Souscrire</button>`)
           ).join('')}
+        </div>
+        <div class="landing-compare-table-wrap">
+          <table class="landing-compare-table">
+            <thead>
+              <tr><th></th><th>Nexus</th><th>La plupart des SIRH du marché</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Tarification</td><td>Un seul prix par salarié, tout inclus</td><td>Modules facturés séparément</td></tr>
+              <tr><td>Support</td><td>Inclus dans toutes les offres, par ticket</td><td>Souvent en option ou limité</td></tr>
+              <tr><td>Engagement</td><td>Résiliable à tout moment</td><td>Souvent un engagement annuel</td></tr>
+              <tr><td>Mise en route</td><td>Aucune carte bancaire pour commencer</td><td>Démonstration commerciale obligatoire</td></tr>
+              <tr><td>Tickets restaurant</td><td>Calcul automatique inclus</td><td>Souvent un module à part</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -3590,6 +3627,17 @@ function syncNotifications() {
       `${employee.prenom} ${employee.nom} · ${t.titre}`, 'mes-tickets', {}, employee.id));
   });
 
+  // Un entretien planifié par RH ne devait auparavant être découvert qu'en visitant "Entretiens" —
+  // sourceKey basé sur dateCreation (pas juste l'id) pour la même raison que les tickets ci-dessus :
+  // un entretien n'est jamais recréé avec le même id, donc en pratique ceci ne notifie qu'une fois,
+  // mais reste cohérent avec la convention du reste de ce bloc.
+  entretienRepository.getAll().filter(e => e.statut === 'a_planifier').forEach(e => {
+    const employee = employeeRepository.getById(e.employeeId);
+    if (!employee) return;
+    candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, '🗒️', 'Entretien planifié',
+      `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}`, 'entretiens', {}, employee.id));
+  });
+
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
   // widgets d'aperçu du tableau de bord) — sinon le 6e salarié et au-delà n'est simplement jamais notifié.
   getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
@@ -3873,6 +3921,10 @@ function render() {
       root.innerHTML = renderMesDocuments();
       bindMesDocumentsEvents();
       break;
+    case 'entretiens':
+      root.innerHTML = renderEntretiens();
+      bindEntretiensEvents();
+      break;
     case 'mes-tickets':
       root.innerHTML = renderMesTickets();
       bindMesTicketsEvents();
@@ -3880,6 +3932,10 @@ function render() {
     case 'ticket-detail':
       root.innerHTML = renderTicketDetail(state.currentTicketId);
       bindTicketDetailEvents();
+      break;
+    case 'entretien-detail':
+      root.innerHTML = renderEntretienDetail(state.currentEntretienId);
+      bindEntretienDetailEvents();
       break;
     case 'employee-detail':
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
@@ -5707,6 +5763,18 @@ const TICKET_STATUT_LABELS = { ouvert: 'Nouvelle demande', en_cours: 'En cours',
 const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', livre: 'success', ferme: 'muted' };
 const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 
+const ENTRETIEN_STATUT_LABELS = { a_planifier: 'À faire', auto_evaluation_faite: 'En cours', cloture: 'Clôturé' };
+const ENTRETIEN_STATUT_BADGE_CLASS = { a_planifier: 'warning', auto_evaluation_faite: 'info', cloture: 'success' };
+const ENTRETIEN_TYPE_LABELS = { professionnel: 'Entretien professionnel', bilan: 'Bilan (6 ans)' };
+
+/** Reflète is_manager_of() côté RLS (0002_rls_policies.sql) — même relation (employee.managerIds),
+ * juste côté client pour décider quoi afficher/activer dans l'UI (la donnée reste protégée par la
+ * policy serveur quoi qu'il arrive). */
+function isManagerOfEmployee(managerId, targetEmployeeId) {
+  const target = employeeRepository.getById(targetEmployeeId);
+  return Boolean(target && (target.managerIds || []).includes(managerId));
+}
+
 /** Libellé humain de l'écran courant, utilisé comme contexte auto-capturé à la création d'un
  * ticket — pas de capture d'écran (décision actée précédemment pour des raisons de confidentialité
  * RH), juste de quoi orienter BERTOLIS sans que le salarié ait à le décrire lui-même. */
@@ -5988,6 +6056,217 @@ function bindTicketDetailEvents() {
       const result = await supportTicketRepository.addComment(state.currentTicketId, texte);
       submitBtn.disabled = false;
       if (!result.success) { showToast(result.error || 'Erreur lors de l\'envoi.', 'error'); return; }
+      render();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vue : Entretiens annuels (§14 modules futurs, construit)
+// ---------------------------------------------------------------------------
+
+function renderEntretienRow(e, showEmployee) {
+  const employee = showEmployee ? employeeRepository.getById(e.employeeId) : null;
+  return `
+    <div class="mini-list-item ticket-row" data-open-entretien="${e.id}">
+      <span>
+        <span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[e.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[e.statut] || e.statut)}</span>
+        ${escapeHtml(ENTRETIEN_TYPE_LABELS[e.type] || e.type)}
+        ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
+      </span>
+      <span class="detail-header-actions">
+        <span class="text-muted">${formatDate(e.datePrevue)}</span>
+      </span>
+    </div>
+  `;
+}
+
+function renderEntretiens() {
+  const user = authRepository.getCurrentUser();
+  const entretiens = entretienRepository.getVisibleTo(user);
+  const canPlan = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
+
+  return `
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Entretiens</h1>
+        <p class="view-subtitle">${entretiens.length} entretien${entretiens.length > 1 ? 's' : ''}</p>
+      </div>
+      ${canPlan ? '<div class="detail-header-actions"><button class="btn btn-primary" id="btn-planifier-entretien">+ Planifier un entretien</button></div>' : ''}
+    </div>
+    <div class="card">
+      <div id="entretiens-list">
+        ${entretiens.length === 0 ? '<p class="text-muted">Aucun entretien pour le moment.</p>' : entretiens.map(e => renderEntretienRow(e, canPlan || user.role === ROLES.MANAGER)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindEntretiensEvents() {
+  const planBtn = document.getElementById('btn-planifier-entretien');
+  if (planBtn) planBtn.addEventListener('click', () => openPlanEntretienModal());
+  document.querySelectorAll('[data-open-entretien]').forEach(el => {
+    el.addEventListener('click', () => navigateTo('entretien-detail', { currentEntretienId: el.dataset.openEntretien }));
+  });
+}
+
+/** Réservé à RH/Directeur (gererEntretiens) — le salarié ne planifie jamais sa propre convocation
+ * (voir entretiens_insert, 0020_entretiens.sql). Liste de salariés = tous ceux visibles par
+ * l'utilisateur courant côté "Salariés" (getFilteredSortedEmployees serait trop restrictif ici, on
+ * veut toute l'entreprise) — employeeRepository.getAll() convient puisque ce bouton n'est même
+ * affiché qu'avec gererEntretiens, déjà un rôle company-wide (RH/Directeur). */
+function openPlanEntretienModal() {
+  const employees = employeeRepository.getAll().filter(e => !e.archive).sort((a, b) => a.prenom.localeCompare(b.prenom));
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Planifier un entretien</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="plan-entretien-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-entretien-employee">Salarié *</label>
+            <select class="input" id="f-entretien-employee" required>
+              ${employees.map(e => `<option value="${e.id}">${escapeHtml(e.prenom + ' ' + e.nom)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field">
+              <label for="f-entretien-type">Type</label>
+              <select class="input" id="f-entretien-type">
+                <option value="professionnel">Entretien professionnel</option>
+                <option value="bilan">Bilan (6 ans)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-entretien-date">Date prévue *</label>
+              <input class="input" type="date" id="f-entretien-date" required>
+            </div>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-entretien-objectifs">Objectifs (optionnel)</label>
+            <textarea class="input" id="f-entretien-objectifs" rows="3" placeholder="Points à aborder, objectifs fixés à date..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Planifier</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('plan-entretien-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const datePrevue = document.getElementById('f-entretien-date').value;
+    if (!datePrevue) return;
+    entretienRepository.create({
+      employeeId: document.getElementById('f-entretien-employee').value,
+      type: document.getElementById('f-entretien-type').value,
+      datePrevue,
+      objectifs: document.getElementById('f-entretien-objectifs').value.trim()
+    });
+    closeModal();
+    showToast('Entretien planifié.');
+    if (state.view === 'entretiens') render();
+  });
+}
+
+function renderEntretienDetail(id) {
+  const entretien = entretienRepository.getById(id);
+  if (!entretien) return `<button class="btn-link" id="btn-back-to-entretiens">← Retour</button><div class="empty-state"><p>Entretien introuvable.</p></div>`;
+
+  const user = authRepository.getCurrentUser();
+  const canManageAll = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
+  const isSalarie = entretien.employeeId === user.id;
+  const isManager = isManagerOfEmployee(user.id, entretien.employeeId);
+  if (!canManageAll && !isSalarie && !isManager) {
+    return `<button class="btn-link" id="btn-back-to-entretiens">← Retour</button><div class="empty-state"><p>Vous n'avez pas accès à cet entretien.</p></div>`;
+  }
+
+  const employee = employeeRepository.getById(entretien.employeeId);
+  const cloture = entretien.statut === 'cloture';
+
+  return `
+    <button class="btn-link" id="btn-back-to-entretiens">← Retour aux entretiens</button>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>${escapeHtml(ENTRETIEN_TYPE_LABELS[entretien.type] || entretien.type)}</h1>
+        <p class="view-subtitle">
+          <span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[entretien.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[entretien.statut] || entretien.statut)}</span>
+          ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
+          · Prévu le ${formatDate(entretien.datePrevue)}
+          ${entretien.dateRealisee ? ` · Réalisé le ${formatDate(entretien.dateRealisee)}` : ''}
+        </p>
+      </div>
+      ${canManageAll && !cloture ? '<div class="detail-header-actions"><button type="button" class="btn btn-primary btn-sm" id="btn-cloturer-entretien">Clôturer</button></div>' : ''}
+    </div>
+
+    ${entretien.objectifs ? `<div class="card"><div class="search-section-label" style="padding-left:0;">Objectifs</div><p style="margin:0;">${escapeHtml(entretien.objectifs).replace(/\n/g, '<br>')}</p></div>` : ''}
+
+    <div class="card">
+      <div class="search-section-label" style="padding-left:0;">Auto-évaluation ${employee ? `— ${escapeHtml(employee.prenom)}` : ''}</div>
+      ${isSalarie && !cloture ? `
+        <form id="entretien-auto-eval-form">
+          <textarea class="input" id="f-entretien-auto-eval" rows="4" placeholder="Votre bilan de la période écoulée, vos réussites, vos difficultés, vos souhaits d'évolution...">${escapeHtml(entretien.autoEvaluation)}</textarea>
+          <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;">Enregistrer</button>
+        </form>
+      ` : entretien.autoEvaluation
+        ? `<p style="margin:0;">${escapeHtml(entretien.autoEvaluation).replace(/\n/g, '<br>')}</p>`
+        : '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'}
+    </div>
+
+    <div class="card">
+      <div class="search-section-label" style="padding-left:0;">Retour manager</div>
+      ${isManager && !cloture ? `
+        <form id="entretien-retour-manager-form">
+          <textarea class="input" id="f-entretien-retour-manager" rows="4" placeholder="Votre appréciation, vos retours, les axes de progression identifiés...">${escapeHtml(entretien.retourManager)}</textarea>
+          <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;">Enregistrer</button>
+        </form>
+      ` : entretien.retourManager
+        ? `<p style="margin:0;">${escapeHtml(entretien.retourManager).replace(/\n/g, '<br>')}</p>`
+        : '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'}
+    </div>
+
+    ${renderTicketHistoryTimeline(entretien.historique)}
+  `;
+}
+
+function bindEntretienDetailEvents() {
+  const backBtn = document.getElementById('btn-back-to-entretiens');
+  if (backBtn) backBtn.addEventListener('click', () => navigateTo('entretiens'));
+  if (!entretienRepository.getById(state.currentEntretienId)) return;
+
+  const autoEvalForm = document.getElementById('entretien-auto-eval-form');
+  if (autoEvalForm) {
+    autoEvalForm.addEventListener('submit', (evt) => {
+      evt.preventDefault();
+      entretienRepository.submitAutoEvaluation(state.currentEntretienId, document.getElementById('f-entretien-auto-eval').value.trim());
+      showToast('Auto-évaluation enregistrée.');
+      render();
+    });
+  }
+
+  const retourManagerForm = document.getElementById('entretien-retour-manager-form');
+  if (retourManagerForm) {
+    retourManagerForm.addEventListener('submit', (evt) => {
+      evt.preventDefault();
+      entretienRepository.submitRetourManager(state.currentEntretienId, document.getElementById('f-entretien-retour-manager').value.trim());
+      showToast('Retour manager enregistré.');
+      render();
+    });
+  }
+
+  const clotureBtn = document.getElementById('btn-cloturer-entretien');
+  if (clotureBtn) {
+    clotureBtn.addEventListener('click', () => {
+      entretienRepository.cloturer(state.currentEntretienId);
+      showToast('Entretien clôturé.');
       render();
     });
   }

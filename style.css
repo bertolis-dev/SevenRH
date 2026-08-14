@@ -1248,6 +1248,22 @@ textarea.input { resize: vertical; font-family: inherit; }
   align-items: stretch;
 }
 
+/* Comparaison volontairement générique ("la plupart des SIRH du marché"), pas de concurrent nommé
+   — trois avantages réels de Nexus (tout inclus, support inclus, sans engagement) plutôt qu'une
+   liste exhaustive façon Bizneo (7 concurrents) qu'il faudrait maintenir à jour indéfiniment. */
+.landing-compare-table-wrap { max-width: 720px; margin: 40px auto 0; overflow-x: auto; }
+.landing-compare-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.landing-compare-table th, .landing-compare-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--color-border); }
+.landing-compare-table thead th { font-size: 12px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.landing-compare-table thead th:nth-child(2) { color: var(--landing-navy-900); }
+.landing-compare-table tbody td:first-child { font-weight: 600; color: var(--color-text-muted); white-space: nowrap; }
+.landing-compare-table tbody td:nth-child(2) { color: var(--landing-navy-900); font-weight: 600; }
+.landing-compare-table tbody td:nth-child(3) { color: var(--color-text-muted); }
+@media (max-width: 480px) {
+  .landing-compare-table { font-size: 12.5px; }
+  .landing-compare-table th, .landing-compare-table td { padding: 10px 8px; }
+}
+
 .offre-card {
   position: relative;
   display: flex;
@@ -2027,6 +2043,25 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-feature-icon svg { width: 22px; height: 22px; }
 .landing-feature-card h3 { margin: 0 0 6px; font-size: 16px; }
 .landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
+
+/* Bandeau de chiffres juste sous la hero — des faits vérifiables sur le produit (nombre de modules,
+   prix unique, zéro ressaisie), pas des statistiques d'usage inventées : Nexus est un nouveau produit
+   sans historique client permettant d'afficher honnêtement un "70% de temps gagné" à la PayFit. */
+.landing-stats-band {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 36px 32px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+.landing-stat-tile { text-align: center; }
+.landing-stat-tile strong { display: block; font-size: 32px; font-weight: 800; color: var(--landing-navy-900); line-height: 1; margin-bottom: 8px; }
+.landing-stat-tile span { display: block; font-size: 13px; color: var(--color-text-muted); line-height: 1.4; }
+@media (max-width: 860px) {
+  .landing-stats-band { grid-template-columns: repeat(2, 1fr); padding: 28px 20px; gap: 20px; }
+}
 
 .landing-employee-slider { max-width: 420px; margin: 0 auto 28px; text-align: center; }
 .landing-employee-slider label { display: block; font-size: 13.5px; font-weight: 600; color: var(--color-text-muted); margin-bottom: 10px; }

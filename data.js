@@ -95,7 +95,8 @@ const PERMISSIONS = {
   GERER_PERMISSIONS: 'gererPermissions',
   VOIR_JOURNAL_AUDIT: 'voirJournalAudit',
   GERER_ABONNEMENTS: 'gererAbonnements',
-  GERER_TICKETS: 'gererTickets'
+  GERER_TICKETS: 'gererTickets',
+  GERER_ENTRETIENS: 'gererEntretiens'
 };
 
 /** Permissions accordées par défaut à chaque rôle — reproduit le comportement actuel de l'app
@@ -129,7 +130,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.ANNULER_ABSENCE, PERMISSIONS.SAISIR_MALADIE,
     PERMISSIONS.PROLONGER_MALADIE, PERMISSIONS.VALIDER_NOTE_FRAIS, PERMISSIONS.CALCULER_TICKETS_RESTAURANT,
     PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, PERMISSIONS.EXPORTER_PAIE, PERMISSIONS.GERER_PARAMETRES,
-    PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT, PERMISSIONS.GERER_TICKETS
+    PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT, PERMISSIONS.GERER_TICKETS,
+    PERMISSIONS.GERER_ENTRETIENS
   ],
   comptabilite: [
     PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
@@ -1697,6 +1699,118 @@ const DB = {
     return result;
   },
 
+  // ---- Entretiens annuels (§14 modules futurs, construit — voir 0020_entretiens.sql) ----
+  // Workflow à 3 statuts volontairement simple (pas le moteur advanceWorkflow des congés, conçu pour
+  // une chaîne de VALIDATION configurable, pas une séquence de REMPLISSAGE fixe) : 'a_planifier' →
+  // 'auto_evaluation_faite' (dès que le salarié soumet) → 'cloture' (RH décide de clôturer, que le
+  // manager ait rempli son retour ou non — jamais bloquant). Le remplissage du retour manager n'a pas
+  // son propre statut : sa présence (retourManager non vide) suffit à le signaler dans l'UI.
+
+  getEntretiens() {
+    return (this.getCurrentCompany().entretiens || []).slice();
+  },
+
+  getEntretienById(id) {
+    return this.getEntretiens().find(e => e.id === id) || null;
+  },
+
+  getEntretiensForEmployee(employeeId) {
+    return this.getEntretiens()
+      .filter(e => e.employeeId === employeeId)
+      .sort((a, b) => new Date(b.datePrevue) - new Date(a.datePrevue));
+  },
+
+  /** Visibles par un salarié donné : les siens, ceux de son équipe s'il est manager (managerIds sur
+   * le salarié CIBLE, même relation que getVisibleEmployeeIdsForCurrentUser côté app.js), ou tous
+   * s'il a gererEntretiens (RH/Directeur) — reflète entretiens_select (0020_entretiens.sql). */
+  getEntretiensVisibleTo(employee) {
+    const all = this.getEntretiens().sort((a, b) => new Date(b.datePrevue) - new Date(a.datePrevue));
+    if (hasPermission(employee, PERMISSIONS.GERER_ENTRETIENS)) return all;
+    return all.filter(e => {
+      if (e.employeeId === employee.id) return true;
+      const target = this.getEmployeeById(e.employeeId);
+      return Boolean(target && (target.managerIds || []).includes(employee.id));
+    });
+  },
+
+  /** Planification : réservée à RH/Directeur (voir entretiens_insert) — le salarié ne crée jamais sa
+   * propre convocation. */
+  addEntretien(data) {
+    const now = new Date().toISOString();
+    const entretien = {
+      id: generateId('entr'),
+      employeeId: data.employeeId,
+      type: data.type || 'professionnel', // 'professionnel' | 'bilan'
+      datePrevue: data.datePrevue,
+      dateRealisee: null,
+      statut: 'a_planifier',
+      objectifs: data.objectifs || '',
+      autoEvaluation: '',
+      retourManager: '',
+      historique: [{ date: now, action: `Entretien ${data.type === 'bilan' ? 'de bilan' : 'professionnel'} planifié pour le ${formatDate(data.datePrevue)}` }],
+      dateCreation: now,
+      dateModification: now
+    };
+    const company = this.getCurrentCompany();
+    company.entretiens = [...(company.entretiens || []), entretien];
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushEntretiens([entretien], company.id));
+    const employee = this.getEmployeeById(entretien.employeeId);
+    this.logAudit('Création', 'Entretien', employee ? `${employee.prenom} ${employee.nom}` : '—', entretien.type);
+    return entretien;
+  },
+
+  /** Rempli par le salarié concerné — fait avancer le statut une seule fois (jamais de retour en
+   * arrière si le salarié modifie sa réponse après coup, tant que l'entretien n'est pas clôturé). */
+  updateEntretienAutoEvaluation(id, texte) {
+    const company = this.getCurrentCompany();
+    const entretien = (company.entretiens || []).find(e => e.id === id);
+    if (!entretien) return null;
+    const now = new Date().toISOString();
+    const premiereSoumission = !entretien.autoEvaluation;
+    entretien.autoEvaluation = texte;
+    if (entretien.statut === 'a_planifier') entretien.statut = 'auto_evaluation_faite';
+    if (premiereSoumission) entretien.historique = [...(entretien.historique || []), { date: now, action: 'Auto-évaluation soumise par le salarié' }];
+    entretien.dateModification = now;
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    return entretien;
+  },
+
+  /** Rempli par le manager de la personne concernée — vérification d'appartenance à l'équipe déjà
+   * faite côté UI (bouton visible seulement si canManageEntretienFor), ceci est la couche donnée. */
+  updateEntretienRetourManager(id, texte) {
+    const company = this.getCurrentCompany();
+    const entretien = (company.entretiens || []).find(e => e.id === id);
+    if (!entretien) return null;
+    const now = new Date().toISOString();
+    const premiereSoumission = !entretien.retourManager;
+    entretien.retourManager = texte;
+    if (premiereSoumission) entretien.historique = [...(entretien.historique || []), { date: now, action: 'Retour ajouté par le manager' }];
+    entretien.dateModification = now;
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    return entretien;
+  },
+
+  /** Clôture par RH/Directeur (gererEntretiens) — fige la date de réalisation si elle n'était pas
+   * déjà renseignée (coalesce local, comme dateLivraison pour les tickets support). */
+  clotureEntretien(id) {
+    const company = this.getCurrentCompany();
+    const entretien = (company.entretiens || []).find(e => e.id === id);
+    if (!entretien) return null;
+    const now = new Date().toISOString();
+    entretien.statut = 'cloture';
+    entretien.dateRealisee = entretien.dateRealisee || toISODate(new Date());
+    entretien.historique = [...(entretien.historique || []), { date: now, action: 'Entretien clôturé' }];
+    entretien.dateModification = now;
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    const employee = this.getEmployeeById(entretien.employeeId);
+    this.logAudit('Modification', 'Entretien', employee ? `${employee.prenom} ${employee.nom}` : '—', 'Clôturé');
+    return entretien;
+  },
+
   // ---- Journal d'audit ----
 
   getAuditLog() {
@@ -2073,6 +2187,17 @@ const supportTicketRepository = {
   create: (data) => DB.addSupportTicket(data),
   updateStatus: (id, statut) => DB.updateSupportTicketStatus(id, statut),
   addComment: (id, texte) => DB.addTicketComment(id, texte)
+};
+
+const entretienRepository = {
+  getAll: () => DB.getEntretiens(),
+  getById: (id) => DB.getEntretienById(id),
+  getForEmployee: (employeeId) => DB.getEntretiensForEmployee(employeeId),
+  getVisibleTo: (employee) => DB.getEntretiensVisibleTo(employee),
+  create: (data) => DB.addEntretien(data),
+  submitAutoEvaluation: (id, texte) => DB.updateEntretienAutoEvaluation(id, texte),
+  submitRetourManager: (id, texte) => DB.updateEntretienRetourManager(id, texte),
+  cloturer: (id) => DB.clotureEntretien(id)
 };
 
 const serviceRepository = {

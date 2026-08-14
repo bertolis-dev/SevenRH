@@ -220,6 +220,16 @@ function ticketFromRow(row) {
   };
 }
 
+function entretienFromRow(row) {
+  return {
+    id: row.id, employeeId: row.employee_id, type: row.type,
+    datePrevue: row.date_prevue, dateRealisee: row.date_realisee,
+    statut: row.statut, objectifs: row.objectifs || '', autoEvaluation: row.auto_evaluation || '',
+    retourManager: row.retour_manager || '', historique: row.historique || [],
+    dateCreation: row.created_at, dateModification: row.updated_at
+  };
+}
+
 function draftFromRow(row) {
   return {
     id: row.id, ownerId: row.owner_id, type: row.type, champs: row.champs || {},
@@ -327,6 +337,15 @@ function ticketToRow(t, companyId) {
       contexte: t.contexte || {}, pieceJointe: t.pieceJointe || null, comments: t.comments || [],
       historique: t.historique || [], aiAnalysis: t.aiAnalysis || null
     }
+  };
+}
+
+function entretienToRow(e, companyId) {
+  return {
+    id: e.id, company_id: companyId, employee_id: e.employeeId, type: e.type || 'professionnel',
+    date_prevue: e.datePrevue, date_realisee: e.dateRealisee || null, statut: e.statut || 'a_planifier',
+    objectifs: e.objectifs || null, auto_evaluation: e.autoEvaluation || null,
+    retour_manager: e.retourManager || null, historique: e.historique || []
   };
 }
 
@@ -498,7 +517,7 @@ async function hydrateCurrentCompany() {
   const [
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
-    expensesRes, documentsRes, supportTicketsRes, draftsRes, notificationsRes, favoritesRes,
+    expensesRes, documentsRes, supportTicketsRes, entretiensRes, draftsRes, notificationsRes, favoritesRes,
     auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
@@ -513,6 +532,7 @@ async function hydrateCurrentCompany() {
     supabase.from('expenses').select('*').eq('company_id', companyId),
     supabase.from('documents').select('*').eq('company_id', companyId),
     supabase.from('support_tickets').select('*').eq('company_id', companyId),
+    supabase.from('entretiens').select('*').eq('company_id', companyId),
     supabase.from('drafts').select('*').eq('company_id', companyId),
     supabase.from('notifications').select('*').eq('company_id', companyId),
     supabase.from('favorites').select('*').eq('company_id', companyId),
@@ -551,6 +571,7 @@ async function hydrateCurrentCompany() {
     expenses: (expensesRes.data || []).map(expenseFromRow),
     documents: (documentsRes.data || []).map(documentFromRow),
     supportTickets: (supportTicketsRes.data || []).map(ticketFromRow),
+    entretiens: (entretiensRes.data || []).map(entretienFromRow),
     schoolHolidays: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
     auditLog: (auditLogRes.data || []).map(auditLogFromRow),
     favorites: favoritesFromRows(favoritesRes.data),
@@ -665,6 +686,16 @@ const pushDocuments = (rows, companyId) => syncTable('documents', rows, document
 // existant n'est jamais réécrit via cette fonction.
 const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
 
+/** Un entretien n'est jamais créé par le salarié (voir entretiens_insert, 0020_entretiens.sql) —
+ * pushEntretiens ne sert qu'à RH/Directeur planifiant une convocation. updateEntretien couvre les 3
+ * écritures suivantes (auto-évaluation salarié, retour manager, clôture RH) : une simple mise à jour
+ * complète de ligne suffit ici (pas de fonction SQL atomique comme append_ticket_comment) — chaque
+ * étape est écrite par un seul acteur à la fois, jamais en concurrence comme un fil de commentaires. */
+const pushEntretiens = (rows, companyId) => insertRows('entretiens', rows, entretienToRow, companyId);
+async function updateEntretien(entretien, companyId) {
+  await updateRows('entretiens', [entretien], entretienToRow, companyId);
+}
+
 /** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
  * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
  * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
@@ -757,5 +788,6 @@ window.SupabaseSync = {
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
+  pushEntretiens, updateEntretien,
   deleteRow
 };
