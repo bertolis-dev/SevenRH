@@ -696,14 +696,20 @@ const LANDING_FEATURES = [
  * de leurs prix pris séparément. Support intégré/Boîte à idées volontairement absents de cette
  * liste (retirés de la tarification à la carte sur demande, question de savoir s'ils restent
  * inclus gratuitement encore ouverte). */
+/** unite: comme Lucca, tous les modules ne se facturent pas sur la même base — la plupart par
+ * salarié/mois, mais Notes de frais par DÉCLARANT/mois (seuls les salariés qui déposent vraiment des
+ * notes de frais comptent, pas tout l'effectif) — voir le champ dédié "combien de déclarants ?" dans
+ * le compositeur (renderAlacarteBuilderSection/computeAlacarteTotal), distinct du curseur d'effectif
+ * général. Décision du 14/08/2026 : copier ce point précis du système Lucca, pas leur opacité
+ * tarifaire au-delà de 100 salariés (jugée contraire à la transparence déjà actée pour Nexus). */
 const LANDING_ALACARTE_MODULES = [
-  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.90 }, // NAV_ITEMS: absences + calendrier
-  { key: 'planning', label: 'Planning, télétravail', prix: 2.10 }, // NAV_ITEMS: planning + (télétravail dans absences)
-  { key: 'frais', label: 'Notes de frais', prix: 5.20 }, // NAV_ITEMS: frais
-  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95 }, // NAV_ITEMS: tickets
-  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50 }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
-  { key: 'remuneration', label: 'Rémunération', prix: 1.50 }, // NAV_ITEMS: remuneration
-  { key: 'entretiens', label: 'Entretiens', prix: 1.90 } // NAV_ITEMS: entretiens
+  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.90, unite: 'salarié' }, // NAV_ITEMS: absences + calendrier
+  { key: 'planning', label: 'Planning, télétravail', prix: 2.10, unite: 'salarié' }, // NAV_ITEMS: planning + (télétravail dans absences)
+  { key: 'frais', label: 'Notes de frais', prix: 5.20, unite: 'déclarant' }, // NAV_ITEMS: frais
+  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95, unite: 'salarié' }, // NAV_ITEMS: tickets
+  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
+  { key: 'remuneration', label: 'Rémunération', prix: 1.50, unite: 'salarié' }, // NAV_ITEMS: remuneration
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' } // NAV_ITEMS: entretiens
 ];
 
 const ABOUT_CATEGORIES = [
@@ -1358,11 +1364,19 @@ function renderLandingScreen() {
         <div class="alacarte-builder">
           <div class="alacarte-modules">
             ${LANDING_ALACARTE_MODULES.map(m => `
-              <label class="alacarte-module">
-                <input type="checkbox" class="alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" ${(state.landingAlacarteModules && state.landingAlacarteModules[m.key] === false) ? '' : 'checked'}>
-                <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
-                <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ salarié / mois</span></span>
-              </label>
+              <div class="alacarte-module">
+                <label class="alacarte-module-main">
+                  <input type="checkbox" class="alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" data-module-unite="${m.unite}" ${(state.landingAlacarteModules && state.landingAlacarteModules[m.key] === false) ? '' : 'checked'}>
+                  <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
+                  <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ ${escapeHtml(m.unite)} / mois</span></span>
+                </label>
+                ${m.unite === 'déclarant' ? `
+                  <div class="alacarte-module-unit-count">
+                    <label for="alacarte-count-${m.key}">Combien de salariés déposent des notes de frais ?</label>
+                    <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 10}">
+                  </div>
+                ` : ''}
+              </div>
             `).join('')}
           </div>
           <div class="alacarte-total-card">
@@ -1536,11 +1550,20 @@ function computeAlacarteTotal() {
   if (!totalEl) return;
   const employeeCount = Math.max(1, parseInt(document.getElementById('landing-employee-count')?.value, 10) || 1);
   const periodicite = state.landingPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
-  let perEmployee = 0;
+  // Comme Lucca : un module "déclarant" (Notes de frais) se facture sur son propre effectif de
+  // déclarants, jamais sur le nombre total de salariés — voir data-count-for/alacarte-count-input.
+  let monthlyTotal = 0;
   document.querySelectorAll('.alacarte-module-checkbox').forEach(cb => {
-    if (cb.checked) perEmployee += parseFloat(cb.dataset.modulePrice) || 0;
+    if (!cb.checked) return;
+    const prix = parseFloat(cb.dataset.modulePrice) || 0;
+    if (cb.dataset.moduleUnite === 'déclarant') {
+      const countInput = document.getElementById(`alacarte-count-${cb.dataset.moduleKey}`);
+      const count = Math.max(0, parseInt(countInput?.value, 10) || 0);
+      monthlyTotal += prix * count;
+    } else {
+      monthlyTotal += prix * employeeCount;
+    }
   });
-  const monthlyTotal = perEmployee * employeeCount;
   totalEl.textContent = formatCurrencyFR(periodicite === 'annuel' ? monthlyTotal * 10 : monthlyTotal);
 }
 
@@ -1578,6 +1601,13 @@ function bindLandingScreenEvents() {
   });
   document.querySelectorAll('[data-install-trigger]').forEach(btn => {
     btn.addEventListener('click', triggerInstallPrompt);
+  });
+  document.querySelectorAll('.alacarte-count-input').forEach(input => {
+    input.addEventListener('input', () => {
+      state.landingAlacarteCounts = state.landingAlacarteCounts || {};
+      state.landingAlacarteCounts[input.dataset.countFor] = input.value;
+      computeAlacarteTotal();
+    });
   });
   document.querySelectorAll('.alacarte-module-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
