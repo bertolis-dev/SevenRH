@@ -4259,7 +4259,32 @@ function renderSidebar() {
 // Rendu principal
 // ---------------------------------------------------------------------------
 
+/** Vues de détail sans entrée NAV_ITEMS propre (voir navigateTo, "isNavView") : héritent quand
+ * même du module de leur écran parent, sinon un lien direct (dashboard, notification, recherche...)
+ * pourrait contourner un module non souscrit que navigateTo() bloque déjà pour les entrées de menu. */
+const DETAIL_VIEW_MODULE = {
+  'employee-detail': 'rh',
+  'entretien-detail': 'entretiens',
+  'candidature-detail': 'rh'
+};
+
+function moduleForView(view) {
+  const navItem = NAV_ITEMS.find(i => i.key === view);
+  return navItem ? navItem.module : DETAIL_VIEW_MODULE[view];
+}
+
 function render() {
+  // Garde-fou de dernier recours (défense en profondeur, comme §15) : quel que soit le chemin qui a
+  // amené ici (navigateTo filtre déjà les entrées de menu, mais un lien direct vers une vue de détail
+  // ne passe pas forcément par elle), une entreprise sans le module requis n'affiche jamais l'écran —
+  // retour silencieux à l'accueil, même comportement que navigateTo() sur une entrée de menu bloquée.
+  const requiredModule = moduleForView(state.view);
+  if (requiredModule && !hasModule(requiredModule)) {
+    state.view = 'dashboard';
+    renderSidebar();
+    render();
+    return;
+  }
   renderNonSouscritBanner();
   const root = document.getElementById('view-root');
   switch (state.view) {
