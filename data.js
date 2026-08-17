@@ -2617,7 +2617,7 @@ function generateId(prefix) {
 /** Calcule une ancienneté lisible ("3 ans, 2 mois") à partir d'une date d'embauche. */
 function calculateAnciennete(dateEmbauche) {
   if (!dateEmbauche) return '—';
-  const start = new Date(dateEmbauche);
+  const start = parseISODateLocal(dateEmbauche);
   const now = new Date();
   if (Number.isNaN(start.getTime()) || start > now) return '—';
 
@@ -2634,7 +2634,7 @@ function calculateAnciennete(dateEmbauche) {
 
 function calculateAge(dateNaissance) {
   if (!dateNaissance) return null;
-  const birth = new Date(dateNaissance);
+  const birth = parseISODateLocal(dateNaissance);
   const now = new Date();
   if (Number.isNaN(birth.getTime())) return null;
   let age = now.getFullYear() - birth.getFullYear();
@@ -3023,8 +3023,8 @@ function cancelRequest(request) {
  * décompté comme un jour d'absence, exactement comme il n'aurait pas été travaillé de toute façon. */
 function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings) {
   if (!dateDebut || !dateFin) return 0;
-  const start = new Date(dateDebut);
-  const end = new Date(dateFin);
+  const start = parseISODateLocal(dateDebut);
+  const end = parseISODateLocal(dateFin);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
 
   const joursTravailles = employee && employee.joursTravailles;
@@ -3053,8 +3053,8 @@ function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings)
 function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings) {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
-  const start = new Date(dateDebut);
-  const end = new Date(dateFin);
+  const start = parseISODateLocal(dateDebut);
+  const end = parseISODateLocal(dateFin);
   const clippedStart = start < monthStart ? monthStart : start;
   const clippedEnd = end > monthEnd ? monthEnd : end;
   if (clippedStart > clippedEnd) return 0;

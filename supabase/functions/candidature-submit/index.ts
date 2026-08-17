@@ -58,10 +58,18 @@ function buildFromAddress(raisonSociale: string): string {
   return `"${safeName}" <candidatures@nexus-rh.com>`;
 }
 
-async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
+/** Valide taille/type AVANT toute écriture en base — appelée avant l'insert de `candidatures`
+ * (voir Deno.serve ci-dessous) pour qu'un fichier invalide échoue proprement sans laisser de ligne
+ * orpheline (statut "nouvelle", jamais de cv_path) qu'un visiteur malveillant pourrait répéter en
+ * boucle pour polluer la liste "Candidatures reçues" d'une entreprise (aucun CAPTCHA/anti-spam ici,
+ * voir limite connue en tête de fichier — mais au moins pas de ligne fantôme à chaque tentative). */
+function assertValidFile(kind: "cv" | "lettre", file: File) {
   if (file.size > MAX_FILE_BYTES) throw new Error(`Fichier "${kind}" trop volumineux (5 Mo maximum).`);
+  if (!ALLOWED_TYPES[file.type]) throw new Error(`Format de fichier "${kind}" non accepté (PDF, PNG ou JPEG uniquement).`);
+}
+
+async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
   const ext = ALLOWED_TYPES[file.type];
-  if (!ext) throw new Error(`Format de fichier "${kind}" non accepté (PDF, PNG ou JPEG uniquement).`);
   const path = `${companyId}/${candidatureId}/${kind}.${ext}`;
   const { error } = await supabaseAdmin.storage.from("candidatures-files").upload(path, file, { contentType: file.type });
   if (error) throw error;
@@ -154,17 +162,27 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Le CV est obligatoire." }, 400);
   }
 
+  try {
+    assertValidFile("cv", cv);
+    if (lettre instanceof File && lettre.size > 0) assertValidFile("lettre", lettre);
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
   const { data: company } = await supabaseAdmin.from("companies").select("id, raison_sociale, data").eq("id", companyId).maybeSingle();
   if (!company) return jsonResponse({ error: "Lien de candidature invalide." }, 404);
 
-  try {
-    const { data: inserted, error: insertErr } = await supabaseAdmin
-      .from("candidatures")
-      .insert({ company_id: companyId, nom, prenom, email, telephone, lettre_texte: lettreTexte || null, postes })
-      .select("id")
-      .single();
-    if (insertErr) throw insertErr;
+  const { data: inserted, error: insertErr } = await supabaseAdmin
+    .from("candidatures")
+    .insert({ company_id: companyId, nom, prenom, email, telephone, lettre_texte: lettreTexte || null, postes })
+    .select("id")
+    .single();
+  if (insertErr) {
+    console.error("candidature-submit insert error:", insertErr);
+    return jsonResponse({ error: "Erreur lors de l'envoi : " + insertErr.message }, 500);
+  }
 
+  try {
     const patch: Record<string, string> = {};
     patch.cv_path = await uploadFile(companyId, inserted.id, "cv", cv);
     if (lettre instanceof File && lettre.size > 0) {
@@ -179,7 +197,11 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ success: true });
   } catch (err) {
-    console.error("candidature-submit error:", err);
+    // Le fichier a été validé plus haut (assertValidFile) : un échec ici est un problème de stockage/
+    // réseau, pas une donnée invalide côté visiteur — on retire la ligne orpheline plutôt que de la
+    // laisser polluer la liste "Candidatures reçues" de l'entreprise avec une candidature sans cv_path.
+    console.error("candidature-submit upload/update error:", err);
+    await supabaseAdmin.from("candidatures").delete().eq("id", inserted.id);
     return jsonResponse({ error: "Erreur lors de l'envoi : " + (err as Error).message }, 500);
   }
 });

@@ -4882,7 +4882,7 @@ function getUpcomingBirthdays(daysAhead = 60, employees, limit = 5) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
-      const birth = new Date(e.dateNaissance);
+      const birth = parseISODateLocal(e.dateNaissance);
       let next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
       if (next < today) next = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
       return { employee: e, next, daysUntil: Math.round((next - today) / 86400000) };
@@ -4916,7 +4916,7 @@ function getUpcomingSeniorityAnniversaries(daysAhead = 60, employees, limit = 5)
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
-      const hire = new Date(e.dateEmbauche);
+      const hire = parseISODateLocal(e.dateEmbauche);
       let next = new Date(today.getFullYear(), hire.getMonth(), hire.getDate());
       if (next < today) next = new Date(today.getFullYear() + 1, hire.getMonth(), hire.getDate());
       const years = next.getFullYear() - hire.getFullYear();
@@ -4938,7 +4938,7 @@ function getUpcomingEntretiensProfessionnels(daysAhead = 60, employees, limit = 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
-      const baseline = new Date(e.dateDernierEntretienProfessionnel || e.dateEmbauche);
+      const baseline = parseISODateLocal(e.dateDernierEntretienProfessionnel || e.dateEmbauche);
       const next = new Date(baseline.getFullYear() + 2, baseline.getMonth(), baseline.getDate());
       return { employee: e, next, daysUntil: Math.round((next - today) / 86400000) };
     })
@@ -4956,7 +4956,7 @@ function getUpcomingBilansSixAns(daysAhead = 60, employees, limit = 5) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
-      const hire = new Date(e.dateEmbauche);
+      const hire = parseISODateLocal(e.dateEmbauche);
       let years = 6;
       let next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate());
       while (next < today) { years += 6; next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate()); }
@@ -7688,6 +7688,7 @@ function bindEmployeeDetailEvents() {
   const archiveBtn = document.getElementById('btn-archive-employee');
   if (archiveBtn) archiveBtn.addEventListener('click', () => {
     const e = employeeRepository.getById(state.currentEmployeeId);
+    if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
     const willArchive = !e.archive;
     openConfirm({
       title: willArchive ? 'Archiver ce salarié ?' : 'Réactiver ce salarié ?',
@@ -7706,6 +7707,7 @@ function bindEmployeeDetailEvents() {
   const deleteBtn = document.getElementById('btn-delete-employee');
   if (deleteBtn) deleteBtn.addEventListener('click', () => {
     const e = employeeRepository.getById(state.currentEmployeeId);
+    if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
     openConfirm({
       title: 'Supprimer définitivement ?',
       message: `Cette action est irréversible. La fiche de ${e.prenom} ${e.nom} sera définitivement supprimée.`,
@@ -12301,7 +12303,7 @@ function updateTeleworkQuotaHint() {
   const activeRequests = teleworkRepository.getAll().filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'));
   let usedThisWeek = 0;
   activeRequests.forEach(r => {
-    for (let cursor = new Date(r.dateDebut); toISODate(cursor) <= r.dateFin; cursor.setDate(cursor.getDate() + 1)) {
+    for (let cursor = parseISODateLocal(r.dateDebut); toISODate(cursor) <= r.dateFin; cursor.setDate(cursor.getDate() + 1)) {
       const ds = toISODate(cursor);
       if (ds >= weekStart && ds <= weekEnd) usedThisWeek += 1;
     }
@@ -12359,7 +12361,7 @@ function findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quo
   const usageByWeek = {};
 
   const tally = (start, end) => {
-    for (let cursor = new Date(start); toISODate(cursor) <= end; cursor.setDate(cursor.getDate() + 1)) {
+    for (let cursor = parseISODateLocal(start); toISODate(cursor) <= end; cursor.setDate(cursor.getDate() + 1)) {
       if (!workedDays.includes(dayLabels[cursor.getDay()])) continue;
       const weekStart = toISODate(getWeekDatesContaining(toISODate(cursor))[0]);
       usageByWeek[weekStart] = (usageByWeek[weekStart] || 0) + 1;
@@ -14112,6 +14114,7 @@ function openRejectCandidatureModal(candidature) {
 function openEmployeeModal(id, prefill, candidatureId) {
   const isEdit = Boolean(id);
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
+  if (isEdit && !employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   if (!isEdit && prefill) Object.assign(employee, prefill);
   const settings = settingsRepository.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id && !e.archive);
