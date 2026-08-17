@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css?v=20260817i">
+  <link rel="stylesheet" href="style.css?v=20260817j">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -38,8 +38,8 @@
         <span class="logo-text">Nexus</span>
       </div>
       <nav id="sidebar-nav"></nav>
-      <!-- Mobile uniquement (voir style.css @media 860px) : remplace la barre du bas par un seul
-           bouton qui déroule #sidebar-nav en panneau vertical, plutôt qu'une rangée de boutons à
+      <!-- Mobile uniquement (voir style.css @media 860px) : bouton "☰" fixe en haut à gauche de
+           l'écran qui déroule #sidebar-nav juste en-dessous, plutôt qu'une rangée de boutons à
            faire défiler horizontalement — voir bindGlobalEvents (app.js) pour le comportement. -->
       <button type="button" id="btn-mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
     </aside>
@@ -74,13 +74,13 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260817i"></script>
-  <script src="qrcode.js?v=20260817i"></script>
-  <script src="data.js?v=20260817i"></script>
-  <script src="app.js?v=20260817i"></script>
+  <script type="module" src="supabase-client.js?v=20260817j"></script>
+  <script src="qrcode.js?v=20260817j"></script>
+  <script src="data.js?v=20260817j"></script>
+  <script src="app.js?v=20260817j"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817i'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817j'));
     }
   </script>
 </body>

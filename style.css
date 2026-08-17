@@ -2430,45 +2430,41 @@ textarea.input { resize: vertical; font-family: inherit; }
    --------------------------------------------------------------------- */
 
 @media (max-width: 860px) {
-  /* Barre de navigation en bas de l'écran (pattern natif mobile) plutôt qu'à gauche : plus
-     atteignable au pouce, et n'empiète plus sur la largeur déjà réduite du contenu. #sidebar-nav
-     passe d'un défilement vertical (colonne, hauteur = 100vh) à un défilement horizontal (ligne,
-     hauteur fixe) — nécessaire car un rôle Directeur peut avoir une dizaine d'entrées de menu,
-     largement plus que ce qu'une barre du bas peut afficher sans défiler. */
+  /* §demande 17/08/2026, révisée le même jour (l'utilisateur veut le bouton en haut à gauche, pas
+     une barre du bas) : #sidebar se réduit à un simple bouton "☰" carré, ancré en haut à gauche de
+     l'écran (au-dessus du coin de #topbar) plutôt qu'à gauche sur toute la hauteur. #sidebar-nav se
+     déplie juste SOUS ce bouton (top: 100%) au lieu d'à côté ou au-dessus d'une barre — voir
+     bindGlobalEvents (app.js) pour l'ouverture/fermeture (classe .open). */
   #sidebar {
-    top: auto;
+    top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    /* env(safe-area-inset-bottom) : sur un iPhone à barre de gestes (pas de bouton Accueil), une
-       barre collée à bottom:0 sans cette marge se fait chevaucher par la zone de geste système —
-       les boutons du bas deviennent difficiles à atteindre ("trop bas"). Nécessite
-       viewport-fit=cover dans la meta viewport (index.html), sinon cette valeur reste à 0. */
-    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
-    padding-bottom: env(safe-area-inset-bottom);
+    right: auto;
+    bottom: auto;
+    width: var(--topbar-height);
+    /* env(safe-area-inset-top) : sur un iPhone, le bouton doit rester sous l'encoche/île dynamique
+       plutôt que dessous. Nécessite viewport-fit=cover (index.html), sinon vaut 0. */
+    height: calc(var(--topbar-height) + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
     flex-direction: row;
-    border-right: none;
-    border-top: 1px solid var(--color-border);
-    z-index: 40;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    z-index: 45;
   }
   .sidebar-logo { display: none; }
-  /* §demande 17/08/2026 : un seul bouton "☰" plutôt qu'une rangée de boutons à faire défiler
-     horizontalement (un rôle Directeur peut avoir une dizaine d'entrées) — #sidebar-nav se
-     déplie en panneau vertical AU-DESSUS de la barre (bottom: 100%) au lieu de s'étaler dans la
-     barre elle-même ; voir bindGlobalEvents (app.js) pour l'ouverture/fermeture (classe .open). */
   #sidebar-nav {
     display: none;
     flex-direction: column;
     position: absolute;
     left: 0;
-    right: 0;
-    bottom: 100%;
+    top: 100%;
+    min-width: 260px;
+    max-width: calc(100vw - 24px);
     max-height: 70vh;
     overflow-y: auto;
     background: var(--color-surface);
-    border-top: 1px solid var(--color-border);
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border: 1px solid var(--color-border);
+    border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
     box-shadow: var(--shadow-lg);
     padding: 8px;
     gap: 2px;
@@ -2490,18 +2486,20 @@ textarea.input { resize: vertical; font-family: inherit; }
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
+    height: var(--topbar-height);
     font-size: 22px;
     background: none;
     border: none;
     color: var(--color-text);
     cursor: pointer;
   }
-  #main-column { margin-left: 0; padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom)); }
+  #main-column { margin-left: 0; }
   #view-root { padding: 16px; }
   .calendar-cell { min-height: 64px; }
   .calendar-weekday { font-size: 10px; }
-  #topbar { padding: 0 14px; gap: 10px; }
+  /* padding-left réserve la place du bouton ☰ (en haut à gauche, voir #sidebar) pour que la barre
+     de recherche ne se retrouve jamais cachée dessous. */
+  #topbar { padding: 0 14px 0 calc(var(--topbar-height) + 14px); gap: 10px; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
@@ -2513,7 +2511,7 @@ textarea.input { resize: vertical; font-family: inherit; }
      ont beaucoup (ex. Paramètres, 10 onglets). */
   .tabs { flex-wrap: wrap; overflow-x: visible; }
   .tab { padding: 8px 12px; font-size: 13px; }
-  #toast-root { bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 16px); }
+  #toast-root { bottom: calc(env(safe-area-inset-bottom) + 16px); }
   /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
      cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
      position:fixed + left/right ancrés à la fenêtre (pas au petit wrapper de la cloche, qui rendait
