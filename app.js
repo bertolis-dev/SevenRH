@@ -399,7 +399,12 @@ function bindCandidatureFormEvents(companyId) {
 
     const result = await window.SupabaseSync.submitCandidature(formData);
     if (!result.success) {
-      errorEl.textContent = result.error || 'Impossible d\'envoyer la candidature.';
+      // Diagnostic temporaire (17/08/2026, voir candidature-submit/index.ts) : affiche le détail
+      // technique renvoyé par le serveur en cas d'échec, pour pouvoir le lire/copier directement
+      // depuis un téléphone sans accès aux outils de développement. À retirer une fois le vrai
+      // problème identifié.
+      const debugText = result.debug ? ` [debug: ${JSON.stringify(result.debug)}]` : '';
+      errorEl.textContent = (result.error || 'Impossible d\'envoyer la candidature.') + debugText;
       errorEl.style.display = 'block';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Envoyer ma candidature';

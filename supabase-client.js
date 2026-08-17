@@ -675,7 +675,7 @@ async function submitCandidature(formData) {
     });
     let body = {};
     try { body = await res.json(); } catch { /* réponse non-JSON (ne devrait pas arriver) */ }
-    if (!res.ok) return { success: false, error: body.error || 'Impossible d\'envoyer la candidature.' };
+    if (!res.ok) return { success: false, error: body.error || 'Impossible d\'envoyer la candidature.', debug: body.debug };
     return { success: true, ...body };
   } catch {
     return { success: false, error: 'Impossible de contacter le serveur (problème réseau).' };
