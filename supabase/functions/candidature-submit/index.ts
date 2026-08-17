@@ -20,7 +20,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
+  // supabase-js (functions.invoke) envoie aussi les en-têtes "apikey"/"authorization"/"x-client-info"
+  // même pour un appel public sans session (jeton anon par défaut) — sans les autoriser ici, le
+  // navigateur bloque la requête au stade du preflight CORS, avant même qu'elle ne parte (même
+  // piège déjà rencontré et corrigé sur notify-slack/index.ts).
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
