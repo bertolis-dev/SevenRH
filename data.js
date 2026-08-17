@@ -262,7 +262,14 @@ const DEFAULT_SETTINGS = {
   suiviAgeActive: false,
   // §34 — voir EXPORT_PAIE_MODELES ; exportPaieColonnes n'est utilisé que si exportPaieModele === 'personnalise'.
   exportPaieModele: 'generique',
-  exportPaieColonnes: { conges: true, teletravail: true, tickets: true, frais: true }
+  exportPaieColonnes: { conges: true, teletravail: true, tickets: true, frais: true },
+  // Postes actuellement recrutés (demande du 17/08/2026) — gérés depuis l'écran Embauche (pas
+  // Paramètres) via le même composant chip-add/remove que les listes de référence
+  // (renderSettingsListCard/bindChipListEvents). Proposés au candidat sur la page publique de
+  // candidature (get_company_public_info) — simple liste de libellés, comme `postes` ci-dessus,
+  // pas une entité à part avec ID (un poste ouvert n'a pas besoin d'identité stable au-delà de son
+  // libellé, une candidature garde le libellé choisi tel quel).
+  postesOuverts: []
 };
 
 /**
@@ -2386,7 +2393,10 @@ const candidatureRepository = {
   getAll: () => window.SupabaseSync.getCandidatures(DB.getCurrentCompany().id),
   marquerEmbauchee: (id, employeeId) => window.SupabaseSync.setCandidatureStatut(id, 'embauchee', employeeId),
   archiver: (id) => window.SupabaseSync.setCandidatureStatut(id, 'archivee', null),
-  getFileUrl: (path) => window.SupabaseSync.getCandidatureFileUrl(path)
+  getFileUrl: (path) => window.SupabaseSync.getCandidatureFileUrl(path),
+  /** "Pas intéressé" (demande du 17/08/2026) : envoie le message par email au candidat PUIS
+   * archive — jamais un archivage silencieux (voir candidature-reject, Edge Function/Resend). */
+  reject: (id, message) => window.SupabaseSync.rejectCandidature(id, message)
 };
 
 const categorieSalarieRepository = {

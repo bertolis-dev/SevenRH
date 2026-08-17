@@ -13,6 +13,8 @@
 // INSERT pour anon/authenticated (voir 0024_candidatures.sql) — ce visiteur ne pourrait de toute
 // façon pas écrire directement même avec la clé anon, seule cette fonction le peut.
 //
+// Secret Supabase requis : RESEND_API_KEY (voir resend.com — même compte que candidature-reject).
+//
 // Limite connue acceptée pour cette v1 (formulaire public sans compte) : aucun CAPTCHA/anti-spam.
 // Les limites de taille/type de fichier ci-dessous sont le seul filet de sécurité basique.
 
@@ -37,10 +39,16 @@ const ALLOWED_TYPES: Record<string, string> = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
+const EMAIL_FROM = "Nexus RH <candidatures@nexus-rh.com>";
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
@@ -74,6 +82,35 @@ async function notifySlackNewCandidature(companyId: string, nom: string, prenom:
   }
 }
 
+/** Confirmation envoyée AU CANDIDAT (demande du 17/08/2026), brandée avec le nom + logo de
+ * l'entreprise ciblée par le QR — jamais bloquante : un échec d'envoi ne doit jamais faire échouer
+ * le dépôt de candidature lui-même (déjà enregistré en base à ce stade), juste être journalisé. */
+async function sendConfirmationEmail(candidateEmail: string, candidateName: string, raisonSociale: string, logo: string | null) {
+  const html = `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(raisonSociale)}" style="max-height: 48px; margin-bottom: 16px;">` : ""}
+      <h2 style="margin: 0 0 12px;">Candidature reçue</h2>
+      <p>Bonjour ${escapeHtml(candidateName)},</p>
+      <p>Votre candidature chez <strong>${escapeHtml(raisonSociale)}</strong> a bien été reçue. L'équipe l'examinera et reviendra vers vous.</p>
+      <p style="color: #888; font-size: 13px; margin-top: 24px;">Envoyé via Nexus RH.</p>
+    </div>
+  `;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: candidateEmail,
+        subject: `Candidature reçue — ${raisonSociale}`,
+        html,
+      }),
+    });
+  } catch (err) {
+    console.error("sendConfirmationEmail error:", err);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return jsonResponse({ error: "Méthode non autorisée." }, 405);
@@ -81,24 +118,8 @@ Deno.serve(async (req) => {
   let form: FormData;
   try {
     form = await req.formData();
-  } catch (err) {
-    // Diagnostic temporaire (17/08/2026) : "Corps de requête invalide" reproductible sur Chrome
-    // Android (y compris navigation privée, donc pas un souci de cache/service worker) mais jamais
-    // reproduit en test — on a besoin de savoir CE QUE le serveur reçoit réellement avant de
-    // deviner une 3e fois. À retirer une fois le vrai problème identifié.
-    console.error("candidature-submit formData() error:", err, {
-      contentType: req.headers.get("content-type"),
-      contentLength: req.headers.get("content-length"),
-      userAgent: req.headers.get("user-agent"),
-    });
-    return jsonResponse({
-      error: "Corps de requête invalide.",
-      debug: {
-        message: err instanceof Error ? err.message : String(err),
-        contentType: req.headers.get("content-type"),
-        contentLength: req.headers.get("content-length"),
-      },
-    }, 400);
+  } catch {
+    return jsonResponse({ error: "Corps de requête invalide." }, 400);
   }
 
   const companyId = String(form.get("company_id") || "").trim();
@@ -109,6 +130,13 @@ Deno.serve(async (req) => {
   const lettreTexte = String(form.get("lettre_texte") || "").trim();
   const cv = form.get("cv");
   const lettre = form.get("lettre");
+  let postes: string[] = [];
+  try {
+    const raw = form.get("postes");
+    if (typeof raw === "string" && raw) postes = JSON.parse(raw).filter((p: unknown) => typeof p === "string");
+  } catch {
+    postes = [];
+  }
 
   if (!companyId || !nom || !email) {
     return jsonResponse({ error: "Le nom et l'email sont obligatoires." }, 400);
@@ -120,13 +148,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Le CV est obligatoire." }, 400);
   }
 
-  const { data: company } = await supabaseAdmin.from("companies").select("id").eq("id", companyId).maybeSingle();
+  const { data: company } = await supabaseAdmin.from("companies").select("id, raison_sociale, data").eq("id", companyId).maybeSingle();
   if (!company) return jsonResponse({ error: "Lien de candidature invalide." }, 404);
 
   try {
     const { data: inserted, error: insertErr } = await supabaseAdmin
       .from("candidatures")
-      .insert({ company_id: companyId, nom, prenom, email, telephone, lettre_texte: lettreTexte || null })
+      .insert({ company_id: companyId, nom, prenom, email, telephone, lettre_texte: lettreTexte || null, postes })
       .select("id")
       .single();
     if (insertErr) throw insertErr;
@@ -141,6 +169,7 @@ Deno.serve(async (req) => {
     if (updateErr) throw updateErr;
 
     await notifySlackNewCandidature(companyId, nom, prenom);
+    await sendConfirmationEmail(email, `${prenom} ${nom}`.trim(), company.raison_sociale, company.data?.logo || null);
 
     return jsonResponse({ success: true });
   } catch (err) {

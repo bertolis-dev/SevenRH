@@ -344,6 +344,7 @@ function renderCandidatureForm(companyId) {
         </div>
         <div class="form-field"><label>Email *</label><input type="email" class="input" id="cand-email" required></div>
         <div class="form-field"><label>Téléphone</label><input type="tel" class="input" id="cand-telephone"></div>
+        <div id="candidature-postes-field"></div>
         <div class="form-field"><label>CV (PDF, PNG ou JPEG) *</label><input type="file" class="input" id="cand-cv" accept=".pdf,.png,.jpg,.jpeg" required></div>
         <div class="form-field"><label>Lettre de motivation (fichier, optionnel)</label><input type="file" class="input" id="cand-lettre-fichier" accept=".pdf,.png,.jpg,.jpeg"></div>
         <div class="form-field"><label>Ou votre message (optionnel)</label><textarea class="input" id="cand-lettre-texte" rows="4" placeholder="Quelques mots sur votre candidature..."></textarea></div>
@@ -360,11 +361,27 @@ async function populateCandidatureCompanyHeader(companyId) {
   try {
     const info = await window.SupabaseSync.getCompanyPublicInfo(companyId);
     const header = document.getElementById('candidature-company-header');
-    if (!header || !info || !info.raisonSociale) return;
-    header.innerHTML = `
-      ${info.logo ? `<img src="${escapeHtml(info.logo)}" alt="${escapeHtml(info.raisonSociale)}" style="max-width: 40px; max-height: 40px; border-radius: var(--radius-sm);">` : ''}
-      <span>${escapeHtml(info.raisonSociale)}</span>
-    `;
+    if (header && info && info.raisonSociale) {
+      header.innerHTML = `
+        ${info.logo ? `<img src="${escapeHtml(info.logo)}" alt="${escapeHtml(info.raisonSociale)}" style="max-width: 40px; max-height: 40px; border-radius: var(--radius-sm);">` : ''}
+        <span>${escapeHtml(info.raisonSociale)}</span>
+      `;
+    }
+    // Postes ouverts (gérés depuis l'écran Embauche) : champ entièrement absent si l'entreprise n'a
+    // rien renseigné, plutôt qu'une case vide sans intérêt pour le candidat.
+    const postesField = document.getElementById('candidature-postes-field');
+    if (postesField && info && Array.isArray(info.postesOuverts) && info.postesOuverts.length > 0) {
+      postesField.innerHTML = `
+        <div class="form-field">
+          <label>Poste(s) souhaité(s)</label>
+          ${info.postesOuverts.map((poste, i) => `
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 4px;">
+              <input type="checkbox" class="cand-poste-checkbox" value="${escapeHtml(poste)}"> ${escapeHtml(poste)}
+            </label>
+          `).join('')}
+        </div>
+      `;
+    }
   } catch {
     // Repli silencieux sur la marque Nexus déjà affichée — jamais bloquer le formulaire pour ça.
   }
@@ -392,6 +409,8 @@ function bindCandidatureFormEvents(companyId) {
     formData.set('email', document.getElementById('cand-email').value.trim());
     formData.set('telephone', document.getElementById('cand-telephone').value.trim());
     formData.set('lettre_texte', document.getElementById('cand-lettre-texte').value.trim());
+    const postesChoisis = Array.from(document.querySelectorAll('.cand-poste-checkbox:checked')).map(cb => cb.value);
+    formData.set('postes', JSON.stringify(postesChoisis));
     const cvFile = document.getElementById('cand-cv').files[0];
     const lettreFile = document.getElementById('cand-lettre-fichier').files[0];
     if (cvFile) formData.set('cv', cvFile);
@@ -399,12 +418,7 @@ function bindCandidatureFormEvents(companyId) {
 
     const result = await window.SupabaseSync.submitCandidature(formData);
     if (!result.success) {
-      // Diagnostic temporaire (17/08/2026, voir candidature-submit/index.ts) : affiche le détail
-      // technique renvoyé par le serveur en cas d'échec, pour pouvoir le lire/copier directement
-      // depuis un téléphone sans accès aux outils de développement. À retirer une fois le vrai
-      // problème identifié.
-      const debugText = result.debug ? ` [debug: ${JSON.stringify(result.debug)}]` : '';
-      errorEl.textContent = (result.error || 'Impossible d\'envoyer la candidature.') + debugText;
+      errorEl.textContent = result.error || 'Impossible d\'envoyer la candidature.';
       errorEl.style.display = 'block';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Envoyer ma candidature';
@@ -4301,6 +4315,10 @@ function render() {
     case 'embauche':
       root.innerHTML = renderEmbauche();
       bindEmbaucheEvents();
+      break;
+    case 'candidature-detail':
+      root.innerHTML = renderCandidatureDetail(state.currentCandidatureId);
+      bindCandidatureDetailEvents(state.currentCandidatureId);
       break;
     default:
       root.innerHTML = renderDashboard();
@@ -10664,6 +10682,13 @@ function bindParametresListesEvents() {
     showToast('Chaîne de validation des notes de frais mise à jour.');
   });
 
+  bindChipListEvents();
+}
+
+/** Extrait de bindParametresListesEvents (générique par data-list-key sur settings[key]) — réutilisé
+ * par bindEmbaucheEvents pour "postesOuverts", rendu dans un tout autre écran (Embauche, pas
+ * Paramètres) avec renderSettingsListCard mais sans le reste des champs propres à Paramètres. */
+function bindChipListEvents() {
   document.querySelectorAll('.chip-remove[data-list-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
@@ -13803,6 +13828,7 @@ function candidatureUrlForCompany(companyId) {
 
 function renderEmbauche() {
   const company = companyRepository.getCurrent();
+  const settings = settingsRepository.getSettings();
   const url = candidatureUrlForCompany(company.id);
   const qr = qrcode(0, 'M');
   qr.addData(url);
@@ -13824,6 +13850,7 @@ function renderEmbauche() {
         </div>
       </div>
     </div>
+    ${renderSettingsListCard({ key: 'postesOuverts', label: 'Postes ouverts au recrutement' }, settings.postesOuverts || [])}
     <div class="card table-card" style="margin-top: 16px;">
       <h2>Candidatures reçues</h2>
       <div id="embauche-candidatures-list"><p class="text-muted">Chargement...</p></div>
@@ -13835,26 +13862,16 @@ function renderCandidaturesTable(candidatures) {
   if (!candidatures.length) return '<p class="text-muted">Aucune candidature reçue pour le moment.</p>';
   return `
     <table class="table">
-      <thead><tr><th>Candidat</th><th>Contact</th><th>Reçue le</th><th>Statut</th><th>Documents</th><th></th></tr></thead>
+      <thead><tr><th>Candidat</th><th>Contact</th><th>Poste(s)</th><th>Reçue le</th><th>Statut</th><th></th></tr></thead>
       <tbody>
         ${candidatures.map(c => `
           <tr>
             <td>${escapeHtml(c.prenom)} ${escapeHtml(c.nom)}</td>
             <td>${escapeHtml(c.email)}${c.telephone ? `<br><span class="text-muted">${escapeHtml(c.telephone)}</span>` : ''}</td>
+            <td>${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '<span class="text-muted">—</span>'}</td>
             <td>${formatDate(c.dateSoumission)}</td>
             <td><span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[c.statut] || 'badge-muted'}">${escapeHtml(CANDIDATURE_STATUT_LABELS[c.statut] || c.statut)}</span></td>
-            <td>
-              ${c.cvPath ? `<button type="button" class="btn-link" data-view-candidature-file="${escapeHtml(c.cvPath)}">CV</button>` : ''}
-              ${c.lettrePath ? ` · <button type="button" class="btn-link" data-view-candidature-file="${escapeHtml(c.lettrePath)}">Lettre</button>` : ''}
-              ${c.lettreTexte ? ` · <button type="button" class="btn-link" data-view-candidature-texte="${escapeHtml(c.id)}">Message</button>` : ''}
-              ${!c.cvPath && !c.lettrePath && !c.lettreTexte ? '<span class="text-muted">—</span>' : ''}
-            </td>
-            <td>
-              ${c.statut === 'nouvelle' ? `
-                <button type="button" class="btn-link" data-embaucher-candidature="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}" data-prenom="${escapeHtml(c.prenom)}" data-email="${escapeHtml(c.email)}" data-telephone="${escapeHtml(c.telephone)}">Embaucher</button>
-                · <button type="button" class="btn-link btn-link-danger" data-archiver-candidature="${escapeHtml(c.id)}">Archiver</button>
-              ` : ''}
-            </td>
+            <td><button type="button" class="btn btn-secondary btn-sm" data-voir-candidature="${escapeHtml(c.id)}">Voir</button></td>
           </tr>
         `).join('')}
       </tbody>
@@ -13868,66 +13885,12 @@ async function refreshEmbaucheCandidaturesList() {
   try {
     const candidatures = await candidatureRepository.getAll();
     listEl.innerHTML = renderCandidaturesTable(candidatures);
-    bindCandidaturesListEvents();
+    document.querySelectorAll('[data-voir-candidature]').forEach(btn => {
+      btn.addEventListener('click', () => navigateTo('candidature-detail', { currentCandidatureId: btn.dataset.voirCandidature }));
+    });
   } catch (err) {
     listEl.innerHTML = '<p class="text-muted">Impossible de charger les candidatures.</p>';
   }
-}
-
-function bindCandidaturesListEvents() {
-  document.querySelectorAll('[data-view-candidature-file]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      try {
-        const url = await candidatureRepository.getFileUrl(btn.dataset.viewCandidatureFile);
-        window.open(url, '_blank', 'noopener');
-      } catch {
-        showToast('Impossible d\'ouvrir ce document.', 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-view-candidature-texte]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const candidatures = await candidatureRepository.getAll();
-      const c = candidatures.find(x => x.id === btn.dataset.viewCandidatureTexte);
-      if (!c || !c.lettreTexte) return;
-      const modalRoot = document.getElementById('modal-root');
-      modalRoot.innerHTML = `
-        <div class="modal modal-small">
-          <div class="modal-header">
-            <h2>Message de candidature</h2>
-            <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
-          </div>
-          <div class="modal-body"><p style="white-space: pre-wrap;">${escapeHtml(c.lettreTexte)}</p></div>
-        </div>
-      `;
-      modalRoot.classList.add('open');
-      document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-    });
-  });
-
-  document.querySelectorAll('[data-embaucher-candidature]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      openEmployeeModal(null, {
-        nom: btn.dataset.nom,
-        prenom: btn.dataset.prenom,
-        email: btn.dataset.email,
-        telephone: btn.dataset.telephone
-      }, btn.dataset.embaucherCandidature);
-    });
-  });
-
-  document.querySelectorAll('[data-archiver-candidature]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      try {
-        await candidatureRepository.archiver(btn.dataset.archiverCandidature);
-        showToast('Candidature archivée.');
-        refreshEmbaucheCandidaturesList();
-      } catch {
-        showToast('Impossible d\'archiver cette candidature.', 'error');
-      }
-    });
-  });
 }
 
 function bindEmbaucheEvents() {
@@ -13942,7 +13905,152 @@ function bindEmbaucheEvents() {
       showToast('Sélectionnez et copiez le lien manuellement.', 'error');
     }
   });
+  bindChipListEvents();
   refreshEmbaucheCandidaturesList();
+}
+
+// ---- Sous-vue : détail d'une candidature ----
+
+/** "Voir tout d'un coup" (demande du 17/08/2026) : remplace les petits boutons CV/Lettre/Message
+ * de la liste par une vraie page dédiée, même patron que renderTicketDetail/renderEntretienDetail
+ * — un aller-retour réseau de plus (on ne garde pas les candidatures dans un state local, voir
+ * candidatureRepository) mais une seule vue à maintenir pour "tout voir proprement". */
+function renderCandidatureDetail(id) {
+  return `
+    <div class="view-header">
+      <button type="button" class="btn-link" id="btn-back-embauche">← Retour aux candidatures</button>
+    </div>
+    <div id="candidature-detail-body"><p class="text-muted">Chargement...</p></div>
+  `;
+}
+
+async function bindCandidatureDetailEvents(id) {
+  document.getElementById('btn-back-embauche').addEventListener('click', () => navigateTo('embauche'));
+
+  const body = document.getElementById('candidature-detail-body');
+  let candidature;
+  try {
+    const candidatures = await candidatureRepository.getAll();
+    candidature = candidatures.find(c => c.id === id);
+  } catch {
+    body.innerHTML = '<p class="text-muted">Impossible de charger cette candidature.</p>';
+    return;
+  }
+  if (!candidature) {
+    body.innerHTML = '<p class="text-muted">Candidature introuvable.</p>';
+    return;
+  }
+
+  let cvUrl = null, lettreUrl = null;
+  if (candidature.cvPath) {
+    try { cvUrl = await candidatureRepository.getFileUrl(candidature.cvPath); } catch { /* affiché sans lien ci-dessous */ }
+  }
+  if (candidature.lettrePath) {
+    try { lettreUrl = await candidatureRepository.getFileUrl(candidature.lettrePath); } catch { /* idem */ }
+  }
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="view-header-row">
+        <div>
+          <h2 style="margin-bottom: 4px;">${escapeHtml(candidature.prenom)} ${escapeHtml(candidature.nom)}</h2>
+          <span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[candidature.statut] || 'badge-muted'}">${escapeHtml(CANDIDATURE_STATUT_LABELS[candidature.statut] || candidature.statut)}</span>
+        </div>
+      </div>
+      <div class="detail-grid" style="margin-top: 16px;">
+        ${infoRow('Email', candidature.email)}
+        ${infoRow('Téléphone', candidature.telephone || '—')}
+        ${infoRow('Poste(s) souhaité(s)', (candidature.postes || []).length ? candidature.postes.join(', ') : '—')}
+        ${infoRow('Reçue le', formatDate(candidature.dateSoumission))}
+      </div>
+      <div class="detail-grid" style="margin-top: 16px;">
+        <div class="form-field">
+          <label>CV</label>
+          ${cvUrl ? `<button type="button" class="btn btn-secondary btn-sm" onclick="window.open('${cvUrl}', '_blank', 'noopener')">Ouvrir le CV</button>` : '<p class="text-muted">Aucun CV.</p>'}
+        </div>
+        <div class="form-field">
+          <label>Lettre de motivation</label>
+          ${lettreUrl ? `<button type="button" class="btn btn-secondary btn-sm" onclick="window.open('${lettreUrl}', '_blank', 'noopener')">Ouvrir la lettre</button>` : '<p class="text-muted">Aucun fichier joint.</p>'}
+        </div>
+      </div>
+      ${candidature.lettreTexte ? `
+        <div class="form-field" style="margin-top: 16px;">
+          <label>Message</label>
+          <p style="white-space: pre-wrap;">${escapeHtml(candidature.lettreTexte)}</p>
+        </div>
+      ` : ''}
+      ${candidature.statut === 'nouvelle' ? `
+        <div class="detail-header-actions" style="margin-top: 20px;">
+          <button type="button" class="btn btn-primary" id="btn-embaucher-candidature">Embaucher</button>
+          <button type="button" class="btn btn-secondary" id="btn-pas-interesse-candidature">Pas intéressé</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  const embaucherBtn = document.getElementById('btn-embaucher-candidature');
+  if (embaucherBtn) embaucherBtn.addEventListener('click', () => {
+    openEmployeeModal(null, {
+      nom: candidature.nom,
+      prenom: candidature.prenom,
+      email: candidature.email,
+      telephone: candidature.telephone
+    }, candidature.id);
+  });
+
+  const pasInteresseBtn = document.getElementById('btn-pas-interesse-candidature');
+  if (pasInteresseBtn) pasInteresseBtn.addEventListener('click', () => openRejectCandidatureModal(candidature));
+}
+
+/** Message par défaut modifiable — l'envoi réel passe par candidature-reject (Edge Function,
+ * Resend) : jamais d'archivage silencieux, le candidat reçoit toujours une explication. */
+function openRejectCandidatureModal(candidature) {
+  const company = companyRepository.getCurrent();
+  const defaultMessage = `Bonjour ${candidature.prenom || ''},\n\nNous vous remercions pour votre candidature chez ${company.raisonSociale}. Après étude de votre profil, nous avons décidé de ne pas y donner suite pour le moment.\n\nNous vous souhaitons une belle continuation dans vos recherches.\n\nCordialement,\nL'équipe ${company.raisonSociale}`;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Répondre à ${escapeHtml(candidature.prenom)} ${escapeHtml(candidature.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="reject-candidature-form">
+        <div class="modal-body">
+          <p class="text-muted">Ce message sera envoyé par email à ${escapeHtml(candidature.email)}, puis la candidature sera archivée.</p>
+          <div class="form-field">
+            <label for="f-reject-message">Message</label>
+            <textarea class="input" id="f-reject-message" rows="8" required>${escapeHtml(defaultMessage)}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary" id="btn-send-reject">Envoyer et archiver</button>
+        </div>
+      </form>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('reject-candidature-form').addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const message = document.getElementById('f-reject-message').value.trim();
+    if (!message) return;
+    const submitBtn = document.getElementById('btn-send-reject');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi...';
+    const result = await candidatureRepository.reject(candidature.id, message);
+    if (!result.success) {
+      showToast(result.error || 'Impossible d\'envoyer la réponse.', 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Envoyer et archiver';
+      return;
+    }
+    closeModal();
+    showToast('Réponse envoyée, candidature archivée.');
+    navigateTo('embauche');
+  });
 }
 
 /** prefill/candidatureId (voir bindEmbaucheEvents) : pré-remplit un NOUVEAU salarié depuis une

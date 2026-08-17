@@ -643,7 +643,7 @@ async function getCompanyPublicInfo(companyId) {
   const { data, error } = await supabase.rpc('get_company_public_info', { p_company_id: companyId });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  return row ? { raisonSociale: row.raison_sociale, logo: row.logo } : null;
+  return row ? { raisonSociale: row.raison_sociale, logo: row.logo, postesOuverts: row.postes_ouverts || [] } : null;
 }
 
 /** Upload du logo (Paramètres → Entreprise) — bucket public par conception (voir
@@ -689,6 +689,7 @@ function candidatureFromRow(row) {
     prenom: row.prenom,
     email: row.email,
     telephone: row.telephone,
+    postes: row.postes || [],
     cvPath: row.cv_path,
     lettrePath: row.lettre_path,
     lettreTexte: row.lettre_texte,
@@ -707,6 +708,23 @@ async function getCandidatures(companyId) {
 async function setCandidatureStatut(id, statut, employeeId) {
   const { error } = await supabase.rpc('set_candidature_statut', { p_id: id, p_statut: statut, p_employee_id: employeeId || null });
   if (error) throw error;
+}
+
+/** "Pas intéressé" — voir candidature-reject/index.ts : envoie le message au candidat (Resend) PUIS
+ * archive côté serveur (jamais côté client seul, pour ne jamais archiver sans email parti). Corps
+ * JSON simple (pas de fichier ici) : functions.invoke() est fiable pour ce cas, contrairement à
+ * submitCandidature (voir son commentaire) qui devait passer par fetch() pour un FormData. */
+async function rejectCandidature(candidatureId, message) {
+  const { data, error } = await supabase.functions.invoke('candidature-reject', { body: { candidatureId, message } });
+  if (error) {
+    let msg = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) msg = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: msg };
+  }
+  return { success: true, ...data };
 }
 
 /** URL signée de courte durée pour un fichier de candidature (CV/lettre) — jamais d'URL publique
@@ -943,7 +961,7 @@ window.SupabaseSync = {
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
-  submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl,
+  submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo,
   deleteRow
 };
