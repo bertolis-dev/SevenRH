@@ -3354,6 +3354,24 @@ function openHelpModal() {
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
 
+  // Menu mobile "☰" (demande du 17/08/2026) — même patron ouverture/fermeture que
+  // .notif-wrapper/.user-menu-wrapper (bindNotificationEvents/bindUserMenuEvents) : bouton statique
+  // lié UNE SEULE fois ici (contrairement à #sidebar-nav, reconstruit à chaque navigation par
+  // renderSidebar, qui se charge elle-même de toujours refermer le panneau, voir plus bas).
+  const mobileNavToggle = document.getElementById('btn-mobile-nav-toggle');
+  const mobileNavPanel = document.getElementById('sidebar-nav');
+  mobileNavToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = mobileNavPanel.classList.toggle('open');
+    mobileNavToggle.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#sidebar')) {
+      mobileNavPanel.classList.remove('open');
+      mobileNavToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
   const modalRoot = document.getElementById('modal-root');
   // Une modale marquée data-blocking (ex. changement de mot de passe obligatoire) ne doit pouvoir
   // se fermer QUE via son propre bouton de validation — ni le clic sur le fond sombre, ni Échap.
@@ -4192,6 +4210,11 @@ function renderSidebar() {
   // l'étroit. Desktop (même #sidebar-nav, juste réorienté en CSS) n'est jamais filtré.
   const items = navItemsForRole(user).filter(i => !(i.hideOnMobile && MOBILE_NAV_QUERY.matches));
   const nav = document.getElementById('sidebar-nav');
+  // Referme toujours le panneau mobile "☰" au changement de vue (innerHTML reconstruit juste après
+  // ne touche jamais la classe de #sidebar-nav lui-même — sans ce reset, le panneau resterait
+  // ouvert après avoir cliqué un item, voir bindGlobalEvents pour l'ouverture).
+  nav.classList.remove('open');
+  document.getElementById('btn-mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
 
   const renderItem = (item, index) => {
     const label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
