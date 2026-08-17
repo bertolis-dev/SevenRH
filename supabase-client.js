@@ -662,19 +662,24 @@ async function uploadCompanyLogo(companyId, file) {
 
 /** Dépôt de candidature (voir renderCandidatureForm, app.js) — la seule action de toute
  * l'application appelée SANS session (le visiteur qui scanne le QR "Embauche" n'a jamais de
- * compte). functions.invoke() accepte un FormData directement (fichiers + champs texte), envoyé
- * en multipart sans jeton d'autorisation — voir candidature-submit/index.ts, JWT désactivé. */
+ * compte). fetch() direct plutôt que supabase.functions.invoke() : ce dernier a produit "Corps de
+ * requête invalide" côté serveur (Deno req.formData() n'arrivait pas à relire le corps) — la
+ * sérialisation d'un FormData contenant des fichiers par functions.invoke() n'est pas fiable selon
+ * la version du SDK. fetch() brut envoie le FormData tel quel (multipart, boundary posé par le
+ * navigateur lui-même), exactement comme les tests curl qui ont confirmé la fonction serveur saine. */
 async function submitCandidature(formData) {
-  const { data, error } = await supabase.functions.invoke('candidature-submit', { body: formData });
-  if (error) {
-    let message = error.message;
-    try {
-      const ctx = await error.context.json();
-      if (ctx && ctx.error) message = ctx.error;
-    } catch { /* réponse non-JSON, on garde le message par défaut */ }
-    return { success: false, error: message };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/candidature-submit`, {
+      method: 'POST',
+      body: formData
+    });
+    let body = {};
+    try { body = await res.json(); } catch { /* réponse non-JSON (ne devrait pas arriver) */ }
+    if (!res.ok) return { success: false, error: body.error || 'Impossible d\'envoyer la candidature.' };
+    return { success: true, ...body };
+  } catch {
+    return { success: false, error: 'Impossible de contacter le serveur (problème réseau).' };
   }
-  return { success: true, ...data };
 }
 
 function candidatureFromRow(row) {
