@@ -60,6 +60,10 @@ async function triggerInstallPrompt() {
   deferredInstallPrompt = null;
   prompt.prompt();
   await prompt.userChoice;
+  // Que l'installation soit acceptée ou non, l'utilisateur vient de cliquer "Installer" en
+  // attendant d'arriver sur l'application — jamais le laisser silencieusement sur la page
+  // d'accueil publique après ce clic (même écran d'atterrissage que isInstalledApp()).
+  showLogin();
 }
 
 /** Repli quand le navigateur n'a pas proposé le signal d'installation natif (voir
@@ -80,7 +84,12 @@ function showInstallHintModal() {
     </div>
   `;
   modalRoot.classList.add('open');
-  document.getElementById('btn-install-hint-ok').addEventListener('click', closeModal);
+  document.getElementById('btn-install-hint-ok').addEventListener('click', () => {
+    closeModal();
+    // Même logique que le chemin avec prompt natif : le clic sur "Installer" doit toujours mener
+    // à l'application, jamais laisser sur la page d'accueil publique une fois la modale fermée.
+    showLogin();
+  });
 }
 
 /** Détection grossière de plateforme (écran d'accueil public, voir renderLandingScreen) — sert
@@ -269,6 +278,11 @@ const NAV_ITEMS = [
   // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Directeur
   // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
   { key: 'remuneration', label: 'Rémunération', icon: '💰', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
+  // Demande du 17/08/2026 : dépôt de candidature via QR code, périmètre volontairement minimal
+  // (upload + liste + conversion en salarié) — le recrutement/ATS complet reste par ailleurs hors
+  // scope de Nexus RH. Rattaché au module "rh" (pas de nouvelle ligne tarifaire) : qui paie déjà
+  // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
+  { key: 'embauche', label: 'Embauche', icon: '🧑‍💼', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'rh' },
 
   // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
   // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
@@ -304,10 +318,103 @@ function navItemsForRole(user) {
 }
 
 // ---------------------------------------------------------------------------
+// Page publique de candidature (QR code "Embauche", voir renderEmbauche)
+// ---------------------------------------------------------------------------
+
+/** Écran entièrement autonome : ni DB.init(), ni SupabaseSync (sauf pour l'envoi lui-même, qui ne
+ * requiert aucune session — voir submitCandidature). Le nom de l'entreprise n'est volontairement
+ * pas affiché : l'ajouterait exigerait une nouvelle lecture publique (RPC dédiée) pour un gain
+ * mineur — la personne qui scanne le QR le fait déjà dans un contexte où l'entreprise est connue
+ * (affiche, page carrière), périmètre minimal assumé. */
+function renderCandidatureForm(companyId) {
+  const root = document.getElementById('candidature-root');
+  document.getElementById('login-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
+  root.style.display = 'flex';
+  root.innerHTML = `
+    <div class="login-card">
+      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+      <h1>Déposer ma candidature</h1>
+      <p class="text-muted">Renseignez vos coordonnées et joignez votre CV — l'entreprise recevra votre candidature directement.</p>
+      <p class="login-error" id="candidature-error" role="alert" style="display: none;"></p>
+      <form id="candidature-form">
+        <div class="form-grid">
+          <div class="form-field"><label>Prénom</label><input type="text" class="input" id="cand-prenom"></div>
+          <div class="form-field"><label>Nom *</label><input type="text" class="input" id="cand-nom" required></div>
+        </div>
+        <div class="form-field"><label>Email *</label><input type="email" class="input" id="cand-email" required></div>
+        <div class="form-field"><label>Téléphone</label><input type="tel" class="input" id="cand-telephone"></div>
+        <div class="form-field"><label>CV (PDF, PNG ou JPEG) *</label><input type="file" class="input" id="cand-cv" accept=".pdf,.png,.jpg,.jpeg" required></div>
+        <div class="form-field"><label>Lettre de motivation (fichier, optionnel)</label><input type="file" class="input" id="cand-lettre-fichier" accept=".pdf,.png,.jpg,.jpeg"></div>
+        <div class="form-field"><label>Ou votre message (optionnel)</label><textarea class="input" id="cand-lettre-texte" rows="4" placeholder="Quelques mots sur votre candidature..."></textarea></div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;" id="btn-submit-candidature">Envoyer ma candidature</button>
+      </form>
+    </div>
+  `;
+  bindCandidatureFormEvents(companyId);
+}
+
+function bindCandidatureFormEvents(companyId) {
+  const form = document.getElementById('candidature-form');
+  const errorEl = document.getElementById('candidature-error');
+  form.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    errorEl.style.display = 'none';
+    if (!window.SupabaseSync) {
+      errorEl.textContent = 'Impossible de charger le formulaire (problème réseau). Rechargez la page.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    const submitBtn = document.getElementById('btn-submit-candidature');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi en cours...';
+
+    const formData = new FormData();
+    formData.set('company_id', companyId);
+    formData.set('nom', document.getElementById('cand-nom').value.trim());
+    formData.set('prenom', document.getElementById('cand-prenom').value.trim());
+    formData.set('email', document.getElementById('cand-email').value.trim());
+    formData.set('telephone', document.getElementById('cand-telephone').value.trim());
+    formData.set('lettre_texte', document.getElementById('cand-lettre-texte').value.trim());
+    const cvFile = document.getElementById('cand-cv').files[0];
+    const lettreFile = document.getElementById('cand-lettre-fichier').files[0];
+    if (cvFile) formData.set('cv', cvFile);
+    if (lettreFile) formData.set('lettre', lettreFile);
+
+    const result = await window.SupabaseSync.submitCandidature(formData);
+    if (!result.success) {
+      errorEl.textContent = result.error || 'Impossible d\'envoyer la candidature.';
+      errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Envoyer ma candidature';
+      return;
+    }
+
+    document.getElementById('candidature-root').innerHTML = `
+      <div class="login-card">
+        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+        <h1>Candidature envoyée ✅</h1>
+        <p class="text-muted">Merci ! Votre candidature a bien été transmise à l'entreprise.</p>
+      </div>
+    `;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Initialisation
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Page de candidature publique (QR code "Embauche", voir renderEmbauche) — avant TOUT le reste :
+  // ni compte, ni entreprise locale, ni SupabaseSync (le dépôt de candidature passe par un simple
+  // fetch() vers l'Edge Function, jamais par le client Supabase authentifié). Sortie immédiate pour
+  // ne jamais laisser DB.init()/le routage normal s'exécuter sur cette page sans rapport.
+  const candidatureCompanyId = new URLSearchParams(window.location.search).get('candidature');
+  if (candidatureCompanyId) {
+    renderCandidatureForm(candidatureCompanyId);
+    return;
+  }
+
   DB.onSaveError = (message) => showToast(message, 'error');
   DB.init();
   bindGlobalEvents();
@@ -4169,6 +4276,10 @@ function render() {
     case 'remuneration':
       root.innerHTML = renderRemuneration();
       bindRemunerationEvents();
+      break;
+    case 'embauche':
+      root.innerHTML = renderEmbauche();
+      bindEmbaucheEvents();
       break;
     default:
       root.innerHTML = renderDashboard();
@@ -8582,7 +8693,7 @@ function renderCongesTypes(categorie = 'conge') {
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${types.length} type${plural} ${noun} configuré${plural}</p>
-      <button class="btn btn-primary" id="btn-new-leave-type">+ Nouveau type</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-leave-type">+ Nouveau type</button>
     </div>
     <div class="card table-card">
       <table class="table">
@@ -10067,7 +10178,7 @@ function renderParametresEtablissements() {
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${etablissements.length} établissement${etablissements.length > 1 ? 's' : ''}</p>
-      <button class="btn btn-primary" id="btn-new-etablissement">+ Nouvel établissement</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-etablissement">+ Nouvel établissement</button>
     </div>
     <div class="settings-lists-grid">
       ${etablissements.map(renderEtablissementCard).join('')}
@@ -10196,7 +10307,7 @@ function renderParametresServices() {
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${services.length} service${services.length > 1 ? 's' : ''}</p>
-      <button class="btn btn-primary" id="btn-new-service">+ Nouveau service</button>
+      <button class="btn btn-primary btn-sm" id="btn-new-service">+ Nouveau service</button>
     </div>
     <div class="settings-lists-grid">
       ${services.map(renderServiceCard).join('')}
@@ -11008,7 +11119,7 @@ function renderParametresCategoriesSalarie() {
               <td>${escapeHtml(c.description || '—')}</td>
               <td>
                 <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
-                <button type="button" class="btn-link" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
+                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
               </td>
             </tr>
           `).join('')}
@@ -13629,9 +13740,171 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
   `;
 }
 
-function openEmployeeModal(id) {
+// ---------------------------------------------------------------------------
+// Vue : Embauche (QR code de candidature)
+// ---------------------------------------------------------------------------
+
+const CANDIDATURE_STATUT_LABELS = { nouvelle: 'Nouvelle', embauchee: 'Embauchée', archivee: 'Archivée' };
+const CANDIDATURE_STATUT_BADGE_CLASS = { nouvelle: 'badge-info', embauchee: 'badge-success', archivee: 'badge-muted' };
+
+/** URL publique de candidature pour cette entreprise — ?candidature=<companyId>, détecté tout en
+ * haut de DOMContentLoaded (avant même DB.init()) pour router vers renderCandidatureForm(). */
+function candidatureUrlForCompany(companyId) {
+  return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}?candidature=${encodeURIComponent(companyId)}`;
+}
+
+function renderEmbauche() {
+  const company = companyRepository.getCurrent();
+  const url = candidatureUrlForCompany(company.id);
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  const qrSvg = qr.createSvgTag({ cellSize: 4, margin: 8, alt: 'QR code de candidature', title: 'Candidature Nexus RH' });
+
+  return `
+    <div class="view-header">
+      <h1>Embauche</h1>
+      <p class="view-subtitle">Affichez ce QR code (poster, page carrière...) pour recevoir des candidatures directement — CV et lettre de motivation compris, sans compte à créer.</p>
+    </div>
+    <div class="card" style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+      <div style="flex-shrink: 0; line-height: 0;">${qrSvg}</div>
+      <div style="flex: 1; min-width: 240px;">
+        <p class="text-muted" style="margin-bottom: 8px;">Lien de candidature</p>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" class="input" id="embauche-link" value="${escapeHtml(url)}" readonly style="flex: 1;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-embauche-link">Copier</button>
+        </div>
+      </div>
+    </div>
+    <div class="card table-card" style="margin-top: 16px;">
+      <h2>Candidatures reçues</h2>
+      <div id="embauche-candidatures-list"><p class="text-muted">Chargement...</p></div>
+    </div>
+  `;
+}
+
+function renderCandidaturesTable(candidatures) {
+  if (!candidatures.length) return '<p class="text-muted">Aucune candidature reçue pour le moment.</p>';
+  return `
+    <table class="table">
+      <thead><tr><th>Candidat</th><th>Contact</th><th>Reçue le</th><th>Statut</th><th>Documents</th><th></th></tr></thead>
+      <tbody>
+        ${candidatures.map(c => `
+          <tr>
+            <td>${escapeHtml(c.prenom)} ${escapeHtml(c.nom)}</td>
+            <td>${escapeHtml(c.email)}${c.telephone ? `<br><span class="text-muted">${escapeHtml(c.telephone)}</span>` : ''}</td>
+            <td>${formatDate(c.dateSoumission)}</td>
+            <td><span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[c.statut] || 'badge-muted'}">${escapeHtml(CANDIDATURE_STATUT_LABELS[c.statut] || c.statut)}</span></td>
+            <td>
+              ${c.cvPath ? `<button type="button" class="btn-link" data-view-candidature-file="${escapeHtml(c.cvPath)}">CV</button>` : ''}
+              ${c.lettrePath ? ` · <button type="button" class="btn-link" data-view-candidature-file="${escapeHtml(c.lettrePath)}">Lettre</button>` : ''}
+              ${c.lettreTexte ? ` · <button type="button" class="btn-link" data-view-candidature-texte="${escapeHtml(c.id)}">Message</button>` : ''}
+              ${!c.cvPath && !c.lettrePath && !c.lettreTexte ? '<span class="text-muted">—</span>' : ''}
+            </td>
+            <td>
+              ${c.statut === 'nouvelle' ? `
+                <button type="button" class="btn-link" data-embaucher-candidature="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}" data-prenom="${escapeHtml(c.prenom)}" data-email="${escapeHtml(c.email)}" data-telephone="${escapeHtml(c.telephone)}">Embaucher</button>
+                · <button type="button" class="btn-link btn-link-danger" data-archiver-candidature="${escapeHtml(c.id)}">Archiver</button>
+              ` : ''}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function refreshEmbaucheCandidaturesList() {
+  const listEl = document.getElementById('embauche-candidatures-list');
+  if (!listEl) return;
+  try {
+    const candidatures = await candidatureRepository.getAll();
+    listEl.innerHTML = renderCandidaturesTable(candidatures);
+    bindCandidaturesListEvents();
+  } catch (err) {
+    listEl.innerHTML = '<p class="text-muted">Impossible de charger les candidatures.</p>';
+  }
+}
+
+function bindCandidaturesListEvents() {
+  document.querySelectorAll('[data-view-candidature-file]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        const url = await candidatureRepository.getFileUrl(btn.dataset.viewCandidatureFile);
+        window.open(url, '_blank', 'noopener');
+      } catch {
+        showToast('Impossible d\'ouvrir ce document.', 'error');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-view-candidature-texte]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const candidatures = await candidatureRepository.getAll();
+      const c = candidatures.find(x => x.id === btn.dataset.viewCandidatureTexte);
+      if (!c || !c.lettreTexte) return;
+      const modalRoot = document.getElementById('modal-root');
+      modalRoot.innerHTML = `
+        <div class="modal modal-small">
+          <div class="modal-header">
+            <h2>Message de candidature</h2>
+            <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+          </div>
+          <div class="modal-body"><p style="white-space: pre-wrap;">${escapeHtml(c.lettreTexte)}</p></div>
+        </div>
+      `;
+      modalRoot.classList.add('open');
+      document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+    });
+  });
+
+  document.querySelectorAll('[data-embaucher-candidature]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openEmployeeModal(null, {
+        nom: btn.dataset.nom,
+        prenom: btn.dataset.prenom,
+        email: btn.dataset.email,
+        telephone: btn.dataset.telephone
+      }, btn.dataset.embaucherCandidature);
+    });
+  });
+
+  document.querySelectorAll('[data-archiver-candidature]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await candidatureRepository.archiver(btn.dataset.archiverCandidature);
+        showToast('Candidature archivée.');
+        refreshEmbaucheCandidaturesList();
+      } catch {
+        showToast('Impossible d\'archiver cette candidature.', 'error');
+      }
+    });
+  });
+}
+
+function bindEmbaucheEvents() {
+  const copyBtn = document.getElementById('btn-copy-embauche-link');
+  if (copyBtn) copyBtn.addEventListener('click', async () => {
+    const link = document.getElementById('embauche-link');
+    try {
+      await navigator.clipboard.writeText(link.value);
+      showToast('Lien copié.');
+    } catch {
+      link.select();
+      showToast('Sélectionnez et copiez le lien manuellement.', 'error');
+    }
+  });
+  refreshEmbaucheCandidaturesList();
+}
+
+/** prefill/candidatureId (voir bindEmbaucheEvents) : pré-remplit un NOUVEAU salarié depuis une
+ * candidature reçue par QR code — jamais utilisé en édition (isEdit). candidatureId est juste
+ * transmis jusqu'à submitEmployeeForm pour marquer la candidature "embauchée" une fois le salarié
+ * réellement créé, sans dupliquer la logique de création elle-même. */
+function openEmployeeModal(id, prefill, candidatureId) {
   const isEdit = Boolean(id);
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
+  if (!isEdit && prefill) Object.assign(employee, prefill);
   const settings = settingsRepository.getSettings();
   const managers = employeeRepository.getAll().filter(e => e.id !== id && !e.archive);
   const categoriesSalarie = categorieSalarieRepository.getAll();
@@ -13746,7 +14019,7 @@ function openEmployeeModal(id) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
-  document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id));
+  document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 }
 
 /** Champ "Adresse" avec suggestions en direct (API Adresse gouv.fr, gratuite/sans clé) — remplace
@@ -13829,7 +14102,7 @@ function multiSelectField(name, label, customOptions, selectedValues) {
   `;
 }
 
-function submitEmployeeForm(evt, id) {
+function submitEmployeeForm(evt, id, candidatureId) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
@@ -13898,6 +14171,10 @@ function submitEmployeeForm(evt, id) {
       return;
     }
     const created = employeeRepository.create(patch);
+    if (candidatureId) {
+      candidatureRepository.marquerEmbauchee(candidatureId, created.id)
+        .catch(() => showToast('Salarié créé, mais la candidature n\'a pas pu être mise à jour.', 'error'));
+    }
     showToast('Salarié créé.');
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: created.id });

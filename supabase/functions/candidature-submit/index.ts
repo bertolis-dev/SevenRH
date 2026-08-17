@@ -1,0 +1,130 @@
+// Seven RH — fonction "candidature-submit" : SEULE fonction de toute l'application accessible sans
+// aucune authentification par conception. La personne qui scanne le QR code "Embauche" (voir
+// renderEmbauche, app.js) n'a et n'aura jamais de compte — elle dépose un CV (+ une lettre de
+// motivation, fichier ou texte libre) qui doit arriver jusqu'à l'entreprise ciblée par le QR.
+//
+// IMPORTANT côté configuration Supabase : cette fonction doit être créée avec la vérification JWT
+// DÉSACTIVÉE ("Enforce JWT verification" décoché) — comme stripe-webhook, mais pour une raison
+// différente : ici c'est un visiteur public sans le moindre jeton, pas un service externe signé.
+//
+// Sécurité : company_id vient du QR (donc du visiteur, non fiable en soi) — vérifié contre une
+// vraie entreprise existante avant toute écriture ; un company_id invalide échoue proprement sans
+// rien créer. Toute écriture passe par la clé service-role : `candidatures` n'a AUCUNE policy
+// INSERT pour anon/authenticated (voir 0024_candidatures.sql) — ce visiteur ne pourrait de toute
+// façon pas écrire directement même avec la clé anon, seule cette fonction le peut.
+//
+// Limite connue acceptée pour cette v1 (formulaire public sans compte) : aucun CAPTCHA/anti-spam.
+// Les limites de taille/type de fichier ci-dessous sont le seul filet de sécurité basique.
+
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 Mo — large pour un CV/lettre en PDF, limite un abus grossier.
+const ALLOWED_TYPES: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+}
+
+async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
+  if (file.size > MAX_FILE_BYTES) throw new Error(`Fichier "${kind}" trop volumineux (5 Mo maximum).`);
+  const ext = ALLOWED_TYPES[file.type];
+  if (!ext) throw new Error(`Format de fichier "${kind}" non accepté (PDF, PNG ou JPEG uniquement).`);
+  const path = `${companyId}/${candidatureId}/${kind}.${ext}`;
+  const { error } = await supabaseAdmin.storage.from("candidatures-files").upload(path, file, { contentType: file.type });
+  if (error) throw error;
+  return path;
+}
+
+/** Relaie vers Slack si l'entreprise a configuré un webhook (Paramètres → Intégrations) — même
+ * logique que notify-slack/index.ts, réécrite ici plutôt qu'appelée : notify-slack exige un jeton
+ * Supabase de l'appelant pour résoudre current_company_id(), qu'un visiteur public n'a jamais. */
+async function notifySlackNewCandidature(companyId: string, nom: string, prenom: string) {
+  const { data: integration } = await supabaseAdmin
+    .from("company_integrations")
+    .select("slack_webhook_url")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!integration?.slack_webhook_url) return;
+  try {
+    await fetch(integration.slack_webhook_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: `🧑‍💼 *Nouvelle candidature*\n${prenom} ${nom} — voir l'onglet Embauche` }),
+    });
+  } catch {
+    // Une notification Slack ratée ne doit jamais faire échouer le dépôt de candidature lui-même.
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+  if (req.method !== "POST") return jsonResponse({ error: "Méthode non autorisée." }, 405);
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return jsonResponse({ error: "Corps de requête invalide." }, 400);
+  }
+
+  const companyId = String(form.get("company_id") || "").trim();
+  const nom = String(form.get("nom") || "").trim();
+  const prenom = String(form.get("prenom") || "").trim();
+  const email = String(form.get("email") || "").trim();
+  const telephone = String(form.get("telephone") || "").trim();
+  const lettreTexte = String(form.get("lettre_texte") || "").trim();
+  const cv = form.get("cv");
+  const lettre = form.get("lettre");
+
+  if (!companyId || !nom || !email) {
+    return jsonResponse({ error: "Le nom et l'email sont obligatoires." }, 400);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonResponse({ error: "Adresse email invalide." }, 400);
+  }
+  if (!(cv instanceof File) || cv.size === 0) {
+    return jsonResponse({ error: "Le CV est obligatoire." }, 400);
+  }
+
+  const { data: company } = await supabaseAdmin.from("companies").select("id").eq("id", companyId).maybeSingle();
+  if (!company) return jsonResponse({ error: "Lien de candidature invalide." }, 404);
+
+  try {
+    const { data: inserted, error: insertErr } = await supabaseAdmin
+      .from("candidatures")
+      .insert({ company_id: companyId, nom, prenom, email, telephone, lettre_texte: lettreTexte || null })
+      .select("id")
+      .single();
+    if (insertErr) throw insertErr;
+
+    const patch: Record<string, string> = {};
+    patch.cv_path = await uploadFile(companyId, inserted.id, "cv", cv);
+    if (lettre instanceof File && lettre.size > 0) {
+      patch.lettre_path = await uploadFile(companyId, inserted.id, "lettre", lettre);
+    }
+
+    const { error: updateErr } = await supabaseAdmin.from("candidatures").update(patch).eq("id", inserted.id);
+    if (updateErr) throw updateErr;
+
+    await notifySlackNewCandidature(companyId, nom, prenom);
+
+    return jsonResponse({ success: true });
+  } catch (err) {
+    console.error("candidature-submit error:", err);
+    return jsonResponse({ error: "Erreur lors de l'envoi : " + (err as Error).message }, 500);
+  }
+});

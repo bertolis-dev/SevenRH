@@ -637,6 +637,60 @@ async function invokeBilling(action, payload) {
  * supabase/functions/manage-employee-account/index.ts). Renvoie le mot de passe (généré côté
  * serveur pour "create", ou celui passé/généré pour "reset") — à afficher une seule fois, jamais
  * récupérable ensuite. */
+/** Dépôt de candidature (voir renderCandidatureForm, app.js) — la seule action de toute
+ * l'application appelée SANS session (le visiteur qui scanne le QR "Embauche" n'a jamais de
+ * compte). functions.invoke() accepte un FormData directement (fichiers + champs texte), envoyé
+ * en multipart sans jeton d'autorisation — voir candidature-submit/index.ts, JWT désactivé. */
+async function submitCandidature(formData) {
+  const { data, error } = await supabase.functions.invoke('candidature-submit', { body: formData });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, ...data };
+}
+
+function candidatureFromRow(row) {
+  return {
+    id: row.id,
+    nom: row.nom,
+    prenom: row.prenom,
+    email: row.email,
+    telephone: row.telephone,
+    cvPath: row.cv_path,
+    lettrePath: row.lettre_path,
+    lettreTexte: row.lettre_texte,
+    statut: row.statut,
+    employeeId: row.employee_id,
+    dateSoumission: row.created_at
+  };
+}
+
+async function getCandidatures(companyId) {
+  const { data, error } = await supabase.from('candidatures').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(candidatureFromRow);
+}
+
+async function setCandidatureStatut(id, statut, employeeId) {
+  const { error } = await supabase.rpc('set_candidature_statut', { p_id: id, p_statut: statut, p_employee_id: employeeId || null });
+  if (error) throw error;
+}
+
+/** URL signée de courte durée pour un fichier de candidature (CV/lettre) — jamais d'URL publique
+ * permanente sur un document personnel (RGPD), voir la policy storage candidatures_files_select
+ * (0024_candidatures.sql), qui restreint déjà la lecture à gererSalaries de l'entreprise ; l'URL
+ * signée est juste le mécanisme d'accès effectif à un fichier d'un bucket privé. */
+async function getCandidatureFileUrl(path) {
+  const { data, error } = await supabase.storage.from('candidatures-files').createSignedUrl(path, 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 async function manageEmployeeAccount(action, employeeId, password) {
   const { data, error } = await supabase.functions.invoke('manage-employee-account', { body: { action, employeeId, password } });
   if (error) {
@@ -861,5 +915,6 @@ window.SupabaseSync = {
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
+  submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl,
   deleteRow
 };

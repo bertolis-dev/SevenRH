@@ -2370,6 +2370,17 @@ const integrationsRepository = {
   save: (patch) => window.SupabaseSync.saveCompanyIntegrations(DB.getCurrentCompany().id, patch)
 };
 
+/** Candidatures reçues via le QR code "Embauche" (voir renderEmbauche, app.js). Comme
+ * integrationsRepository : jamais dans le cache local optimiste (company.*) — de nouvelles
+ * candidatures peuvent arriver n'importe quand depuis le formulaire public, sans qu'aucun signal
+ * temps réel ne prévienne l'onglet ouvert ; toujours une lecture fraîche à l'ouverture de l'écran. */
+const candidatureRepository = {
+  getAll: () => window.SupabaseSync.getCandidatures(DB.getCurrentCompany().id),
+  marquerEmbauchee: (id, employeeId) => window.SupabaseSync.setCandidatureStatut(id, 'embauchee', employeeId),
+  archiver: (id) => window.SupabaseSync.setCandidatureStatut(id, 'archivee', null),
+  getFileUrl: (path) => window.SupabaseSync.getCandidatureFileUrl(path)
+};
+
 const categorieSalarieRepository = {
   getAll: () => DB.getCategoriesSalarie(),
   getById: (id) => DB.getCategoriesSalarie().find(c => c.id === id) || null,

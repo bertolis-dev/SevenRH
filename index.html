@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css?v=20260817a">
+  <link rel="stylesheet" href="style.css?v=20260817b">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -26,6 +26,10 @@
   <div id="login-root" style="display: none;"></div>
 
   <div id="bertolis-root" style="display: none;"></div>
+
+  <!-- Page publique atteinte via le QR code "Embauche" (?candidature=<companyId>) — aucun compte,
+       aucune connexion, jamais de chrome applicatif (voir renderCandidatureForm, app.js). -->
+  <div id="candidature-root" style="display: none;"></div>
 
   <div id="app-shell" style="display: none;">
     <aside id="sidebar">
@@ -66,12 +70,13 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260817a"></script>
-  <script src="data.js?v=20260817a"></script>
-  <script src="app.js?v=20260817a"></script>
+  <script type="module" src="supabase-client.js?v=20260817b"></script>
+  <script src="qrcode.js?v=20260817b"></script>
+  <script src="data.js?v=20260817b"></script>
+  <script src="app.js?v=20260817b"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817a'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817b'));
     }
   </script>
 </body>

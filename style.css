@@ -1751,7 +1751,9 @@ textarea.input { resize: vertical; font-family: inherit; }
    Écran de connexion
    --------------------------------------------------------------------- */
 
-#login-root {
+/* #candidature-root (page publique du QR "Embauche") partage volontairement ce même habillage
+   centré — même famille d'écran ("formulaire seul, sans chrome applicatif") que la connexion. */
+#login-root, #candidature-root {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
