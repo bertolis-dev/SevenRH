@@ -22,7 +22,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-const EMAIL_FROM = "Nexus RH <candidatures@nexus-rh.com>";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
@@ -30,6 +29,14 @@ function jsonResponse(body: unknown, status = 200) {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Nom affiché = celui de l'entreprise (demande du 17/08/2026 : le candidat ne doit jamais voir
+ * "Nexus RH" comme expéditeur) — seule l'ADRESSE reste sur le domaine vérifié Resend, jamais le
+ * nom. Guillemets retirés de raisonSociale pour ne pas casser l'en-tête "Nom <email>". */
+function buildFromAddress(raisonSociale: string): string {
+  const safeName = raisonSociale.replace(/"/g, "").trim() || "Nexus RH";
+  return `"${safeName}" <candidatures@nexus-rh.com>`;
 }
 
 Deno.serve(async (req) => {
@@ -83,7 +90,6 @@ Deno.serve(async (req) => {
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(raisonSociale)}" style="max-height: 48px; margin-bottom: 16px;">` : ""}
       <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
-      <p style="color: #888; font-size: 13px; margin-top: 24px;">Envoyé via Nexus RH pour le compte de ${escapeHtml(raisonSociale)}.</p>
     </div>
   `;
 
@@ -92,7 +98,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: EMAIL_FROM,
+        from: buildFromAddress(raisonSociale),
         to: candidature.email,
         subject: `Votre candidature chez ${raisonSociale}`,
         html,

@@ -40,7 +40,6 @@ const ALLOWED_TYPES: Record<string, string> = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-const EMAIL_FROM = "Nexus RH <candidatures@nexus-rh.com>";
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function jsonResponse(body: unknown, status = 200) {
@@ -49,6 +48,14 @@ function jsonResponse(body: unknown, status = 200) {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Nom affiché = celui de l'entreprise (demande du 17/08/2026 : le candidat ne doit jamais voir
+ * "Nexus RH" comme expéditeur) — seule l'ADRESSE reste sur le domaine vérifié Resend, jamais le
+ * nom. Guillemets retirés de raisonSociale pour ne pas casser l'en-tête "Nom <email>". */
+function buildFromAddress(raisonSociale: string): string {
+  const safeName = raisonSociale.replace(/"/g, "").trim() || "Nexus RH";
+  return `"${safeName}" <candidatures@nexus-rh.com>`;
 }
 
 async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
@@ -92,7 +99,6 @@ async function sendConfirmationEmail(candidateEmail: string, candidateName: stri
       <h2 style="margin: 0 0 12px;">Candidature reçue</h2>
       <p>Bonjour ${escapeHtml(candidateName)},</p>
       <p>Votre candidature chez <strong>${escapeHtml(raisonSociale)}</strong> a bien été reçue. L'équipe l'examinera et reviendra vers vous.</p>
-      <p style="color: #888; font-size: 13px; margin-top: 24px;">Envoyé via Nexus RH.</p>
     </div>
   `;
   try {
@@ -100,7 +106,7 @@ async function sendConfirmationEmail(candidateEmail: string, candidateName: stri
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: EMAIL_FROM,
+        from: buildFromAddress(raisonSociale),
         to: candidateEmail,
         subject: `Candidature reçue — ${raisonSociale}`,
         html,
