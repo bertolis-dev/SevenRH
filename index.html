@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css?v=20260817j">
+  <link rel="stylesheet" href="style.css?v=20260817k">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -38,15 +38,15 @@
         <span class="logo-text">Nexus</span>
       </div>
       <nav id="sidebar-nav"></nav>
-      <!-- Mobile uniquement (voir style.css @media 860px) : bouton "☰" fixe en haut à gauche de
-           l'écran qui déroule #sidebar-nav juste en-dessous, plutôt qu'une rangée de boutons à
-           faire défiler horizontalement — voir bindGlobalEvents (app.js) pour le comportement. -->
-      <button type="button" id="btn-mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
     </aside>
 
     <div id="main-column">
       <div id="non-souscrit-banner" class="non-souscrit-banner" style="display: none;"></div>
       <header id="topbar">
+        <!-- Mobile uniquement (voir style.css @media 860px) : bouton "☰" à gauche de la barre de
+             recherche, qui déroule #sidebar-nav juste en-dessous — plutôt qu'une rangée de boutons
+             à faire défiler horizontalement. Voir bindGlobalEvents (app.js) pour le comportement. -->
+        <button type="button" id="btn-mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
         <div class="topbar-search">
           <input type="text" id="global-search-input" class="input" placeholder="Rechercher un salarié, une demande, une note de frais... (Ctrl+K)" autocomplete="off">
           <div id="global-search-results" class="search-results"></div>
@@ -74,13 +74,13 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260817j"></script>
-  <script src="qrcode.js?v=20260817j"></script>
-  <script src="data.js?v=20260817j"></script>
-  <script src="app.js?v=20260817j"></script>
+  <script type="module" src="supabase-client.js?v=20260817k"></script>
+  <script src="qrcode.js?v=20260817k"></script>
+  <script src="data.js?v=20260817k"></script>
+  <script src="app.js?v=20260817k"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817j'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260817k'));
     }
   </script>
 </body>

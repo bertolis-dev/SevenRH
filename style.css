@@ -2430,34 +2430,32 @@ textarea.input { resize: vertical; font-family: inherit; }
    --------------------------------------------------------------------- */
 
 @media (max-width: 860px) {
-  /* §demande 17/08/2026, révisée le même jour (l'utilisateur veut le bouton en haut à gauche, pas
-     une barre du bas) : #sidebar se réduit à un simple bouton "☰" carré, ancré en haut à gauche de
-     l'écran (au-dessus du coin de #topbar) plutôt qu'à gauche sur toute la hauteur. #sidebar-nav se
-     déplie juste SOUS ce bouton (top: 100%) au lieu d'à côté ou au-dessus d'une barre — voir
-     bindGlobalEvents (app.js) pour l'ouverture/fermeture (classe .open). */
+  /* §demande 17/08/2026, révisée deux fois le même jour (l'utilisateur veut le bouton "☰"
+     directement à gauche de la barre de recherche, dans la topbar elle-même — pas une barre du bas,
+     pas un carré flottant en haut à gauche). Le bouton est déplacé dans le DOM à l'intérieur de
+     #topbar (voir index.html, juste avant .topbar-search) : il devient un item normal de la même
+     ligne flex, alignement et hauteur garantis sans calcul de position séparé. #sidebar ne sert
+     plus que d'ancre invisible pour #sidebar-nav (voir bindGlobalEvents, app.js, pour
+     l'ouverture/fermeture — classe .open). */
   #sidebar {
     top: 0;
     left: 0;
-    right: auto;
-    bottom: auto;
-    width: var(--topbar-height);
-    /* env(safe-area-inset-top) : sur un iPhone, le bouton doit rester sous l'encoche/île dynamique
-       plutôt que dessous. Nécessite viewport-fit=cover (index.html), sinon vaut 0. */
-    height: calc(var(--topbar-height) + env(safe-area-inset-top));
-    padding-top: env(safe-area-inset-top);
-    flex-direction: row;
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
-    border-bottom: 1px solid var(--color-border);
+    width: 0;
+    height: 0;
+    border: none;
+    background: none;
+    overflow: visible;
     z-index: 45;
   }
   .sidebar-logo { display: none; }
   #sidebar-nav {
     display: none;
     flex-direction: column;
-    position: absolute;
-    left: 0;
-    top: 100%;
+    position: fixed;
+    /* env(safe-area-inset-top) : sur un iPhone, le panneau doit s'ouvrir sous l'encoche/île
+       dynamique, pas dessous. Nécessite viewport-fit=cover (index.html), sinon vaut 0. */
+    top: calc(var(--topbar-height) + env(safe-area-inset-top));
+    left: 14px;
     min-width: 260px;
     max-width: calc(100vw - 24px);
     max-height: 70vh;
@@ -2485,9 +2483,11 @@ textarea.input { resize: vertical; font-family: inherit; }
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: var(--topbar-height);
-    font-size: 22px;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    font-size: 20px;
     background: none;
     border: none;
     color: var(--color-text);
@@ -2497,9 +2497,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   #view-root { padding: 16px; }
   .calendar-cell { min-height: 64px; }
   .calendar-weekday { font-size: 10px; }
-  /* padding-left réserve la place du bouton ☰ (en haut à gauche, voir #sidebar) pour que la barre
-     de recherche ne se retrouve jamais cachée dessous. */
-  #topbar { padding: 0 14px 0 calc(var(--topbar-height) + 14px); gap: 10px; }
+  #topbar { padding: 0 14px; gap: 10px; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
