@@ -52,16 +52,17 @@ for (const [offre, prices] of Object.entries(PRICE_IDS)) {
 // tag, pas cette table, qui fait foi pour reconstruire subscription_modules depuis
 // stripeSubscription.items (voir upsertSubscriptionFromStripeSubscription) — cette table ne sert
 // qu'à savoir QUEL Price appeler au moment du "checkout".
-// TODO (une fois le script de configuration Stripe exécuté, voir stripe-setup-modules.sh) :
-// remplacer chaque "price_TODO_*" par le vrai Price ID imprimé par le script.
+// Price réels (mode PRODUCTION) créés le 17/08/2026 via stripe-setup-modules.sh — voir la sortie du
+// script pour l'historique complet (chaque Price porte metadata.module=<clé>, vérifiable dans le
+// Dashboard Stripe).
 const MODULES: Record<string, { unite: "salarie" | "declarant"; priceIds: { mensuel: string; annuel: string } }> = {
-  conges: { unite: "salarie", priceIds: { mensuel: "price_TODO_CONGES_MENSUEL", annuel: "price_TODO_CONGES_ANNUEL" } },
-  planning: { unite: "salarie", priceIds: { mensuel: "price_TODO_PLANNING_MENSUEL", annuel: "price_TODO_PLANNING_ANNUEL" } },
-  frais: { unite: "declarant", priceIds: { mensuel: "price_TODO_FRAIS_MENSUEL", annuel: "price_TODO_FRAIS_ANNUEL" } },
-  tickets: { unite: "salarie", priceIds: { mensuel: "price_TODO_TICKETS_MENSUEL", annuel: "price_TODO_TICKETS_ANNUEL" } },
-  rh: { unite: "salarie", priceIds: { mensuel: "price_TODO_RH_MENSUEL", annuel: "price_TODO_RH_ANNUEL" } },
-  remuneration: { unite: "salarie", priceIds: { mensuel: "price_TODO_REMUNERATION_MENSUEL", annuel: "price_TODO_REMUNERATION_ANNUEL" } },
-  entretiens: { unite: "salarie", priceIds: { mensuel: "price_TODO_ENTRETIENS_MENSUEL", annuel: "price_TODO_ENTRETIENS_ANNUEL" } },
+  conges: { unite: "salarie", priceIds: { mensuel: "price_1U5NimCAcL94JssKFNYLHx1P", annuel: "price_1U5NimCAcL94JssKrlCxs5af" } },
+  planning: { unite: "salarie", priceIds: { mensuel: "price_1U5NimCAcL94JssKC2GwXKWR", annuel: "price_1U5NinCAcL94JssK12e3VIQW" } },
+  frais: { unite: "declarant", priceIds: { mensuel: "price_1U5NXsCAcL94JssKkwzNAcTE", annuel: "price_1U5NXsCAcL94JssKPSBrqeA5" } },
+  tickets: { unite: "salarie", priceIds: { mensuel: "price_1U5NXtCAcL94JssKdAsr2AUg", annuel: "price_1U5NXtCAcL94JssKxfFYOMff" } },
+  rh: { unite: "salarie", priceIds: { mensuel: "price_1U5NioCAcL94JssKWTWcAQte", annuel: "price_1U5NipCAcL94JssKULqbs6YS" } },
+  remuneration: { unite: "salarie", priceIds: { mensuel: "price_1U5NipCAcL94JssKBf9fUyfd", annuel: "price_1U5NiqCAcL94JssKkdBt3kw0" } },
+  entretiens: { unite: "salarie", priceIds: { mensuel: "price_1U5NXuCAcL94JssKNYIyAShJ", annuel: "price_1U5NXuCAcL94JssKDoOPle5z" } },
 };
 
 function statutFromStripeStatus(stripeStatus: string): string {

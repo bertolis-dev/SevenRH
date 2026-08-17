@@ -26,31 +26,47 @@ if [ -z "${STRIPE_SECRET_KEY:-}" ]; then
 fi
 
 create_price() {
-  local module_key="$1" label="$2" interval="$3" t1="$4" t2="$5" t3="$6" t4="$7"
-  echo "--- $label ($interval) ---"
-  curl -s https://api.stripe.com/v1/prices \
+  local module_key="$1" ascii_label="$2" interval="$3" t1="$4" t2="$5" t3="$6" t4="$7"
+  echo "--- $ascii_label ($interval) ---"
+  # ascii_label (pas d'accents) plutôt que le libellé français exact : sur ce Git Bash Windows, un
+  # nom de produit accentué (Congés, Rémunération...) fait échouer TOUTE la requête avec une erreur
+  # Stripe générique — reproductible même avec --data-urlencode, donc pas un simple problème
+  # d'encodage HTTP mais de corruption des octets multi-byte avant même que curl les reçoive
+  # (locale du shell). Le nom Stripe n'a qu'un usage interne (Dashboard) et n'a pas besoin de
+  # reprendre l'accentuation exacte de l'app — seule metadata.module (toujours ASCII) compte pour
+  # la logique métier (billing/index.ts, stripe-webhook/index.ts).
+  # Idempotency-Key : un ré-essai après un échec ne doit jamais créer un second Price identique.
+  local response
+  response=$(curl -s https://api.stripe.com/v1/prices \
     -u "${STRIPE_SECRET_KEY}:" \
-    -d "currency=eur" \
-    -d "billing_scheme=tiered" \
-    -d "tiers_mode=volume" \
-    -d "nickname=${label} (${interval})" \
-    -d "product_data[name]=Nexus RH — ${label}" \
-    -d "recurring[interval]=${interval}" \
-    -d "recurring[usage_type]=licensed" \
-    -d "metadata[module]=${module_key}" \
-    -d "tiers[0][up_to]=24"    -d "tiers[0][unit_amount]=${t1}" \
-    -d "tiers[1][up_to]=49"    -d "tiers[1][unit_amount]=${t2}" \
-    -d "tiers[2][up_to]=99"    -d "tiers[2][unit_amount]=${t3}" \
-    -d "tiers[3][up_to]=inf"   -d "tiers[3][unit_amount]=${t4}"
+    -H "Idempotency-Key: nexus-rh-${module_key}-${interval}-v1" \
+    --data-urlencode "currency=eur" \
+    --data-urlencode "billing_scheme=tiered" \
+    --data-urlencode "tiers_mode=volume" \
+    --data-urlencode "nickname=${ascii_label} (${interval})" \
+    --data-urlencode "product_data[name]=Nexus RH - ${ascii_label}" \
+    --data-urlencode "recurring[interval]=${interval}" \
+    --data-urlencode "recurring[usage_type]=licensed" \
+    --data-urlencode "metadata[module]=${module_key}" \
+    --data-urlencode "tiers[0][up_to]=24"    --data-urlencode "tiers[0][unit_amount]=${t1}" \
+    --data-urlencode "tiers[1][up_to]=49"    --data-urlencode "tiers[1][unit_amount]=${t2}" \
+    --data-urlencode "tiers[2][up_to]=99"    --data-urlencode "tiers[2][unit_amount]=${t3}" \
+    --data-urlencode "tiers[3][up_to]=inf"   --data-urlencode "tiers[3][unit_amount]=${t4}")
+  echo "$response"
+  if echo "$response" | grep -q '"id": *"price_'; then
+    echo ">>> OK"
+  else
+    echo ">>> ECHEC — voir l'erreur ci-dessus"
+  fi
   echo
 }
 
-# module_key | label | mois:t1 t2 t3 t4 (centimes) | an:t1 t2 t3 t4 (centimes, = mois x10, 2 mois offerts)
-create_price conges       "Congés, absences et calendrier"                 month 290 276 261 247
-create_price conges       "Congés, absences et calendrier"                 year  2900 2760 2610 2470
+# module_key | ascii_label (nom Stripe, sans accent) | mois:t1 t2 t3 t4 (centimes) | an:t1 t2 t3 t4 (centimes, = mois x10)
+create_price conges       "Conges, absences et calendrier"                 month 290 276 261 247
+create_price conges       "Conges, absences et calendrier"                 year  2900 2760 2610 2470
 
-create_price planning     "Planning, télétravail"                          month 210 200 189 179
-create_price planning     "Planning, télétravail"                          year  2100 2000 1890 1790
+create_price planning     "Planning, teletravail"                          month 210 200 189 179
+create_price planning     "Planning, teletravail"                          year  2100 2000 1890 1790
 
 create_price frais        "Notes de frais"                                 month 520 494 468 442
 create_price frais        "Notes de frais"                                 year  5200 4940 4680 4420
@@ -58,11 +74,11 @@ create_price frais        "Notes de frais"                                 year 
 create_price tickets      "Tickets restaurant"                             month 95  90  86  81
 create_price tickets      "Tickets restaurant"                             year  950 900 860 810
 
-create_price rh           "Module RH (salariés, paie, documents, organigramme)" month 650 618 585 553
-create_price rh           "Module RH (salariés, paie, documents, organigramme)" year  6500 6180 5850 5530
+create_price rh           "Module RH (salaries, paie, documents, organigramme)" month 650 618 585 553
+create_price rh           "Module RH (salaries, paie, documents, organigramme)" year  6500 6180 5850 5530
 
-create_price remuneration "Rémunération"                                   month 150 143 135 128
-create_price remuneration "Rémunération"                                   year  1500 1430 1350 1280
+create_price remuneration "Remuneration"                                   month 150 143 135 128
+create_price remuneration "Remuneration"                                   year  1500 1430 1350 1280
 
 create_price entretiens   "Entretiens"                                     month 190 181 171 162
 create_price entretiens   "Entretiens"                                     year  1900 1810 1710 1620
