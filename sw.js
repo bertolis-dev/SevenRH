@@ -6,5 +6,15 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (event) => {
+  // Uniquement les GET same-origin passent par ce handler (juste pour satisfaire "il existe un
+  // handler fetch", condition d'installabilité PWA sur certains navigateurs) — tout le reste ne
+  // doit JAMAIS être intercepté. En particulier un POST cross-origin avec un corps réel (FormData
+  // contenant un fichier choisi sur l'appareil, voir submitCandidature) rejoué via
+  // event.respondWith(fetch(event.request)) peut arriver corrompu côté serveur sur mobile (observé
+  // : "Corps de requête invalide" sur Chrome Android, reproductible même en navigation privée,
+  // donc pas un problème de cache) — pour un gain nul puisque ce service worker ne met rien en cache.
+  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) {
+    return;
+  }
   event.respondWith(fetch(event.request));
 });
