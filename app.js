@@ -425,9 +425,13 @@ function bindCandidatureFormEvents(companyId) {
       return;
     }
 
+    // Réutilise le contenu déjà affiché du bandeau entreprise (logo + nom, voir
+    // populateCandidatureCompanyHeader) plutôt que de tout écraser en revenant à la marque Nexus —
+    // le candidat doit voir la même entreprise du début à la fin, jamais "Nexus" réapparaître.
+    const headerHtml = document.getElementById('candidature-company-header').innerHTML;
     document.getElementById('candidature-root').innerHTML = `
       <div class="login-card">
-        <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+        <div class="login-logo">${headerHtml}</div>
         <h1>Candidature envoyée ✅</h1>
         <p class="text-muted">Merci ! Votre candidature a bien été transmise à l'entreprise.</p>
       </div>
