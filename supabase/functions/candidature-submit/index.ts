@@ -81,8 +81,24 @@ Deno.serve(async (req) => {
   let form: FormData;
   try {
     form = await req.formData();
-  } catch {
-    return jsonResponse({ error: "Corps de requête invalide." }, 400);
+  } catch (err) {
+    // Diagnostic temporaire (17/08/2026) : "Corps de requête invalide" reproductible sur Chrome
+    // Android (y compris navigation privée, donc pas un souci de cache/service worker) mais jamais
+    // reproduit en test — on a besoin de savoir CE QUE le serveur reçoit réellement avant de
+    // deviner une 3e fois. À retirer une fois le vrai problème identifié.
+    console.error("candidature-submit formData() error:", err, {
+      contentType: req.headers.get("content-type"),
+      contentLength: req.headers.get("content-length"),
+      userAgent: req.headers.get("user-agent"),
+    });
+    return jsonResponse({
+      error: "Corps de requête invalide.",
+      debug: {
+        message: err instanceof Error ? err.message : String(err),
+        contentType: req.headers.get("content-type"),
+        contentLength: req.headers.get("content-length"),
+      },
+    }, 400);
   }
 
   const companyId = String(form.get("company_id") || "").trim();
