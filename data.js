@@ -2338,7 +2338,15 @@ const companyRepository = {
   getCurrent: () => DB.getCurrentCompany(),
   getProfile: () => DB.getCompanyProfile(),
   saveProfile: (profile) => DB.saveCompanyProfile(profile),
-  createFromOnboarding: (payload) => DB.createCompanyFromOnboarding(payload)
+  createFromOnboarding: (payload) => DB.createCompanyFromOnboarding(payload),
+  /** Affiché en haut de la page publique de candidature (Embauche) en plus du nom — voir
+   * get_company_public_info. Upload direct (pas de cache local optimiste, comme les autres
+   * uploads de fichiers de l'app) : la vraie URL publique ne peut venir que du serveur. */
+  async uploadLogo(file) {
+    const url = await window.SupabaseSync.uploadCompanyLogo(DB.getCurrentCompanyId(), file);
+    DB.saveCompanyProfile({ logo: url });
+    return url;
+  }
 };
 
 const authRepository = {

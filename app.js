@@ -321,11 +321,11 @@ function navItemsForRole(user) {
 // Page publique de candidature (QR code "Embauche", voir renderEmbauche)
 // ---------------------------------------------------------------------------
 
-/** Écran entièrement autonome : ni DB.init(), ni SupabaseSync (sauf pour l'envoi lui-même, qui ne
- * requiert aucune session — voir submitCandidature). Le nom de l'entreprise n'est volontairement
- * pas affiché : l'ajouterait exigerait une nouvelle lecture publique (RPC dédiée) pour un gain
- * mineur — la personne qui scanne le QR le fait déjà dans un contexte où l'entreprise est connue
- * (affiche, page carrière), périmètre minimal assumé. */
+/** Écran entièrement autonome : ni DB.init(), ni SupabaseSync côté rendu initial. L'en-tête affiche
+ * par défaut la marque Nexus (repli immédiat, formulaire utilisable sans attendre le réseau), puis
+ * bascule sur le nom + logo de l'entreprise ciblée dès que get_company_public_info répond (voir
+ * populateCandidatureCompanyHeader) — seule lecture publique de toute l'app limitée à ces deux
+ * champs (0025_company_logo.sql), jamais le reste de `companies`. */
 function renderCandidatureForm(companyId) {
   const root = document.getElementById('candidature-root');
   document.getElementById('login-root').style.display = 'none';
@@ -333,7 +333,7 @@ function renderCandidatureForm(companyId) {
   root.style.display = 'flex';
   root.innerHTML = `
     <div class="login-card">
-      <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
+      <div class="login-logo" id="candidature-company-header">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Déposer ma candidature</h1>
       <p class="text-muted">Renseignez vos coordonnées et joignez votre CV — l'entreprise recevra votre candidature directement.</p>
       <p class="login-error" id="candidature-error" role="alert" style="display: none;"></p>
@@ -352,6 +352,22 @@ function renderCandidatureForm(companyId) {
     </div>
   `;
   bindCandidatureFormEvents(companyId);
+  populateCandidatureCompanyHeader(companyId);
+}
+
+async function populateCandidatureCompanyHeader(companyId) {
+  if (!window.SupabaseSync) return;
+  try {
+    const info = await window.SupabaseSync.getCompanyPublicInfo(companyId);
+    const header = document.getElementById('candidature-company-header');
+    if (!header || !info || !info.raisonSociale) return;
+    header.innerHTML = `
+      ${info.logo ? `<img src="${escapeHtml(info.logo)}" alt="${escapeHtml(info.raisonSociale)}" style="max-width: 40px; max-height: 40px; border-radius: var(--radius-sm);">` : ''}
+      <span>${escapeHtml(info.raisonSociale)}</span>
+    `;
+  } catch {
+    // Repli silencieux sur la marque Nexus déjà affichée — jamais bloquer le formulaire pour ça.
+  }
 }
 
 function bindCandidatureFormEvents(companyId) {
@@ -9767,6 +9783,19 @@ function renderParametresEntreprise() {
   return `
     <div class="card">
       <h2>Profil de l'entreprise</h2>
+      <div class="form-field" style="margin-bottom: 16px;">
+        <label>Logo</label>
+        <p class="text-muted" style="margin: 0 0 8px;">Affiché en haut de la page publique de candidature (voir Embauche), en plus du nom.</p>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          ${profile.logo
+            ? `<img src="${escapeHtml(profile.logo)}" alt="Logo" style="max-width: 80px; max-height: 80px; border-radius: var(--radius-md); border: 1px solid var(--color-border);">`
+            : `<div style="width: 80px; height: 80px; border-radius: var(--radius-md); border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); font-size: 12px;">Aucun logo</div>`}
+          <div>
+            <input type="file" id="f-logo-upload" accept="image/png,image/jpeg,image/svg+xml" style="display: none;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-logo">Changer le logo</button>
+          </div>
+        </div>
+      </div>
       <form id="entreprise-form">
         <div class="form-grid">
           ${companyNameAutocompleteField('raisonSociale', 'Raison sociale', profile.raisonSociale, true, 'siret', 'adresse')}
@@ -10169,6 +10198,20 @@ function bindParametresEntrepriseEvents() {
   });
 
   document.getElementById('btn-new-company').addEventListener('click', () => openOnboardingWizard());
+
+  const logoUploadInput = document.getElementById('f-logo-upload');
+  document.getElementById('btn-upload-logo').addEventListener('click', () => logoUploadInput.click());
+  logoUploadInput.addEventListener('change', async () => {
+    const file = logoUploadInput.files[0];
+    if (!file) return;
+    try {
+      await companyRepository.uploadLogo(file);
+      showToast('Logo mis à jour.');
+      render();
+    } catch (err) {
+      showToast(err.message || 'Impossible de mettre à jour le logo.', 'error');
+    }
+  });
 }
 
 // ---- Sous-vue : Établissements (§12) ----

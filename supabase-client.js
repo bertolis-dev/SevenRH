@@ -637,6 +637,29 @@ async function invokeBilling(action, payload) {
  * supabase/functions/manage-employee-account/index.ts). Renvoie le mot de passe (généré côté
  * serveur pour "create", ou celui passé/généré pour "reset") — à afficher une seule fois, jamais
  * récupérable ensuite. */
+/** Nom + logo d'une entreprise, lisible SANS session (page de candidature publique) — jamais le
+ * reste des champs de `companies`, voir get_company_public_info (0025_company_logo.sql). */
+async function getCompanyPublicInfo(companyId) {
+  const { data, error } = await supabase.rpc('get_company_public_info', { p_company_id: companyId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? { raisonSociale: row.raison_sociale, logo: row.logo } : null;
+}
+
+/** Upload du logo (Paramètres → Entreprise) — bucket public par conception (voir
+ * 0025_company_logo.sql) : contrairement à candidatures-files, un logo n'a rien de confidentiel et
+ * doit être affichable sans authentification sur la page de candidature. Renvoie l'URL publique
+ * permanente à stocker dans companies.data.logo (companyRepository.saveProfile). */
+async function uploadCompanyLogo(companyId, file) {
+  const ext = (file.type === 'image/png') ? 'png' : (file.type === 'image/jpeg') ? 'jpg' : (file.type === 'image/svg+xml') ? 'svg' : null;
+  if (!ext) throw new Error('Format non accepté (PNG, JPEG ou SVG uniquement).');
+  const path = `${companyId}/logo.${ext}`;
+  const { error } = await supabase.storage.from('company-logos').upload(path, file, { contentType: file.type, upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from('company-logos').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /** Dépôt de candidature (voir renderCandidatureForm, app.js) — la seule action de toute
  * l'application appelée SANS session (le visiteur qui scanne le QR "Embauche" n'a jamais de
  * compte). functions.invoke() accepte un FormData directement (fichiers + champs texte), envoyé
@@ -916,5 +939,6 @@ window.SupabaseSync = {
   pushIdees, toggleIdeeVote, setIdeeStatut,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl,
+  getCompanyPublicInfo, uploadCompanyLogo,
   deleteRow
 };
