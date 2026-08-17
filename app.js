@@ -219,8 +219,11 @@ const NAV_ITEMS = [
   { key: 'dashboard', label: 'Accueil', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
 
   // ---- Personnel ----
-  { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' } },
-  { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' } },
+  // `module` (voir LANDING_ALACARTE_MODULES/hasModule) : sans effet pour un abonnement classique
+  // (essai/essentiel/professionnel/premium, toujours tout inclus) — ne restreint que les
+  // entreprises passées à la carte, selon les modules réellement souscrits.
+  { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
+  { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
   // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
   // logique de regroupement que Planning/Calendrier ci-dessus, appliquée cette fois à 3 écrans
@@ -230,16 +233,16 @@ const NAV_ITEMS = [
   // Autres absences/Télétravail, jamais mise à jour) était la seule à l'exclure, la privant de tout
   // moyen d'exercer cette permission — un salarié Comptabilité a autant besoin de poser des congés
   // que les autres.
-  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
-  { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
-  { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel' },
+  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges' },
+  { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'frais' },
+  { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
   { key: 'mes-tickets', label: 'Mes tickets', icon: '🎫', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
   // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
   // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
-  { key: 'entretiens', label: 'Entretiens', icon: '🗒️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'entretiens', label: 'Entretiens', icon: '🗒️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'entretiens' },
   // Contrairement aux autres entrées "personnel" (données propres au salarié), la boîte à idées est
   // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
   // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
@@ -247,8 +250,8 @@ const NAV_ITEMS = [
   { key: 'idees', label: "Boîte à idées", icon: '💡', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
-  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
-  { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe' },
+  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'rh' },
+  { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
   // vers exactement la même vue que leur pendant "Personnel", juste avec des navParams différents.
@@ -259,13 +262,13 @@ const NAV_ITEMS = [
   // §sprint refonte UX §10 : ouvert à tous désormais (vue personnelle par défaut) — RH/Comptabilité/
   // Directeur gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2 entrées
   // de menu distinctes pour un même écran.
-  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
-  { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe' },
+  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'tickets' },
+  { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
   // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
   // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
   // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Directeur
   // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
-  { key: 'remuneration', label: 'Rémunération', icon: '💰', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe' },
+  { key: 'remuneration', label: 'Rémunération', icon: '💰', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
 
   // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
   // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
@@ -279,10 +282,22 @@ const NAV_ITEMS = [
   { key: 'parametres', label: 'Abonnement', icon: '💳', roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' }, hideOnMobile: true }
 ];
 
+/** true si l'entreprise a accès à ce module (voir LANDING_ALACARTE_MODULES) — toujours vrai pour un
+ * abonnement classique (essai/essentiel/professionnel/premium : toujours tout inclus, aucune
+ * migration forcée vers l'à la carte, voir upsertSubscriptionFromStripeSubscription dans
+ * billing/index.ts), seulement si présent dans abonnement.modules pour un abonnement à la carte. */
+function hasModule(moduleKey) {
+  const company = companyRepository.getCurrent();
+  const abo = company && company.abonnement;
+  if (!abo || abo.offre !== 'a_la_carte') return true;
+  return (abo.modules || []).some(m => m.key === moduleKey);
+}
+
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
  * surcharges de permissions individuelles (§8) en plus du défaut de son rôle. */
 function navItemsForRole(user) {
   return NAV_ITEMS.filter(item => {
+    if (item.module && !hasModule(item.module)) return false;
     if (item.permissions) return item.permissions.some(p => hasPermission(user, p));
     return item.roles.includes(user.role);
   });
@@ -7516,12 +7531,15 @@ function bindEmployeeDetailEvents() {
 function renderAbsencesHub() {
   const user = authRepository.getCurrentUser();
   const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
-  const tab = state.absencesHubTab || 'conges';
   const TABS = {
     conges: { label: 'Congés', subtitle: 'Demandes de congés payés, RTT, ancienneté...', btnId: 'btn-conges-a-valider' },
     autres: { label: 'Absences', subtitle: 'Maladie, événements familiaux et autres absences paramétrables', btnId: 'btn-autres-absences-a-valider' },
-    teletravail: { label: 'Télétravail', subtitle: 'Demandes, validations et planning hebdomadaire', btnId: 'btn-teletravail-a-valider' }
+    // Le télétravail dépend du module "planning" (voir LANDING_ALACARTE_MODULES) même si l'onglet
+    // vit dans cet écran fusionné "conges" — retiré ici plutôt que dans NAV_ITEMS, qui ne connaît
+    // que l'écran entier, pas ses onglets internes.
+    ...(hasModule('planning') ? { teletravail: { label: 'Télétravail', subtitle: 'Demandes, validations et planning hebdomadaire', btnId: 'btn-teletravail-a-valider' } } : {})
   };
+  const tab = TABS[state.absencesHubTab] ? state.absencesHubTab : 'conges';
 
   return `
     <div class="view-header view-header-row">
@@ -9724,21 +9742,91 @@ function renderOffreCard(key, o, periodicite, ctaHtml, extraClass = '') {
   `;
 }
 
-/** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing) — remplace
- * l'ancien aperçu en lecture seule : l'entreprise cliente choisit et paie elle-même son offre,
- * la gestion (changer d'offre, annuler, moyen de paiement) passe par le portail Stripe hébergé. */
+/** Paiement réel via Stripe (voir billingRepository/supabase/functions/billing). Depuis le
+ * 17/08/2026, toute NOUVELLE souscription passe par la formule à la carte (même catalogue de
+ * modules que la page publique, voir LANDING_ALACARTE_MODULES) plutôt que l'ancienne grille à 3
+ * paliers — celle-ci reste affichée UNIQUEMENT pour une entreprise déjà abonnée sur l'ancien
+ * système (aucune migration forcée). On ne propose jamais le compositeur à la carte à une
+ * entreprise déjà sur l'ancien système : relancer un Checkout dessus créerait un second abonnement
+ * Stripe en parallèle plutôt que de remplacer le premier (voir la note affichée dans ce cas). */
 function renderParametresAbonnement() {
   const company = companyRepository.getCurrent();
   const abo = company.abonnement;
   if (!abo) return '<p class="text-muted">Abonnement indisponible.</p>';
-  const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
+  const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
   const statutBadge = { actif: 'success', impaye: 'warning', suspendu: 'warning', resilie: 'muted', non_souscrit: 'warning' }[abo.statut] || 'muted';
+  const estAlaCarte = abo.offre === 'a_la_carte';
+  const legacyActif = !estAlaCarte && abo.offre !== 'essai' && abo.statut !== 'resilie';
+
+  if (estAlaCarte) return renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge);
+  if (legacyActif) return renderAbonnementLegacyActif(abo, statutBadge);
+  return renderAbonnementAlaCarteComposer(nbSalaries);
+}
+
+function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
+  const modules = (abo.modules || [])
+    .map(m => Object.assign({}, m, { def: LANDING_ALACARTE_MODULES.find(d => d.key === m.key) }))
+    .filter(m => m.def);
+  const totalMensuel = modules.reduce((sum, m) => sum + m.def.prix * m.quantite, 0);
+  const effectifDesaligne = modules.some(m => m.def.unite === 'salarié' && m.quantite !== nbSalaries);
+
+  return `
+    <div class="card abonnement-summary-card">
+      <div class="abonnement-summary-header">
+        <div class="abonnement-summary-icon">🧩</div>
+        <div>
+          <h2 style="margin-bottom: 4px;">Abonnement à la carte</h2>
+          <div class="badge-row">
+            <span class="badge badge-${statutBadge}">${escapeHtml(ABONNEMENT_STATUT_LABELS[abo.statut] || abo.statut)}</span>
+            <span class="badge badge-info">${abo.periodicite === 'annuel' ? 'Facturation annuelle' : 'Facturation mensuelle'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="detail-grid" style="margin-top: 16px;">
+        ${infoRow('Date de début', formatDate(abo.dateDebut))}
+        ${infoRow('Prochain renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
+        ${infoRow('Coût estimé', `${formatCurrencyFR(abo.periodicite === 'annuel' ? totalMensuel * 10 : totalMensuel)} / ${abo.periodicite === 'annuel' ? 'an' : 'mois'}`)}
+      </div>
+      <table class="table" style="margin-top: 16px;">
+        <thead><tr><th>Module actif</th><th>Quantité facturée</th><th>Prix</th></tr></thead>
+        <tbody>
+          ${modules.map(m => `
+            <tr>
+              <td>${escapeHtml(m.def.label)}</td>
+              <td>
+                ${m.quantite} ${escapeHtml(m.def.unite)}${m.quantite > 1 ? 's' : ''}
+                ${m.def.unite === 'déclarant' ? `
+                  <span style="display:inline-flex; align-items:center; gap:6px; margin-left:8px;">
+                    <input type="number" class="input" id="abo-declarants-${m.key}" min="1" max="${nbSalaries}" value="${m.quantite}" style="width:70px;">
+                    <button type="button" class="btn-link" data-update-declarants="${m.key}">Mettre à jour</button>
+                  </span>
+                ` : ''}
+              </td>
+              <td>${formatCurrencyFR(m.def.prix)} / ${escapeHtml(m.def.unite)} / mois</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${effectifDesaligne ? `
+        <div style="margin-top: 16px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--color-warning-soft); color: var(--color-warning); font-size: 14px;">
+          ⚠️ La facturation ne correspond plus à votre effectif actuel (${nbSalaries} salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''}). Actualisez votre abonnement pour l'aligner.
+        </div>
+      ` : ''}
+      <div class="detail-header-actions" style="margin-top: 16px;">
+        <button class="btn btn-secondary" id="btn-resync-abonnement">Actualiser mon abonnement</button>
+        <button class="btn btn-secondary" id="btn-gerer-abonnement">Gérer mon abonnement</button>
+      </div>
+      <p class="text-muted" style="margin-top: 8px;">Pour ajouter, retirer un module ou annuler, utilisez "Gérer mon abonnement" (portail Stripe sécurisé).</p>
+    </div>
+  `;
+}
+
+function renderAbonnementLegacyActif(abo, statutBadge) {
+  const offre = OFFRES_BERTOLIS[abo.offre] || OFFRES_BERTOLIS.essai;
   const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
   const plafondActuel = abo.nombreSalariesMax;
   const plafondLabel = plafondActuel === null ? `${nbSalaries} (illimité)` : `${nbSalaries} / ${plafondActuel}`;
   const jaugePct = plafondActuel === null ? 0 : Math.min(100, Math.round((nbSalaries / plafondActuel) * 100));
-  const dejaAbonne = abo.offre !== 'essai' && abo.statut !== 'resilie';
-  const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
 
   return `
     <div class="card abonnement-summary-card">
@@ -9763,26 +9851,86 @@ function renderParametresAbonnement() {
         </div>
         ${plafondActuel !== null ? `<div class="abonnement-jauge-bar"><div class="abonnement-jauge-fill" style="width: ${jaugePct}%;"></div></div>` : ''}
       </div>
-      ${dejaAbonne ? `<button class="btn btn-secondary" id="btn-gerer-abonnement" style="margin-top: 16px;">Gérer mon abonnement</button>` : ''}
+      <button class="btn btn-secondary" id="btn-gerer-abonnement" style="margin-top: 16px;">Gérer mon abonnement</button>
     </div>
     <div class="card">
-      <h2>Changer d'offre</h2>
-      <p class="text-muted">Paiement sécurisé par Stripe. Toutes les fonctionnalités du logiciel sont incluses dans chaque offre — seul le nombre de salariés change. Annulation possible à tout moment depuis "Gérer mon abonnement".</p>
+      <h2>Passer à la formule à la carte</h2>
+      <p class="text-muted">Nexus RH propose désormais une tarification à la carte, module par module. Pour basculer votre abonnement existant sans double facturation, contactez-nous — nous nous occupons du changement.</p>
+    </div>
+  `;
+}
+
+function renderAbonnementAlaCarteComposer(nbSalaries) {
+  const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+  return `
+    <div class="card">
+      <h2>Composez votre abonnement</h2>
+      <p class="text-muted">Choisissez uniquement les modules dont vous avez besoin — le prix s'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.</p>
+      <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} — la quantité facturée par module suit automatiquement votre effectif réel (sauf Notes de frais, voir ci-dessous).</p>
       <div class="tabs" style="margin: 12px 0;">
         <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
         <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-abonnement-periodicite="annuel">Annuel (2 mois offerts)</button>
       </div>
-      <div class="offres-grid">
-        ${Object.entries(OFFRE_TARIFS).map(([key, o]) => {
-          const estActuelle = abo.offre === key && abo.periodicite === periodicite && dejaAbonne;
-          const cta = estActuelle
-            ? `<span class="badge badge-success" style="margin-top: 12px;">Offre actuelle</span>`
-            : `<button class="btn ${(OFFRE_PRESENTATION[key] || {}).misEnAvant ? 'btn-primary' : 'btn-secondary'}" data-souscrire-offre="${key}" data-souscrire-periodicite="${periodicite}" style="margin-top: 12px;">Souscrire</button>`;
-          return renderOffreCard(key, o, periodicite, cta, estActuelle ? 'offre-card-active' : '');
-        }).join('')}
+      <div class="alacarte-builder">
+        <div class="alacarte-modules">
+          ${LANDING_ALACARTE_MODULES.map(m => `
+            <div class="alacarte-module">
+              <label class="alacarte-module-main">
+                <input type="checkbox" class="abo-alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" data-module-unite="${m.unite}" ${(state.abonnementAlacarteModules && state.abonnementAlacarteModules[m.key] === false) ? '' : 'checked'}>
+                <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
+                <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ ${escapeHtml(m.unite)} / mois</span></span>
+              </label>
+              ${m.unite === 'déclarant' ? `
+                <div class="alacarte-module-unit-count">
+                  <label for="abo-alacarte-count-${m.key}">Combien de salariés déposent des notes de frais ?</label>
+                  <input type="number" id="abo-alacarte-count-${m.key}" class="input abo-alacarte-count-input" data-count-for="${m.key}" min="1" max="${nbSalaries}" value="${Math.min(nbSalaries, (state.abonnementAlacarteCounts && state.abonnementAlacarteCounts[m.key]) || nbSalaries)}">
+                </div>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+        <div class="alacarte-total-card">
+          <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
+          <strong id="abo-alacarte-total">—</strong>
+          <p class="alacarte-discount-note" id="abo-alacarte-discount-note"></p>
+          <p class="landing-simulator-note">Estimation — le montant exact est confirmé par Stripe avant tout paiement.</p>
+          <button type="button" class="btn btn-primary" style="width: 100%; margin-top: 8px;" id="btn-souscrire-alacarte">Souscrire</button>
+        </div>
       </div>
     </div>
   `;
+}
+
+/** Même logique de remise que computeAlacarteTotal() (page publique) mais sur un effectif réel et
+ * fixe (pas un curseur ajustable — la facturation réelle suit toujours l'effectif actuel, jamais
+ * une valeur que le client pourrait librement taper). */
+function computeAbonnementAlacarteTotal(nbSalaries) {
+  const totalEl = document.getElementById('abo-alacarte-total');
+  if (!totalEl) return;
+  const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+  let monthlyTotal = 0;
+  document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
+    if (!cb.checked) return;
+    const prix = parseFloat(cb.dataset.modulePrice) || 0;
+    if (cb.dataset.moduleUnite === 'déclarant') {
+      const countInput = document.getElementById(`abo-alacarte-count-${cb.dataset.moduleKey}`);
+      const count = Math.max(1, parseInt(countInput?.value, 10) || 1);
+      monthlyTotal += prix * count;
+    } else {
+      monthlyTotal += prix * nbSalaries;
+    }
+  });
+
+  const tier = getAlacarteVolumeDiscount(nbSalaries);
+  const discounted = monthlyTotal * (1 - tier.rate);
+  totalEl.textContent = formatCurrencyFR(periodicite === 'annuel' ? discounted * 10 : discounted);
+
+  const discountNote = document.getElementById('abo-alacarte-discount-note');
+  if (discountNote) {
+    discountNote.textContent = tier.rate > 0
+      ? `🎉 Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${nbSalaries} salariés)`
+      : '';
+  }
 }
 
 function bindParametresAbonnementEvents() {
@@ -9804,19 +9952,91 @@ function bindParametresAbonnementEvents() {
     window.location.href = result.url;
   });
 
-  document.querySelectorAll('[data-souscrire-offre]').forEach(btn => {
+  const resyncBtn = document.getElementById('btn-resync-abonnement');
+  if (resyncBtn) resyncBtn.addEventListener('click', async () => {
+    resyncBtn.disabled = true;
+    resyncBtn.textContent = 'Actualisation...';
+    const result = await billingRepository.resync();
+    if (!result.success) {
+      showToast(result.error || 'Impossible d\'actualiser l\'abonnement.', 'error');
+      resyncBtn.disabled = false;
+      resyncBtn.textContent = 'Actualiser mon abonnement';
+      return;
+    }
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (company) DB._companiesCache = [company];
+    showToast('Abonnement actualisé.');
+    render();
+  });
+
+  document.querySelectorAll('[data-update-declarants]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const key = btn.dataset.updateDeclarants;
+      const input = document.getElementById(`abo-declarants-${key}`);
+      const quantite = Math.max(1, parseInt(input?.value, 10) || 1);
       btn.disabled = true;
-      btn.textContent = 'Redirection...';
-      const result = await billingRepository.checkout(btn.dataset.souscrireOffre, btn.dataset.souscrirePeriodicite);
+      btn.textContent = '...';
+      const result = await billingRepository.resync({ [key]: quantite });
       if (!result.success) {
-        showToast(result.error || 'Impossible de démarrer le paiement.', 'error');
+        showToast(result.error || 'Impossible de mettre à jour ce module.', 'error');
         btn.disabled = false;
-        btn.textContent = 'Souscrire';
+        btn.textContent = 'Mettre à jour';
         return;
       }
-      window.location.href = result.url;
+      const company = await window.SupabaseSync.hydrateCurrentCompany();
+      if (company) DB._companiesCache = [company];
+      showToast('Module mis à jour.');
+      render();
     });
+  });
+
+  const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
+  if (document.getElementById('abo-alacarte-total')) {
+    computeAbonnementAlacarteTotal(nbSalaries);
+    document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        state.abonnementAlacarteModules = state.abonnementAlacarteModules || {};
+        state.abonnementAlacarteModules[cb.dataset.moduleKey] = cb.checked;
+        computeAbonnementAlacarteTotal(nbSalaries);
+      });
+    });
+    document.querySelectorAll('.abo-alacarte-count-input').forEach(input => {
+      input.addEventListener('input', () => {
+        state.abonnementAlacarteCounts = state.abonnementAlacarteCounts || {};
+        state.abonnementAlacarteCounts[input.dataset.countFor] = parseInt(input.value, 10) || 1;
+        computeAbonnementAlacarteTotal(nbSalaries);
+      });
+    });
+  }
+
+  const souscrireBtn = document.getElementById('btn-souscrire-alacarte');
+  if (souscrireBtn) souscrireBtn.addEventListener('click', async () => {
+    const modules = [];
+    document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
+      if (!cb.checked) return;
+      const key = cb.dataset.moduleKey;
+      if (cb.dataset.moduleUnite === 'déclarant') {
+        const countInput = document.getElementById(`abo-alacarte-count-${key}`);
+        modules.push({ key, declarants: Math.max(1, parseInt(countInput?.value, 10) || 1) });
+      } else {
+        modules.push({ key });
+      }
+    });
+    if (!modules.length) {
+      showToast('Sélectionnez au moins un module.', 'error');
+      return;
+    }
+    souscrireBtn.disabled = true;
+    souscrireBtn.textContent = 'Redirection...';
+    const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+    const result = await billingRepository.checkout(modules, periodicite);
+    if (!result.success) {
+      showToast(result.error || 'Impossible de démarrer le paiement.', 'error');
+      souscrireBtn.disabled = false;
+      souscrireBtn.textContent = 'Souscrire';
+      return;
+    }
+    window.location.href = result.url;
   });
 }
 

@@ -17,7 +17,9 @@
 import Stripe from "npm:stripe@14";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Prix Stripe (mode PRODUCTION — voir git blame pour les anciens Price ID de test).
+// Ancien système à 3 paliers — conservé UNIQUEMENT pour les abonnements déjà souscrits avant le
+// passage à la carte (14/08/2026), voir le même commentaire dans billing/index.ts. Un abonnement à
+// la carte se reconnaît par ses Price (metadata.module posé dessus), jamais par cette table.
 const PRICE_TO_PLAN = new Map<string, { offre: string; periodicite: string }>([
   ["price_1TzGXFCAcL94JssKcYV67hON", { offre: "essentiel", periodicite: "mensuel" }],
   ["price_1TzGXFCAcL94JssKSGtncWWL", { offre: "essentiel", periodicite: "annuel" }],
@@ -54,8 +56,13 @@ async function upsertSubscriptionFromStripeSubscription(
   stripeSubscription: any,
   stripeCustomerId?: string
 ) {
-  const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
-  const plan = priceId ? PRICE_TO_PLAN.get(priceId) : undefined;
+  const items = stripeSubscription.items?.data ?? [];
+  // Un abonnement à la carte se reconnaît par ses Price : au moins un porte metadata.module (posé
+  // manuellement sur chaque Price lors de sa création, voir MODULES dans billing/index.ts) — jamais
+  // par une valeur qu'on aurait nous-mêmes stockée à l'avance, pour rester fidèle à ce que Stripe
+  // facture réellement à cet instant.
+  const moduleItems = items.filter((it: any) => it.price?.metadata?.module);
+  const isAlaCarte = moduleItems.length > 0;
   const dateRenouvellement = stripeSubscription.current_period_end
     ? new Date(stripeSubscription.current_period_end * 1000).toISOString().slice(0, 10)
     : null;
@@ -66,15 +73,41 @@ async function upsertSubscriptionFromStripeSubscription(
     stripe_subscription_id: stripeSubscription.id,
     updated_at: new Date().toISOString(),
   };
-  if (plan) {
-    patch.offre = plan.offre;
-    patch.periodicite = plan.periodicite;
-    patch.nombre_salaries_max = SEATS_MAX[plan.offre] ?? null;
+  if (isAlaCarte) {
+    patch.offre = "a_la_carte";
+    patch.periodicite = moduleItems[0].price?.recurring?.interval === "year" ? "annuel" : "mensuel";
+    // Pas de plafond de salariés en à la carte : la facturation suit l'effectif réel (voir l'action
+    // "resync" de billing/index.ts), rien à bloquer côté ajout de salarié.
+    patch.nombre_salaries_max = null;
+  } else {
+    const priceId = items[0]?.price?.id;
+    const plan = priceId ? PRICE_TO_PLAN.get(priceId) : undefined;
+    if (plan) {
+      patch.offre = plan.offre;
+      patch.periodicite = plan.periodicite;
+      patch.nombre_salaries_max = SEATS_MAX[plan.offre] ?? null;
+    }
   }
   if (stripeCustomerId) patch.stripe_customer_id = stripeCustomerId;
 
   const { error } = await supabaseAdmin.from("subscriptions").update(patch).eq("company_id", companyId);
   if (error) throw error;
+
+  // subscription_modules est un simple miroir de ce que Stripe dit avoir maintenant — reconstruit
+  // entièrement (delete puis insert) à chaque fois plutôt qu'un diff, pour ne jamais laisser un
+  // module fantôme après un downgrade/changement de modules décidé depuis le portail Stripe.
+  const { error: delErr } = await supabaseAdmin.from("subscription_modules").delete().eq("company_id", companyId);
+  if (delErr) throw delErr;
+  if (isAlaCarte) {
+    const rows = moduleItems.map((it: any) => ({
+      company_id: companyId,
+      module_key: it.price.metadata.module,
+      quantite: it.quantity,
+      stripe_subscription_item_id: it.id,
+    }));
+    const { error: insErr } = await supabaseAdmin.from("subscription_modules").insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { httpClient: Stripe.createFetchHttpClient() });

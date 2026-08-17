@@ -544,7 +544,7 @@ async function hydrateCurrentCompany() {
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
     expensesRes, documentsRes, supportTicketsRes, entretiensRes, ideesRes, draftsRes, notificationsRes, favoritesRes,
-    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes
+    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
     supabase.from('employees').select('*').eq('company_id', companyId),
@@ -566,7 +566,8 @@ async function hydrateCurrentCompany() {
     supabase.from('audit_log').select('*').eq('company_id', companyId),
     supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
-    supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle()
+    supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle(),
+    supabase.from('subscription_modules').select('*').eq('company_id', companyId)
   ]);
 
   const company = companyRes.data;
@@ -587,7 +588,12 @@ async function hydrateCurrentCompany() {
     // Toujours après le spread de company.data : abonnement vit désormais dans sa propre table
     // (migration 0010, jamais dans data) — au cas où une ligne pas encore migrée aurait encore un
     // data.abonnement obsolète, cette clé explicite gagne toujours.
-    abonnement: abonnementFromRow(subscriptionRes.data),
+    // .modules : présent seulement pour un abonnement à la carte (offre === 'a_la_carte') — tableau
+    // vide sinon, jamais undefined (voir hasModule(), app.js, qui lit toujours .modules directement).
+    abonnement: {
+      ...abonnementFromRow(subscriptionRes.data),
+      modules: (subscriptionModulesRes.data || []).map(r => ({ key: r.module_key, quantite: r.quantite }))
+    },
     etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
     employees: (employeesRes.data || []).map(employeeFromRow),
     services: (servicesRes.data || []).map(serviceFromRow),
@@ -612,7 +618,7 @@ async function hydrateCurrentCompany() {
 /** Appelle la fonction serveur "billing" (Edge Function Supabase) — invoke() du client Supabase
  * transmet automatiquement le jeton de la session en cours, exactement ce dont has_permission()/
  * current_company_id() ont besoin côté serveur pour vérifier qui appelle (voir supabase/functions/
- * billing/index.ts). action : "checkout" | "portal" | "confirm". */
+ * billing/index.ts). action : "checkout" | "resync" | "portal" | "confirm". */
 async function invokeBilling(action, payload) {
   const { data, error } = await supabase.functions.invoke('billing', { body: { action, ...payload } });
   if (error) {

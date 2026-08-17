@@ -167,7 +167,12 @@ const OFFRES_BERTOLIS = {
   essai: { label: 'Essai gratuit', nombreSalariesMax: null },
   essentiel: { label: 'Essentiel', nombreSalariesMax: 10 },
   professionnel: { label: 'Professionnel', nombreSalariesMax: 25 },
-  premium: { label: 'Premium', nombreSalariesMax: null }
+  premium: { label: 'Premium', nombreSalariesMax: null },
+  // À la carte (14/08/2026) : pas de plafond de salariés (voir hasModule()/upsertSubscriptionFromStripe
+  // Subscription dans billing/index.ts) — présent ici surtout pour que tout code qui affiche
+  // OFFRES_BERTOLIS[abo.offre] (console BERTOLIS, etc.) montre un libellé correct plutôt que de
+  // retomber sur "Essai gratuit" par défaut.
+  a_la_carte: { label: 'À la carte', nombreSalariesMax: null }
 };
 
 const ABONNEMENT_STATUT_LABELS = {
@@ -180,12 +185,13 @@ const ABONNEMENT_STATUT_LABELS = {
 
 function makeEmptyAbonnement() {
   return {
-    offre: 'essai', // clé de OFFRES_BERTOLIS
+    offre: 'essai', // clé de OFFRES_BERTOLIS, ou 'a_la_carte' (voir LANDING_ALACARTE_MODULES, app.js)
     periodicite: 'mensuel', // 'mensuel' | 'annuel'
     statut: 'actif', // voir ABONNEMENT_STATUT_LABELS
     dateDebut: toISODate(new Date()),
     dateRenouvellement: '',
-    nombreSalariesMax: OFFRES_BERTOLIS.essai.nombreSalariesMax
+    nombreSalariesMax: OFFRES_BERTOLIS.essai.nombreSalariesMax,
+    modules: [] // [{ key, quantite }] — seulement rempli quand offre === 'a_la_carte'
   };
 }
 
@@ -2392,7 +2398,12 @@ function currentReturnBase() {
 }
 
 const billingRepository = {
-  checkout: (offre, periodicite) => window.SupabaseSync.invokeBilling('checkout', { offre, periodicite, returnBase: currentReturnBase() }),
+  // modules : [{ key, declarants? }] — voir LANDING_ALACARTE_MODULES/renderParametresAbonnement
+  // (app.js). declarants ne compte que pour le module "frais" (unité déclarant, pas salarié).
+  checkout: (modules, periodicite) => window.SupabaseSync.invokeBilling('checkout', { modules, periodicite, returnBase: currentReturnBase() }),
+  // declarantOverrides : { [moduleKey]: nombre } — ne concerne que les modules en unité déclarant ;
+  // les modules en unité salarié se réalignent automatiquement sur l'effectif réel côté serveur.
+  resync: (declarantOverrides) => window.SupabaseSync.invokeBilling('resync', { declarants: declarantOverrides || {} }),
   portal: () => window.SupabaseSync.invokeBilling('portal', { returnBase: currentReturnBase() }),
   confirm: (sessionId) => window.SupabaseSync.invokeBilling('confirm', { sessionId })
 };
