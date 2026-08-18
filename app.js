@@ -429,7 +429,7 @@ function renderCvExperienceRow(exp, i) {
         <div class="form-field"><label>Entreprise</label><input type="text" class="input cv-exp-entreprise" value="${escapeHtml(exp.entreprise)}"></div>
       </div>
       <div class="form-field"><label>Période (ex. 2022 - 2024)</label><input type="text" class="input cv-exp-periode" value="${escapeHtml(exp.periode)}"></div>
-      <div class="form-field"><label>Description</label><textarea class="input cv-exp-description" rows="2">${escapeHtml(exp.description)}</textarea></div>
+      <div class="form-field"><label>Description (une ligne = un point)</label><textarea class="input cv-exp-description" rows="3" placeholder="Ex. Gestion d'une équipe de 5 personnes&#10;Mise en place d'un nouvel outil de suivi">${escapeHtml(exp.description)}</textarea></div>
       <button type="button" class="btn-link btn-link-danger cv-builder-row-remove" data-cv-remove-exp="${i}">✕ Retirer cette expérience</button>
     </div>
   `;
@@ -605,6 +605,15 @@ function bindCvBuilderFormEvents(data) {
   });
 }
 
+/** Coupe une description en points (une ligne saisie = un point) plutôt qu'un seul bloc de texte —
+ * demande du 18/08/2026 : reprendre la mise en page d'un modèle de CV fourni (photo + résumé en
+ * en-tête, bandeau nom, colonne latérale contact/compétences/langues, colonne principale
+ * expérience/formation avec puces). */
+function cvBulletList(text) {
+  const lines = (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+  return lines.length ? `<ul class="cv-bullets">${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : '';
+}
+
 /** Le même gabarit sert à l'aperçu (dans la modale) et à l'impression finale (bouton "Garder") —
  * une seule source de vérité pour la mise en page du CV, jamais deux templates à faire diverger. */
 function renderCvDocument(data) {
@@ -615,34 +624,47 @@ function renderCvDocument(data) {
 
   return `
     <div class="cv-document">
-      <div class="cv-header">
-        ${data.photoDataUrl ? `<img src="${data.photoDataUrl}" alt="Photo" class="cv-photo-thumb cv-photo-thumb-lg">` : ''}
-        <div>
-          <h1>${escapeHtml(data.prenom)} ${escapeHtml(data.nom)}</h1>
-          ${data.titre ? `<p class="cv-titre">${escapeHtml(data.titre)}</p>` : ''}
-          <p class="cv-contact">${[data.email, data.telephone].filter(Boolean).map(escapeHtml).join(' · ')}</p>
+      <div class="cv-intro">
+        ${data.photoDataUrl ? `<img src="${data.photoDataUrl}" alt="Photo">` : ''}
+        ${(data.titre || data.resume) ? `<p class="cv-resume">${data.titre ? `<strong>${escapeHtml(data.titre)}</strong>. ` : ''}${escapeHtml(data.resume || '')}</p>` : ''}
+      </div>
+      <div class="cv-name-band"><h1>${escapeHtml(data.prenom)} ${escapeHtml(data.nom)}</h1></div>
+      <div class="cv-body">
+        <div class="cv-sidebar">
+          ${(data.telephone || data.email) ? `
+            <h3>Contact</h3>
+            ${data.telephone ? `<p class="cv-sidebar-label">Téléphone</p><p>${escapeHtml(data.telephone)}</p>` : ''}
+            ${data.email ? `<p class="cv-sidebar-label">E-mail</p><p>${escapeHtml(data.email)}</p>` : ''}
+          ` : ''}
+          ${competencesList.length ? `<h3>Compétences</h3><ul class="cv-bullets">${competencesList.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+          ${langues.length ? `<h3>Langues</h3><ul class="cv-bullets">${langues.map(l => `<li>${escapeHtml(l.langue)} – ${escapeHtml(l.niveau)}</li>`).join('')}</ul>` : ''}
+        </div>
+        <div class="cv-main">
+          ${experiences.length ? `
+            <h3>Expérience</h3>
+            ${experiences.map(exp => `
+              <div class="cv-entry">
+                <div class="cv-entry-head">
+                  <p class="cv-entry-title">${escapeHtml(exp.poste)}${exp.entreprise ? ` — ${escapeHtml(exp.entreprise)}` : ''}</p>
+                  ${exp.periode ? `<span class="cv-entry-dates">${escapeHtml(exp.periode)}</span>` : ''}
+                </div>
+                ${cvBulletList(exp.description)}
+              </div>
+            `).join('')}
+          ` : ''}
+          ${formations.length ? `
+            <h3>Formation</h3>
+            ${formations.map(f => `
+              <div class="cv-entry">
+                <div class="cv-entry-head">
+                  <p class="cv-entry-title">${escapeHtml(f.diplome)}${f.etablissement ? ` — ${escapeHtml(f.etablissement)}` : ''}</p>
+                  ${f.annee ? `<span class="cv-entry-dates">${escapeHtml(f.annee)}</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          ` : ''}
         </div>
       </div>
-      ${data.resume ? `<h3>Profil</h3><p>${escapeHtml(data.resume)}</p>` : ''}
-      ${experiences.length ? `
-        <h3>Expérience professionnelle</h3>
-        ${experiences.map(exp => `
-          <div class="cv-entry">
-            <p class="cv-entry-title">${escapeHtml(exp.poste)}${exp.entreprise ? ` — ${escapeHtml(exp.entreprise)}` : ''}${exp.periode ? ` <span class="text-muted">(${escapeHtml(exp.periode)})</span>` : ''}</p>
-            ${exp.description ? `<p>${escapeHtml(exp.description)}</p>` : ''}
-          </div>
-        `).join('')}
-      ` : ''}
-      ${formations.length ? `
-        <h3>Formation</h3>
-        ${formations.map(f => `
-          <div class="cv-entry">
-            <p class="cv-entry-title">${escapeHtml(f.diplome)}${f.etablissement ? ` — ${escapeHtml(f.etablissement)}` : ''}${f.annee ? ` <span class="text-muted">(${escapeHtml(f.annee)})</span>` : ''}</p>
-          </div>
-        `).join('')}
-      ` : ''}
-      ${competencesList.length ? `<h3>Compétences</h3><div class="chip-list">${competencesList.map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
-      ${langues.length ? `<h3>Langues</h3><p>${langues.map(l => `${escapeHtml(l.langue)} (${escapeHtml(l.niveau)})`).join(' · ')}</p>` : ''}
     </div>
   `;
 }
