@@ -5089,10 +5089,6 @@ function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
     .slice(0, limit);
 }
 
-/** Prochaine échéance de visite médicale pour UN salarié — extrait de getUpcomingVisitesMedicales
- * pour être aussi réutilisable sur la fiche salarié (qui doit toujours montrer la prochaine
- * échéance, même hors de la fenêtre "60 prochains jours" du tableau de bord). null si le salarié
- * n'a pas de date d'embauche connue (rien à calculer). */
 /** Cumul des heures supplémentaires saisies (voir DB.ajusterHeuresSupplementaires) sur l'année
  * civile donnée — comparé à settings.contingentAnnuelHeuresSup pour repérer une approche/un
  * dépassement du contingent légal. Ne calcule PAS le repos compensateur (taux 50%/100% selon
@@ -5138,6 +5134,10 @@ function renderContingentHeuresSupCard(items) {
   `;
 }
 
+/** Prochaine échéance de visite médicale pour UN salarié — extrait de getUpcomingVisitesMedicales
+ * pour être aussi réutilisable sur la fiche salarié (qui doit toujours montrer la prochaine
+ * échéance, même hors de la fenêtre "60 prochains jours" du tableau de bord). null si le salarié
+ * n'a pas de date d'embauche connue (rien à calculer). */
 function computeNextVisiteMedicale(employee, perioditeMois) {
   if (!employee.dateEmbauche) return null;
   if (employee.dateDerniereVisiteMedicale) {
@@ -5586,9 +5586,10 @@ function renderEmployeesList() {
   // partagé, qui n'a pas de gating par rôle indépendant d'un salarié précis) : cet écran est déjà
   // restreint aux mêmes rôles à visibilité entreprise entière que canSeeRegistrePersonnel.
   const indexEgaliteRappel = (() => {
-    if (!canSeeRegistrePersonnel || !isConcerneParIndexEgalite()) return null;
+    if (!canSeeRegistrePersonnel) return null;
     const currentYear = new Date().getFullYear();
     const anneePrecedente = currentYear - 1;
+    if (!isConcerneParIndexEgalite(anneePrecedente)) return null;
     const settings = settingsRepository.getSettings();
     if ((settings.indexEgaliteProfessionnelle || {})[anneePrecedente]) return null;
     const retard = new Date() >= new Date(currentYear, 2, 1);
@@ -8074,11 +8075,15 @@ function openRegistreUniquePersonnelModal() {
   });
 }
 
-/** L'obligation légale ne porte que sur les entreprises d'au moins 50 salariés ACTIFS (pas les
- * archivés, contrairement au registre unique du personnel juste au-dessus — deux notions
- * différentes : "effectif" vs "historique complet des embauches"). */
-function isConcerneParIndexEgalite() {
-  return employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif').length >= 50;
+/** L'obligation légale porte sur l'effectif de l'ANNÉE CONCERNÉE (celle qui doit être déclarée),
+ * pas sur l'effectif d'aujourd'hui — une entreprise qui vient de franchir 50 salariés n'était pas
+ * concernée l'année dernière, et une entreprise qui vient de descendre sous 50 peut encore devoir
+ * une déclaration en retard pour une année où elle l'était. Utilise l'historique d'emploi réel
+ * (dateEmbauche/dateDepart, comme isEmployedDuringPeriod) au 31 décembre de l'année donnée, plutôt
+ * que e.statut === 'Actif' qui ne reflète que l'instant présent. */
+function isConcerneParIndexEgalite(year) {
+  const finAnnee = `${year}-12-31`;
+  return employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, finAnnee, finAnnee)).length >= 50;
 }
 
 /** Index de l'égalité professionnelle femmes-hommes (Code du travail, art. L1142-8) : obligatoire
@@ -8097,9 +8102,11 @@ function openIndexEgaliteModal() {
   const records = settings.indexEgaliteProfessionnelle || {};
   const currentYear = new Date().getFullYear();
   const anneesDeclarees = Object.keys(records).map(Number).sort((a, b) => b - a);
-  const concerne = isConcerneParIndexEgalite();
-
   const anneePrecedente = currentYear - 1;
+  // C'est l'obligation de l'année précédente qui est en jeu ici (celle qui doit être déclarée au
+  // 1er mars) — pas l'effectif d'aujourd'hui, voir isConcerneParIndexEgalite.
+  const concerne = isConcerneParIndexEgalite(anneePrecedente);
+  const effectifAnneePrecedente = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, `${anneePrecedente}-12-31`, `${anneePrecedente}-12-31`)).length;
   const echeance = new Date(currentYear, 2, 1); // 1er mars
   const now = new Date();
   const anneePrecedenteDeclaree = Boolean(records[anneePrecedente]);
@@ -8113,7 +8120,7 @@ function openIndexEgaliteModal() {
       </div>
       <div class="modal-body">
         <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> — cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
-        ${!concerne ? `<p class="text-muted" style="margin-top: 8px;">Non obligatoire tant que l'effectif reste sous 50 salariés (actuellement ${employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif').length}).</p>` : ''}
+        ${!concerne ? `<p class="text-muted" style="margin-top: 8px;">Non obligatoire pour ${anneePrecedente} : effectif sous 50 salariés au 31 décembre ${anneePrecedente} (${effectifAnneePrecedente}).</p>` : ''}
         ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? '⚠️ En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${currentYear}${retard ? ' (dépassée)' : ''}.</p>` : ''}
         <div class="mini-list" style="margin-top: 12px;">
           ${anneesDeclarees.length === 0 ? `<p class="text-muted">Aucune année déclarée.</p>` : anneesDeclarees.map(year => {
@@ -8166,7 +8173,8 @@ function openAjouterIndexEgaliteModal(defaultYear) {
         <div class="modal-body">
           <div class="form-field">
             <label for="f-index-annee">Année</label>
-            <input class="input" type="number" id="f-index-annee" value="${defaultYear}" required>
+            <input class="input" type="number" id="f-index-annee" value="${defaultYear}" ${existing ? 'readonly' : ''} required>
+            ${existing ? `<p class="text-muted" style="margin-top: 4px;">L'année ne peut pas être changée ici — modifiez plutôt l'entrée de l'année correspondante.</p>` : ''}
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-index-note">Note obtenue (/100) *</label>
