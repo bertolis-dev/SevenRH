@@ -3420,6 +3420,17 @@ function addDays(date, days) {
   return d;
 }
 
+/** Ajoute des mois à une date en évitant le débordement de fin de mois (ex: 31 janvier + 1 mois
+ * ne doit pas donner le 3 mars via un débordement silencieux — on cale sur le dernier jour du
+ * mois cible, ex: 28/29 février). */
+function addMonths(date, months) {
+  const day = date.getDate();
+  const d = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const daysInTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, daysInTargetMonth));
+  return d;
+}
+
 /** Les 7 dates (Lundi → Dimanche) de la semaine contenant la date donnée. */
 function getWeekDatesContaining(dateStr) {
   const d = parseISODateLocal(dateStr);

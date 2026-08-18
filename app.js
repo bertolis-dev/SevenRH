@@ -5095,10 +5095,10 @@ function computeNextVisiteMedicale(employee, perioditeMois) {
   if (!employee.dateEmbauche) return null;
   if (employee.dateDerniereVisiteMedicale) {
     const baseline = parseISODateLocal(employee.dateDerniereVisiteMedicale);
-    return { next: new Date(baseline.getFullYear(), baseline.getMonth() + perioditeMois, baseline.getDate()), premiereVisite: false };
+    return { next: addMonths(baseline, perioditeMois), premiereVisite: false };
   }
   const embauche = parseISODateLocal(employee.dateEmbauche);
-  return { next: new Date(embauche.getFullYear(), embauche.getMonth() + 3, embauche.getDate()), premiereVisite: true };
+  return { next: addMonths(embauche, 3), premiereVisite: true };
 }
 
 /** Suivi médecine du travail (Code du travail) : la toute première visite ("visite d'information
@@ -5529,6 +5529,12 @@ function renderEmployeesList() {
   const user = authRepository.getCurrentUser();
   const isManager = user.role === ROLES.MANAGER;
   const canCreate = hasPermission(user, PERMISSIONS.CREER_SALARIE);
+  // Le registre unique du personnel est un document légal de l'entreprise entière (voir
+  // openRegistreUniquePersonnelModal) — il ne doit être accessible qu'aux rôles qui ont déjà une
+  // visibilité entreprise entière sans restriction (getVisibleEmployeeIdsForCurrentUser() === null),
+  // jamais simplement "n'importe qui sauf un manager" (un salarié/comptable avec un override de
+  // permission VOIR_SALARIES individuel resterait exclu ici, à raison).
+  const canSeeRegistrePersonnel = getVisibleEmployeeIdsForCurrentUser() === null;
 
   const { pageItems, totalPages, page, pageStart } = paginate(visible, 'employeesPage');
 
@@ -5540,7 +5546,7 @@ function renderEmployeesList() {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
-        ${!isManager ? '<button class="btn btn-secondary" id="btn-registre-personnel">📋 Registre du personnel</button>' : ''}
+        ${canSeeRegistrePersonnel ? '<button class="btn btn-secondary" id="btn-registre-personnel">📋 Registre du personnel</button>' : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
@@ -7095,7 +7101,7 @@ const AVENANT_TYPES = ['Poste', 'Rémunération', 'Temps de travail', 'Établiss
 
 /** Trace manuelle des avenants (voir data.js, employee.avenants) — le plus récent en premier,
  * comme les autres historiques de l'app (buildRequestTimeline, entretien.historique...). */
-function renderAvenantsCard(avenants) {
+function renderAvenantsCard(avenants, canEdit) {
   const sorted = avenants.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return `
     <div class="card">
@@ -7113,12 +7119,17 @@ function renderAvenantsCard(avenants) {
           `).join('')}
         </div>
       `}
-      <button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-avenant">Enregistrer un avenant</button>
+      ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-avenant">Enregistrer un avenant</button>` : ''}
     </div>
   `;
 }
 
 function openAjouterAvenantModal(employeeId) {
+  const employeeForCheck = employeeRepository.getById(employeeId);
+  if (!employeeForCheck || !canEditEmployeeRecord(employeeForCheck)) {
+    showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error');
+    return;
+  }
   const html = `
     <div class="modal">
       <div class="modal-header">
@@ -7256,15 +7267,16 @@ function renderEmployeeDetail(id) {
         <h2>Suivi médical</h2>
         ${infoRow('Dernière visite médicale', e.dateDerniereVisiteMedicale ? formatDate(e.dateDerniereVisiteMedicale) : 'Jamais enregistrée')}
         ${(() => {
-          const visite = computeNextVisiteMedicale(e, settingsRepository.getSettings().visiteMedicalePerioditeMois || 60);
+          const visite = computeNextVisiteMedicale(e, settingsRepository.getSettings().visiteMedicalePerioditeMois);
           if (!visite) return '';
-          const overdue = visite.next < new Date();
+          const now = new Date();
+          const overdue = visite.next < new Date(now.getFullYear(), now.getMonth(), now.getDate());
           return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin-top: 4px;">Prochaine échéance : ${formatDate(toISODate(visite.next))}${visite.premiereVisite ? ' (visite d\'embauche)' : ''}${overdue ? ' — en retard' : ''}</p>`;
         })()}
         ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-enregistrer-visite-medicale" style="margin-top: 8px;">Enregistrer une visite médicale</button>` : ''}
       </div>
 
-      ${canSeeContractuel ? renderAvenantsCard(e.avenants || []) : ''}
+      ${canSeeContractuel ? renderAvenantsCard(e.avenants || [], canEdit) : ''}
 
       <div class="card">
         <h2>Temps de travail</h2>
@@ -7916,6 +7928,10 @@ function openAttestationEmployeurModal(id) {
  * "Sexe" reprend genre s'il est renseigné (suivi RH optionnel), sinon déduit de civilite (toujours
  * renseignée) — jamais laissé vide si l'un des deux existe. */
 function openRegistreUniquePersonnelModal() {
+  if (getVisibleEmployeeIdsForCurrentUser() !== null) {
+    showToast('Vous n\'avez pas le droit d\'accéder au registre du personnel.', 'error');
+    return;
+  }
   const profile = companyRepository.getProfile();
   const employees = employeeRepository.getAll().slice()
     .sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
