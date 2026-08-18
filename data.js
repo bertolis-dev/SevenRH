@@ -263,6 +263,18 @@ const DEFAULT_SETTINGS = {
   // §34 — voir EXPORT_PAIE_MODELES ; exportPaieColonnes n'est utilisé que si exportPaieModele === 'personnalise'.
   exportPaieModele: 'generique',
   exportPaieColonnes: { conges: true, teletravail: true, tickets: true, frais: true },
+  // Modèles de checklist d'intégration/de départ (demande du 18/08/2026) — copiés tels quels dans
+  // employee.onboardingChecklist/offboardingChecklist au moment où la checklist démarre pour ce
+  // salarié (voir ensureOnboardingChecklist/startOffboardingChecklist, app.js) : modifier le modèle
+  // ensuite n'affecte jamais les checklists déjà en cours, seulement les prochaines.
+  onboardingChecklistTemplate: ['DPAE envoyée', 'Contrat de travail signé', 'Visite médicale d\'embauche planifiée', 'Badge/accès remis', 'Compte informatique créé', 'Mutuelle souscrite', 'Règlement intérieur remis'],
+  offboardingChecklistTemplate: ['Matériel récupéré', 'Accès informatiques désactivés', 'Solde de tout compte préparé', 'Certificat de travail remis', 'Attestation Pôle emploi remise', 'Portabilité mutuelle/prévoyance signalée'],
+  // Périodicité par défaut du suivi médical (Code du travail — "suivi individuel simple" : 5 ans
+  // maximum entre deux visites hors surveillance renforcée, non gérée ici) — configurable car un
+  // accord de branche ou une exposition à risque particulière peut imposer un délai plus court.
+  // Voir getUpcomingVisitesMedicales (app.js) : la toute première visite (à l'embauche) reste fixée
+  // à 3 mois par la loi, non paramétrable, indépendamment de ce réglage.
+  visiteMedicalePerioditeMois: 60,
   // Postes actuellement recrutés (demande du 17/08/2026) — gérés depuis l'écran Embauche (pas
   // Paramètres) via le même composant chip-add/remove que les listes de référence
   // (renderSettingsListCard/bindChipListEvents). Proposés au candidat sur la page publique de
@@ -692,11 +704,15 @@ const DB = {
     const company = this.getCurrentCompany();
     const now = new Date().toISOString();
     company.matriculeSeq = (company.matriculeSeq || 0) + 1;
+    const settings = this.getSettings();
     const employee = Object.assign(makeEmptyEmployee(), data, {
       id: generateId('emp'),
       matricule: data.matricule || 'SRH-' + String(company.matriculeSeq).padStart(4, '0'),
       dateCreation: now,
-      dateModification: now
+      dateModification: now,
+      // Copie figée du modèle au moment de l'embauche (voir DEFAULT_SETTINGS.onboardingChecklistTemplate)
+      // — data.onboardingChecklist n'est jamais fourni par le formulaire de création, sauf import.
+      onboardingChecklist: data.onboardingChecklist || (settings.onboardingChecklistTemplate || []).map(label => ({ label, fait: false, dateFait: '' }))
     });
     // Passe par saveEmployees (pas un push direct sur company.employees) pour que la nouvelle
     // fiche soit bien envoyée à Supabase — un ajout direct au tableau contourne le diff qui
@@ -2495,6 +2511,20 @@ function makeEmptyEmployee() {
     dateFinContrat: '',
     dateFinPeriodeEssai: '',
     dateDernierEntretienProfessionnel: '',
+    dateDerniereVisiteMedicale: '', // suivi médecine du travail — voir getUpcomingVisitesMedicales
+    // Checklists d'intégration/de départ (demande du 18/08/2026) : [{ label, fait, dateFait }] —
+    // copie du modèle de Paramètres au démarrage, jamais une référence live à ce modèle (voir
+    // ensureOnboardingChecklist/startOffboardingChecklist, app.js). onboardingChecklist démarre dès
+    // la création du salarié ; offboardingChecklist reste vide (absent des exports/impressions) tant
+    // qu'il n'est pas explicitement déclenché depuis la fiche salarié.
+    onboardingChecklist: [],
+    offboardingChecklist: [],
+    // Historique des avenants (demande du 18/08/2026) : [{ id, date, type, description, dateEnregistrement }]
+    // — trace manuelle ("un avenant a été signé, voici ce qu'il change"), pas une détection
+    // automatique des modifications de champs (aurait exigé d'intercepter chaque chemin d'édition
+    // de la fiche pour un signal beaucoup plus bruyant que ce qui compte réellement : les avenants
+    // formels, pas chaque correction de coquille). Voir openAjouterAvenantModal (app.js).
+    avenants: [],
 
     tempsTravail: 'Temps plein',
     pourcentageActivite: 100,

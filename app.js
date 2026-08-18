@@ -4077,6 +4077,11 @@ function syncNotifications() {
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
+  getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
+    candidates.push(makeNotification(`visite-medicale-${x.employee.id}-${toISODate(x.next)}`, '🩺', x.premiereVisite ? 'Visite médicale d\'embauche à programmer' : 'Visite médicale à programmer',
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+  });
+
   documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
     // Comparer au même format des deux côtés (date-only, via toISODate) plutôt qu'à l'instant
     // courant — sinon la fraction de journée déjà écoulée décale daysUntil d'un jour selon l'heure
@@ -4550,9 +4555,11 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const ticketsCostTrend = getTicketsCostTrend(actifs);
   const birthdays = getUpcomingBirthdays(60, employees);
   const contractEnds = getUpcomingContractEnds(60, employees);
+  const probationEnds = getUpcomingProbationEnds(60, employees);
   const seniorityAnniversaries = getUpcomingSeniorityAnniversaries(60, employees);
   const entretiensProfessionnels = getUpcomingEntretiensProfessionnels(60, employees);
   const bilansSixAns = getUpcomingBilansSixAns(60, employees);
+  const visitesMedicales = getUpcomingVisitesMedicales(60, employees);
 
   const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
@@ -4591,8 +4598,10 @@ function renderOperationalDashboardBody(employees, employeeIds) {
     <div class="dashboard-grid">
       ${renderUpcomingBirthdaysCard(birthdays)}
       ${renderUpcomingContractEndsCard(contractEnds)}
+      ${renderUpcomingProbationEndsCard(probationEnds)}
       ${renderUpcomingSeniorityCard(seniorityAnniversaries)}
       ${renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns)}
+      ${renderUpcomingVisitesMedicalesCard(visitesMedicales)}
     </div>
     ` : ''}
 
@@ -5078,6 +5087,41 @@ function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
     .slice(0, limit);
 }
 
+/** Prochaine échéance de visite médicale pour UN salarié — extrait de getUpcomingVisitesMedicales
+ * pour être aussi réutilisable sur la fiche salarié (qui doit toujours montrer la prochaine
+ * échéance, même hors de la fenêtre "60 prochains jours" du tableau de bord). null si le salarié
+ * n'a pas de date d'embauche connue (rien à calculer). */
+function computeNextVisiteMedicale(employee, perioditeMois) {
+  if (!employee.dateEmbauche) return null;
+  if (employee.dateDerniereVisiteMedicale) {
+    const baseline = parseISODateLocal(employee.dateDerniereVisiteMedicale);
+    return { next: new Date(baseline.getFullYear(), baseline.getMonth() + perioditeMois, baseline.getDate()), premiereVisite: false };
+  }
+  const embauche = parseISODateLocal(employee.dateEmbauche);
+  return { next: new Date(embauche.getFullYear(), embauche.getMonth() + 3, embauche.getDate()), premiereVisite: true };
+}
+
+/** Suivi médecine du travail (Code du travail) : la toute première visite ("visite d'information
+ * et de prévention") est due au plus tard 3 mois après la prise de poste — délai légal, jamais
+ * paramétrable. Une fois une première visite enregistrée, l'échéance suivante suit la périodicité
+ * réglable (settings.visiteMedicalePerioditeMois, 5 ans par défaut). Même principe qu'
+ * getUpcomingEntretiensProfessionnels : un retard s'affiche EN RETARD (daysUntil négatif, trié en
+ * premier), jamais silencieusement repoussé. */
+function getUpcomingVisitesMedicales(daysAhead = 60, employees, limit = 5) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
+  const perioditeMois = settingsRepository.getSettings().visiteMedicalePerioditeMois || 60;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return employees
+    .map(e => {
+      const { next, premiereVisite } = computeNextVisiteMedicale(e, perioditeMois);
+      return { employee: e, next, daysUntil: Math.round((next - today) / 86400000), premiereVisite };
+    })
+    .filter(x => x.daysUntil <= daysAhead)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, limit);
+}
+
 // ---- Rendu des graphiques SVG (aucune librairie externe) ----
 
 function emptyChartMessage() {
@@ -5300,6 +5344,45 @@ function renderUpcomingContractEndsCard(contractEnds) {
   `;
 }
 
+/** Même champ/notification que "Fins de contrat" (getUpcomingProbationEnds, déjà câblé — voir
+ * date-report de session) mais sans carte au tableau de bord jusqu'ici, donc invisible tant qu'on
+ * n'ouvre pas le centre de notifications. */
+function renderUpcomingProbationEndsCard(probationEnds) {
+  return `
+    <div class="card">
+      <h2>Fins de période d'essai</h2>
+      ${probationEnds.length === 0 ? `<p class="text-muted">Aucune fin de période d'essai dans les 60 prochains jours.</p>` : `
+        <div class="mini-list">
+          ${probationEnds.map(e => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</span>
+              <span class="text-muted">${formatDate(e.dateFinPeriodeEssai)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function renderUpcomingVisitesMedicalesCard(visitesMedicales) {
+  return `
+    <div class="card">
+      <h2>Visites médicales à programmer</h2>
+      ${visitesMedicales.length === 0 ? `<p class="text-muted">Aucune visite médicale dans les 60 prochains jours.</p>` : `
+        <div class="mini-list">
+          ${visitesMedicales.map(x => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}${x.premiereVisite ? ' <span class="text-muted">(visite d\'embauche)</span>' : ''}</span>
+              <span class="text-muted${x.daysUntil < 0 ? ' text-danger' : ''}">${formatDate(toISODate(x.next))}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
 /**
  * Statut du jour d'un salarié, déduit des vraies données (congés/télétravail validés du
  * jour, jours travaillés) — aucune saisie manuelle. "Mission" n'est pas modélisée comme une
@@ -5457,6 +5540,7 @@ function renderEmployeesList() {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
+        ${!isManager ? '<button class="btn btn-secondary" id="btn-registre-personnel">📋 Registre du personnel</button>' : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
@@ -5857,6 +5941,8 @@ function bindEmployeesListEvents() {
   if (importEmployeesBtn) importEmployeesBtn.addEventListener('click', openImportSalariesModal);
 
   document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesCSV);
+  const registreBtn = document.getElementById('btn-registre-personnel');
+  if (registreBtn) registreBtn.addEventListener('click', openRegistreUniquePersonnelModal);
 
   document.querySelectorAll('.table-row').forEach(row => {
     row.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: row.dataset.id }));
@@ -6942,6 +7028,152 @@ function canDeleteEmployeeRecord() {
   return hasPermission(user, PERMISSIONS.SUPPRIMER_SALARIE);
 }
 
+// ---------------------------------------------------------------------------
+// Checklists d'intégration / de départ (§demande 18/08/2026)
+// ---------------------------------------------------------------------------
+
+/** Un salarié créé avant l'ajout de cette fonctionnalité a onboardingChecklist = [] (défaut de
+ * makeEmptyEmployee) — on la peuple à la volée, au premier affichage, plutôt que de forcer une
+ * migration de toutes les fiches existantes ou de laisser la carte vide pour toujours. Persistée
+ * immédiatement pour ne pas re-générer une nouvelle checklist à chaque rendu. */
+function ensureOnboardingChecklist(employee) {
+  if (employee.onboardingChecklist && employee.onboardingChecklist.length) return employee.onboardingChecklist;
+  const template = settingsRepository.getSettings().onboardingChecklistTemplate || [];
+  if (!template.length) return [];
+  const checklist = template.map(label => ({ label, fait: false, dateFait: '' }));
+  employeeRepository.update(employee.id, { onboardingChecklist: checklist });
+  employee.onboardingChecklist = checklist;
+  return checklist;
+}
+
+/** Générique pour les deux checklists (onboarding toujours présente, offboarding seulement une
+ * fois démarrée) — une seule mise en page, un seul jeu d'événements (voir bindChecklistEvents). */
+function renderChecklistCard(title, checklistKey, checklist) {
+  const total = checklist.length;
+  const done = checklist.filter(item => item.fait).length;
+  return `
+    <div class="card">
+      <h2>${escapeHtml(title)}${total ? ` <span class="text-muted" style="font-size: 13px; font-weight: 400;">(${done}/${total})</span>` : ''}</h2>
+      <div class="checklist">
+        ${checklist.map((item, i) => `
+          <label class="checklist-item">
+            <input type="checkbox" class="checklist-checkbox" data-checklist-key="${checklistKey}" data-index="${i}" ${item.fait ? 'checked' : ''}>
+            <span class="${item.fait ? 'checklist-label-done' : ''}">${escapeHtml(item.label)}</span>
+            ${item.fait && item.dateFait ? `<span class="text-muted" style="font-size: 12px; margin-left: auto;">${formatDate(item.dateFait)}</span>` : ''}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindChecklistEvents(employeeId) {
+  document.querySelectorAll('.checklist-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.checklistKey;
+      const index = Number(cb.dataset.index);
+      const employee = employeeRepository.getById(employeeId);
+      if (!employee) return;
+      const checklist = (employee[key] || []).slice();
+      checklist[index] = { ...checklist[index], fait: cb.checked, dateFait: cb.checked ? toISODate(new Date()) : '' };
+      employeeRepository.update(employeeId, { [key]: checklist });
+      render();
+    });
+  });
+
+  const startOffboardingBtn = document.getElementById('btn-demarrer-offboarding');
+  if (startOffboardingBtn) startOffboardingBtn.addEventListener('click', () => {
+    const template = settingsRepository.getSettings().offboardingChecklistTemplate || [];
+    if (!template.length) { showToast('Ajoutez d\'abord des étapes dans Paramètres → Listes de référence.', 'error'); return; }
+    employeeRepository.update(employeeId, { offboardingChecklist: template.map(label => ({ label, fait: false, dateFait: '' })) });
+    showToast('Checklist de départ démarrée.');
+    render();
+  });
+}
+
+const AVENANT_TYPES = ['Poste', 'Rémunération', 'Temps de travail', 'Établissement / Service', 'Autre'];
+
+/** Trace manuelle des avenants (voir data.js, employee.avenants) — le plus récent en premier,
+ * comme les autres historiques de l'app (buildRequestTimeline, entretien.historique...). */
+function renderAvenantsCard(avenants) {
+  const sorted = avenants.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return `
+    <div class="card">
+      <h2>Historique des avenants</h2>
+      ${sorted.length === 0 ? `<p class="text-muted" style="margin-bottom: 10px;">Aucun avenant enregistré.</p>` : `
+        <div class="mini-list" style="margin-bottom: 10px;">
+          ${sorted.map(a => `
+            <div class="mini-list-item" style="align-items: flex-start;">
+              <span>
+                <span class="badge badge-info">${escapeHtml(a.type)}</span>
+                ${escapeHtml(a.description)}
+              </span>
+              <span class="text-muted">${formatDate(a.date)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-avenant">Enregistrer un avenant</button>
+    </div>
+  `;
+}
+
+function openAjouterAvenantModal(employeeId) {
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Enregistrer un avenant</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="avenant-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-avenant-type">Type de changement</label>
+            <select class="input" id="f-avenant-type">
+              ${AVENANT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="f-avenant-date">Date d'effet *</label>
+            <input class="input" type="date" id="f-avenant-date" required>
+          </div>
+          <div class="form-field">
+            <label for="f-avenant-description">Description</label>
+            <textarea class="input" id="f-avenant-description" rows="3" placeholder="Ex. Passage de Technicien à Responsable technique, salaire porté à 2 800 € brut/mois"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('avenant-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const date = document.getElementById('f-avenant-date').value;
+    if (!date) return;
+    const employee = employeeRepository.getById(employeeId);
+    if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); closeModal(); return; }
+    const avenant = {
+      id: generateId('aven'),
+      type: document.getElementById('f-avenant-type').value,
+      date,
+      description: document.getElementById('f-avenant-description').value.trim(),
+      dateEnregistrement: new Date().toISOString()
+    };
+    employeeRepository.update(employeeId, { avenants: [...(employee.avenants || []), avenant] });
+    closeModal();
+    showToast('Avenant enregistré.');
+    render();
+  });
+}
+
 function renderEmployeeDetail(id) {
   const e = employeeRepository.getById(id);
   if (!e) return `<button class="btn-link" id="btn-back-to-list">← Retour à la liste</button><div class="empty-state"><p>Salarié introuvable.</p></div>`;
@@ -7021,6 +7253,20 @@ function renderEmployeeDetail(id) {
       </div>
 
       <div class="card">
+        <h2>Suivi médical</h2>
+        ${infoRow('Dernière visite médicale', e.dateDerniereVisiteMedicale ? formatDate(e.dateDerniereVisiteMedicale) : 'Jamais enregistrée')}
+        ${(() => {
+          const visite = computeNextVisiteMedicale(e, settingsRepository.getSettings().visiteMedicalePerioditeMois || 60);
+          if (!visite) return '';
+          const overdue = visite.next < new Date();
+          return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin-top: 4px;">Prochaine échéance : ${formatDate(toISODate(visite.next))}${visite.premiereVisite ? ' (visite d\'embauche)' : ''}${overdue ? ' — en retard' : ''}</p>`;
+        })()}
+        ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-enregistrer-visite-medicale" style="margin-top: 8px;">Enregistrer une visite médicale</button>` : ''}
+      </div>
+
+      ${canSeeContractuel ? renderAvenantsCard(e.avenants || []) : ''}
+
+      <div class="card">
         <h2>Temps de travail</h2>
         ${infoRow('Temps de travail', e.tempsTravail)}
         ${infoRow('Pourcentage d\'activité', formatPercentFR(e.pourcentageActivite))}
@@ -7052,6 +7298,13 @@ function renderEmployeeDetail(id) {
       ${renderPermissionsCard(e, user)}
 
       ${renderEmployeeDocumentsCard(e)}
+
+      ${canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : ''}
+
+      ${canEdit ? (e.offboardingChecklist && e.offboardingChecklist.length
+        ? renderChecklistCard('Checklist de départ', 'offboardingChecklist', e.offboardingChecklist)
+        : `<div class="card"><h2>Checklist de départ</h2><p class="text-muted" style="margin-bottom: 10px;">À démarrer quand ce salarié quitte l'entreprise (récupération du matériel, désactivation des accès, solde de tout compte...).</p><button type="button" class="btn btn-secondary btn-sm" id="btn-demarrer-offboarding">Démarrer le offboarding</button></div>`
+      ) : ''}
     </div>
   `;
 }
@@ -7656,6 +7909,74 @@ function openAttestationEmployeurModal(id) {
   });
 }
 
+/** Registre unique du personnel (Code du travail, art. L1221-13) : obligatoire dès le 1er salarié,
+ * amende jusqu'à 3 750 € si absent ou incomplet lors d'un contrôle. Toutes les entrées, y compris
+ * les salariés archivés (partis), classées par ordre chronologique d'embauche — jamais filtrées
+ * par équipe visible (c'est un document légal de l'entreprise entière, pas un rapport managérial).
+ * "Sexe" reprend genre s'il est renseigné (suivi RH optionnel), sinon déduit de civilite (toujours
+ * renseignée) — jamais laissé vide si l'un des deux existe. */
+function openRegistreUniquePersonnelModal() {
+  const profile = companyRepository.getProfile();
+  const employees = employeeRepository.getAll().slice()
+    .sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
+
+  const sexeOf = (e) => e.genre || (e.civilite === 'Mme' ? 'Femme' : e.civilite === 'M.' ? 'Homme' : '—');
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Registre unique du personnel</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 14px;">Document obligatoire (Code du travail, art. L1221-13), à présenter sur demande de l'inspection du travail. Classé par ordre chronologique d'embauche, salariés partis compris.</p>
+        <div class="print-area print-document">
+          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}</p>
+          <h1>Registre unique du personnel</h1>
+          <div style="overflow-x: auto;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Nom</th><th>Prénom</th><th>Sexe</th><th>Nationalité</th><th>Date de naissance</th>
+                  <th>Poste</th><th>Type de contrat</th><th>Date d'entrée</th><th>Date de sortie</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employees.map(e => `
+                  <tr>
+                    <td>${escapeHtml(e.nom)}</td>
+                    <td>${escapeHtml(e.prenom)}</td>
+                    <td>${escapeHtml(sexeOf(e))}</td>
+                    <td>${escapeHtml(e.nationalite || '—')}</td>
+                    <td>${formatDate(e.dateNaissance)}</td>
+                    <td>${escapeHtml(e.poste || '—')}</td>
+                    <td>${escapeHtml(e.typeContrat)}</td>
+                    <td>${formatDate(e.dateEmbauche)}</td>
+                    <td>${e.archive ? (e.dateFinContrat ? formatDate(e.dateFinContrat) : 'Parti(e) — date non précisée') : '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-document">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-document').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Registre unique du personnel', profile.raisonSociale || 'Entreprise');
+    window.print();
+  });
+}
+
 function openCertificatTravailModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
@@ -7723,6 +8044,7 @@ function bindEmployeeDetailEvents() {
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
+  bindChecklistEvents(state.currentEmployeeId);
 
   const forcerMdpBtn = document.getElementById('btn-forcer-mot-de-passe');
   if (forcerMdpBtn) forcerMdpBtn.addEventListener('click', () => openForcerMotDePasseModal(state.currentEmployeeId));
@@ -7735,6 +8057,19 @@ function bindEmployeeDetailEvents() {
 
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
+
+  // Un clic = "je reviens de la visite, elle a eu lieu aujourd'hui" (cas le plus courant) — pour
+  // saisir une date passée précise (rattrapage de données), le champ reste modifiable depuis
+  // "Modifier" comme dateFinPeriodeEssai/dateFinContrat.
+  const visiteMedicaleBtn = document.getElementById('btn-enregistrer-visite-medicale');
+  if (visiteMedicaleBtn) visiteMedicaleBtn.addEventListener('click', () => {
+    employeeRepository.update(state.currentEmployeeId, { dateDerniereVisiteMedicale: toISODate(new Date()) });
+    showToast('Visite médicale enregistrée.');
+    render();
+  });
+
+  const avenantBtn = document.getElementById('btn-ajouter-avenant');
+  if (avenantBtn) avenantBtn.addEventListener('click', () => openAjouterAvenantModal(state.currentEmployeeId));
 
   const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
   if (editCoordonneesBtn) editCoordonneesBtn.addEventListener('click', () => openCoordonneesModal(state.currentEmployeeId));
@@ -9756,7 +10091,12 @@ const SETTINGS_LISTS = [
   { key: 'typesContrat', label: 'Types de contrat' },
   { key: 'forfaits', label: 'Forfaits' },
   { key: 'categoriesFrais', label: 'Catégories de notes de frais' },
-  { key: 'categoriesDocuments', label: 'Catégories de documents' }
+  { key: 'categoriesDocuments', label: 'Catégories de documents' },
+  // Modèles de checklist (demande du 18/08/2026) : l'ordre d'ajout fait l'ordre d'affichage sur la
+  // fiche salarié (renderChecklistCard) — pas de ré-ordonnancement, une liste courte suffit à
+  // couvrir l'essentiel sans complexité de drag-and-drop pour un simple "ne rien oublier".
+  { key: 'onboardingChecklistTemplate', label: 'Checklist d\'intégration (onboarding)' },
+  { key: 'offboardingChecklistTemplate', label: 'Checklist de départ (offboarding)' }
 ];
 
 /** Avant de retirer une valeur de ces listes de référence, vérifie qu'aucun enregistrement ne la
@@ -10693,6 +11033,10 @@ function renderParametresListes() {
           <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
         </div>
         <div class="form-field">
+          <label for="f-visite-medicale-periodicite">Périodicité des visites médicales (mois)</label>
+          <input class="input" type="number" min="1" id="f-visite-medicale-periodicite" value="${escapeHtml(settings.visiteMedicalePerioditeMois)}">
+        </div>
+        <div class="form-field">
           <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
           <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
         </div>
@@ -10761,6 +11105,12 @@ function bindParametresListesEvents() {
     settings.teletravailQuotaSemaine = Number(e.target.value) || 0;
     settingsRepository.saveSettings(settings);
     showToast('Quota mis à jour.');
+  });
+  document.getElementById('f-visite-medicale-periodicite').addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.visiteMedicalePerioditeMois = Number(e.target.value) || 60;
+    settingsRepository.saveSettings(settings);
+    showToast('Périodicité mise à jour.');
   });
   document.getElementById('f-tickets-valeur').addEventListener('change', (e) => {
     const settings = settingsRepository.getSettings();
@@ -14366,6 +14716,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
               ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date')}
               ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
               ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
+              ${textField('dateDerniereVisiteMedicale', 'Dernière visite médicale', employee.dateDerniereVisiteMedicale, false, 'date')}
             </div>
           </fieldset>
 
