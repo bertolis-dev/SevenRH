@@ -428,6 +428,12 @@ p { margin: 0; line-height: 1.5; }
   align-items: center;
   justify-content: center;
   gap: 6px;
+  /* margin vertical (jamais horizontal, pour ne pas doubler un gap déjà posé par un conteneur
+     flex parent) : plusieurs boutons "nus" directement dans une .card (ex. raccourcis du tableau
+     de bord) se recollaient sans le moindre espace dès qu'ils passaient à la ligne sur mobile —
+     inline-flex respecte les marges verticales, contrairement à inline, donc ça suffit à créer un
+     vrai espacement entre lignes, y compris là où on n'a pas pensé à ajouter un gap explicite. */
+  margin: 3px 0;
   padding: 9px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
@@ -838,6 +844,10 @@ p { margin: 0; line-height: 1.5; }
 .tab:hover { color: var(--color-text); }
 .tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
 
+/* Repli mobile pour les écrans à beaucoup d'onglets (Paramètres, 12+) — voir @media 860px. Caché
+   par défaut : le bouton .tab classique reste le contrôle normal sur desktop. */
+.parametres-tab-select { display: none; margin-bottom: 18px; }
+
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 
 .balance-grid {
@@ -989,7 +999,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .calendar-cell {
-  min-height: 112px;
+  /* height fixe (pas min-height) : une case avec beaucoup de badges (congés+télétravail+anniversaire...)
+     grossissait et étirait toute sa ligne de grille avec elle (une grille CSS aligne la hauteur de
+     chaque ligne sur sa case la plus haute), rendant les lignes visiblement inégales entre elles —
+     toutes les cases ont maintenant la même taille, un jour chargé défile en interne plutôt que
+     de grandir. */
+  height: 112px;
+  overflow-y: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 8px;
@@ -1128,8 +1144,24 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .chip-remove:hover { background: var(--color-danger-soft); color: var(--color-danger); }
 
-.chip-add-form { display: flex; gap: 8px; }
-.chip-add-form .input { flex: 1; }
+.chip-add-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip-add-form .input { flex: 1; min-width: 0; }
+
+/* Postes ouverts au recrutement (écran Embauche) : une ligne par poste plutôt qu'un chip inline —
+   le champ "places disponibles" a besoin de plus de place qu'un simple nom. */
+.poste-ouvert-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--color-muted-soft);
+  border-radius: var(--radius-sm);
+}
+
+.poste-ouvert-nom { flex: 1; font-size: 14px; font-weight: 500; }
+
+.poste-ouvert-qty-label { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.poste-ouvert-qty { width: 64px; padding: 4px 8px; }
 
 /* ---------------------------------------------------------------------
    Télétravail — planning hebdomadaire
@@ -1702,6 +1734,54 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .user-menu-panel.open { display: block; }
+
+/* Sélecteur de poste(s) du formulaire public de candidature (§demande 18/08/2026) — même patron que
+   .notif-panel/.user-menu-panel : bouton statique + panneau qui se déplie juste dessous. */
+.poste-dropdown { position: relative; }
+
+.poste-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text);
+}
+
+.poste-dropdown-arrow { color: var(--color-text-muted); flex-shrink: 0; }
+
+.poste-dropdown-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  padding: 6px;
+}
+
+.poste-dropdown-panel.open { display: block; }
+
+.poste-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.poste-dropdown-option:hover { background: var(--color-muted-soft); }
+.poste-dropdown-option span:nth-child(2) { flex: 1; }
 
 .user-menu-header {
   padding: 14px;
@@ -2495,20 +2575,24 @@ textarea.input { resize: vertical; font-family: inherit; }
   }
   #main-column { margin-left: 0; }
   #view-root { padding: 16px; }
-  .calendar-cell { min-height: 64px; }
+  .calendar-cell { height: 84px; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
   .topbar-search { max-width: none; }
   .detail-header { flex-wrap: wrap; }
   .detail-header-actions { width: 100%; }
-  /* Sur mobile, .tabs (Congés/Télétravail/Paramètres...) défilait horizontalement sans aucun indice
-     visuel qu'il y avait "plus à droite" — un simple tap avec un léger mouvement du doigt faisait
-     glisser toute la rangée au lieu d'appuyer sur l'onglet visé (retour utilisateur : "je peux
-     bouger les boutons"). Passer à la ligne plutôt que défiler élimine cette ambiguïté tap/scroll :
-     chaque onglet reste visible et immobile, au prix d'un peu plus de hauteur sur les pages qui en
-     ont beaucoup (ex. Paramètres, 10 onglets). */
+  /* Sur mobile, .tabs (Congés/Télétravail...) défilait horizontalement sans aucun indice visuel
+     qu'il y avait "plus à droite" — un simple tap avec un léger mouvement du doigt faisait glisser
+     toute la rangée au lieu d'appuyer sur l'onglet visé (retour utilisateur : "je peux bouger les
+     boutons"). Passer à la ligne plutôt que défiler élimine cette ambiguïté tap/scroll, correct pour
+     un petit nombre d'onglets. */
   .tabs { flex-wrap: wrap; overflow-x: visible; }
   .tab { padding: 8px 12px; font-size: 13px; }
+  /* §demande 18/08/2026 : Paramètres a 12+ onglets — même en passant à la ligne, ça fait "un tas de
+     boutons au même endroit" sur un petit écran. Remplacé par un simple menu déroulant, natif et
+     compact, uniquement sous ce seuil (desktop garde la rangée d'onglets habituelle). */
+  .parametres-tabs-desktop { display: none; }
+  .parametres-tab-select { display: block; }
   #toast-root { bottom: calc(env(safe-area-inset-bottom) + 16px); }
   /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
      cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
@@ -2618,3 +2702,51 @@ textarea.input { resize: vertical; font-family: inherit; }
     padding: 24px;
   }
 }
+
+/* ---------------------------------------------------------------------
+   Générateur de CV (formulaire public de candidature)
+   --------------------------------------------------------------------- */
+
+.cv-photo-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+}
+
+.cv-photo-thumb-lg { width: 96px; height: 96px; flex-shrink: 0; }
+
+.cv-builder-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.cv-document { font-size: 14px; line-height: 1.5; }
+
+.cv-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--color-primary);
+  padding-bottom: 16px;
+}
+
+.cv-header h1 { margin: 0 0 4px; }
+.cv-titre { margin: 0 0 6px; font-weight: 600; color: var(--color-primary); }
+.cv-contact { margin: 0; color: var(--color-text-muted); font-size: 13px; }
+
+.cv-document h3 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 18px 0 8px;
+}
+
+.cv-entry { margin-bottom: 10px; }
+.cv-entry-title { margin: 0 0 2px; font-weight: 600; }

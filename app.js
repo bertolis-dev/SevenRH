@@ -345,7 +345,14 @@ function renderCandidatureForm(companyId) {
         <div class="form-field"><label>Email *</label><input type="email" class="input" id="cand-email" required></div>
         <div class="form-field"><label>Téléphone</label><input type="tel" class="input" id="cand-telephone"></div>
         <div id="candidature-postes-field"></div>
-        <div class="form-field"><label>CV (PDF, PNG ou JPEG) *</label><input type="file" class="input" id="cand-cv" accept=".pdf,.png,.jpg,.jpeg" required></div>
+        <div class="form-field">
+          <label>CV (PDF, PNG ou JPEG) *</label>
+          <input type="file" class="input" id="cand-cv" accept=".pdf,.png,.jpg,.jpeg" required>
+          <!-- §demande 18/08/2026 : pas de CV sous la main ? on le construit avec le candidat (photo,
+               expériences, formations...) puis on lui montre le résultat avant qu'il ne l'exporte en
+               PDF et le sélectionne ci-dessus — voir openCvBuilderModal. -->
+          <button type="button" class="btn-link" id="btn-open-cv-builder" style="margin-top: 6px;">📄 Pas de CV sous la main ? Créer mon CV</button>
+        </div>
         <div class="form-field"><label>Lettre de motivation (fichier, optionnel)</label><input type="file" class="input" id="cand-lettre-fichier" accept=".pdf,.png,.jpg,.jpeg"></div>
         <div class="form-field"><label>Ou votre message (optionnel)</label><textarea class="input" id="cand-lettre-texte" rows="4" placeholder="Quelques mots sur votre candidature..."></textarea></div>
         <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 4px;" id="btn-submit-candidature">Envoyer ma candidature</button>
@@ -368,28 +375,391 @@ async function populateCandidatureCompanyHeader(companyId) {
       `;
     }
     // Postes ouverts (gérés depuis l'écran Embauche) : champ entièrement absent si l'entreprise n'a
-    // rien renseigné, plutôt qu'une case vide sans intérêt pour le candidat.
+    // rien renseigné, plutôt qu'une case vide sans intérêt pour le candidat. §demande 18/08/2026 :
+    // panneau déroulant (comme le menu mobile) plutôt qu'une liste de cases toujours dépliée — un
+    // candidat voit d'abord un simple bouton, la liste ne prend de place qu'une fois ouverte.
     const postesField = document.getElementById('candidature-postes-field');
     if (postesField && info && Array.isArray(info.postesOuverts) && info.postesOuverts.length > 0) {
+      const postes = info.postesOuverts.map(normalizePoste);
       postesField.innerHTML = `
         <div class="form-field">
           <label>Poste(s) souhaité(s)</label>
-          ${info.postesOuverts.map((poste, i) => `
-            <label style="display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 4px;">
-              <input type="checkbox" class="cand-poste-checkbox" value="${escapeHtml(poste)}"> ${escapeHtml(poste)}
-            </label>
-          `).join('')}
+          <div class="poste-dropdown">
+            <button type="button" class="input poste-dropdown-toggle" id="btn-poste-dropdown" aria-expanded="false">
+              <span id="poste-dropdown-label">Sélectionner un ou plusieurs postes</span>
+              <span class="poste-dropdown-arrow">▾</span>
+            </button>
+            <div class="poste-dropdown-panel" id="poste-dropdown-panel">
+              ${postes.map((poste, i) => `
+                <label class="poste-dropdown-option">
+                  <input type="checkbox" class="cand-poste-checkbox" value="${escapeHtml(poste.nom)}">
+                  <span>${escapeHtml(poste.nom)}</span>
+                  <span class="text-muted" style="font-size: 12px;">${poste.quantite} poste${poste.quantite > 1 ? 's' : ''} dispo.</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
         </div>
       `;
+      bindPosteDropdownEvents();
     }
   } catch {
     // Repli silencieux sur la marque Nexus déjà affichée — jamais bloquer le formulaire pour ça.
   }
 }
 
+// ---------------------------------------------------------------------------
+// Générateur de CV (formulaire public de candidature, §demande 18/08/2026)
+// ---------------------------------------------------------------------------
+
+/** Données en cours d'édition du CV — propre à cette page (pas de `state` global ici, voir le
+ * commentaire en tête de fichier sur la page de candidature, entièrement autonome). Conservées
+ * pour permettre "Modifier" après "Garder" sans tout ressaisir. */
+let cvBuilderData = null;
+
+function emptyCvExperience() { return { poste: '', entreprise: '', periode: '', description: '' }; }
+function emptyCvFormation() { return { diplome: '', etablissement: '', annee: '' }; }
+function emptyCvLangue() { return { langue: '', niveau: 'Courant' }; }
+
+function renderCvExperienceRow(exp, i) {
+  return `
+    <div class="cv-builder-row" data-cv-exp-row="${i}">
+      <div class="form-grid">
+        <div class="form-field"><label>Poste</label><input type="text" class="input cv-exp-poste" value="${escapeHtml(exp.poste)}"></div>
+        <div class="form-field"><label>Entreprise</label><input type="text" class="input cv-exp-entreprise" value="${escapeHtml(exp.entreprise)}"></div>
+      </div>
+      <div class="form-field"><label>Période (ex. 2022 - 2024)</label><input type="text" class="input cv-exp-periode" value="${escapeHtml(exp.periode)}"></div>
+      <div class="form-field"><label>Description</label><textarea class="input cv-exp-description" rows="2">${escapeHtml(exp.description)}</textarea></div>
+      <button type="button" class="btn-link btn-link-danger cv-builder-row-remove" data-cv-remove-exp="${i}">✕ Retirer cette expérience</button>
+    </div>
+  `;
+}
+
+function renderCvFormationRow(f, i) {
+  return `
+    <div class="cv-builder-row" data-cv-formation-row="${i}">
+      <div class="form-grid">
+        <div class="form-field"><label>Diplôme</label><input type="text" class="input cv-formation-diplome" value="${escapeHtml(f.diplome)}"></div>
+        <div class="form-field"><label>Établissement</label><input type="text" class="input cv-formation-etablissement" value="${escapeHtml(f.etablissement)}"></div>
+      </div>
+      <div class="form-field" style="max-width: 160px;"><label>Année</label><input type="text" class="input cv-formation-annee" value="${escapeHtml(f.annee)}"></div>
+      <button type="button" class="btn-link btn-link-danger cv-builder-row-remove" data-cv-remove-formation="${i}">✕ Retirer cette formation</button>
+    </div>
+  `;
+}
+
+function renderCvLangueRow(l, i) {
+  return `
+    <div class="cv-builder-row" data-cv-langue-row="${i}">
+      <div class="form-grid">
+        <div class="form-field"><label>Langue</label><input type="text" class="input cv-langue-nom" value="${escapeHtml(l.langue)}"></div>
+        <div class="form-field">
+          <label>Niveau</label>
+          <select class="input cv-langue-niveau">
+            ${['Débutant', 'Intermédiaire', 'Courant', 'Bilingue'].map(n => `<option value="${n}" ${l.niveau === n ? 'selected' : ''}>${n}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <button type="button" class="btn-link btn-link-danger cv-builder-row-remove" data-cv-remove-langue="${i}">✕ Retirer cette langue</button>
+    </div>
+  `;
+}
+
+/** prefill : données déjà saisies (bouton "Modifier" depuis l'aperçu) — sinon un CV vide avec une
+ * seule ligne par section, pour montrer immédiatement au candidat où écrire plutôt que des listes
+ * vides avec juste un bouton "Ajouter". Les nom/prénom/email/téléphone déjà saisis dans le
+ * formulaire principal sont repris automatiquement, jamais ressaisis. */
+function openCvBuilderModal() {
+  const data = cvBuilderData || {
+    prenom: document.getElementById('cand-prenom').value.trim(),
+    nom: document.getElementById('cand-nom').value.trim(),
+    email: document.getElementById('cand-email').value.trim(),
+    telephone: document.getElementById('cand-telephone').value.trim(),
+    titre: '',
+    photoDataUrl: '',
+    resume: '',
+    experiences: [emptyCvExperience()],
+    formations: [emptyCvFormation()],
+    competences: '',
+    langues: [emptyCvLangue()]
+  };
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Créer mon CV</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="cv-builder-form">
+        <div class="modal-body">
+          <p class="text-muted" style="margin-bottom: 14px;">Remplissez ce que vous pouvez — le CV se génère automatiquement, vous pourrez le revoir avant de le garder.</p>
+          <div class="form-field">
+            <label>Photo (optionnel)</label>
+            <input type="file" class="input" id="cv-photo" accept=".png,.jpg,.jpeg">
+            <div id="cv-photo-preview" style="margin-top: 8px;">${data.photoDataUrl ? `<img src="${data.photoDataUrl}" alt="Photo" class="cv-photo-thumb">` : ''}</div>
+          </div>
+          <div class="form-grid">
+            <div class="form-field"><label>Prénom</label><input type="text" class="input" id="cv-prenom" value="${escapeHtml(data.prenom)}"></div>
+            <div class="form-field"><label>Nom</label><input type="text" class="input" id="cv-nom" value="${escapeHtml(data.nom)}"></div>
+          </div>
+          <div class="form-field"><label>Titre professionnel (ex. Développeur web)</label><input type="text" class="input" id="cv-titre" value="${escapeHtml(data.titre)}"></div>
+          <div class="form-grid">
+            <div class="form-field"><label>Email</label><input type="email" class="input" id="cv-email" value="${escapeHtml(data.email)}"></div>
+            <div class="form-field"><label>Téléphone</label><input type="tel" class="input" id="cv-telephone" value="${escapeHtml(data.telephone)}"></div>
+          </div>
+          <div class="form-field"><label>Profil (2-3 phrases sur vous)</label><textarea class="input" id="cv-resume" rows="3">${escapeHtml(data.resume)}</textarea></div>
+
+          <h3 style="margin-top: 20px;">Expériences professionnelles</h3>
+          <div id="cv-experiences-list">${data.experiences.map(renderCvExperienceRow).join('')}</div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-add-cv-experience" style="margin-top: 8px;">+ Ajouter une expérience</button>
+
+          <h3 style="margin-top: 20px;">Formations</h3>
+          <div id="cv-formations-list">${data.formations.map(renderCvFormationRow).join('')}</div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-add-cv-formation" style="margin-top: 8px;">+ Ajouter une formation</button>
+
+          <div class="form-field" style="margin-top: 20px;"><label>Compétences (séparées par des virgules)</label><textarea class="input" id="cv-competences" rows="2" placeholder="Excel, gestion de projet, anglais courant...">${escapeHtml(data.competences)}</textarea></div>
+
+          <h3 style="margin-top: 20px;">Langues</h3>
+          <div id="cv-langues-list">${data.langues.map(renderCvLangueRow).join('')}</div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-add-cv-langue" style="margin-top: 8px;">+ Ajouter une langue</button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Voir mon CV</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  bindCvBuilderFormEvents(data);
+}
+
+function bindCvBuilderFormEvents(data) {
+  let photoDataUrl = data.photoDataUrl || '';
+
+  document.getElementById('cv-photo').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      photoDataUrl = reader.result;
+      document.getElementById('cv-photo-preview').innerHTML = `<img src="${photoDataUrl}" alt="Photo" class="cv-photo-thumb">`;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('btn-add-cv-experience').addEventListener('click', () => {
+    document.getElementById('cv-experiences-list').insertAdjacentHTML('beforeend', renderCvExperienceRow(emptyCvExperience(), Date.now()));
+  });
+  document.getElementById('btn-add-cv-formation').addEventListener('click', () => {
+    document.getElementById('cv-formations-list').insertAdjacentHTML('beforeend', renderCvFormationRow(emptyCvFormation(), Date.now()));
+  });
+  document.getElementById('btn-add-cv-langue').addEventListener('click', () => {
+    document.getElementById('cv-langues-list').insertAdjacentHTML('beforeend', renderCvLangueRow(emptyCvLangue(), Date.now()));
+  });
+
+  // Délégation sur le formulaire entier : les lignes ajoutées dynamiquement (ci-dessus) doivent
+  // aussi pouvoir être retirées, sans réattacher un listener à chaque ajout.
+  document.getElementById('cv-builder-form').addEventListener('click', (e) => {
+    const removeExp = e.target.closest('[data-cv-remove-exp]');
+    if (removeExp) { removeExp.closest('[data-cv-exp-row]').remove(); return; }
+    const removeFormation = e.target.closest('[data-cv-remove-formation]');
+    if (removeFormation) { removeFormation.closest('[data-cv-formation-row]').remove(); return; }
+    const removeLangue = e.target.closest('[data-cv-remove-langue]');
+    if (removeLangue) { removeLangue.closest('[data-cv-langue-row]').remove(); }
+  });
+
+  document.getElementById('cv-builder-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const collected = {
+      prenom: document.getElementById('cv-prenom').value.trim(),
+      nom: document.getElementById('cv-nom').value.trim(),
+      titre: document.getElementById('cv-titre').value.trim(),
+      email: document.getElementById('cv-email').value.trim(),
+      telephone: document.getElementById('cv-telephone').value.trim(),
+      photoDataUrl,
+      resume: document.getElementById('cv-resume').value.trim(),
+      competences: document.getElementById('cv-competences').value.trim(),
+      experiences: Array.from(document.querySelectorAll('[data-cv-exp-row]')).map(row => ({
+        poste: row.querySelector('.cv-exp-poste').value.trim(),
+        entreprise: row.querySelector('.cv-exp-entreprise').value.trim(),
+        periode: row.querySelector('.cv-exp-periode').value.trim(),
+        description: row.querySelector('.cv-exp-description').value.trim()
+      })).filter(x => x.poste || x.entreprise || x.description),
+      formations: Array.from(document.querySelectorAll('[data-cv-formation-row]')).map(row => ({
+        diplome: row.querySelector('.cv-formation-diplome').value.trim(),
+        etablissement: row.querySelector('.cv-formation-etablissement').value.trim(),
+        annee: row.querySelector('.cv-formation-annee').value.trim()
+      })).filter(x => x.diplome || x.etablissement),
+      langues: Array.from(document.querySelectorAll('[data-cv-langue-row]')).map(row => ({
+        langue: row.querySelector('.cv-langue-nom').value.trim(),
+        niveau: row.querySelector('.cv-langue-niveau').value
+      })).filter(x => x.langue)
+    };
+    cvBuilderData = collected;
+    openCvPreviewModal(collected);
+  });
+}
+
+/** Le même gabarit sert à l'aperçu (dans la modale) et à l'impression finale (bouton "Garder") —
+ * une seule source de vérité pour la mise en page du CV, jamais deux templates à faire diverger. */
+function renderCvDocument(data) {
+  const experiences = (data.experiences || []).filter(x => x.poste || x.entreprise || x.description);
+  const formations = (data.formations || []).filter(x => x.diplome || x.etablissement);
+  const langues = (data.langues || []).filter(x => x.langue);
+  const competencesList = (data.competences || '').split(',').map(c => c.trim()).filter(Boolean);
+
+  return `
+    <div class="cv-document">
+      <div class="cv-header">
+        ${data.photoDataUrl ? `<img src="${data.photoDataUrl}" alt="Photo" class="cv-photo-thumb cv-photo-thumb-lg">` : ''}
+        <div>
+          <h1>${escapeHtml(data.prenom)} ${escapeHtml(data.nom)}</h1>
+          ${data.titre ? `<p class="cv-titre">${escapeHtml(data.titre)}</p>` : ''}
+          <p class="cv-contact">${[data.email, data.telephone].filter(Boolean).map(escapeHtml).join(' · ')}</p>
+        </div>
+      </div>
+      ${data.resume ? `<h3>Profil</h3><p>${escapeHtml(data.resume)}</p>` : ''}
+      ${experiences.length ? `
+        <h3>Expérience professionnelle</h3>
+        ${experiences.map(exp => `
+          <div class="cv-entry">
+            <p class="cv-entry-title">${escapeHtml(exp.poste)}${exp.entreprise ? ` — ${escapeHtml(exp.entreprise)}` : ''}${exp.periode ? ` <span class="text-muted">(${escapeHtml(exp.periode)})</span>` : ''}</p>
+            ${exp.description ? `<p>${escapeHtml(exp.description)}</p>` : ''}
+          </div>
+        `).join('')}
+      ` : ''}
+      ${formations.length ? `
+        <h3>Formation</h3>
+        ${formations.map(f => `
+          <div class="cv-entry">
+            <p class="cv-entry-title">${escapeHtml(f.diplome)}${f.etablissement ? ` — ${escapeHtml(f.etablissement)}` : ''}${f.annee ? ` <span class="text-muted">(${escapeHtml(f.annee)})</span>` : ''}</p>
+          </div>
+        `).join('')}
+      ` : ''}
+      ${competencesList.length ? `<h3>Compétences</h3><div class="chip-list">${competencesList.map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+      ${langues.length ? `<h3>Langues</h3><p>${langues.map(l => `${escapeHtml(l.langue)} (${escapeHtml(l.niveau)})`).join(' · ')}</p>` : ''}
+    </div>
+  `;
+}
+
+/** Aperçu avant validation (demande du 18/08/2026 : "montrer à la personne qui la fait" avant de
+ * conclure) — "Modifier" rouvre le même formulaire prérempli (cvBuilderData), "Garder" bascule sur
+ * l'état final avec le bouton d'impression/export PDF (même patron que les documents RH —
+ * openCertificatTravailModal etc. — voir .print-area). */
+function openCvPreviewModal(data) {
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Aperçu de votre CV</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="print-area">${renderCvDocument(data)}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-modifier-cv">✏️ Modifier</button>
+        <button type="button" class="btn btn-primary" id="btn-garder-cv">✅ Garder ce CV</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-modifier-cv').addEventListener('click', () => openCvBuilderModal());
+  document.getElementById('btn-garder-cv').addEventListener('click', () => openCvFinalizeModal(data));
+}
+
+/** État final : le CV est "gardé" mais reste un simple aperçu HTML — sans bibliothèque PDF côté
+ * client (aucune dans ce projet, voir openCertificatTravailModal/openAttestationEmployeurModal qui
+ * ont le même besoin côté RH), la seule voie fiable pour obtenir un vrai fichier est l'impression
+ * navigateur "Enregistrer en PDF", puis le candidat sélectionne ce fichier dans le champ CV normal
+ * du formulaire — jamais promettre une pièce jointe automatique qu'on ne peut pas tenir. */
+function openCvFinalizeModal(data) {
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Votre CV est prêt</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 14px;">
+          1. Cliquez sur « Imprimer / Enregistrer en PDF » ci-dessous et choisissez « Enregistrer en PDF ».<br>
+          2. Puis, dans le formulaire, sélectionnez ce fichier PDF comme votre CV.
+        </p>
+        <div class="print-area">${renderCvDocument(data)}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-modifier-cv">✏️ Modifier</button>
+        <button type="button" class="btn btn-primary" id="btn-print-cv">🖨️ Imprimer / Enregistrer en PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', () => { closeModal(); markCvBuilderButtonDone(); });
+  document.getElementById('btn-modifier-cv').addEventListener('click', () => openCvBuilderModal());
+  document.getElementById('btn-print-cv').addEventListener('click', () => window.print());
+  markCvBuilderButtonDone();
+}
+
+/** Une fois un CV gardé au moins une fois, le bouton d'origine devient un raccourci pour le revoir
+ * (aperçu + impression) plutôt que de repartir d'un formulaire vide. */
+function markCvBuilderButtonDone() {
+  const btn = document.getElementById('btn-open-cv-builder');
+  if (btn) btn.textContent = '📄 Revoir / modifier mon CV';
+}
+
+/** Chaque poste vient soit d'une ancienne liste de simples chaînes (avant le 18/08/2026), soit du
+ * nouveau format {nom, quantite} (voir renderPostesOuvertsCard) — get_company_public_info renvoie
+ * le JSON brut de settings.postesOuverts tel quel, sans jamais migrer les données existantes. */
+function normalizePoste(p) {
+  if (typeof p === 'string') return { nom: p, quantite: 1 };
+  const quantite = Number(p.quantite);
+  return { nom: p.nom || '', quantite: quantite > 0 ? quantite : 1 };
+}
+
+/** Ouverture/fermeture du panneau de sélection de poste (public, formulaire de candidature) — même
+ * patron que .notif-wrapper/le menu mobile : bouton statique lié une seule fois, fermeture au clic
+ * extérieur. Le libellé du bouton reflète la sélection courante pour que le candidat sache ce qu'il
+ * a choisi une fois le panneau refermé. */
+function bindPosteDropdownEvents() {
+  const toggle = document.getElementById('btn-poste-dropdown');
+  const panel = document.getElementById('poste-dropdown-panel');
+  const label = document.getElementById('poste-dropdown-label');
+  if (!toggle || !panel) return;
+
+  const updateLabel = () => {
+    const checked = Array.from(panel.querySelectorAll('.cand-poste-checkbox:checked'));
+    label.textContent = checked.length === 0
+      ? 'Sélectionner un ou plusieurs postes'
+      : checked.length === 1 ? checked[0].value : `${checked.length} postes sélectionnés`;
+  };
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = panel.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', String(open));
+  });
+  panel.querySelectorAll('.cand-poste-checkbox').forEach(cb => cb.addEventListener('change', updateLabel));
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.poste-dropdown')) {
+      panel.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
 function bindCandidatureFormEvents(companyId) {
   const form = document.getElementById('candidature-form');
   const errorEl = document.getElementById('candidature-error');
+  document.getElementById('btn-open-cv-builder').addEventListener('click', () => openCvBuilderModal());
   form.addEventListener('submit', async (evt) => {
     evt.preventDefault();
     errorEl.style.display = 'none';
@@ -3988,7 +4358,7 @@ function syncNotifications() {
     const employee = employeeRepository.getById(e.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, '🗒️', 'Entretien planifié',
-      `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}`, 'entretiens', {}, employee.id));
+      `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${e.heurePrevue}` : ''}`, 'entretiens', {}, employee.id));
   });
 
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
@@ -4623,11 +4993,13 @@ function renderDashboardShortcuts() {
   return `
     <div class="card">
       <h2>Raccourcis</h2>
-      <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
-      <button class="btn btn-secondary" data-nav="conges">Gérer les congés</button>
-      <button class="btn btn-secondary" data-nav="teletravail">Gérer le télétravail</button>
-      <button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>
-      <button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
+        <button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>
+        <button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Gérer le télétravail</button>
+        <button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>
+        <button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>
+      </div>
     </div>
   `;
 }
@@ -6478,7 +6850,7 @@ function renderEntretienRow(e, showEmployee) {
         ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
       </span>
       <span class="detail-header-actions">
-        <span class="text-muted">${formatDate(e.datePrevue)}</span>
+        <span class="text-muted">${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${escapeHtml(e.heurePrevue)}` : ''}</span>
       </span>
     </div>
   `;
@@ -6546,6 +6918,10 @@ function openPlanEntretienModal() {
               <label for="f-entretien-date">Date prévue *</label>
               <input class="input" type="date" id="f-entretien-date" required>
             </div>
+            <div class="form-field">
+              <label for="f-entretien-heure">Heure prévue (optionnel)</label>
+              <input class="input" type="time" id="f-entretien-heure">
+            </div>
           </div>
           <div class="form-field" style="margin-top:12px;">
             <label for="f-entretien-objectifs">Objectifs (optionnel)</label>
@@ -6572,6 +6948,7 @@ function openPlanEntretienModal() {
       employeeId: document.getElementById('f-entretien-employee').value,
       type: document.getElementById('f-entretien-type').value,
       datePrevue,
+      heurePrevue: document.getElementById('f-entretien-heure').value,
       objectifs: document.getElementById('f-entretien-objectifs').value.trim()
     });
     closeModal();
@@ -6603,7 +6980,7 @@ function renderEntretienDetail(id) {
         <p class="view-subtitle">
           <span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[entretien.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[entretien.statut] || entretien.statut)}</span>
           ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
-          · Prévu le ${formatDate(entretien.datePrevue)}
+          · Prévu le ${formatDate(entretien.datePrevue)}${entretien.heurePrevue ? ` à ${escapeHtml(entretien.heurePrevue)}` : ''}
           ${entretien.dateRealisee ? ` · Réalisé le ${formatDate(entretien.dateRealisee)}` : ''}
         </p>
       </div>
@@ -9721,7 +10098,7 @@ function renderParametres() {
       <h1>Paramètres</h1>
       <p class="view-subtitle">Entreprise, types d'absences, listes de référence, vacances scolaires, jours fériés et journal d'audit</p>
     </div>
-    <div class="tabs">
+    <div class="tabs parametres-tabs-desktop">
       <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
       ${canGererAbonnement ? `<button class="tab ${state.parametresTab === 'abonnement' ? 'active' : ''}" data-parametres-tab="abonnement">Abonnement</button>` : ''}
       <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
@@ -9736,6 +10113,24 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>
       ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
     </div>
+    <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
+         mobile ("un tas de bouton au même endroit") — un menu déroulant remplace la rangée
+         d'onglets uniquement sous 860px (voir style.css), même sélection (state.parametresTab). -->
+    <select class="input parametres-tab-select" id="parametres-tab-select">
+      <option value="entreprise" ${state.parametresTab === 'entreprise' ? 'selected' : ''}>Entreprise</option>
+      ${canGererAbonnement ? `<option value="abonnement" ${state.parametresTab === 'abonnement' ? 'selected' : ''}>Abonnement</option>` : ''}
+      <option value="etablissements" ${state.parametresTab === 'etablissements' ? 'selected' : ''}>Établissements</option>
+      <option value="services" ${state.parametresTab === 'services' ? 'selected' : ''}>Services &amp; équipes</option>
+      <option value="types-absences" ${state.parametresTab === 'types-absences' ? 'selected' : ''}>Types d'absences</option>
+      <option value="listes" ${state.parametresTab === 'listes' ? 'selected' : ''}>Listes de référence</option>
+      <option value="vacances" ${state.parametresTab === 'vacances' ? 'selected' : ''}>Vacances scolaires</option>
+      <option value="feries" ${state.parametresTab === 'feries' ? 'selected' : ''}>Jours fériés</option>
+      <option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>
+      <option value="categories-salarie" ${state.parametresTab === 'categories-salarie' ? 'selected' : ''}>Catégories de salariés</option>
+      <option value="qualite" ${state.parametresTab === 'qualite' ? 'selected' : ''}>Qualité des données</option>
+      <option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>
+      ${canSeeAudit ? `<option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Journal d'audit</option>` : ''}
+    </select>
     <div id="parametres-tab-content">
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
         : state.parametresTab === 'abonnement' && canGererAbonnement ? renderParametresAbonnement()
@@ -9828,6 +10223,8 @@ function bindParametresIntegrationsEvents() {
 }
 
 function bindParametresEvents() {
+  const tabSelect = document.getElementById('parametres-tab-select');
+  if (tabSelect) tabSelect.addEventListener('change', () => { state.parametresTab = tabSelect.value; render(); renderSidebar(); });
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {
     // renderSidebar() en plus de render() : "Abonnement" a maintenant sa propre entrée de menu
     // (même vue "parametres", distinguée par navParams) — sans ça, passer d'un onglet à l'autre ne
@@ -13880,6 +14277,84 @@ function candidatureUrlForCompany(companyId) {
   return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}?candidature=${encodeURIComponent(companyId)}`;
 }
 
+/** §demande 18/08/2026 : chaque poste ouvert porte désormais un nombre de places disponibles, pas
+ * juste un nom — remplace le renderSettingsListCard générique (simples chaînes) par une carte
+ * dédiée, pour ne pas alourdir ce composant partagé (utilisé ailleurs par de vraies listes de
+ * chaînes, ex. Paramètres → "Postes"/"Types de contrat"...) avec un champ quantité qui ne concerne
+ * que celle-ci. normalizePoste() absorbe l'ancien format (simple chaîne) déjà en base. */
+function renderPostesOuvertsCard(postesOuverts) {
+  const postes = (postesOuverts || []).map(normalizePoste);
+  return `
+    <div class="card">
+      <h2>Postes ouverts au recrutement</h2>
+      <div class="chip-list" style="flex-direction: column; align-items: stretch;">
+        ${postes.map((poste, i) => `
+          <div class="poste-ouvert-row">
+            <span class="poste-ouvert-nom">${escapeHtml(poste.nom)}</span>
+            <label class="poste-ouvert-qty-label">
+              <span class="text-muted" style="font-size: 12px;">Places</span>
+              <input type="number" class="input poste-ouvert-qty" min="1" step="1" value="${poste.quantite}" data-index="${i}">
+            </label>
+            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      <form class="chip-add-form" id="form-add-poste-ouvert">
+        <input type="text" class="input" id="input-poste-ouvert-nom" placeholder="Nom du poste..." required>
+        <input type="number" class="input" id="input-poste-ouvert-qty" placeholder="Places" min="1" step="1" value="1" style="max-width: 90px;">
+        <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+      </form>
+    </div>
+  `;
+}
+
+function bindPostesOuvertsEvents() {
+  document.querySelectorAll('.poste-ouvert-qty').forEach(input => {
+    input.addEventListener('change', () => {
+      const settings = settingsRepository.getSettings();
+      const postes = (settings.postesOuverts || []).map(normalizePoste);
+      const index = Number(input.dataset.index);
+      const quantite = Number(input.value);
+      postes[index].quantite = quantite > 0 ? quantite : 1;
+      settings.postesOuverts = postes;
+      settingsRepository.saveSettings(settings);
+      showToast('Nombre de places mis à jour.');
+    });
+  });
+
+  document.querySelectorAll('.poste-ouvert-row .chip-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = settingsRepository.getSettings();
+      const postes = (settings.postesOuverts || []).map(normalizePoste);
+      settings.postesOuverts = postes.filter((_, i) => i !== Number(btn.dataset.index));
+      settingsRepository.saveSettings(settings);
+      showToast('Poste retiré.');
+      render();
+    });
+  });
+
+  const addForm = document.getElementById('form-add-poste-ouvert');
+  if (addForm) addForm.addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nomInput = document.getElementById('input-poste-ouvert-nom');
+    const qtyInput = document.getElementById('input-poste-ouvert-qty');
+    const nom = nomInput.value.trim();
+    if (!nom) return;
+    const settings = settingsRepository.getSettings();
+    const postes = (settings.postesOuverts || []).map(normalizePoste);
+    if (postes.some(p => p.nom === nom)) {
+      showToast('Ce poste existe déjà.', 'error');
+      return;
+    }
+    const quantite = Number(qtyInput.value);
+    postes.push({ nom, quantite: quantite > 0 ? quantite : 1 });
+    settings.postesOuverts = postes;
+    settingsRepository.saveSettings(settings);
+    showToast('Poste ajouté.');
+    render();
+  });
+}
+
 function renderEmbauche() {
   const company = companyRepository.getCurrent();
   const settings = settingsRepository.getSettings();
@@ -13898,13 +14373,14 @@ function renderEmbauche() {
       <div style="flex-shrink: 0; line-height: 0;">${qrSvg}</div>
       <div style="flex: 1; min-width: 240px;">
         <p class="text-muted" style="margin-bottom: 8px;">Lien de candidature</p>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" class="input" id="embauche-link" value="${escapeHtml(url)}" readonly style="flex: 1;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <input type="text" class="input" id="embauche-link" value="${escapeHtml(url)}" readonly style="flex: 1; min-width: 0;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-share-embauche-link">🔗 Partager</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-embauche-link">Copier</button>
         </div>
       </div>
     </div>
-    ${renderSettingsListCard({ key: 'postesOuverts', label: 'Postes ouverts au recrutement' }, settings.postesOuverts || [])}
+    ${renderPostesOuvertsCard(settings.postesOuverts)}
     <div class="card table-card" style="margin-top: 16px;">
       <h2>Candidatures reçues</h2>
       <div id="embauche-candidatures-list"><p class="text-muted">Chargement...</p></div>
@@ -13959,7 +14435,29 @@ function bindEmbaucheEvents() {
       showToast('Sélectionnez et copiez le lien manuellement.', 'error');
     }
   });
-  bindChipListEvents();
+  // §demande 18/08/2026 : "un bouton partager normal comme sur tous les sites" — Web Share API
+  // native (menu de partage du système, apps installées comprises) quand le navigateur la propose ;
+  // repli sur le même copier-coller que btn-copy-embauche-link sinon (Web Share n'existe pas sur
+  // tous les navigateurs desktop).
+  const shareBtn = document.getElementById('btn-share-embauche-link');
+  if (shareBtn) shareBtn.addEventListener('click', async () => {
+    const link = document.getElementById('embauche-link').value;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Rejoignez-nous', text: 'Déposez votre candidature :', url: link });
+      } catch {
+        // Annulé par l'utilisateur (bouton "Annuler" du menu de partage) — pas une erreur à signaler.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('Lien copié.');
+    } catch {
+      showToast('Impossible de partager automatiquement — copiez le lien manuellement.', 'error');
+    }
+  });
+  bindPostesOuvertsEvents();
   refreshEmbaucheCandidaturesList();
 }
 

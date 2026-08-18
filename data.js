@@ -1768,12 +1768,13 @@ const DB = {
       employeeId: data.employeeId,
       type: data.type || 'professionnel', // 'professionnel' | 'bilan'
       datePrevue: data.datePrevue,
+      heurePrevue: data.heurePrevue || '', // 'HH:MM', optionnel — voir openPlanEntretienModal
       dateRealisee: null,
       statut: 'a_planifier',
       objectifs: data.objectifs || '',
       autoEvaluation: '',
       retourManager: '',
-      historique: [{ date: now, action: `Entretien ${data.type === 'bilan' ? 'de bilan' : 'professionnel'} planifié pour le ${formatDate(data.datePrevue)}` }],
+      historique: [{ date: now, action: `Entretien ${data.type === 'bilan' ? 'de bilan' : 'professionnel'} planifié pour le ${formatDate(data.datePrevue)}${data.heurePrevue ? ` à ${data.heurePrevue}` : ''}` }],
       dateCreation: now,
       dateModification: now
     };
