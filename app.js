@@ -4560,6 +4560,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const entretiensProfessionnels = getUpcomingEntretiensProfessionnels(60, employees);
   const bilansSixAns = getUpcomingBilansSixAns(60, employees);
   const visitesMedicales = getUpcomingVisitesMedicales(60, employees);
+  const contingentHeuresSup = getEmployeesNearingContingentHeuresSup(employees);
 
   const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
@@ -4602,6 +4603,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${renderUpcomingSeniorityCard(seniorityAnniversaries)}
       ${renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns)}
       ${renderUpcomingVisitesMedicalesCard(visitesMedicales)}
+      ${renderContingentHeuresSupCard(contingentHeuresSup)}
     </div>
     ` : ''}
 
@@ -5091,6 +5093,51 @@ function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
  * pour être aussi réutilisable sur la fiche salarié (qui doit toujours montrer la prochaine
  * échéance, même hors de la fenêtre "60 prochains jours" du tableau de bord). null si le salarié
  * n'a pas de date d'embauche connue (rien à calculer). */
+/** Cumul des heures supplémentaires saisies (voir DB.ajusterHeuresSupplementaires) sur l'année
+ * civile donnée — comparé à settings.contingentAnnuelHeuresSup pour repérer une approche/un
+ * dépassement du contingent légal. Ne calcule PAS le repos compensateur (taux 50%/100% selon
+ * l'effectif, potentiellement modifié par accord de branche) : ce module reste un compteur de
+ * suivi, pas un moteur de paie. */
+function getHeuresSupAnnee(employee, year) {
+  const heuresSup = employee.heuresSupplementaires || {};
+  return Object.entries(heuresSup)
+    .filter(([monthKey]) => monthKey.startsWith(`${year}-`))
+    .reduce((sum, [, heures]) => sum + (Number(heures) || 0), 0);
+}
+
+/** Salariés dont le cumul d'heures sup de l'année civile en cours atteint au moins `seuilPct` du
+ * contingent annuel (settings.contingentAnnuelHeuresSup) — repère au tableau de bord ceux qui s'en
+ * approchent ou l'ont déjà dépassé, sans attendre de l'ouvrir fiche par fiche. Triés par cumul
+ * décroissant (le plus proche du dépassement en premier), pas de plafond artificiel à 5 (même
+ * principe que les autres listes d'échéance de cette session : rien de silencieusement tronqué). */
+function getEmployeesNearingContingentHeuresSup(employees, seuilPct = 0.8) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif');
+  const contingent = settingsRepository.getSettings().contingentAnnuelHeuresSup;
+  const year = new Date().getFullYear();
+  return employees
+    .map(e => ({ employee: e, cumul: getHeuresSupAnnee(e, year), contingent }))
+    .filter(x => x.cumul >= x.contingent * seuilPct)
+    .sort((a, b) => b.cumul - a.cumul);
+}
+
+function renderContingentHeuresSupCard(items) {
+  return `
+    <div class="card">
+      <h2>Contingent annuel d'heures sup.</h2>
+      ${items.length === 0 ? `<p class="text-muted">Aucun salarié proche du contingent annuel.</p>` : `
+        <div class="mini-list">
+          ${items.map(x => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}</span>
+              <span class="text-muted${x.cumul >= x.contingent ? ' text-danger' : ''}">${formatNumberFR(x.cumul)} h / ${formatNumberFR(x.contingent)} h</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
 function computeNextVisiteMedicale(employee, perioditeMois) {
   if (!employee.dateEmbauche) return null;
   if (employee.dateDerniereVisiteMedicale) {
@@ -5535,6 +5582,18 @@ function renderEmployeesList() {
   // jamais simplement "n'importe qui sauf un manager" (un salarié/comptable avec un override de
   // permission VOIR_SALARIES individuel resterait exclu ici, à raison).
   const canSeeRegistrePersonnel = getVisibleEmployeeIdsForCurrentUser() === null;
+  // Rappel d'échéance Index égalité pro affiché ici (plutôt que dans le système de notifications
+  // partagé, qui n'a pas de gating par rôle indépendant d'un salarié précis) : cet écran est déjà
+  // restreint aux mêmes rôles à visibilité entreprise entière que canSeeRegistrePersonnel.
+  const indexEgaliteRappel = (() => {
+    if (!canSeeRegistrePersonnel || !isConcerneParIndexEgalite()) return null;
+    const currentYear = new Date().getFullYear();
+    const anneePrecedente = currentYear - 1;
+    const settings = settingsRepository.getSettings();
+    if ((settings.indexEgaliteProfessionnelle || {})[anneePrecedente]) return null;
+    const retard = new Date() >= new Date(currentYear, 2, 1);
+    return { anneePrecedente, currentYear, retard };
+  })();
 
   const { pageItems, totalPages, page, pageStart } = paginate(visible, 'employeesPage');
 
@@ -5547,10 +5606,16 @@ function renderEmployeesList() {
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
         ${canSeeRegistrePersonnel ? '<button class="btn btn-secondary" id="btn-registre-personnel">📋 Registre du personnel</button>' : ''}
+        ${canSeeRegistrePersonnel ? '<button class="btn btn-secondary" id="btn-index-egalite">⚖️ Index égalité pro</button>' : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
     </div>
+    ${indexEgaliteRappel ? `
+      <div class="card" style="margin-bottom: 12px; border-left: 3px solid var(--color-danger, #d33);">
+        <p class="${indexEgaliteRappel.retard ? 'text-danger' : ''}" style="font-weight: 600;">${indexEgaliteRappel.retard ? '⚠️ En retard : ' : '⚖️ '}Index égalité professionnelle ${indexEgaliteRappel.anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${indexEgaliteRappel.currentYear}${indexEgaliteRappel.retard ? ' (dépassée)' : ''}.</p>
+      </div>
+    ` : ''}
 
     <div class="toolbar card">
       <input type="text" id="filter-search" class="input" placeholder="Rechercher un nom, un poste, un matricule..." value="${escapeHtml(state.search)}">
@@ -5949,6 +6014,8 @@ function bindEmployeesListEvents() {
   document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesCSV);
   const registreBtn = document.getElementById('btn-registre-personnel');
   if (registreBtn) registreBtn.addEventListener('click', openRegistreUniquePersonnelModal);
+  const indexEgaliteBtn = document.getElementById('btn-index-egalite');
+  if (indexEgaliteBtn) indexEgaliteBtn.addEventListener('click', openIndexEgaliteModal);
 
   document.querySelectorAll('.table-row').forEach(row => {
     row.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: row.dataset.id }));
@@ -7286,6 +7353,20 @@ function renderEmployeeDetail(id) {
         ${infoRow('Forfait', e.forfait)}
         ${infoRow('Jours travaillés', (e.joursTravailles || []).join(', '))}
         ${infoRow('Régime RTT', e.regimeRTT || '—')}
+        ${(() => {
+          const year = new Date().getFullYear();
+          const contingent = settingsRepository.getSettings().contingentAnnuelHeuresSup;
+          const cumul = getHeuresSupAnnee(e, year);
+          if (!cumul) return '';
+          const depasse = cumul >= contingent;
+          return `
+            <div class="info-row">
+              <span class="info-label">Heures sup. cumulées en ${year}</span>
+              <span class="info-value${depasse ? ' text-danger' : ''}">${formatNumberFR(cumul)} h / ${formatNumberFR(contingent)} h (contingent annuel)</span>
+            </div>
+            ${depasse ? `<p class="text-muted text-danger" style="margin-top: 4px;">Contingent annuel dépassé — un repos compensateur obligatoire s'applique (taux selon effectif/accord de branche, à vérifier avec votre gestionnaire de paie).</p>` : ''}
+          `;
+        })()}
       </div>
 
       <div class="card">
@@ -7990,6 +8071,139 @@ function openRegistreUniquePersonnelModal() {
   document.getElementById('btn-print-document').addEventListener('click', () => {
     auditLogRepository.logAudit('Export', 'Registre unique du personnel', profile.raisonSociale || 'Entreprise');
     window.print();
+  });
+}
+
+/** L'obligation légale ne porte que sur les entreprises d'au moins 50 salariés ACTIFS (pas les
+ * archivés, contrairement au registre unique du personnel juste au-dessus — deux notions
+ * différentes : "effectif" vs "historique complet des embauches"). */
+function isConcerneParIndexEgalite() {
+  return employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif').length >= 50;
+}
+
+/** Index de l'égalité professionnelle femmes-hommes (Code du travail, art. L1142-8) : obligatoire
+ * chaque année (publication au plus tard le 1er mars, portant sur l'année précédente) pour toute
+ * entreprise d'au moins 50 salariés, amende jusqu'à 1% de la masse salariale en cas de manquement.
+ * Volontairement PAS un calculateur : les 4-5 indicateurs officiels nécessitent des données de
+ * rémunération par bande d'âge/catégorie que cette app ne modélise pas — calculez la note sur
+ * index-egapro.travail.gouv.fr, ce module se contente de la tracer par année et de rappeler
+ * l'échéance pour ne plus l'oublier. */
+function openIndexEgaliteModal() {
+  if (getVisibleEmployeeIdsForCurrentUser() !== null) {
+    showToast('Vous n\'avez pas le droit d\'accéder à cet écran.', 'error');
+    return;
+  }
+  const settings = settingsRepository.getSettings();
+  const records = settings.indexEgaliteProfessionnelle || {};
+  const currentYear = new Date().getFullYear();
+  const anneesDeclarees = Object.keys(records).map(Number).sort((a, b) => b - a);
+  const concerne = isConcerneParIndexEgalite();
+
+  const anneePrecedente = currentYear - 1;
+  const echeance = new Date(currentYear, 2, 1); // 1er mars
+  const now = new Date();
+  const anneePrecedenteDeclaree = Boolean(records[anneePrecedente]);
+  const retard = now >= echeance;
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Index de l'égalité professionnelle</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> — cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
+        ${!concerne ? `<p class="text-muted" style="margin-top: 8px;">Non obligatoire tant que l'effectif reste sous 50 salariés (actuellement ${employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif').length}).</p>` : ''}
+        ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? '⚠️ En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${currentYear}${retard ? ' (dépassée)' : ''}.</p>` : ''}
+        <div class="mini-list" style="margin-top: 12px;">
+          ${anneesDeclarees.length === 0 ? `<p class="text-muted">Aucune année déclarée.</p>` : anneesDeclarees.map(year => {
+            const r = records[year];
+            return `
+              <div class="mini-list-item" style="align-items: flex-start;">
+                <span>
+                  <strong>${year}</strong> — <span class="${r.note < 75 ? 'text-danger' : ''}">${r.note}/100</span>
+                  ${r.datePublication ? ` · publié le ${formatDate(r.datePublication)}` : ''}
+                  ${r.note < 75 && r.mesuresCorrectives ? `<br><span class="text-muted">Mesures correctives : ${escapeHtml(r.mesuresCorrectives)}</span>` : ''}
+                </span>
+                <button type="button" class="btn-link" data-edit-index-egalite="${year}">Modifier</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-ajouter-index-egalite">Ajouter une année</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-ajouter-index-egalite').addEventListener('click', () => openAjouterIndexEgaliteModal(anneePrecedenteDeclaree ? currentYear : anneePrecedente));
+  document.querySelectorAll('[data-edit-index-egalite]').forEach(btn => {
+    btn.addEventListener('click', () => openAjouterIndexEgaliteModal(Number(btn.dataset.editIndexEgalite)));
+  });
+}
+
+function openAjouterIndexEgaliteModal(defaultYear) {
+  if (getVisibleEmployeeIdsForCurrentUser() !== null) {
+    showToast('Vous n\'avez pas le droit d\'accéder à cet écran.', 'error');
+    return;
+  }
+  const settings = settingsRepository.getSettings();
+  const existing = (settings.indexEgaliteProfessionnelle || {})[defaultYear];
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Index égalité pro — ${defaultYear}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="index-egalite-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-index-annee">Année</label>
+            <input class="input" type="number" id="f-index-annee" value="${defaultYear}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-index-note">Note obtenue (/100) *</label>
+            <input class="input" type="number" min="0" max="100" id="f-index-note" value="${existing ? existing.note : ''}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-index-date">Date de publication</label>
+            <input class="input" type="date" id="f-index-date" value="${existing ? existing.datePublication : ''}">
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-index-mesures">Mesures correctives (si note &lt; 75)</label>
+            <textarea class="input" id="f-index-mesures" rows="3">${existing ? escapeHtml(existing.mesuresCorrectives) : ''}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('index-egalite-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const year = document.getElementById('f-index-annee').value;
+    const note = document.getElementById('f-index-note').value;
+    const datePublication = document.getElementById('f-index-date').value;
+    const mesuresCorrectives = document.getElementById('f-index-mesures').value.trim();
+    const result = settingsRepository.enregistrerIndexEgalite(year, note, datePublication, mesuresCorrectives);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Index égalité professionnelle enregistré.');
+    closeModal();
+    openIndexEgaliteModal();
   });
 }
 
@@ -11053,6 +11267,10 @@ function renderParametresListes() {
           <input class="input" type="number" min="1" id="f-visite-medicale-periodicite" value="${escapeHtml(settings.visiteMedicalePerioditeMois)}">
         </div>
         <div class="form-field">
+          <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
+          <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
+        </div>
+        <div class="form-field">
           <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
           <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
         </div>
@@ -11127,6 +11345,12 @@ function bindParametresListesEvents() {
     settings.visiteMedicalePerioditeMois = Number(e.target.value) || 60;
     settingsRepository.saveSettings(settings);
     showToast('Périodicité mise à jour.');
+  });
+  document.getElementById('f-contingent-heures-sup').addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.contingentAnnuelHeuresSup = Number(e.target.value) || 220;
+    settingsRepository.saveSettings(settings);
+    showToast('Contingent mis à jour.');
   });
   document.getElementById('f-tickets-valeur').addEventListener('change', (e) => {
     const settings = settingsRepository.getSettings();
@@ -13793,7 +14017,10 @@ function getPaieRows(year, month) {
       // Sprint SIRH premium §6 : "Variables" du récapitulatif — saisie manuelle par mois (aucun
       // module ne les calcule automatiquement, cf. DB.ajusterVariablesPaie), même principe que
       // ticketsAjustements.
-      variablesMontant: (e.variablesPaie && e.variablesPaie[`${year}-${String(month + 1).padStart(2, '0')}`]) || 0
+      variablesMontant: (e.variablesPaie && e.variablesPaie[`${year}-${String(month + 1).padStart(2, '0')}`]) || 0,
+      // Heures supplémentaires du mois — même principe, aucun module de pointage ne les détecte
+      // automatiquement (voir DB.ajusterHeuresSupplementaires).
+      heuresSupHeures: (e.heuresSupplementaires && e.heuresSupplementaires[monthStr]) || 0
     };
   });
 }
@@ -13943,6 +14170,7 @@ function renderExportPaiePreparationTab(rows) {
               <th>Télétravail</th>
               <th>Notes de frais</th>
               <th>Variables</th>
+              <th>Heures sup</th>
               <th>Tickets restaurant</th>
               <th>Anomalies</th>
             </tr>
@@ -13957,6 +14185,7 @@ function renderExportPaiePreparationTab(rows) {
                 <td>${formatDurationFR(r.teletravailJours)}</td>
                 <td>${formatCurrencyFR(r.notesRembourser)}</td>
                 <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">✎</button></td>
+                <td>${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">✎</button></td>
                 <td>${r.tickets.nbTickets}</td>
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
@@ -14009,6 +14238,7 @@ function renderExportPaieExportTab(rows) {
               ${showColonne('tickets') ? '<th>Tickets resto</th><th>Part salarié tickets</th>' : ''}
               ${showColonne('frais') ? '<th>Frais à rembourser</th>' : ''}
               <th>Variables</th>
+              <th>Heures sup</th>
             </tr>
           </thead>
           <tbody>
@@ -14021,6 +14251,7 @@ function renderExportPaieExportTab(rows) {
                 ${showColonne('tickets') ? `<td>${r.tickets.nbTickets}</td><td>${formatCurrencyFR(r.tickets.partSalarie)}</td>` : ''}
                 ${showColonne('frais') ? `<td>${formatCurrencyFR(r.notesRembourser)}</td>` : ''}
                 <td>${formatCurrencyFR(r.variablesMontant)}</td>
+                <td>${formatNumberFR(r.heuresSupHeures)} h</td>
               </tr>
             `).join('')}
           </tbody>
@@ -14067,6 +14298,10 @@ function bindExportPaieEvents() {
 
   document.querySelectorAll('[data-adjust-variables]').forEach(btn => {
     btn.addEventListener('click', () => openVariablesPaieModal(btn.dataset.adjustVariables));
+  });
+
+  document.querySelectorAll('[data-adjust-heures-sup]').forEach(btn => {
+    btn.addEventListener('click', () => openHeuresSupModal(btn.dataset.adjustHeuresSup));
   });
 }
 
@@ -14194,6 +14429,61 @@ function openVariablesPaieModal(employeeId) {
   });
 }
 
+/** Heures supplémentaires du récapitulatif de paie — même modale que Variables (openVariablesPaieModal)
+ * mais en heures plutôt qu'en euros. Aucun module de pointage n'existe dans l'app pour les détecter :
+ * saisie manuelle par mois, remplace la valeur précédente (pas un cumul). */
+function openHeuresSupModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const year = state.paieYear;
+  const month = state.paieMonth;
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const current = (employee.heuresSupplementaires && employee.heuresSupplementaires[monthKey]) || 0;
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Heures supplémentaires — ${MONTH_NAMES[month]} ${year}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+      </div>
+      <form id="heures-sup-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — nombre d'heures supplémentaires effectuées ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <div class="form-field">
+            <label for="f-heures">Heures supplémentaires (h) *</label>
+            <input class="input" type="number" id="f-heures" name="heures" step="0.5" min="0" value="${current}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. inventaire de fin de mois">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('heures-sup-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const heures = document.getElementById('f-heures').value;
+    const motif = document.getElementById('f-motif').value;
+    const result = employeeRepository.ajusterHeuresSup(employeeId, year, month, heures, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Heures supplémentaires enregistrées.');
+    closeModal();
+    render();
+  });
+}
+
 function shiftPaieMonth(delta) {
   let month = state.paieMonth + delta;
   let year = state.paieYear;
@@ -14252,7 +14542,8 @@ function exportPaieCSV() {
     ...(showColonne('teletravail') ? ['Télétravail (jours)'] : []),
     ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets — part salarié (€)'] : []),
     ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : []),
-    'Variables (€)' // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
+    'Variables (€)', // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
+    'Heures supplémentaires (h)' // même raisonnement : élément de paie essentiel, toujours inclus
   ];
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
@@ -14260,7 +14551,8 @@ function exportPaieCSV() {
     ...(showColonne('teletravail') ? [formatNumberFR(r.teletravailJours)] : []),
     ...(showColonne('tickets') ? [r.tickets.nbTickets, formatNumberFR(r.tickets.partSalarie)] : []),
     ...(showColonne('frais') ? [formatNumberFR(r.notesRembourser)] : []),
-    formatNumberFR(r.variablesMontant)
+    formatNumberFR(r.variablesMontant),
+    formatNumberFR(r.heuresSupHeures)
   ]);
   exportRowsToCSVWithDelimiter(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`, delimiter);
   auditLogRepository.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);

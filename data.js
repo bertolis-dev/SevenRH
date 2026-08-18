@@ -275,6 +275,14 @@ const DEFAULT_SETTINGS = {
   // Voir getUpcomingVisitesMedicales (app.js) : la toute première visite (à l'embauche) reste fixée
   // à 3 mois par la loi, non paramétrable, indépendamment de ce réglage.
   visiteMedicalePerioditeMois: 60,
+  // Contingent annuel légal d'heures supplémentaires (Code du travail, à défaut d'accord de
+  // branche/entreprise fixant un autre plafond) : 220h/salarié/an par défaut en 2026. Au-delà, un
+  // repos compensateur obligatoire s'applique (taux variable selon l'effectif — non calculé
+  // automatiquement ici, voir renderHeuresSupCard, app.js).
+  contingentAnnuelHeuresSup: 220,
+  // Index de l'égalité professionnelle femmes-hommes (voir DB.enregistrerIndexEgalite) : { [année]:
+  // { note, datePublication, mesuresCorrectives } }, une entrée par année civile déclarée.
+  indexEgaliteProfessionnelle: {},
   // Postes actuellement recrutés (demande du 17/08/2026) — gérés depuis l'écran Embauche (pas
   // Paramètres) via le même composant chip-add/remove que les listes de référence
   // (renderSettingsListCard/bindChipListEvents). Proposés au candidat sur la page publique de
@@ -815,6 +823,28 @@ const DB = {
     this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
   },
 
+  /** Index de l'égalité professionnelle femmes-hommes (Code du travail, art. L1142-8) — obligatoire
+   * chaque année (publication au plus tard le 1er mars) pour toute entreprise d'au moins 50
+   * salariés, amende jusqu'à 1% de la masse salariale annuelle en cas de manquement. Le calcul des
+   * 4-5 indicateurs officiels nécessite des données de rémunération fines (bandes d'âge/catégorie)
+   * que cette app ne modélise pas : on ne recalcule PAS la note ici (voir index-egapro.travail.gouv.fr
+   * pour l'outil officiel), on trace seulement la note obtenue/publiée par année, pour ne plus
+   * oublier l'échéance. Remplace l'enregistrement de l'année (pas un cumul). */
+  enregistrerIndexEgalite(year, note, datePublication, mesuresCorrectives) {
+    const settings = this.getSettings();
+    const value = Number(note);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      return { success: false, error: 'La note doit être un nombre entre 0 et 100.' };
+    }
+    const indexEgaliteProfessionnelle = Object.assign({}, settings.indexEgaliteProfessionnelle, {
+      [year]: { note: value, datePublication: datePublication || '', mesuresCorrectives: mesuresCorrectives || '' }
+    });
+    settings.indexEgaliteProfessionnelle = indexEgaliteProfessionnelle;
+    this.saveSettings(settings);
+    this.logAudit('Modification', 'Index égalité professionnelle', `Année ${year} · note ${value}/100${datePublication ? ' · publié le ' + formatDate(datePublication) : ''}`);
+    return { success: true };
+  },
+
   // ---- Catégories de salarié (§10 sprint amélioration) ----
 
   getCategoriesSalarie() {
@@ -1327,6 +1357,22 @@ const DB = {
     const variablesPaie = Object.assign({}, employee.variablesPaie, { [ticketsMonthKey(year, month)]: value });
     this.updateEmployee(employeeId, { variablesPaie });
     this.logAudit('Modification', 'Variables de paie', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · ${formatCurrencyFR(value)}${motif ? ' · ' + motif : ''}`);
+    return { success: true };
+  },
+
+  /** Heures supplémentaires du mois — même principe que ajusterVariablesPaie ci-dessus (remplace la
+   * valeur du mois, pas un cumul) : aucun module de pointage n'existe dans l'app pour les détecter
+   * automatiquement, saisie manuelle par le service RH/paie. */
+  ajusterHeuresSupplementaires(employeeId, year, month, heures, motif) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const value = Number(heures);
+    if (!Number.isFinite(value) || value < 0) {
+      return { success: false, error: 'Le nombre d\'heures doit être un nombre positif ou nul.' };
+    }
+    const heuresSupplementaires = Object.assign({}, employee.heuresSupplementaires, { [ticketsMonthKey(year, month)]: value });
+    this.updateEmployee(employeeId, { heuresSupplementaires });
+    this.logAudit('Modification', 'Heures supplémentaires', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · ${formatNumberFR(value)} h${motif ? ' · ' + motif : ''}`);
     return { success: true };
   },
 
@@ -2265,6 +2311,7 @@ const employeeRepository = {
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
   ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
   ajusterVariables: (employeeId, year, month, montant, motif) => DB.ajusterVariablesPaie(employeeId, year, month, montant, motif),
+  ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
@@ -2389,7 +2436,8 @@ const authRepository = {
 
 const settingsRepository = {
   getSettings: () => DB.getSettings(),
-  saveSettings: (settings) => DB.saveSettings(settings)
+  saveSettings: (settings) => DB.saveSettings(settings),
+  enregistrerIndexEgalite: (year, note, datePublication, mesuresCorrectives) => DB.enregistrerIndexEgalite(year, note, datePublication, mesuresCorrectives)
 };
 
 /** Contrairement à settingsRepository, ne vit pas dans le cache local optimiste (company.settings) :
@@ -2549,7 +2597,8 @@ function makeEmptyEmployee() {
 
     compteurs: {},
     ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
-    variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes, heures sup...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
+    variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
+    heuresSupplementaires: {}, // { 'AAAA-MM': heures } — heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
     typesAbsenceDesactives: [], // Sprint SIRH premium SS1 : ids de types actifs/visibles au niveau entreprise
                                  // mais explicitement désactivés pour CE salarié (liste blanche par défaut : vide = tout ce que l'entreprise autorise)
     dateCreation: null,
