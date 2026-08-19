@@ -216,6 +216,25 @@ p { margin: 0; line-height: 1.5; }
 
 .non-souscrit-banner .btn { flex-shrink: 0; }
 
+/* D3 (audit fiabilité du 19/08/2026) : bannière persistante (pas un toast qui disparaît seul) tant
+   qu'une écriture n'a pas pu être synchronisée avec le serveur — voir renderSyncFailureBanner,
+   DB._pushInBackground (app.js/data.js). Couleurs danger (pas warning comme non-souscrit-banner) :
+   risque réel de perte de donnée, pas juste une limite d'offre. */
+.sync-failure-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 28px;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-bottom: 1px solid var(--color-danger);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sync-failure-banner .btn { flex-shrink: 0; }
+
 /* Champs mot de passe — bouton "afficher" (œil) + indicateur de correspondance pour les paires
    mot de passe/confirmation, partout où ils apparaissent (connexion, inscription, réinitialisation). */
 .password-input-wrapper { position: relative; }

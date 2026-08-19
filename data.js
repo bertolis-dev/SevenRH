@@ -756,13 +756,27 @@ const DB = {
 
   /** Cache local optimiste (voir le plan de migration) : le cache mémoire est déjà à jour au
    * moment de l'appel, ceci envoie juste la même écriture à Supabase en arrière-plan, sans jamais
-   * bloquer l'UI. En cas d'échec réseau, la donnée reste correcte localement — on prévient juste
-   * l'utilisateur que la synchronisation en ligne a échoué (pas de retour en arrière automatique :
-   * la prochaine écriture réussie renverra l'état local complet). */
+   * bloquer l'UI. En cas d'échec réseau, la donnée reste correcte localement — MAIS (D3, audit
+   * fiabilité du 19/08/2026) il n'existe aucune file d'attente/retour automatique : si la page se
+   * recharge ou qu'on se reconnecte avant une écriture réussie ultérieure sur la MÊME entité,
+   * hydrateCurrentCompany() écrase le cache local avec la version serveur, qui n'a jamais reçu ce
+   * changement — perdu silencieusement. En attendant une vraie file d'attente hors-ligne (chantier
+   * séparé, plus risqué à faire vite), on se contente ici d'être honnête : compter les échecs
+   * (this._syncFailureCount, lu par renderSyncFailureBanner côté app.js) pour afficher un
+   * avertissement PERSISTANT (pas juste un toast qui disparaît) et bloquer la fermeture/le
+   * rechargement de la page (voir le handler beforeunload, app.js) tant qu'au moins un échec n'a
+   * pas été résolu par une nouvelle tentative réussie sur cette même session. */
   _pushInBackground(promise) {
-    promise.catch(err => {
+    promise.then(() => {
+      // Une écriture réussie ne prouve pas que TOUTES les écritures en échec ont été rattrapées
+      // (aucune ne rejoue automatiquement), mais c'est le seul signal honnête disponible sans vraie
+      // file d'attente : on ne baisse le compteur qu'ici, jamais de façon optimiste ailleurs.
+      if (this._syncFailureCount > 0) this._syncFailureCount -= 1;
+      if (this.onSaveSuccess) this.onSaveSuccess();
+    }).catch(err => {
       console.error('Échec de synchronisation Supabase :', err);
-      if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : vos modifications restent enregistrées localement mais n\'ont pas encore été envoyées au serveur.');
+      this._syncFailureCount = (this._syncFailureCount || 0) + 1;
+      if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.');
     });
   },
 
@@ -3436,15 +3450,39 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     }
   }
 
-  const isInPeriod = (r, start, end) => {
-    if (!r.dateDebut) return false;
-    if (start && r.dateDebut < toISODate(start)) return false;
+  // D17 (audit fiabilité du 19/08/2026) : une demande à cheval sur une clôture de compteur (ex. 28
+  // mai → 4 juin, clôture au 31 mai) doit être répartie sur les deux périodes qu'elle traverse —
+  // l'ancienne version classait la demande ENTIÈRE dans la période de sa date de début (isInPeriod
+  // ne regardait que dateDebut) et créditait tout son nbJours là, faussant les deux soldes. Même
+  // principe de découpe que countRequestDaysInMonth (déjà correct, utilisé par l'export paie).
+  const overlapsPeriod = (r, start, end) => {
+    if (!r.dateDebut || !r.dateFin) return false;
+    if (start && r.dateFin < toISODate(start)) return false;
     if (end && r.dateDebut > toISODate(end)) return false;
     return true;
   };
 
+  const settings = DB.getSettings();
+  const daysInPeriod = (r, start, end) => {
+    const reqStart = parseISODateLocal(r.dateDebut);
+    const reqEnd = parseISODateLocal(r.dateFin);
+    const fullyWithinPeriod = (!start || reqStart >= start) && (!end || reqEnd <= end);
+    // Pas de découpe nécessaire : la valeur déjà calculée à la création de la demande reste la
+    // bonne réponse, pas de recalcul qui pourrait dériver si les jours fériés/fermetures ont changé
+    // depuis (et c'est le cas systématique quand start/end sont null : comportement strictement
+    // inchangé pour une entreprise sans dateClotureCompteur).
+    if (fullyWithinPeriod) return r.nbJours;
+    const clippedStart = start && reqStart < start ? start : reqStart;
+    const clippedEnd = end && reqEnd > end ? end : reqEnd;
+    if (clippedStart > clippedEnd) return 0;
+    // demiJournee non applicable ici : une demande à cheval sur une découpe est nécessairement
+    // multi-jours (une demi-journée est toujours mono-jour, donc toujours "fullyWithinPeriod" si
+    // elle chevauche du tout — voir ci-dessus).
+    return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), false, employee, settings);
+  };
+
   const requestsFor = (start, end) => allRequests.filter(r =>
-    r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé' && isInPeriod(r, start, end)
+    r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé' && overlapsPeriod(r, start, end)
   );
 
   // §5 sprint amélioration : sans dateClotureCompteur, comportement strictement inchangé (une seule
@@ -3461,8 +3499,8 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   const current = getCompteurPeriodBounds(leaveType.dateClotureCompteur, refDate);
   const acquisPeriode = calculateAcquisition(employee, leaveType, refDate, current);
   const requestsCurrent = requestsFor(current.periodStart, current.periodEnd);
-  const pris = requestsCurrent.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
-  const enAttente = requestsCurrent.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+  const pris = requestsCurrent.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
+  const enAttente = requestsCurrent.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
 
   // Report depuis la période précédente immédiate uniquement (pas de chaîne indéfinie) — c'est la
   // seule période qui a un solde résiduel encore pertinent, les précédentes ont déjà été closes.
@@ -3472,7 +3510,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate);
     const acquisPrecedent = calculateAcquisition(employee, leaveType, previous.periodEnd, previous);
     const requestsPrecedent = requestsFor(previous.periodStart, previous.periodEnd);
-    const prisPrecedent = requestsPrecedent.reduce((sum, r) => sum + r.nbJours, 0); // validé + en attente : les deux entament le solde reportable
+    const prisPrecedent = requestsPrecedent.reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, previous.periodEnd), 0); // validé + en attente : les deux entament le solde reportable
     const soldeResiduel = Math.max(0, round2(acquisPrecedent - prisPrecedent));
     report = leaveType.reportCompteur === 'limite' ? Math.min(soldeResiduel, Number(leaveType.reportLimiteJours) || 0) : soldeResiduel;
   }

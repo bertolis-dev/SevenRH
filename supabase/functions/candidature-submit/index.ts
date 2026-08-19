@@ -15,8 +15,10 @@
 //
 // Secret Supabase requis : RESEND_API_KEY (voir resend.com — même compte que candidature-reject).
 //
-// Limite connue acceptée pour cette v1 (formulaire public sans compte) : aucun CAPTCHA/anti-spam.
-// Les limites de taille/type de fichier ci-dessous sont le seul filet de sécurité basique.
+// Anti-abus (D16, audit fiabilité du 19/08/2026 — mis à jour depuis la v1 qui n'avait aucune
+// protection) : honeypot + limite de débit par IP (voir plus bas), en plus des limites de
+// taille/type de fichier ci-dessous. Toujours pas de CAPTCHA — volontairement, voir le commentaire
+// au-dessus de RATE_LIMIT_MAX_PER_HOUR.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -61,11 +63,29 @@ function buildFromAddress(raisonSociale: string): string {
 /** Valide taille/type AVANT toute écriture en base — appelée avant l'insert de `candidatures`
  * (voir Deno.serve ci-dessous) pour qu'un fichier invalide échoue proprement sans laisser de ligne
  * orpheline (statut "nouvelle", jamais de cv_path) qu'un visiteur malveillant pourrait répéter en
- * boucle pour polluer la liste "Candidatures reçues" d'une entreprise (aucun CAPTCHA/anti-spam ici,
- * voir limite connue en tête de fichier — mais au moins pas de ligne fantôme à chaque tentative). */
+ * boucle pour polluer la liste "Candidatures reçues" d'une entreprise (le honeypot/la limite de
+ * débit, voir RATE_LIMIT_MAX_PER_HOUR, filtrent l'essentiel avant d'arriver jusqu'ici, mais restent
+ * pas infaillibles — au moins pas de ligne fantôme à chaque tentative qui les franchirait). */
 function assertValidFile(kind: "cv" | "lettre", file: File) {
   if (file.size > MAX_FILE_BYTES) throw new Error(`Fichier "${kind}" trop volumineux (5 Mo maximum).`);
   if (!ALLOWED_TYPES[file.type]) throw new Error(`Format de fichier "${kind}" non accepté (PDF, PNG ou JPEG uniquement).`);
+}
+
+// D16 (audit fiabilité du 19/08/2026) : mitigation légère contre l'abus de ce formulaire public
+// sans authentification. Pas de CAPTCHA (friction + dépendance externe nouvelle sur une page
+// publique de recrutement) — un honeypot (voir le champ "site_web" plus bas, jamais rempli par un
+// humain puisqu'invisible dans le vrai formulaire, voir renderCandidatureForm/app.js) et une
+// limite par IP sur candidature_submit_log (migration 0029) suffisent contre un robot naïf/scripté.
+const RATE_LIMIT_MAX_PER_HOUR = 5;
+
+function getClientIp(req: Request): string {
+  // x-forwarded-for peut contenir plusieurs IP séparées par des virgules (chaîne de proxys) — la
+  // première est celle du visiteur d'origine. "unknown" en repli plutôt que planter si l'en-tête
+  // manque (mieux vaut une limite un peu large partagée par tous les "unknown" que bloquer le
+  // formulaire entier si l'infrastructure ne pose pas cet en-tête pour une raison quelconque).
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") || "unknown";
 }
 
 async function uploadFile(companyId: string, candidatureId: string, kind: "cv" | "lettre", file: File): Promise<string> {
@@ -136,6 +156,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Corps de requête invalide." }, 400);
   }
 
+  // Honeypot : un vrai visiteur ne voit ni ne remplit jamais ce champ (masqué en CSS, jamais
+  // display:none — voir renderCandidatureForm, app.js). Un robot qui remplit tout ce qu'il trouve
+  // s'y fait piéger. Réponse "succès" silencieuse (jamais d'erreur explicite) pour ne rien lui
+  // apprendre — aucune écriture, aucun email, juste un retour qui a l'air normal.
+  if (String(form.get("site_web") || "").trim() !== "") {
+    return jsonResponse({ success: true });
+  }
+
   const companyId = String(form.get("company_id") || "").trim();
   const nom = String(form.get("nom") || "").trim();
   const prenom = String(form.get("prenom") || "").trim();
@@ -158,6 +186,23 @@ Deno.serve(async (req) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return jsonResponse({ error: "Adresse email invalide." }, 400);
   }
+
+  // Limite de débit (D16) : comptée avant toute autre validation coûteuse (fichiers) pour qu'un
+  // robot en boucle ne consomme même pas ce travail-là une fois la limite atteinte. Comptée par IP
+  // seule (pas par company_id) : une même IP qui viserait tour à tour plusieurs entreprises reste
+  // limitée globalement, pas contournable en changeant juste de company_id.
+  const clientIp = getClientIp(req);
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: recentCount } = await supabaseAdmin
+    .from("candidature_submit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("ip", clientIp)
+    .gte("created_at", oneHourAgo);
+  if ((recentCount ?? 0) >= RATE_LIMIT_MAX_PER_HOUR) {
+    return jsonResponse({ error: "Trop de candidatures envoyées récemment depuis votre connexion. Réessayez plus tard." }, 429);
+  }
+  await supabaseAdmin.from("candidature_submit_log").insert({ ip: clientIp, company_id: companyId });
+
   if (!(cv instanceof File) || cv.size === 0) {
     return jsonResponse({ error: "Le CV est obligatoire." }, 400);
   }

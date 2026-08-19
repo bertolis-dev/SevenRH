@@ -344,6 +344,14 @@ function renderCandidatureForm(companyId) {
       <p class="text-muted">Renseignez vos coordonnées et joignez votre CV — l'entreprise recevra votre candidature directement.</p>
       <p class="login-error" id="candidature-error" role="alert" style="display: none;"></p>
       <form id="candidature-form">
+        <!-- D16 (audit fiabilité du 19/08/2026) : honeypot anti-robot, jamais visible ni atteignable
+             au clavier pour un vrai visiteur (position hors-écran, pas display:none — certains
+             robots ignorent justement display:none) — voir candidature-submit/index.ts, qui rejette
+             silencieusement toute soumission où ce champ n'est pas vide. -->
+        <div style="position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden;" aria-hidden="true">
+          <label for="cand-honeypot">Ne pas remplir ce champ</label>
+          <input type="text" id="cand-honeypot" name="site_web" tabindex="-1" autocomplete="off">
+        </div>
         <div class="form-grid">
           <div class="form-field"><label>Prénom</label><input type="text" class="input" id="cand-prenom"></div>
           <div class="form-field"><label>Nom *</label><input type="text" class="input" id="cand-nom" required></div>
@@ -464,6 +472,7 @@ function bindCandidatureFormEvents(companyId) {
 
     const formData = new FormData();
     formData.set('company_id', companyId);
+    formData.set('site_web', document.getElementById('cand-honeypot').value);
     formData.set('nom', document.getElementById('cand-nom').value.trim());
     formData.set('prenom', document.getElementById('cand-prenom').value.trim());
     formData.set('email', document.getElementById('cand-email').value.trim());
@@ -514,7 +523,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  DB.onSaveError = (message) => showToast(message, 'error');
+  DB.onSaveError = (message) => { showToast(message, 'error'); renderSyncFailureBanner(); };
+  DB.onSaveSuccess = () => renderSyncFailureBanner();
+  // D3 (audit fiabilité du 19/08/2026) : protection native du navigateur contre le scénario exact
+  // décrit dans l'audit — fermer/recharger la page pendant qu'une écriture n'a pas pu être
+  // synchronisée écraserait silencieusement cette modification à la prochaine connexion
+  // (hydrateCurrentCompany réhydrate depuis le serveur, qui ne l'a jamais reçue). Ne couvre que la
+  // fermeture/le rechargement de CETTE page — pas une vraie file d'attente, voir data.js.
+  window.addEventListener('beforeunload', (evt) => {
+    if (DB._syncFailureCount > 0) {
+      evt.preventDefault();
+      evt.returnValue = '';
+    }
+  });
   DB.init();
   bindGlobalEvents();
   bindGlobalSearchEvents();
@@ -2094,6 +2115,25 @@ function openForcedPasswordChangeModal() {
 /** Bandeau persistant app-wide pour les entreprises créées via "Créer mon entreprise" (migration
  * 0012) qui n'ont pas encore souscrit d'offre — pas de blocage total (le Directeur fondateur peut
  * explorer l'app normalement), seul l'ajout d'un 2ᵉ salarié est bloqué par le plafond existant. */
+/** D3 (audit fiabilité du 19/08/2026) : bannière PERSISTANTE (contrairement à un toast qui
+ * disparaît seul) tant qu'au moins une écriture n'a pas réussi à joindre le serveur — voir
+ * DB._pushInBackground (data.js) pour ce que ce compteur signifie exactement et ses limites (pas
+ * de vraie file d'attente/retour automatique, juste un décompte honnête). Appelée après chaque
+ * succès/échec de synchronisation pour rester à jour sans attendre un re-render de l'écran actif. */
+function renderSyncFailureBanner() {
+  const banner = document.getElementById('sync-failure-banner');
+  if (!banner) return;
+  if (!DB._syncFailureCount) {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+  banner.style.display = 'flex';
+  banner.innerHTML = `
+    <span>⚠️ ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur — ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+  `;
+}
+
 function renderNonSouscritBanner() {
   const banner = document.getElementById('non-souscrit-banner');
   if (!banner) return;
@@ -13081,8 +13121,18 @@ function bindTeletravailPlanningEvents() {
 // Export CSV — utilitaire générique réutilisé par Congés et Notes de frais
 // ---------------------------------------------------------------------------
 
+/** Neutralise l'injection de formule CSV (D15, audit fiabilité du 19/08/2026, recommandation OWASP)
+ * : un libellé saisi par un salarié (ex. note de frais) commençant par =, +, -, @, tabulation ou
+ * retour chariot s'exécuterait comme une formule chez le destinataire du fichier (comptable,
+ * cabinet de paie) qui l'ouvre dans Excel/LibreOffice. Un guillemet simple en préfixe force
+ * l'interprétation en texte — invisible à l'affichage, appliqué avant l'échappement CSV normal
+ * (guillemets/délimiteur) par les deux fonctions d'export du projet. */
+function neutralizeCsvFormulaInjection(str) {
+  return /^[=+\-@\t\r]/.test(str) ? "'" + str : str;
+}
+
 function csvEscape(value) {
-  const str = String(value === null || value === undefined ? '' : value);
+  const str = neutralizeCsvFormulaInjection(String(value === null || value === undefined ? '' : value));
   return /[;"\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
 }
 
@@ -14334,7 +14384,7 @@ function shiftPaieMonth(delta) {
  * L'export paie a besoin d'un délimiteur configurable par modèle (SS34, EXPORT_PAIE_MODELES),
  * d'où ces variantes dédiées plutôt qu'un changement du comportement partagé. */
 function csvEscapeWithDelimiter(value, delimiter) {
-  const str = String(value === null || value === undefined ? '' : value);
+  const str = neutralizeCsvFormulaInjection(String(value === null || value === undefined ? '' : value));
   return (str.includes(delimiter) || str.includes('"') || str.includes('\n'))
     ? '"' + str.replace(/"/g, '""') + '"'
     : str;

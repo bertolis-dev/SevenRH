@@ -89,7 +89,16 @@ function employeeFromRow(row) {
     resetToken: null,
     authUserId: row.auth_user_id ?? null,
     mustChangePassword: d.mustChangePassword ?? false,
-    permissionsOverrides: row.permissions_overrides ?? {}
+    permissionsOverrides: row.permissions_overrides ?? {},
+    // D2 (audit fiabilité du 19/08/2026) : ces 6 champs étaient bien poussés vers Supabase
+    // (employeeToRow ne les exclut pas, ils atterrissent dans `data`) mais jamais relus ici —
+    // écrits une fois, puis silencieusement perdus à la prochaine connexion/rechargement.
+    categorieSalarieId: d.categorieSalarieId ?? null,
+    dateDerniereVisiteMedicale: d.dateDerniereVisiteMedicale ?? '',
+    onboardingChecklist: d.onboardingChecklist ?? [],
+    offboardingChecklist: d.offboardingChecklist ?? [],
+    avenants: d.avenants ?? [],
+    heuresSupplementaires: d.heuresSupplementaires ?? {}
   };
 }
 
@@ -551,19 +560,29 @@ async function hydrateCurrentCompany() {
     supabase.from('etablissements').select('*').eq('company_id', companyId),
     supabase.from('services').select('*').eq('company_id', companyId),
     supabase.from('leave_types').select('*').eq('company_id', companyId),
-    supabase.from('leave_requests').select('*').eq('company_id', companyId),
+    // D4/D10 (audit fiabilité du 19/08/2026) : aucune de ces requêtes n'avait de .order() — au-delà
+    // du plafond de lignes par défaut de Supabase (1000, réglage projet, pas dans ce code), l'ordre
+    // renvoyé n'est pas garanti, donc pas forcément les plus récentes. Ajout d'un tri explicite
+    // partout par cohérence, même si seul audit_log dépasse vraiment 1000 lignes en pratique
+    // aujourd'hui. Pas de .limit() ajouté sur les tables métier (congés/télétravail/frais/
+    // documents/tickets/entretiens/idées/brouillons) : les calculs de solde/compteur ont besoin de
+    // l'historique complet, tronquer ici introduirait le même genre de bug que D17 plutôt que de le
+    // corriger — seuls audit_log et notifications (des flux de consultation, pas des données de
+    // calcul) reçoivent une limite explicite, alignée sur les 2000 déjà utilisés côté client par
+    // appendAuditLogEntry.
+    supabase.from('leave_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('leave_requests_calendar').select('*').eq('company_id', companyId),
-    supabase.from('telework_requests').select('*').eq('company_id', companyId),
+    supabase.from('telework_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('telework_requests_calendar').select('*').eq('company_id', companyId),
-    supabase.from('expenses').select('*').eq('company_id', companyId),
-    supabase.from('documents').select('*').eq('company_id', companyId),
-    supabase.from('support_tickets').select('*').eq('company_id', companyId),
-    supabase.from('entretiens').select('*').eq('company_id', companyId),
-    supabase.from('idees').select('*').eq('company_id', companyId),
-    supabase.from('drafts').select('*').eq('company_id', companyId),
-    supabase.from('notifications').select('*').eq('company_id', companyId),
+    supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('support_tickets').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('entretiens').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('idees').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('drafts').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    supabase.from('notifications').select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(500),
     supabase.from('favorites').select('*').eq('company_id', companyId),
-    supabase.from('audit_log').select('*').eq('company_id', companyId),
+    supabase.from('audit_log').select('*').eq('company_id', companyId).order('date', { ascending: false }).limit(2000),
     supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle(),
