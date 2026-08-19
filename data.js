@@ -2904,9 +2904,15 @@ function calculateAge(dateNaissance) {
   return age;
 }
 
+/** §correctif date/fuseau (bug sweep du 19/08/2026) : appelée à la fois avec des dates pures
+ * ("2026-08-19", ex. date de naissance/embauche — aucune notion d'heure, ne doit JAMAIS être
+ * réinterprétée en UTC sous peine de décalage d'un jour dans les fuseaux derrière UTC comme les
+ * DOM-TOM) et avec des horodatages complets (ex. dateCreation d'un ticket/document, qui EUX
+ * doivent bien s'afficher dans le jour calendaire local du fuseau du lecteur). Distingue les deux
+ * plutôt que de traiter systématiquement l'argument comme un horodatage UTC. */
 function formatDate(isoDate) {
   if (!isoDate) return '—';
-  const d = new Date(isoDate);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? parseISODateLocal(isoDate) : new Date(isoDate);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('fr-FR');
 }
@@ -3339,12 +3345,23 @@ function round2(n) {
  * Simplification volontaire : les règles exactes varient selon la convention
  * collective ; ce moteur fournit une base paramétrable, pas un calcul légal figé.
  */
+/** §correctif bug sweep 19/08/2026 : getCompteurPeriodBounds/calculateAcquisition reçoivent
+ * `refDate` sous 3 formes différentes selon l'appelant (undefined, un objet Date déjà construit,
+ * ou une chaîne "YYYY-MM-DD" — ex. `monthEnd` passé depuis getPaieAnomalies) — `new Date(refDate)`
+ * traitait une chaîne comme un horodatage UTC, décalant d'un jour dans les fuseaux derrière UTC et
+ * faussant l'acquisition mensuelle calculée pour la Préparation de paie. */
+function toRefDate(refDate) {
+  if (!refDate) return new Date();
+  if (refDate instanceof Date) return refDate;
+  return parseISODateLocal(refDate);
+}
+
 /** Bornes [periodStart, periodEnd] de la période de compteur EN COURS pour une date de clôture
  * 'MM-JJ' donnée (ex. '05-31'), à un instant refDate — §5 sprint amélioration. Si refDate tombe
  * avant la clôture de cette année, on est encore dans la période ouverte l'année précédente. */
 function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
   const [month, day] = dateClotureMMJJ.split('-').map(Number);
-  const now = refDate ? new Date(refDate) : new Date();
+  const now = toRefDate(refDate);
   const clotureThisYear = new Date(now.getFullYear(), month - 1, day);
   if (now <= clotureThisYear) {
     return { periodStart: new Date(now.getFullYear() - 1, month - 1, day + 1), periodEnd: clotureThisYear };
@@ -3358,12 +3375,12 @@ function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
 function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
   if (!leaveType || leaveType.illimite || leaveType.acquisition === 'Illimitée') return Infinity;
 
-  const now = refDate ? new Date(refDate) : new Date();
+  const now = toRefDate(refDate);
   const yearStart = periodOverride ? periodOverride.periodStart : new Date(now.getFullYear(), 0, 1);
   const yearEnd = periodOverride ? periodOverride.periodEnd : new Date(now.getFullYear(), 11, 31);
-  const hireDate = employee.dateEmbauche ? new Date(employee.dateEmbauche) : yearStart;
+  const hireDate = employee.dateEmbauche ? parseISODateLocal(employee.dateEmbauche) : yearStart;
   const periodStart = hireDate > yearStart ? hireDate : yearStart;
-  const departDate = employee.dateDepart ? new Date(employee.dateDepart) : null;
+  const departDate = employee.dateDepart ? parseISODateLocal(employee.dateDepart) : null;
   // Clamp à yearEnd : sans periodOverride, `now` tombe toujours dans [yearStart,yearEnd] par
   // construction (même année civile) — ce clamp ne change donc rien au comportement par défaut,
   // il ne devient utile qu'avec un periodOverride dont la borne de fin dépasse "aujourd'hui"
@@ -3542,19 +3559,24 @@ function calculateAverageAnciennete(employees) {
   if (!actifs.length) return 0;
   const now = new Date();
   const totalAnnees = actifs.reduce((sum, e) => {
-    const start = new Date(e.dateEmbauche);
+    const start = parseISODateLocal(e.dateEmbauche);
     if (Number.isNaN(start.getTime())) return sum;
     return sum + (now - start) / (365.25 * 24 * 3600 * 1000);
   }, 0);
   return round2(totalAnnees / actifs.length);
 }
 
-/** Simplification : sorties sur 12 mois / effectif moyen sur la période (effectif moyen = (début + fin) / 2). */
+/** Simplification : sorties sur 12 mois / effectif moyen sur la période (effectif moyen = (début + fin) / 2).
+ * §correctif bug sweep 19/08/2026 : `depuis` doit rester une CHAÎNE ISO pour être comparable à
+ * dateDepart/dateEmbauche (chaînes) — auparavant addDays() renvoyait un objet Date, comparé à des
+ * chaînes via >=/<= (toujours faux après coercition), ce qui maintenait sorties/entrees à 0 et
+ * affichait un taux de rotation systématiquement nul. */
 function calculateTurnoverRate(employees, refDate) {
   const ref = refDate || new Date();
-  const depuis = addDays(toISODate(ref), -365);
-  const sorties = employees.filter(e => e.dateDepart && e.dateDepart >= depuis && e.dateDepart <= toISODate(ref)).length;
-  const entrees = employees.filter(e => e.dateEmbauche && e.dateEmbauche >= depuis && e.dateEmbauche <= toISODate(ref)).length;
+  const refStr = toISODate(ref);
+  const depuis = toISODate(addDays(ref, -365));
+  const sorties = employees.filter(e => e.dateDepart && e.dateDepart >= depuis && e.dateDepart <= refStr).length;
+  const entrees = employees.filter(e => e.dateEmbauche && e.dateEmbauche >= depuis && e.dateEmbauche <= refStr).length;
   const effectifFin = employees.filter(e => e.statut === 'Actif').length;
   const effectifDebut = Math.max(0, effectifFin - entrees + sorties);
   const effectifMoyen = (effectifDebut + effectifFin) / 2;

@@ -7728,6 +7728,7 @@ function openCoordonneesModal(employeeId) {
 
 function openEmployeePrintModal(id) {
   const e = employeeRepository.getById(id);
+  if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const age = calculateAge(e.dateNaissance);
   const user = authRepository.getCurrentUser();
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
@@ -8554,6 +8555,7 @@ function openProlongerModal(requestId) {
   if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(request.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
+  if (!employee || !type) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
 
   const html = `
     <div class="modal modal-small">
@@ -8607,6 +8609,7 @@ function openRegulariserModal(requestId) {
   if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(request.employeeId);
   const currentType = leaveTypeRepository.getLeaveTypeById(request.typeId);
+  if (!employee || !currentType) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
   // Inclut le type ACTUEL même s'il a été désactivé depuis (sinon le select retombe sur le fallback
   // générique de selectField, qui affiche l'id brut plutôt qu'un nom lisible — même bug déjà corrigé
   // pour les établissements désactivés).
@@ -8759,6 +8762,7 @@ function openLeaveAttestationModal(requestId) {
   if (!r) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
+  if (!employee || !type) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
   const periode = r.dateDebut === r.dateFin
     ? formatDate(r.dateDebut) + (r.demiJournee ? ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : '')
     : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
@@ -10937,6 +10941,7 @@ function bindParametresEtablissementsEvents() {
 function openEtablissementModal(id) {
   const isEdit = Boolean(id);
   const etab = isEdit ? etablissementRepository.getById(id) : makeEmptyEtablissement();
+  if (isEdit && !etab) { showToast('Cet établissement n\'est plus disponible.', 'error'); return; }
   const employees = employeeRepository.getAll().filter(e => !e.archive);
 
   const html = `
@@ -11056,6 +11061,7 @@ function bindParametresServicesEvents() {
 
   document.querySelectorAll('[data-delete-service]').forEach(btn => btn.addEventListener('click', () => {
     const service = serviceRepository.getById(btn.dataset.deleteService);
+    if (!service) { showToast('Ce service n\'est plus disponible.', 'error'); render(); return; }
     openConfirm({
       title: 'Supprimer ce service ?',
       message: `"${service.nom}" et ses équipes seront définitivement supprimés. Les salariés déjà rattachés à ce service conservent leur donnée actuelle.`,
@@ -11082,7 +11088,8 @@ function bindParametresServicesEvents() {
   document.querySelectorAll('[data-delete-equipe]').forEach(btn => btn.addEventListener('click', () => {
     const [serviceId, equipeId] = btn.dataset.deleteEquipe.split(':');
     const service = serviceRepository.getById(serviceId);
-    const equipe = service.equipes.find(e => e.id === equipeId);
+    const equipe = service && service.equipes.find(e => e.id === equipeId);
+    if (!service || !equipe) { showToast('Cette équipe n\'est plus disponible.', 'error'); render(); return; }
     openConfirm({
       title: 'Supprimer cette équipe ?',
       message: `"${equipe.nom}" sera retirée de "${service.nom}".`,
@@ -11105,6 +11112,7 @@ function bindParametresServicesEvents() {
 function openServiceModal(id) {
   const isEdit = Boolean(id);
   const service = isEdit ? serviceRepository.getById(id) : { nom: '' };
+  if (isEdit && !service) { showToast('Ce service n\'est plus disponible.', 'error'); return; }
 
   const html = `
     <div class="modal modal-small">
@@ -11143,7 +11151,8 @@ function openServiceModal(id) {
 
 function openEquipeManagersModal(serviceId, equipeId) {
   const service = serviceRepository.getById(serviceId);
-  const equipe = service.equipes.find(e => e.id === equipeId);
+  const equipe = service && service.equipes.find(e => e.id === equipeId);
+  if (!service || !equipe) { showToast('Cette équipe n\'est plus disponible.', 'error'); return; }
   const employees = employeeRepository.getAll().filter(e => !e.archive);
 
   const html = `
@@ -13590,6 +13599,7 @@ function openExpenseDetailModal(id) {
   const n = expenseRepository.getById(id);
   if (!n) { showToast('Cette note de frais n\'est plus disponible.', 'error'); return; }
   const employee = employeeRepository.getById(n.employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const ht = computeMontantHT(n.montantTTC, n.tauxTVA);
   const tva = computeMontantTVA(n.montantTTC, n.tauxTVA);
 
@@ -15232,20 +15242,43 @@ function submitEmployeeForm(evt, id, candidatureId) {
       showToast(`Plafond de l'offre « ${offre.label} » atteint (${plafond} salarié${plafond > 1 ? 's' : ''}). ${abonnement && abonnement.statut === 'non_souscrit' ? 'Souscrivez une offre pour ajouter d\'autres salariés.' : 'Contactez BERTOLIS pour changer d\'offre.'}`, 'error');
       return;
     }
-    const created = employeeRepository.create(patch);
+    const finalizeEmployeeCreation = () => {
+      const created = employeeRepository.create(patch);
+      if (candidatureId) {
+        candidatureRepository.marquerEmbauchee(candidatureId, created.id)
+          .catch(() => showToast('Salarié créé, mais la candidature n\'a pas pu être mise à jour.', 'error'));
+      }
+      showToast('Salarié créé.');
+      closeModal();
+      navigateTo('employee-detail', { currentEmployeeId: created.id });
+      // §demande 19/08/2026 : enchaîne directement sur la création des identifiants de connexion —
+      // jusqu'ici il fallait remarquer la carte "Compte" de la fiche salarié pour y penser. Seulement
+      // si le créateur a lui-même la permission (sinon la carte "Compte" ne s'affiche pas non plus) et
+      // si le salarié a un email (toujours vrai ici, le champ est obligatoire, mais gardé par sécurité).
+      if (created.email && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS)) {
+        openCreerCompteConnexionModal(created.id);
+      }
+    };
+
     if (candidatureId) {
-      candidatureRepository.marquerEmbauchee(candidatureId, created.id)
-        .catch(() => showToast('Salarié créé, mais la candidature n\'a pas pu être mise à jour.', 'error'));
-    }
-    showToast('Salarié créé.');
-    closeModal();
-    navigateTo('employee-detail', { currentEmployeeId: created.id });
-    // §demande 19/08/2026 : enchaîne directement sur la création des identifiants de connexion —
-    // jusqu'ici il fallait remarquer la carte "Compte" de la fiche salarié pour y penser. Seulement
-    // si le créateur a lui-même la permission (sinon la carte "Compte" ne s'affiche pas non plus) et
-    // si le salarié a un email (toujours vrai ici, le champ est obligatoire, mais gardé par sécurité).
-    if (created.email && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS)) {
-      openCreerCompteConnexionModal(created.id);
+      // §correctif bug sweep 19/08/2026 : revérifie l'état RÉEL de la candidature (fetch direct
+      // Supabase, pas le cache local) juste avant de créer le salarié — jusqu'ici la création du
+      // salarié était inconditionnelle, seule la mise à jour du statut de la candidature était
+      // protégée contre un double "Embaucher" (migration 0028_candidature_statut_guard.sql). Si deux
+      // RH cliquaient sur la même candidature au même moment, DEUX salariés étaient créés (un seul
+      // employee_id gagnait la course sur la candidature). Ferme presque toute la fenêtre (il en
+      // reste une, minime, entre cette vérification et la création elle-même) sans exiger une
+      // refonte serveur pour un cas volontairement traité en atténuation, pas en garantie absolue.
+      candidatureRepository.getAll().then(list => {
+        const fresh = list.find(c => c.id === candidatureId);
+        if (fresh && fresh.statut !== 'nouvelle') {
+          showToast('Cette candidature a déjà été traitée (probablement par quelqu\'un d\'autre).', 'error');
+          return;
+        }
+        finalizeEmployeeCreation();
+      }).catch(() => finalizeEmployeeCreation()); // Supabase injoignable : on ne bloque pas l'embauche pour ça.
+    } else {
+      finalizeEmployeeCreation();
     }
   }
 }
