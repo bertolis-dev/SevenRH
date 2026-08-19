@@ -1803,8 +1803,8 @@ const DB = {
     const company = this.getCurrentCompany();
     company.documents = list;
     this.saveCurrentCompany(company);
-    // Seules les métadonnées sont synchronisées pour l'instant (le contenu du fichier nécessite une
-    // vraie migration vers Supabase Storage, voir supabase-client.js/documentToRow).
+    // Le contenu du fichier n'est jamais envoyé ici : seules les métadonnées + le chemin Storage
+    // (une fois l'upload terminé, voir updateDocument ci-dessous) sont synchronisées.
     this._pushInBackground(window.SupabaseSync.pushDocuments(list, company.id));
   },
 
@@ -1831,6 +1831,18 @@ const DB = {
     const employee = this.getEmployeeById(document_.employeeId);
     this.logAudit('Création', 'Document', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${document_.categorie} · ${document_.nom}`);
     return document_;
+  },
+
+  /** D1 (audit fiabilité 19/08/2026) : patche `fichier` avec {nom, path} une fois l'upload Storage
+   * terminé (voir uploadJustificatifBestEffort, app.js) — appelé de façon best-effort, jamais dans
+   * le flux synchrone de création. */
+  updateDocument(id, patch) {
+    const list = this.getDocuments();
+    const index = list.findIndex(d => d.id === id);
+    if (index === -1) return null;
+    list[index] = Object.assign({}, list[index], patch, { dateModification: new Date().toISOString() });
+    this.saveDocuments(list);
+    return list[index];
   },
 
   deleteDocument(id) {
@@ -2521,6 +2533,7 @@ const documentRepository = {
   getById: (id) => DB.getDocumentById(id),
   getForEmployee: (employeeId) => DB.getDocumentsForEmployee(employeeId),
   create: (data) => DB.addDocument(data),
+  update: (id, patch) => DB.updateDocument(id, patch),
   delete: (id) => DB.deleteDocument(id)
 };
 

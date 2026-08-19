@@ -164,6 +164,7 @@ function getInitialViewState() {
     autresAbsencesFilters: { employeeId: '', typeId: '', statut: '' },
     autresAbsencesPage: 1,
     pendingAttachment: null,
+    pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
     editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
@@ -6067,9 +6068,23 @@ function renderDocumentRow(doc, canManage) {
 
 function bindDocumentRowEvents(scopeSelector) {
   document.querySelectorAll(`${scopeSelector} [data-download-document]`).forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const doc = documentRepository.getById(btn.dataset.downloadDocument);
-      if (doc && doc.fichier) downloadDataUrl(doc.fichier.dataUrl, doc.fichier.nom);
+      if (!doc || !doc.fichier) return;
+      // Priorité au fichier réel (Storage) — le dataUrl local n'est qu'un repli tant que l'upload
+      // best-effort n'a pas encore réussi (voir uploadJustificatifBestEffort).
+      if (doc.fichier.path) {
+        try {
+          const url = await window.SupabaseSync.getEmployeeDocumentFileUrl(doc.fichier.path);
+          window.open(url, '_blank', 'noopener');
+        } catch {
+          showToast('Impossible de récupérer le fichier pour le moment.', 'error');
+        }
+      } else if (doc.fichier.dataUrl) {
+        downloadDataUrl(doc.fichier.dataUrl, doc.fichier.nom);
+      } else {
+        showToast('Fichier indisponible.', 'error');
+      }
     });
   });
   document.querySelectorAll(`${scopeSelector} [data-delete-document]`).forEach(btn => {
@@ -6157,12 +6172,17 @@ function openDocumentModal(employeeId) {
       return;
     }
     const formData = new FormData(evt.target);
-    documentRepository.create({
+    const createdDocument = documentRepository.create({
       employeeId,
       categorie: formData.get('categorie'),
       nom: formData.get('nom'),
       dateExpiration: formData.get('dateExpiration') || '',
       fichier: state.pendingAttachment
+    });
+    uploadJustificatifBestEffort({
+      uploader: window.SupabaseSync.uploadEmployeeDocumentFile,
+      employeeId, recordId: createdDocument.id, file: state.pendingAttachmentFile,
+      patcher: (fichier) => documentRepository.update(createdDocument.id, { fichier })
     });
     showToast('Document ajouté.');
     closeModal();
@@ -9060,20 +9080,43 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
   updateLeaveRequestHints();
 }
 
-const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo — les fichiers sont stockés en base64 dans localStorage (quota navigateur limité)
+const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo — plafond conservé même avec Storage réel (taille raisonnable pour un justificatif/document RH)
 
+/** state.pendingAttachmentFile (le File brut) n'est JAMAIS placé dans un enregistrement persisté —
+ * il ne sert qu'à uploadJustificatifBestEffort juste après la création (voir plus bas), tant que le
+ * File existe encore en mémoire. state.pendingAttachment ({nom, dataUrl}) reste la donnée locale
+ * immédiate et le repli si l'upload Storage échoue ou n'a pas encore eu lieu. */
 function handleAttachmentChange(e) {
   const file = e.target.files[0];
-  if (!file) { state.pendingAttachment = null; return; }
+  if (!file) { state.pendingAttachment = null; state.pendingAttachmentFile = null; return; }
   if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
     showToast(`Fichier trop volumineux (${formatNumberFR(file.size / (1024 * 1024), 1)} Mo) — 2 Mo maximum.`, 'error');
     e.target.value = '';
     state.pendingAttachment = null;
+    state.pendingAttachmentFile = null;
     return;
   }
+  state.pendingAttachmentFile = file;
   const reader = new FileReader();
   reader.onload = () => { state.pendingAttachment = { nom: file.name, dataUrl: reader.result }; };
   reader.readAsDataURL(file);
+}
+
+/** D1+D9 (audit fiabilité 19/08/2026) : upload Storage best-effort après création d'un document/
+ * congé/note de frais avec justificatif. Ne bloque jamais la création (déjà faite avec le dataUrl
+ * local) et n'affiche aucune erreur à l'utilisateur en cas d'échec — le dataUrl local reste
+ * disponible comme source de vérité, seul l'accès "signé" futur ne bénéficiera pas encore du
+ * fichier réel avant un nouvel essai. `uploader`/`patcher` sont injectés pour rester générique entre
+ * document/congé/note de frais (chacun a son propre repository.update et sa propre fonction Storage). */
+function uploadJustificatifBestEffort({ uploader, employeeId, recordId, file, patcher }) {
+  if (!file) return;
+  const company = companyRepository.getCurrent();
+  // `file` est capturé ici, dans la valeur passée à l'appel — jamais relu depuis
+  // state.pendingAttachmentFile une fois la promesse résolue (qui a pu changer d'ici là si
+  // l'utilisateur a rouvert une autre modale d'upload).
+  uploader(company.id, employeeId, recordId, file)
+    .then(path => patcher({ nom: file.name, path }))
+    .catch(() => { /* échec silencieux, voir commentaire ci-dessus */ });
 }
 
 function updateLeaveRequestHints() {
@@ -9213,10 +9256,16 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  leaveRepository.create({
+  const createdRequest = leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, nbJours,
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
+  });
+
+  uploadJustificatifBestEffort({
+    uploader: window.SupabaseSync.uploadJustificatifFile,
+    employeeId, recordId: createdRequest.id, file: state.pendingAttachmentFile,
+    patcher: (justificatif) => leaveRepository.update(createdRequest.id, { justificatif })
   });
 
   finalizeDraftEdit();
@@ -13478,12 +13527,18 @@ function submitExpenseForm(evt) {
     }
   }
 
-  expenseRepository.create({
+  const createdExpense = expenseRepository.create({
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
     date: formData.get('date'),
     libelle: formData.get('libelle'),
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
+  });
+
+  uploadJustificatifBestEffort({
+    uploader: window.SupabaseSync.uploadJustificatifFile,
+    employeeId, recordId: createdExpense.id, file: state.pendingAttachmentFile,
+    patcher: (justificatif) => expenseRepository.update(createdExpense.id, { justificatif })
   });
 
   finalizeDraftEdit();
@@ -13519,7 +13574,7 @@ function openExpenseDetailModal(id) {
           ${infoRow('Montant TTC', formatCurrencyFR(n.montantTTC))}
           ${infoRow('Statut', n.statut)}
           ${n.commentaire ? infoRow('Commentaire', n.commentaire) : ''}
-          ${n.justificatif ? `<div style="margin-top: 12px;"><img src="${escapeHtml(n.justificatif.dataUrl)}" alt="Justificatif" style="max-width: 100%; border-radius: 8px;"></div>` : ''}
+          ${n.justificatif ? `<div id="expense-justificatif-preview" style="margin-top: 12px;"></div>` : ''}
         </div>
       </div>
       <div class="modal-footer">
@@ -13536,6 +13591,29 @@ function openExpenseDetailModal(id) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('btn-print-expense').addEventListener('click', () => window.print());
+  if (n.justificatif) renderJustificatifPreview('expense-justificatif-preview', n.justificatif);
+}
+
+/** Affiche l'aperçu d'un justificatif (congé/note de frais) dans un conteneur déjà présent dans le
+ * DOM — asynchrone car un fichier réel (Storage, `path`) nécessite une URL signée récupérée à la
+ * demande ; un dataUrl local (pas encore uploadé, ou données antérieures à cette migration) reste
+ * affiché immédiatement, sans aller-retour réseau. */
+async function renderJustificatifPreview(containerId, justificatif) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (justificatif.dataUrl) {
+    container.innerHTML = `<img src="${escapeHtml(justificatif.dataUrl)}" alt="Justificatif" style="max-width: 100%; border-radius: 8px;">`;
+    return;
+  }
+  if (justificatif.path) {
+    container.innerHTML = '<p class="text-muted">Chargement du justificatif…</p>';
+    try {
+      const url = await window.SupabaseSync.getJustificatifFileUrl(justificatif.path);
+      container.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Voir le justificatif</a>`;
+    } catch {
+      container.innerHTML = '<p class="text-muted">Justificatif indisponible pour le moment.</p>';
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

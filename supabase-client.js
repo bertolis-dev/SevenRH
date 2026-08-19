@@ -326,15 +326,16 @@ function expenseToRow(r, companyId) {
   };
 }
 
-// Coffre-fort documentaire : SEULES les métadonnées sont synchronisées pour l'instant (nom,
-// catégorie, date d'expiration) — le contenu du fichier (aujourd'hui un dataUrl base64) nécessite
-// une vraie migration vers Supabase Storage, volontairement hors périmètre de cet incrément (voir
-// le plan de migration, note Phase 1 sur le stockage des fichiers). fichier_path reste donc null.
+// Coffre-fort documentaire : seules les métadonnées (nom, catégorie, date d'expiration) et le
+// CHEMIN Storage du fichier sont synchronisés — jamais son contenu (voir uploadEmployeeDocumentFile,
+// appelée séparément depuis app.js une fois le document créé, puis documentRepository.update patche
+// `fichier` avec {nom, path}). Tant que l'upload n'a pas encore réussi (ou pour un document créé
+// avant cette migration), d.fichier ne porte qu'un dataUrl local : fichier_path reste alors null.
 function documentToRow(d, companyId) {
   return {
     id: d.id, company_id: companyId, employee_id: d.employeeId,
     categorie: d.categorie || '', nom: d.nom || '', date_expiration: d.dateExpiration || null,
-    fichier_path: null
+    fichier_path: (d.fichier && d.fichier.path) || null
   };
 }
 
@@ -756,6 +757,41 @@ async function getCandidatureFileUrl(path) {
   return data.signedUrl;
 }
 
+/** D1+D9 (audit fiabilité 19/08/2026) : upload réel dans un bucket Storage privé, appelé depuis
+ * app.js APRÈS la création du document/congé/note de frais (une fois son id connu) — voir
+ * uploadJustificatifBestEffort (app.js). Chemin "<company>/<employee>/<record>-<timestamp>-<nom>",
+ * même patron que candidatures-files/company-logos ; le composant de temps évite toute collision
+ * si un même record reçoit un nouveau fichier (prolongation d'arrêt maladie). */
+async function uploadFileToBucket(bucket, companyId, employeeId, recordId, file) {
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const path = `${companyId}/${employeeId}/${recordId}-${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream' });
+  if (error) throw error;
+  return path;
+}
+
+/** URL signée de courte durée — voir employee_documents_select (0030_employee_files_storage.sql) :
+ * bucket privé, jamais d'URL publique permanente sur un document RH personnel. */
+async function uploadEmployeeDocumentFile(companyId, employeeId, docId, file) {
+  return uploadFileToBucket('employee-documents', companyId, employeeId, docId, file);
+}
+async function getEmployeeDocumentFileUrl(path) {
+  const { data, error } = await supabase.storage.from('employee-documents').createSignedUrl(path, 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/** Même principe pour les justificatifs de congé/note de frais (bucket "justificatifs", voir
+ * justificatifs_select/justificatifs_insert, 0030_employee_files_storage.sql). */
+async function uploadJustificatifFile(companyId, employeeId, requestId, file) {
+  return uploadFileToBucket('justificatifs', companyId, employeeId, requestId, file);
+}
+async function getJustificatifFileUrl(path) {
+  const { data, error } = await supabase.storage.from('justificatifs').createSignedUrl(path, 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 async function manageEmployeeAccount(action, employeeId, password) {
   const { data, error } = await supabase.functions.invoke('manage-employee-account', { body: { action, employeeId, password } });
   if (error) {
@@ -982,5 +1018,6 @@ window.SupabaseSync = {
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo,
+  uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };
