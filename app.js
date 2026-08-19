@@ -10223,8 +10223,10 @@ const SETTINGS_LIST_USAGE_CHECK = {
 function renderParametres() {
   const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
   const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
+  const canGererUtilisateurs = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS);
   if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
   if (state.parametresTab === 'abonnement' && !canGererAbonnement) state.parametresTab = 'listes';
+  if (state.parametresTab === 'comptes' && !canGererUtilisateurs) state.parametresTab = 'listes';
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
@@ -10241,6 +10243,7 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
       <button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>
       <button class="tab ${state.parametresTab === 'categories-salarie' ? 'active' : ''}" data-parametres-tab="categories-salarie">Catégories de salariés</button>
+      ${canGererUtilisateurs ? `<button class="tab ${state.parametresTab === 'comptes' ? 'active' : ''}" data-parametres-tab="comptes">Comptes salariés</button>` : ''}
       <button class="tab ${state.parametresTab === 'qualite' ? 'active' : ''}" data-parametres-tab="qualite">Qualité des données</button>
       <button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>
       ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
@@ -10259,6 +10262,7 @@ function renderParametres() {
       <option value="feries" ${state.parametresTab === 'feries' ? 'selected' : ''}>Jours fériés</option>
       <option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>
       <option value="categories-salarie" ${state.parametresTab === 'categories-salarie' ? 'selected' : ''}>Catégories de salariés</option>
+      ${canGererUtilisateurs ? `<option value="comptes" ${state.parametresTab === 'comptes' ? 'selected' : ''}>Comptes salariés</option>` : ''}
       <option value="qualite" ${state.parametresTab === 'qualite' ? 'selected' : ''}>Qualité des données</option>
       <option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>
       ${canSeeAudit ? `<option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Journal d'audit</option>` : ''}
@@ -10273,6 +10277,7 @@ function renderParametres() {
         : state.parametresTab === 'feries' ? renderParametresFeries()
         : state.parametresTab === 'fermetures' ? renderParametresFermetures()
         : state.parametresTab === 'categories-salarie' ? renderParametresCategoriesSalarie()
+        : state.parametresTab === 'comptes' && canGererUtilisateurs ? renderParametresComptes()
         : state.parametresTab === 'qualite' ? renderParametresQualite()
         : state.parametresTab === 'integrations' ? renderParametresIntegrations()
         : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
@@ -10374,6 +10379,7 @@ function bindParametresEvents() {
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
   else if (state.parametresTab === 'fermetures') bindParametresFermeturesEvents();
   else if (state.parametresTab === 'categories-salarie') bindParametresCategoriesSalarieEvents();
+  else if (state.parametresTab === 'comptes') bindParametresComptesEvents();
   else if (state.parametresTab === 'qualite') bindParametresQualiteEvents();
   else if (state.parametresTab === 'audit') bindParametresAuditEvents();
   else bindParametresListesEvents();
@@ -11938,6 +11944,37 @@ function getFilteredAuditLog() {
   const term = normalizeForSearch((filters.search || '').trim());
   if (term) list = list.filter(e => normalizeForSearch(`${e.entite} ${e.cible} ${e.details || ''}`).includes(term));
   return list;
+}
+
+/** § GERER_UTILISATEURS : vue d'ensemble pour créer les identifiants de connexion de plusieurs
+ * salariés sans devoir ouvrir chaque fiche une par une (jusqu'ici uniquement possible via la carte
+ * "Compte" de renderCompteCard, fiche salarié par fiche salarié) — réutilise exactement le même
+ * modal/flux (openCreerCompteConnexionModal), aucune logique de création dupliquée ici. */
+function renderParametresComptes() {
+  const sansCompte = employeeRepository.getAll().filter(e => !e.archive && !e.authUserId);
+  const avecCompte = employeeRepository.getAll().filter(e => !e.archive && e.authUserId).length;
+  return `
+    <div class="card">
+      <h2>Comptes salariés</h2>
+      <p class="text-muted">Un salarié créé n'a pas de compte de connexion par défaut — créez ses identifiants ici, ou depuis sa fiche (carte "Compte"). ${avecCompte} salarié${avecCompte > 1 ? 's' : ''} déjà connecté${avecCompte > 1 ? 's' : ''}.</p>
+      ${sansCompte.length === 0 ? `<div class="empty-state"><div class="empty-icon">✅</div><p>Tous les salariés actifs ont déjà un compte.</p></div>` : `
+        <div class="mini-list" style="margin-top: 12px;">
+          ${sansCompte.map(e => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <span class="text-muted">· ${escapeHtml(ROLE_LABELS[e.role] || e.role)}</span></span>
+              <button type="button" class="btn btn-secondary btn-sm" data-creer-compte-employee="${escapeHtml(e.id)}">Créer le compte</button>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function bindParametresComptesEvents() {
+  document.querySelectorAll('[data-creer-compte-employee]').forEach(btn => {
+    btn.addEventListener('click', () => openCreerCompteConnexionModal(btn.dataset.creerCompteEmployee));
+  });
 }
 
 function renderParametresQualite() {
@@ -15203,6 +15240,13 @@ function submitEmployeeForm(evt, id, candidatureId) {
     showToast('Salarié créé.');
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: created.id });
+    // §demande 19/08/2026 : enchaîne directement sur la création des identifiants de connexion —
+    // jusqu'ici il fallait remarquer la carte "Compte" de la fiche salarié pour y penser. Seulement
+    // si le créateur a lui-même la permission (sinon la carte "Compte" ne s'affiche pas non plus) et
+    // si le salarié a un email (toujours vrai ici, le champ est obligatoire, mais gardé par sécurité).
+    if (created.email && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS)) {
+      openCreerCompteConnexionModal(created.id);
+    }
   }
 }
 
