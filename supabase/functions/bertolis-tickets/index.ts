@@ -22,12 +22,60 @@ const CORS_HEADERS = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BERTOLIS_TICKETS_SECRET = Deno.env.get("BERTOLIS_TICKETS_SECRET")!;
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
+}
+
+function escapeHtml(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/** Prévient le salarié auteur qu'une réponse vient d'être ajoutée à son ticket (demande du
+ * 19/08/2026 — jusqu'ici il n'était notifié qu'à la CRÉATION, jamais quand BERTOLIS répond, donc
+ * devait revenir consulter "Mes tickets" sans savoir qu'il y avait du nouveau). Jamais bloquante :
+ * un échec d'envoi ne doit jamais faire échouer l'ajout du commentaire lui-même, déjà enregistré en
+ * base à ce stade (même principe que sendTicketConfirmationEmail, notify-bertolis-ticket). */
+async function sendTicketReplyEmail(email: string, prenom: string, titre: string, texte: string) {
+  const html = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
+          <tr><td style="background-color:#1c2b4a;padding:20px 32px;">
+            <span style="color:#ffffff;font-size:20px;font-weight:bold;">Nexus RH</span>
+          </td></tr>
+          <tr><td style="padding:32px;color:#1f2937;">
+            <h1 style="font-size:18px;margin:0 0 16px;color:#1c2b4a;">Nouvelle réponse à votre ticket</h1>
+            <p style="font-size:14px;line-height:1.5;margin:0 0 12px;">Bonjour ${escapeHtml(prenom)},</p>
+            <p style="font-size:14px;line-height:1.5;margin:0 0 12px;">Le support a répondu à votre demande <strong>"${escapeHtml(titre)}"</strong> :</p>
+            <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px 16px;background-color:#f4f5f7;border-radius:6px;white-space:pre-wrap;">${escapeHtml(texte)}</p>
+            <p style="font-size:13px;color:#6b7280;margin:0;">Retrouvez l'échange complet depuis "Mes tickets" dans l'application.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  `;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "Nexus RH <B.bertolis@nexus-rh.com>",
+        to: email,
+        subject: `Nouvelle réponse : ${titre}`,
+        html,
+      }),
+    });
+    if (!res.ok) console.error("sendTicketReplyEmail Resend error:", await res.text());
+  } catch (err) {
+    console.error("sendTicketReplyEmail error:", err);
+  }
 }
 
 async function logToCompanyAuditLog(supabaseAdmin: any, companyId: string, cible: string, details: string) {
@@ -133,21 +181,35 @@ Deno.serve(async (req) => {
       }
       const { data: ticket, error: fetchErr } = await supabaseAdmin
         .from("support_tickets")
-        .select("id, company_id, titre")
+        .select("id, company_id, employee_id, titre")
         .eq("id", ticketId)
         .maybeSingle();
       if (fetchErr || !ticket) return jsonResponse({ error: "Ticket introuvable." }, 404);
+
+      const texteTrim = texte.trim();
 
       // "auteur" n'est jamais pris depuis la requête : fixé en dur ici pour qu'un détenteur du
       // secret ne puisse pas usurper un autre nom dans le fil de discussion.
       const { error: rpcErr } = await supabaseAdmin.rpc("append_ticket_comment", {
         p_ticket_id: ticketId,
         p_auteur: "Support BERTOLIS",
-        p_texte: texte.trim(),
+        p_texte: texteTrim,
       });
       if (rpcErr) throw rpcErr;
 
       await logToCompanyAuditLog(supabaseAdmin, ticket.company_id, ticket.titre, "Réponse ajoutée par BERTOLIS");
+
+      // Prévenir le salarié auteur (voir sendTicketReplyEmail) — jamais bloquant pour la réponse
+      // elle-même, déjà enregistrée juste au-dessus.
+      const { data: employee } = await supabaseAdmin
+        .from("employees")
+        .select("prenom, email")
+        .eq("id", ticket.employee_id)
+        .maybeSingle();
+      if (employee?.email) {
+        await sendTicketReplyEmail(employee.email, employee.prenom || "", ticket.titre, texteTrim);
+      }
+
       return jsonResponse({ success: true });
     }
 
