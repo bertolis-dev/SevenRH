@@ -220,13 +220,218 @@ const EXPORT_PAIE_MODELES = {
 // instant avant la fin du premier appel this.saveCurrentCompany() lui-même synchrone.
 const _categoriesSalarieMigratedCompanyIds = new Set();
 
+/** Catalogue des conventions collectives françaises avec leur code IDCC (Identifiant De Convention
+ * Collective), sourcé du wiki travail-industrie.com (lui-même dérivé des brochures JORF/Légifrance)
+ * — la liste officielle complète du Ministère du Travail dépasse 700 entrées, dont une grande partie
+ * très régionales/obsolètes ; ce catalogue couvre les ~180 conventions les plus courantes pour une
+ * PME/ETI française, classées par secteur. Non exhaustif par construction — si une entreprise ne
+ * trouve pas la sienne, "Aucune" reste toujours disponible plutôt que d'obliger un choix erroné. */
+const IDCC_CONVENTIONS = [
+  // Industrie
+  { code: '18', nom: 'Industries textiles', secteur: 'Industrie' },
+  { code: '44', nom: 'Industries chimiques', secteur: 'Industrie' },
+  { code: '45', nom: 'Caoutchouc', secteur: 'Industrie' },
+  { code: '83', nom: 'Menuiseries et charpentes (ancienne convention)', secteur: 'Industrie' },
+  { code: '87', nom: 'Carrières et matériaux', secteur: 'Industrie' },
+  { code: '158', nom: 'Bois et scieries', secteur: 'Industrie' },
+  { code: '176', nom: 'Industrie pharmaceutique', secteur: 'Industrie' },
+  { code: '184', nom: 'Imprimerie de labeur', secteur: 'Industrie' },
+  { code: '200', nom: 'Exploitations frigorifiques', secteur: 'Industrie' },
+  { code: '207', nom: 'Cuirs et peaux', secteur: 'Industrie' },
+  { code: '247', nom: 'Industries de l\'habillement', secteur: 'Industrie' },
+  { code: '292', nom: 'Plasturgie', secteur: 'Industrie' },
+  { code: '489', nom: 'Industries du cartonnage', secteur: 'Industrie' },
+  { code: '567', nom: 'Bijouterie-joaillerie-orfèvrerie', secteur: 'Industrie' },
+  { code: '637', nom: 'Industries et commerce de la récupération (recyclage)', secteur: 'Industrie' },
+  { code: '650', nom: 'Métallurgie ingénieurs et cadres (ancienne)', secteur: 'Industrie' },
+  { code: '669', nom: 'Fabrication mécanique du verre', secteur: 'Industrie' },
+  { code: '700', nom: 'Papiers-cartons (cadres)', secteur: 'Industrie' },
+  { code: '1090', nom: 'Services de l\'automobile', secteur: 'Industrie' },
+  { code: '1170', nom: 'Tuiles et briques', secteur: 'Industrie' },
+  { code: '1388', nom: 'Industrie du pétrole', secteur: 'Industrie' },
+  { code: '1396', nom: 'Produits alimentaires élaborés (conserves, plats préparés)', secteur: 'Industrie' },
+  { code: '1411', nom: 'Industrie de l\'ameublement', secteur: 'Industrie' },
+  { code: '1492', nom: 'Production papiers-cartons (OETAM)', secteur: 'Industrie' },
+  { code: '1534', nom: 'Industrie de la viande', secteur: 'Industrie' },
+  { code: '1555', nom: 'Produits pharmaceutiques et vétérinaires (fabrication-commerce)', secteur: 'Industrie' },
+  { code: '1558', nom: 'Industries céramiques de France', secteur: 'Industrie' },
+  { code: '1580', nom: 'Industrie de la chaussure', secteur: 'Industrie' },
+  { code: '1586', nom: 'Industries charcutières', secteur: 'Industrie' },
+  { code: '1747', nom: 'Boulangerie-pâtisserie industrielle', secteur: 'Industrie' },
+  { code: '1938', nom: 'Transformation des volailles', secteur: 'Industrie' },
+  { code: '2003', nom: 'Métallurgie Vosges (ancienne convention territoriale)', secteur: 'Industrie' },
+  { code: '2147', nom: 'Eau et assainissement', secteur: 'Industrie' },
+  { code: '2528', nom: 'Maroquinerie', secteur: 'Industrie' },
+  { code: '2728', nom: 'Sucreries et raffineries de sucre', secteur: 'Industrie' },
+  { code: '3109', nom: 'Industries alimentaires diverses', secteur: 'Industrie' },
+  { code: '3222', nom: 'Menuiseries et charpentes', secteur: 'Industrie' },
+  { code: '3238', nom: 'Papiers et cartons (production et transformation)', secteur: 'Industrie' },
+  { code: '3248', nom: 'Métallurgie', secteur: 'Industrie' },
+  { code: '3249', nom: 'Industrie du béton', secteur: 'Industrie' },
+  { code: '3255', nom: 'Boulangerie-pâtisserie industrielle et œuf', secteur: 'Industrie' },
+  // BTP
+  { code: '1412', nom: 'Génie climatique (installation aéraulique, thermique, frigorifique)', secteur: 'BTP' },
+  { code: '1596', nom: 'Bâtiment ≤ 10 salariés (ouvriers)', secteur: 'BTP' },
+  { code: '1597', nom: 'Bâtiment > 10 salariés (ouvriers)', secteur: 'BTP' },
+  { code: '1702', nom: 'Travaux publics (ouvriers)', secteur: 'BTP' },
+  { code: '2420', nom: 'Cadres du bâtiment', secteur: 'BTP' },
+  { code: '2609', nom: 'ETAM du bâtiment', secteur: 'BTP' },
+  { code: '2614', nom: 'ETAM des travaux publics', secteur: 'BTP' },
+  { code: '3107', nom: 'ETAM BTP Martinique', secteur: 'BTP' },
+  { code: '3212', nom: 'Cadres des travaux publics', secteur: 'BTP' },
+  { code: '3216', nom: 'Négoce des matériaux de construction', secteur: 'BTP' },
+  // Services
+  { code: '86', nom: 'Publicité', secteur: 'Services' },
+  { code: '218', nom: 'Organismes de sécurité sociale', secteur: 'Services' },
+  { code: '240', nom: 'Greffes des tribunaux de commerce', secteur: 'Services' },
+  { code: '454', nom: 'Remontées mécaniques & ski', secteur: 'Services' },
+  { code: '478', nom: 'Sociétés financières', secteur: 'Services' },
+  { code: '759', nom: 'Pompes funèbres', secteur: 'Services' },
+  { code: '787', nom: 'Experts-comptables', secteur: 'Services' },
+  { code: '1043', nom: 'Gardiens & concierges d\'immeubles', secteur: 'Services' },
+  { code: '1266', nom: 'Restauration de collectivités', secteur: 'Services' },
+  { code: '1285', nom: 'Entreprises artistiques et culturelles', secteur: 'Services' },
+  { code: '1307', nom: 'Salles de cinéma', secteur: 'Services' },
+  { code: '1316', nom: 'Tourisme social et familial', secteur: 'Services' },
+  { code: '1351', nom: 'Prévention et sécurité', secteur: 'Services' },
+  { code: '1413', nom: 'Permanents du travail temporaire', secteur: 'Services' },
+  { code: '1468', nom: 'Crédit Mutuel', secteur: 'Services' },
+  { code: '1480', nom: 'Journalistes', secteur: 'Services' },
+  { code: '1486', nom: 'Bureaux d\'études techniques (Syntec)', secteur: 'Services' },
+  { code: '1501', nom: 'Restauration rapide', secteur: 'Services' },
+  { code: '1512', nom: 'Promotion immobilière', secteur: 'Services' },
+  { code: '1516', nom: 'Organismes de formation', secteur: 'Services' },
+  { code: '1518', nom: 'Animation - ÉCLAT', secteur: 'Services' },
+  { code: '1527', nom: 'Immobilier', secteur: 'Services' },
+  { code: '1631', nom: 'Hôtellerie de plein air', secteur: 'Services' },
+  { code: '1672', nom: 'Sociétés d\'assurances', secteur: 'Services' },
+  { code: '1710', nom: 'Agences de voyages', secteur: 'Services' },
+  { code: '1794', nom: 'Institutions de prévoyance', secteur: 'Services' },
+  { code: '1909', nom: 'Organismes de tourisme', secteur: 'Services' },
+  { code: '1922', nom: 'Radiodiffusion', secteur: 'Services' },
+  { code: '1951', nom: 'Experts en automobile', secteur: 'Services' },
+  { code: '1979', nom: 'Hôtels, cafés, restaurants (HCR)', secteur: 'Services' },
+  { code: '2002', nom: 'Blanchisserie, pressing et teinturerie', secteur: 'Services' },
+  { code: '2098', nom: 'Prestataires de services tertiaire', secteur: 'Services' },
+  { code: '2120', nom: 'Banques', secteur: 'Services' },
+  { code: '2121', nom: 'Édition (livre)', secteur: 'Services' },
+  { code: '2128', nom: 'Mutualité', secteur: 'Services' },
+  { code: '2148', nom: 'Télécommunications', secteur: 'Services' },
+  { code: '2149', nom: 'Activités du déchet', secteur: 'Services' },
+  { code: '2150', nom: 'SA et fondations d\'HLM (ESH)', secteur: 'Services' },
+  { code: '2152', nom: 'Personnel enseignant des CFA et CFC (UNETP/FNOGEC)', secteur: 'Services' },
+  { code: '2190', nom: 'Missions locales et PAIO', secteur: 'Services' },
+  { code: '2205', nom: 'Notariat', secteur: 'Services' },
+  { code: '2247', nom: 'Courtage d\'assurances', secteur: 'Services' },
+  { code: '2257', nom: 'Casinos', secteur: 'Services' },
+  { code: '2272', nom: 'Assainissement et maintenance industrielle', secteur: 'Services' },
+  { code: '2332', nom: 'Entreprises d\'architecture', secteur: 'Services' },
+  { code: '2335', nom: 'Agences générales d\'assurances', secteur: 'Services' },
+  { code: '2372', nom: 'Distribution directe', secteur: 'Services' },
+  { code: '2378', nom: 'Travail temporaire (intérim)', secteur: 'Services' },
+  { code: '2397', nom: 'Mannequins (agences de mannequins)', secteur: 'Services' },
+  { code: '2511', nom: 'Sport', secteur: 'Services' },
+  { code: '2543', nom: 'Géomètres-experts', secteur: 'Services' },
+  { code: '2596', nom: 'Coiffure', secteur: 'Services' },
+  { code: '2642', nom: 'Production audiovisuelle', secteur: 'Services' },
+  { code: '2683', nom: 'Portage de presse', secteur: 'Services' },
+  { code: '2691', nom: 'Enseignement privé indépendant (hors contrat)', secteur: 'Services' },
+  { code: '2717', nom: 'Entreprises techniques au service de la création et de l\'événement', secteur: 'Services' },
+  { code: '2785', nom: 'Ventes volontaires aux enchères / commissaires-priseurs', secteur: 'Services' },
+  { code: '3016', nom: 'Ateliers et chantiers d\'insertion', secteur: 'Services' },
+  { code: '3032', nom: 'Esthétique-cosmétique et parfumerie', secteur: 'Services' },
+  { code: '3043', nom: 'Propreté et services associés', secteur: 'Services' },
+  { code: '3090', nom: 'Spectacle vivant privé', secteur: 'Services' },
+  { code: '3097', nom: 'Production cinématographique', secteur: 'Services' },
+  { code: '3127', nom: 'Services à la personne (entreprises)', secteur: 'Services' },
+  { code: '3218', nom: 'Enseignement privé non lucratif (EPNL)', secteur: 'Services' },
+  { code: '3219', nom: 'Portage salarial', secteur: 'Services' },
+  { code: '3220', nom: 'Habitat social (OPH et Coop\'HLM)', secteur: 'Services' },
+  { code: '3239', nom: 'Particulier employeur', secteur: 'Services' },
+  { code: '3250', nom: 'Commissaires de justice et sociétés de ventes volontaires', secteur: 'Services' },
+  { code: '3253', nom: 'Salariés des cabinets d\'avocats', secteur: 'Services' },
+  { code: '7501', nom: 'Caisses régionales du Crédit agricole', secteur: 'Services' },
+  // Commerce
+  { code: '43', nom: 'Import-export et commerce international', secteur: 'Commerce' },
+  { code: '179', nom: 'Coopératives de consommation', secteur: 'Commerce' },
+  { code: '493', nom: 'Vins et spiritueux — gros', secteur: 'Commerce' },
+  { code: '573', nom: 'Commerces de gros (étendue)', secteur: 'Commerce' },
+  { code: '675', nom: 'Succursales habillement', secteur: 'Commerce' },
+  { code: '731', nom: 'Quincaillerie (cadres)', secteur: 'Commerce' },
+  { code: '843', nom: 'Boulangerie-pâtisserie artisanale', secteur: 'Commerce' },
+  { code: '992', nom: 'Boucherie & charcuterie', secteur: 'Commerce' },
+  { code: '1267', nom: 'Pâtisserie artisanale', secteur: 'Commerce' },
+  { code: '1383', nom: 'Quincaillerie (employés et agents de maîtrise)', secteur: 'Commerce' },
+  { code: '1431', nom: 'Optique-lunetterie de détail', secteur: 'Commerce' },
+  { code: '1483', nom: 'Commerce de l\'habillement', secteur: 'Commerce' },
+  { code: '1487', nom: 'Horlogerie-bijouterie détail', secteur: 'Commerce' },
+  { code: '1504', nom: 'Poissonnerie', secteur: 'Commerce' },
+  { code: '1505', nom: 'Commerce alimentaire de proximité', secteur: 'Commerce' },
+  { code: '1517', nom: 'Commerces de détail non alimentaires (CDNA)', secteur: 'Commerce' },
+  { code: '1536', nom: 'Distributeurs conseils hors domicile (CHD)', secteur: 'Commerce' },
+  { code: '1539', nom: 'Entreprises du bureau et du numérique', secteur: 'Commerce' },
+  { code: '1557', nom: 'Commerce des articles de sport', secteur: 'Commerce' },
+  { code: '1606', nom: 'Bricolage', secteur: 'Commerce' },
+  { code: '1686', nom: 'Audiovisuel, électronique et équipement ménager', secteur: 'Commerce' },
+  { code: '1760', nom: 'Jardineries et graineteries', secteur: 'Commerce' },
+  { code: '1880', nom: 'Négoce de l\'ameublement', secteur: 'Commerce' },
+  { code: '1947', nom: 'Négoce de bois d\'œuvre', secteur: 'Commerce' },
+  { code: '1978', nom: 'Fleuristes & animaleries', secteur: 'Commerce' },
+  { code: '2156', nom: 'Grands magasins et magasins populaires', secteur: 'Commerce' },
+  { code: '2198', nom: 'Commerce à distance (VAD / e-commerce)', secteur: 'Commerce' },
+  { code: '2216', nom: 'Commerce alimentaire (grande distribution)', secteur: 'Commerce' },
+  { code: '3224', nom: 'Distribution et commerce de gros des papiers-cartons', secteur: 'Commerce' },
+  { code: '3237', nom: 'Commerce de détail alimentaire spécialisé', secteur: 'Commerce' },
+  { code: '3254', nom: 'Boucherie-poissonnerie', secteur: 'Commerce' },
+  // Santé
+  { code: '29', nom: 'FEHAP (CCN 51)', secteur: 'Santé' },
+  { code: '413', nom: 'Établissements pour personnes handicapées (CCN 66)', secteur: 'Santé' },
+  { code: '959', nom: 'Laboratoires de biologie médicale', secteur: 'Santé' },
+  { code: '993', nom: 'Prothésistes dentaires', secteur: 'Santé' },
+  { code: '1147', nom: 'Cabinets médicaux', secteur: 'Santé' },
+  { code: '1261', nom: 'ALISFA (centres sociaux, accueil de jeunes enfants)', secteur: 'Santé' },
+  { code: '1619', nom: 'Cabinets dentaires', secteur: 'Santé' },
+  { code: '1621', nom: 'Répartition pharmaceutique', secteur: 'Santé' },
+  { code: '1982', nom: 'Négoce médico-technique', secteur: 'Santé' },
+  { code: '1996', nom: 'Pharmacie d\'officine', secteur: 'Santé' },
+  { code: '2104', nom: 'Thermalisme', secteur: 'Santé' },
+  { code: '2264', nom: 'Hospitalisation privée', secteur: 'Santé' },
+  { code: '2564', nom: 'Vétérinaires praticiens salariés', secteur: 'Santé' },
+  { code: '2941', nom: 'Aide à domicile (BAD)', secteur: 'Santé' },
+  // Transports
+  { code: '16', nom: 'Transport routier', secteur: 'Transports' },
+  { code: '275', nom: 'Transport aérien (personnel au sol)', secteur: 'Transports' },
+  { code: '538', nom: 'Manutention ferroviaire', secteur: 'Transports' },
+  { code: '1424', nom: 'Transports publics urbains', secteur: 'Transports' },
+  { code: '1612', nom: 'Travail aérien — navigants des essais et réceptions', secteur: 'Transports' },
+  { code: '2480', nom: 'Manutention portuaire — Fort-de-France', secteur: 'Transports' },
+  { code: '2583', nom: 'Sociétés d\'autoroutes', secteur: 'Transports' },
+  { code: '3017', nom: 'Ports et manutention', secteur: 'Transports' },
+  { code: '3217', nom: 'Branche ferroviaire', secteur: 'Transports' },
+  // Agriculture
+  { code: '112', nom: 'Industrie laitière', secteur: 'Agriculture' },
+  { code: '1077', nom: 'Négoce agricole et engrais (produits du sol)', secteur: 'Agriculture' },
+  { code: '1404', nom: 'Commerce et réparation de matériels agricoles', secteur: 'Agriculture' },
+  { code: '1589', nom: 'Mareyeurs-expéditeurs', secteur: 'Agriculture' },
+  { code: '1930', nom: 'Transformation des grains (meunerie)', secteur: 'Agriculture' },
+  { code: '7018', nom: 'Entreprises du paysage', secteur: 'Agriculture' },
+  { code: '7024', nom: 'Production agricole et CUMA', secteur: 'Agriculture' }
+];
+
+/** Format d'affichage standard "Nom (IDCC XXXX)" — utilisé pour peupler
+ * DEFAULT_SETTINGS.conventionsCollectives ; gardé en fonction nommée au cas où un futur écran
+ * aurait besoin de reconstruire ce même libellé (ex. recherche/filtre par secteur). */
+function formatConventionCollective(c) {
+  return `${c.nom} (IDCC ${c.code})`;
+}
+
 // Listes de référence par défaut (modifiables via DB.settings une fois le
 // module Paramètres construit — elles ne sont donc pas figées dans le code).
 const DEFAULT_SETTINGS = {
   // Les services/équipes ont leur propre catalogue structuré (company.services), pas une simple
   // liste de textes : voir makeEmptyService()/seedServices() et l'onglet Paramètres dédié.
   postes: ['Directeur·rice général·e', 'Responsable RH', 'Chargé·e RH', 'Comptable', 'Commercial·e', 'Développeur·se', 'Technicien·ne support'],
-  conventionsCollectives: ['Métallurgie', 'Commerce de détail', 'Bureaux d\'études techniques (Syntec)', 'Transport routier', 'Hôtellerie-restauration', 'Aucune'],
+  conventionsCollectives: ['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)],
   statutsPro: ['Non cadre', 'Cadre', 'Agent de maîtrise', 'Dirigeant'],
   typesContrat: ['CDI', 'CDD', 'Stage', 'Alternance', 'Apprentissage', 'Intérim'],
   forfaits: ['Aucun', 'Forfait jours', 'Forfait heures'],
@@ -351,9 +556,8 @@ function seedCompany() {
 
 /** Ajoute un établissement principal par défaut aux entreprises créées avant l'existence de ce
  * concept (§12), et rattache tout salarié qui n'en a pas encore un — migration idempotente et sans
- * perte de données (ne touche à rien si l'entreprise a déjà au moins un établissement). Appelée à
- * la fois par DB.init() (entreprises déjà en localStorage) et createCompanyFromOnboarding()
- * (nouvelles entreprises), pour ne jamais laisser une entreprise sans établissement. */
+ * perte de données (ne touche à rien si l'entreprise a déjà au moins un établissement). Appelée
+ * par DB.init(), pour ne jamais laisser une entreprise sans établissement. */
 function migrateCompanyEtablissements(company) {
   if (company.etablissements && company.etablissements.length > 0) return false;
   const etab = Object.assign(makeEmptyEtablissement(), {
@@ -623,60 +827,6 @@ const DB = {
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
       brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData));
-  },
-
-  /**
-   * Crée une nouvelle entreprise à partir de l'assistant de première installation :
-   * profil, convention, organisation, et son premier compte administrateur (droits Directeur
-   * pour pouvoir tout configurer ensuite — la fiche pourra être ajustée après coup).
-   * Ne seede pas de salariés de démonstration : seuls les types de congés et le calendrier
-   * scolaire standards sont pré-remplis, le reste se construit depuis un catalogue vide.
-   */
-  createCompanyFromOnboarding({ profile, conventionCollective, etablissement, organisation, admin }) {
-    const company = makeEmptyCompany();
-    company.id = generateId('company');
-    Object.assign(company, profile, { conventionCollective, matriculeSeq: 1 });
-    company.settings = Object.assign({}, DEFAULT_SETTINGS, {
-      teletravailQuotaSemaine: organisation.teletravailQuotaSemaine,
-      ticketsValeurFaciale: organisation.ticketsValeurFaciale,
-      ticketsPartEmployeurPct: organisation.ticketsPartEmployeurPct
-    });
-    company.leaveTypes = seedLeaveTypes();
-    company.schoolHolidays = seedSchoolHolidays();
-
-    const etab = Object.assign(makeEmptyEtablissement(), etablissement, {
-      id: generateId('etab'),
-      principal: true,
-      actif: true
-    });
-    company.etablissements = [etab];
-
-    const now = new Date().toISOString();
-    const adminEmployee = Object.assign(makeEmptyEmployee(), {
-      id: generateId('emp'),
-      matricule: 'SRH-0001',
-      prenom: admin.prenom,
-      nom: admin.nom,
-      email: admin.email,
-      motDePasse: admin.motDePasse,
-      role: ROLES.DIRECTEUR,
-      statut: 'Actif',
-      horairesHebdo: organisation.horairesHebdo,
-      etablissementId: etab.id,
-      dateEmbauche: toISODate(new Date()),
-      dateCreation: now,
-      dateModification: now
-    });
-    company.employees = [adminEmployee];
-    migrateCompanyEtablissements(company); // filet de sécurité si `etablissement` est absent/mal formé
-    company.abonnement = makeEmptyAbonnement();
-
-    const companies = this.getCompanies();
-    companies.push(company);
-    this.saveCompanies(companies);
-    this.setCurrentCompanyId(company.id);
-    this.logAudit('Création', 'Entreprise', company.raisonSociale);
-    return company;
   },
 
   // ---- Salariés ----
@@ -2409,7 +2559,6 @@ const companyRepository = {
   getCurrent: () => DB.getCurrentCompany(),
   getProfile: () => DB.getCompanyProfile(),
   saveProfile: (profile) => DB.saveCompanyProfile(profile),
-  createFromOnboarding: (payload) => DB.createCompanyFromOnboarding(payload),
   /** Affiché en haut de la page publique de candidature (Embauche) en plus du nom — voir
    * get_company_public_info. Upload direct (pas de cache local optimiste, comme les autres
    * uploads de fichiers de l'app) : la vraie URL publique ne peut venir que du serveur. */
@@ -2495,6 +2644,11 @@ const billingRepository = {
   // modules : [{ key, declarants? }] — voir LANDING_ALACARTE_MODULES/renderParametresAbonnement
   // (app.js). declarants ne compte que pour le module "frais" (unité déclarant, pas salarié).
   checkout: (modules, periodicite) => window.SupabaseSync.invokeBilling('checkout', { modules, periodicite, returnBase: currentReturnBase() }),
+  // Ajoute/retire des modules ou change leur quantité (déclarants) sur un abonnement à la carte
+  // déjà actif — même forme de payload que checkout, mais modifie l'abonnement Stripe existant
+  // (proration) au lieu d'en créer un nouveau. Jamais utilisé pour tout annuler (garder au moins un
+  // module reste obligatoire côté serveur) — l'annulation complète reste réservée au portail Stripe.
+  updateModules: (modules, periodicite) => window.SupabaseSync.invokeBilling('update-modules', { modules, periodicite }),
   // declarantOverrides : { [moduleKey]: nombre } — ne concerne que les modules en unité déclarant ;
   // les modules en unité salarié se réalignent automatiquement sur l'effectif réel côté serveur.
   resync: (declarantOverrides) => window.SupabaseSync.invokeBilling('resync', { declarants: declarantOverrides || {} }),

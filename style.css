@@ -2483,44 +2483,6 @@ textarea.input { resize: vertical; font-family: inherit; }
   .landing-topbar-cta-short { display: inline; }
 }
 
-/* ---------------------------------------------------------------------
-   Assistant de première installation (onboarding)
-   --------------------------------------------------------------------- */
-
-.onboarding-steps {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  gap: 4px;
-}
-
-.onboarding-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.onboarding-step-dot {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--color-muted-soft);
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.onboarding-step.active .onboarding-step-dot { background: var(--color-primary); color: white; }
-.onboarding-step.active .onboarding-step-label { color: var(--color-text); font-weight: 600; }
-.onboarding-step.done .onboarding-step-dot { background: var(--color-success); color: white; }
 
 /* ---------------------------------------------------------------------
    Responsive

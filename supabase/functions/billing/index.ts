@@ -261,6 +261,59 @@ Deno.serve(async (req) => {
       return jsonResponse({ url: session.url });
     }
 
+    if (body.action === "update-modules") {
+      // Ajoute/retire des modules ou change une quantité sur l'abonnement à la carte déjà actif —
+      // même validation que "checkout" (au moins un module, périodicité valide), mais modifie
+      // l'abonnement Stripe EXISTANT (items[] avec id pour les lignes conservées/modifiées, sans id
+      // pour une nouvelle ligne, deleted:true pour une ligne retirée) plutôt que de créer une
+      // nouvelle session de paiement. proration_behavior "create_prorations" pour facturer/créditer
+      // le prorata immédiatement plutôt que d'attendre le prochain renouvellement.
+      const { modules, periodicite } = body;
+      if (periodicite !== "mensuel" && periodicite !== "annuel") {
+        return jsonResponse({ error: "Périodicité invalide." }, 400);
+      }
+      if (!Array.isArray(modules) || modules.length === 0) {
+        return jsonResponse({ error: "Sélectionnez au moins un module — pour tout annuler, utilisez \"Gérer mon abonnement\"." }, 400);
+      }
+      if (!sub?.offre || sub.offre !== "a_la_carte" || !sub.stripe_subscription_id) {
+        return jsonResponse({ error: "Aucun abonnement à la carte actif pour cette entreprise." }, 400);
+      }
+
+      const effectif = await getHeadcount(supabaseAdmin, companyId);
+      const stripeSubscription = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+      const currentItemsByModule = new Map<string, any>();
+      for (const it of stripeSubscription.items.data as any[]) {
+        const key = it.price?.metadata?.module;
+        if (key) currentItemsByModule.set(key, it);
+      }
+
+      const desiredKeys = new Set<string>();
+      const itemsPayload: any[] = [];
+      for (const m of modules) {
+        const moduleDef = MODULES[m?.key];
+        if (!moduleDef) return jsonResponse({ error: `Module inconnu : ${m?.key}` }, 400);
+        desiredKeys.add(m.key);
+        const priceId = moduleDef.priceIds[periodicite as "mensuel" | "annuel"];
+        const quantite = moduleDef.unite === "declarant"
+          ? Math.min(effectif, Math.max(1, parseInt(m.declarants, 10) || 1))
+          : effectif;
+        const existing = currentItemsByModule.get(m.key);
+        itemsPayload.push(existing ? { id: existing.id, price: priceId, quantity: quantite } : { price: priceId, quantity: quantite });
+      }
+      for (const [key, it] of currentItemsByModule) {
+        if (!desiredKeys.has(key)) itemsPayload.push({ id: it.id, deleted: true });
+      }
+
+      await stripe.subscriptions.update(sub.stripe_subscription_id, {
+        items: itemsPayload,
+        proration_behavior: "create_prorations",
+      });
+
+      const refreshed = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+      await upsertSubscriptionFromStripeSubscription(supabaseAdmin, companyId, refreshed);
+      return jsonResponse({ ok: true });
+    }
+
     if (body.action === "resync") {
       // Réaligne les quantités facturées sur l'effectif réel — déclenché à la demande par le
       // client (bouton "Actualiser mon abonnement"), pas automatiquement à chaque embauche/départ

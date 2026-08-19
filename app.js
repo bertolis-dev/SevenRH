@@ -186,12 +186,18 @@ function getInitialViewState() {
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
     paieTab: 'preparation', // Sprint SIRH premium §6 : préparation/anomalies affichée par défaut, avant l'export
+    // Brouillon du compositeur d'abonnement à la carte (souscription initiale ou modification d'un
+    // abonnement déjà actif, voir renderAbonnementAlaCarteComposer) — remis à zéro entre deux
+    // entreprises comme tout autre état de vue (même bug de fond déjà corrigé pour fraisFilters).
+    abonnementPeriodicite: 'mensuel',
+    abonnementAlacarteModules: {},
+    abonnementAlacarteCounts: {},
+    abonnementEditingModules: false,
     authView: 'login', // 'login' | 'forgot' | 'reset' | 'signup'
     authError: '',
     pendingReset: null, // { token, employeeName } après une demande de réinitialisation
     pendingSignupConfirmation: null, // email en attente de confirmation après DB.signUp()
     resendConfirmationSent: null, // email confirmé après renderResendConfirmationView() (écran "email envoyé")
-    onboarding: null, // brouillon de l'assistant de première installation, voir openOnboardingWizard()
     planningView: 'semaine', // 'semaine' | 'mois' | 'annee'
     planningFilters: { service: '' },
     planningWeekOffset: 0,
@@ -3049,239 +3055,6 @@ function openChangePasswordModal() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Assistant de première installation — création d'une nouvelle entreprise
-// ---------------------------------------------------------------------------
-
-const ONBOARDING_STEP_TITLES = ['Entreprise', 'Convention', 'Établissement', 'Organisation', 'Administrateur', 'Résumé'];
-
-function openOnboardingWizard() {
-  state.onboarding = {
-    step: 1,
-    profile: { raisonSociale: '', logo: null, siret: '', tva: '', adresse: '', telephone: '', email: '' },
-    conventionCollective: 'Aucune',
-    etablissement: { nom: 'Siège', codeInterne: '', adresse: '', codePostal: '', ville: '', pays: 'France', email: '', telephone: '' },
-    organisation: { horairesHebdo: 35, teletravailQuotaSemaine: 2, ticketsValeurFaciale: 9, ticketsPartEmployeurPct: 60 },
-    admin: { prenom: '', nom: '', email: '', motDePasse: '' }
-  };
-  renderOnboardingWizard();
-}
-
-function renderOnboardingWizard() {
-  const step = state.onboarding.step;
-  const stepContent = step === 1 ? renderOnboardingStep1()
-    : step === 2 ? renderOnboardingStep2()
-    : step === 3 ? renderOnboardingStepEtablissement()
-    : step === 4 ? renderOnboardingStep3()
-    : step === 5 ? renderOnboardingStep4()
-    : renderOnboardingStep5();
-
-  const html = `
-    <div class="modal modal-large">
-      <div class="modal-header">
-        <h2>Nouvelle entreprise</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="onboarding-steps">
-          ${ONBOARDING_STEP_TITLES.map((title, i) => `
-            <div class="onboarding-step ${i + 1 === step ? 'active' : i + 1 < step ? 'done' : ''}">
-              <span class="onboarding-step-dot">${i + 1 < step ? '✓' : i + 1}</span>
-              <span class="onboarding-step-label">${escapeHtml(title)}</span>
-            </div>
-          `).join('')}
-        </div>
-        <h3>Étape ${step} — ${escapeHtml(ONBOARDING_STEP_TITLES[step - 1])}</h3>
-        ${stepContent}
-        <p class="login-error" role="alert" id="onboarding-error" style="display: none;"></p>
-      </div>
-      <div class="modal-footer">
-        ${step > 1 ? '<button type="button" class="btn btn-secondary" id="btn-onboarding-back">← Précédent</button>' : '<button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>'}
-        ${step < 6 ? '<button type="button" class="btn btn-primary" id="btn-onboarding-next">Suivant →</button>' : '<button type="button" class="btn btn-primary" id="btn-onboarding-finish">Créer l\'entreprise</button>'}
-      </div>
-    </div>
-  `;
-
-  const modalRoot = document.getElementById('modal-root');
-  modalRoot.innerHTML = html;
-  modalRoot.classList.add('open');
-  bindOnboardingWizardEvents();
-}
-
-function renderOnboardingStep1() {
-  const p = state.onboarding.profile;
-  return `
-    <div class="form-grid">
-      ${companyNameAutocompleteField('ob-raisonSociale', 'Raison sociale', p.raisonSociale, true, 'ob-siret', 'ob-adresse')}
-      <div class="form-field">
-        <label for="f-ob-siret">SIRET</label>
-        <input class="input" type="text" id="f-ob-siret" name="ob-siret" value="${escapeHtml(p.siret || '')}"
-          data-siret-autocomplete="true" data-fill-raison="f-ob-raisonSociale" data-fill-adresse="f-ob-adresse">
-        <span class="field-hint-computed" id="f-ob-siret-hint"></span>
-      </div>
-      ${textField('ob-tva', 'N° TVA intracommunautaire', p.tva)}
-      ${textField('ob-adresse', 'Adresse', p.adresse)}
-      ${textField('ob-telephone', 'Téléphone', p.telephone)}
-      ${textField('ob-email', 'Email', p.email, true, 'email')}
-    </div>
-  `;
-}
-
-function renderOnboardingStep2() {
-  return `
-    <div class="form-grid">
-      ${selectField('ob-convention', 'Convention collective', DEFAULT_SETTINGS.conventionsCollectives, state.onboarding.conventionCollective)}
-    </div>
-  `;
-}
-
-function renderOnboardingStepEtablissement() {
-  const e = state.onboarding.etablissement;
-  return `
-    <p class="text-muted">Cet établissement sera créé comme établissement principal — vous pourrez en ajouter d'autres ensuite depuis Paramètres.</p>
-    <div class="form-grid">
-      ${textField('ob-etab-nom', 'Nom', e.nom, true)}
-      ${textField('ob-etab-code', 'Code interne', e.codeInterne)}
-      ${addressAutocompleteField('ob-etab-adresse', 'Adresse', e.adresse, 'ob-etab-cp', 'ob-etab-ville')}
-      ${textField('ob-etab-cp', 'Code postal', e.codePostal)}
-      ${textField('ob-etab-ville', 'Ville', e.ville)}
-      ${textField('ob-etab-pays', 'Pays', e.pays)}
-      ${textField('ob-etab-email', 'Email', e.email, false, 'email')}
-      ${textField('ob-etab-telephone', 'Téléphone', e.telephone)}
-    </div>
-  `;
-}
-
-function renderOnboardingStep3() {
-  const o = state.onboarding.organisation;
-  return `
-    <div class="form-grid">
-      ${textField('ob-horaires', 'Horaires hebdomadaires par défaut (h)', o.horairesHebdo, false, 'number')}
-      ${textField('ob-teletravail-quota', 'Quota télétravail (jours / semaine)', o.teletravailQuotaSemaine, false, 'number')}
-      ${textField('ob-tickets-valeur', 'Valeur faciale ticket restaurant (€)', o.ticketsValeurFaciale, false, 'number')}
-      ${textField('ob-tickets-part', 'Part employeur tickets (%)', o.ticketsPartEmployeurPct, false, 'number')}
-    </div>
-  `;
-}
-
-function renderOnboardingStep4() {
-  const a = state.onboarding.admin;
-  return `
-    <p class="text-muted">Ce compte aura tous les droits sur la nouvelle entreprise (rôle Directeur), pour pouvoir tout configurer ensuite.</p>
-    <div class="form-grid">
-      ${textField('ob-admin-prenom', 'Prénom', a.prenom, true)}
-      ${textField('ob-admin-nom', 'Nom', a.nom, true)}
-      ${textField('ob-admin-email', 'Email', a.email, true, 'email')}
-      ${textField('ob-admin-password', 'Mot de passe', '', true, 'password')}
-      ${textField('ob-admin-password-confirm', 'Confirmation', '', true, 'password')}
-    </div>
-  `;
-}
-
-function renderOnboardingStep5() {
-  const { profile, conventionCollective, etablissement, organisation, admin } = state.onboarding;
-  return `
-    ${infoRow('Raison sociale', profile.raisonSociale)}
-    ${infoRow('Email entreprise', profile.email)}
-    ${infoRow('Convention collective', conventionCollective)}
-    ${infoRow('Établissement principal', [etablissement.nom, etablissement.ville].filter(Boolean).join(' · '))}
-    ${infoRow('Horaires hebdomadaires', formatNumberFR(organisation.horairesHebdo) + ' h')}
-    ${infoRow('Télétravail', formatDurationFR(organisation.teletravailQuotaSemaine) + '/semaine')}
-    ${infoRow('Tickets restaurant', `${formatCurrencyFR(organisation.ticketsValeurFaciale)} (${formatPercentFR(organisation.ticketsPartEmployeurPct)} employeur)`)}
-    ${infoRow('Administrateur', `${admin.prenom} ${admin.nom} · ${admin.email}`)}
-    <p class="text-muted" style="margin-top: 14px;">En créant l'entreprise, vous serez automatiquement connecté avec ce compte administrateur.</p>
-  `;
-}
-
-/** Lit et valide les champs de l'étape courante dans state.onboarding. Retourne un message d'erreur, ou null si valide. */
-function saveCurrentOnboardingStep() {
-  const step = state.onboarding.step;
-
-  if (step === 1) {
-    const raisonSociale = document.getElementById('f-ob-raisonSociale').value.trim();
-    const email = document.getElementById('f-ob-email').value.trim();
-    if (!raisonSociale || !email) return 'Raison sociale et email sont obligatoires.';
-    state.onboarding.profile = {
-      raisonSociale, email,
-      siret: document.getElementById('f-ob-siret').value,
-      tva: document.getElementById('f-ob-tva').value,
-      adresse: document.getElementById('f-ob-adresse').value,
-      telephone: document.getElementById('f-ob-telephone').value,
-      logo: null
-    };
-  } else if (step === 2) {
-    state.onboarding.conventionCollective = document.getElementById('f-ob-convention').value;
-  } else if (step === 3) {
-    const nom = document.getElementById('f-ob-etab-nom').value.trim();
-    if (!nom) return 'Le nom de l\'établissement est obligatoire.';
-    state.onboarding.etablissement = {
-      nom,
-      codeInterne: document.getElementById('f-ob-etab-code').value,
-      adresse: document.getElementById('f-ob-etab-adresse').value,
-      codePostal: document.getElementById('f-ob-etab-cp').value,
-      ville: document.getElementById('f-ob-etab-ville').value,
-      pays: document.getElementById('f-ob-etab-pays').value,
-      email: document.getElementById('f-ob-etab-email').value,
-      telephone: document.getElementById('f-ob-etab-telephone').value
-    };
-  } else if (step === 4) {
-    state.onboarding.organisation = {
-      horairesHebdo: Number(document.getElementById('f-ob-horaires').value) || 35,
-      teletravailQuotaSemaine: Number(document.getElementById('f-ob-teletravail-quota').value) || 0,
-      ticketsValeurFaciale: Number(document.getElementById('f-ob-tickets-valeur').value) || 0,
-      ticketsPartEmployeurPct: Number(document.getElementById('f-ob-tickets-part').value) || 0
-    };
-  } else if (step === 5) {
-    const prenom = document.getElementById('f-ob-admin-prenom').value.trim();
-    const nom = document.getElementById('f-ob-admin-nom').value.trim();
-    const email = document.getElementById('f-ob-admin-email').value.trim();
-    const password = document.getElementById('f-ob-admin-password').value;
-    const confirm = document.getElementById('f-ob-admin-password-confirm').value;
-    if (!prenom || !nom || !email || !password) return 'Tous les champs sont obligatoires.';
-    if (password !== confirm) return 'Les mots de passe ne correspondent pas.';
-    if (password.length < 6) return 'Le mot de passe doit contenir au moins 6 caractères.';
-    state.onboarding.admin = { prenom, nom, email, motDePasse: password };
-  }
-
-  return null;
-}
-
-function bindOnboardingWizardEvents() {
-  const closeBtn = document.getElementById('btn-close-modal');
-  if (closeBtn) closeBtn.addEventListener('click', closeModal);
-  const cancelBtn = document.getElementById('btn-cancel-modal');
-  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-
-  const backBtn = document.getElementById('btn-onboarding-back');
-  if (backBtn) backBtn.addEventListener('click', () => {
-    state.onboarding.step -= 1;
-    renderOnboardingWizard();
-  });
-
-  const nextBtn = document.getElementById('btn-onboarding-next');
-  if (nextBtn) nextBtn.addEventListener('click', () => {
-    const error = saveCurrentOnboardingStep();
-    if (error) {
-      const errorEl = document.getElementById('onboarding-error');
-      errorEl.textContent = error;
-      errorEl.style.display = 'block';
-      return;
-    }
-    state.onboarding.step += 1;
-    renderOnboardingWizard();
-  });
-
-  const finishBtn = document.getElementById('btn-onboarding-finish');
-  if (finishBtn) finishBtn.addEventListener('click', () => {
-    const { profile, conventionCollective, etablissement, organisation, admin } = state.onboarding;
-    companyRepository.createFromOnboarding({ profile, conventionCollective, etablissement, organisation, admin });
-    closeModal();
-    authRepository.login(admin.email, admin.motDePasse);
-    showApp();
-    showToast(`Entreprise "${profile.raisonSociale}" créée avec succès.`);
-  });
-}
-
 /** Sprint SIRH premium §12 : Centre d'aide contextuel — une entrée par écran (clé = state.view,
  * mêmes clés que NAV_ITEMS), 3 parties comme demandé (explication ; FAQ ; bonnes pratiques),
  * décrivant CE QUI EST RÉELLEMENT construit sur cet écran plutôt qu'une doc générique. Pas
@@ -6116,7 +5889,11 @@ function renderOrganigramme() {
   if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
 
   const { roots, childrenOf } = buildOrgTree(employees);
-  const allEquipes = Array.from(new Set(serviceRepository.getAll().flatMap(s => s.equipes.map(eq => eq.nom))));
+  // Dépend du service filtré (equipeOptionsForServiceFilter) : choisir un service ici doit
+  // restreindre les équipes proposées à celles de CE service, comme sur la fiche salarié
+  // (equipeSelectField) — auparavant cette liste montrait toujours toutes les équipes de
+  // l'entreprise, y compris celles d'un autre service, une fois un service déjà sélectionné.
+  const equipesDisponibles = equipeOptionsForServiceFilter(f.service);
 
   return `
     <div class="view-header">
@@ -6135,7 +5912,7 @@ function renderOrganigramme() {
       </select>
       <select id="org-filter-equipe" class="input">
         <option value="">Toutes les équipes</option>
-        ${allEquipes.map(nom => `<option value="${escapeHtml(nom)}" ${f.equipe === nom ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('')}
+        ${equipesDisponibles.map(nom => `<option value="${escapeHtml(nom)}" ${f.equipe === nom ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('')}
       </select>
     </div>
     <div class="card org-chart-card">
@@ -6194,6 +5971,10 @@ function bindOrganigrammeEvents() {
   });
   document.getElementById('org-filter-service').addEventListener('change', (e) => {
     state.organigrammeFilters.service = e.target.value;
+    // L'équipe filtrée peut appartenir à un autre service que celui qu'on vient de choisir — la
+    // réinitialiser plutôt que de laisser un filtre équipe caché, invisible dans la liste
+    // désormais restreinte, continuer à s'appliquer silencieusement.
+    state.organigrammeFilters.equipe = '';
     render();
   });
   document.getElementById('org-filter-equipe').addEventListener('change', (e) => {
@@ -10509,7 +10290,7 @@ function bindParametresEvents() {
   else bindParametresListesEvents();
 }
 
-// ---- Sous-vue : Entreprise (profil, multi-entreprise) ----
+// ---- Sous-vue : Entreprise (profil) ----
 
 function renderParametresEntreprise() {
   const profile = companyRepository.getProfile();
@@ -10549,23 +10330,6 @@ function renderParametresEntreprise() {
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
-    </div>
-    <div class="card">
-      <div class="view-header-row">
-        <div>
-          <h2>Multi-entreprise</h2>
-          <p class="text-muted">Chaque entreprise a ses propres salariés, congés, paramètres et historique, complètement isolés.</p>
-        </div>
-        <button class="btn btn-secondary" id="btn-new-company">+ Nouvelle entreprise</button>
-      </div>
-      <div class="mini-list">
-        ${DB.getCompanies().map(c => `
-          <div class="mini-list-item">
-            <span>${escapeHtml(c.raisonSociale)}${c.id === DB.getCurrentCompanyId() ? ' <span class="badge badge-success">Active</span>' : ''}</span>
-            <span>${c.employees.length} salarié${c.employees.length > 1 ? 's' : ''}</span>
-          </div>
-        `).join('')}
-      </div>
     </div>
   `;
 }
@@ -10634,7 +10398,11 @@ function renderParametresAbonnement() {
   const estAlaCarte = abo.offre === 'a_la_carte';
   const legacyActif = !estAlaCarte && abo.offre !== 'essai' && abo.statut !== 'resilie';
 
-  if (estAlaCarte) return renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge);
+  if (estAlaCarte) {
+    return state.abonnementEditingModules
+      ? renderAbonnementAlaCarteComposer(nbSalaries, { mode: 'modifier' })
+      : renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge);
+  }
   if (legacyActif) return renderAbonnementLegacyActif(abo, statutBadge);
   return renderAbonnementAlaCarteComposer(nbSalaries);
 }
@@ -10690,9 +10458,10 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
       ` : ''}
       <div class="detail-header-actions" style="margin-top: 16px;">
         <button class="btn btn-secondary" id="btn-resync-abonnement">Actualiser mon abonnement</button>
+        <button class="btn btn-primary" id="btn-modifier-modules-alacarte">Modifier mes modules</button>
         <button class="btn btn-secondary" id="btn-gerer-abonnement">Gérer mon abonnement</button>
       </div>
-      <p class="text-muted" style="margin-top: 8px;">Pour ajouter, retirer un module ou annuler, utilisez "Gérer mon abonnement" (portail Stripe sécurisé).</p>
+      <p class="text-muted" style="margin-top: 8px;">Pour annuler complètement l'abonnement, utilisez "Gérer mon abonnement" (portail Stripe sécurisé).</p>
     </div>
   `;
 }
@@ -10736,12 +10505,15 @@ function renderAbonnementLegacyActif(abo, statutBadge) {
   `;
 }
 
-function renderAbonnementAlaCarteComposer(nbSalaries) {
+function renderAbonnementAlaCarteComposer(nbSalaries, options) {
+  const editing = Boolean(options && options.mode === 'modifier');
   const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
   return `
     <div class="card">
-      <h2>Composez votre abonnement</h2>
-      <p class="text-muted">Choisissez uniquement les modules dont vous avez besoin — le prix s'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.</p>
+      <h2>${editing ? 'Modifier mes modules' : 'Composez votre abonnement'}</h2>
+      <p class="text-muted">${editing
+        ? 'Ajoutez, retirez un module ou changez de périodicité — le changement s\'applique immédiatement, avec un prorata sur la facture en cours.'
+        : 'Choisissez uniquement les modules dont vous avez besoin — le prix s\'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.'}</p>
       <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} — la quantité facturée par module suit automatiquement votre effectif réel (sauf Notes de frais, voir ci-dessous).</p>
       <div class="tabs" style="margin: 12px 0;">
         <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
@@ -10769,8 +10541,9 @@ function renderAbonnementAlaCarteComposer(nbSalaries) {
           <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
           <strong id="abo-alacarte-total">—</strong>
           <p class="alacarte-discount-note" id="abo-alacarte-discount-note"></p>
-          <p class="landing-simulator-note">Estimation — le montant exact est confirmé par Stripe avant tout paiement.</p>
-          <button type="button" class="btn btn-primary" style="width: 100%; margin-top: 8px;" id="btn-souscrire-alacarte">Souscrire</button>
+          <p class="landing-simulator-note">${editing ? 'Estimation — le montant exact (prorata) est confirmé par Stripe.' : 'Estimation — le montant exact est confirmé par Stripe avant tout paiement.'}</p>
+          <button type="button" class="btn btn-primary" style="width: 100%; margin-top: 8px;" id="${editing ? 'btn-enregistrer-modules-alacarte' : 'btn-souscrire-alacarte'}">${editing ? 'Enregistrer les modifications' : 'Souscrire'}</button>
+          ${editing ? `<button type="button" class="btn btn-secondary" style="width: 100%; margin-top: 8px;" id="btn-annuler-modification-modules">Annuler</button>` : ''}
         </div>
       </div>
     </div>
@@ -10885,6 +10658,63 @@ function bindParametresAbonnementEvents() {
     });
   }
 
+  const modifierModulesBtn = document.getElementById('btn-modifier-modules-alacarte');
+  if (modifierModulesBtn) modifierModulesBtn.addEventListener('click', () => {
+    const abo = companyRepository.getCurrent().abonnement;
+    // Pré-remplir le compositeur avec les modules réellement ACTIFS plutôt que l'état par défaut
+    // (tout coché) — sinon "Modifier mes modules" repartirait toujours de zéro au lieu de refléter
+    // l'abonnement en cours.
+    state.abonnementPeriodicite = abo.periodicite === 'annuel' ? 'annuel' : 'mensuel';
+    state.abonnementAlacarteModules = {};
+    LANDING_ALACARTE_MODULES.forEach(m => {
+      state.abonnementAlacarteModules[m.key] = (abo.modules || []).some(am => am.key === m.key);
+    });
+    state.abonnementAlacarteCounts = {};
+    (abo.modules || []).forEach(am => { state.abonnementAlacarteCounts[am.key] = am.quantite; });
+    state.abonnementEditingModules = true;
+    render();
+  });
+
+  const annulerModifBtn = document.getElementById('btn-annuler-modification-modules');
+  if (annulerModifBtn) annulerModifBtn.addEventListener('click', () => {
+    state.abonnementEditingModules = false;
+    render();
+  });
+
+  const enregistrerModulesBtn = document.getElementById('btn-enregistrer-modules-alacarte');
+  if (enregistrerModulesBtn) enregistrerModulesBtn.addEventListener('click', async () => {
+    const modules = [];
+    document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
+      if (!cb.checked) return;
+      const key = cb.dataset.moduleKey;
+      if (cb.dataset.moduleUnite === 'déclarant') {
+        const countInput = document.getElementById(`abo-alacarte-count-${key}`);
+        modules.push({ key, declarants: Math.max(1, parseInt(countInput?.value, 10) || 1) });
+      } else {
+        modules.push({ key });
+      }
+    });
+    if (!modules.length) {
+      showToast('Sélectionnez au moins un module — pour tout annuler, utilisez "Gérer mon abonnement".', 'error');
+      return;
+    }
+    enregistrerModulesBtn.disabled = true;
+    enregistrerModulesBtn.textContent = 'Enregistrement...';
+    const periodicite = state.abonnementPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
+    const result = await billingRepository.updateModules(modules, periodicite);
+    if (!result.success) {
+      showToast(result.error || 'Impossible de mettre à jour l\'abonnement.', 'error');
+      enregistrerModulesBtn.disabled = false;
+      enregistrerModulesBtn.textContent = 'Enregistrer les modifications';
+      return;
+    }
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (company) DB._companiesCache = [company];
+    state.abonnementEditingModules = false;
+    showToast('Modules mis à jour.');
+    render();
+  });
+
   const souscrireBtn = document.getElementById('btn-souscrire-alacarte');
   if (souscrireBtn) souscrireBtn.addEventListener('click', async () => {
     const modules = [];
@@ -10932,8 +10762,6 @@ function bindParametresEntrepriseEvents() {
     showToast('Profil de l\'entreprise mis à jour.');
     render();
   });
-
-  document.getElementById('btn-new-company').addEventListener('click', () => openOnboardingWizard());
 
   const logoUploadInput = document.getElementById('f-logo-upload');
   document.getElementById('btn-upload-logo').addEventListener('click', () => logoUploadInput.click());
@@ -14574,6 +14402,15 @@ function exportPaieCSV() {
 function equipeOptionsForService(serviceNom) {
   const service = serviceRepository.getAll().find(s => s.nom === serviceNom);
   return service ? service.equipes.map(eq => eq.nom) : [];
+}
+
+/** Même principe qu'equipeOptionsForService, mais pour un FILTRE plutôt qu'une fiche salarié : un
+ * filtre "Service" vide veut dire "tous les services", donc l'équipe doit alors lister TOUTES les
+ * équipes de l'entreprise (dédupliquées) plutôt que rien — equipeOptionsForService('') renverrait
+ * [] à tort, ce qui viderait le filtre équipe tant qu'aucun service n'est choisi. */
+function equipeOptionsForServiceFilter(serviceNom) {
+  if (!serviceNom) return Array.from(new Set(serviceRepository.getAll().flatMap(s => s.equipes.map(eq => eq.nom))));
+  return equipeOptionsForService(serviceNom);
 }
 
 function equipeSelectField(serviceNom, currentEquipe) {
