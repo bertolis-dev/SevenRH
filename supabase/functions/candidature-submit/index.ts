@@ -65,10 +65,40 @@ function buildFromAddress(raisonSociale: string): string {
  * orpheline (statut "nouvelle", jamais de cv_path) qu'un visiteur malveillant pourrait répéter en
  * boucle pour polluer la liste "Candidatures reçues" d'une entreprise (le honeypot/la limite de
  * débit, voir RATE_LIMIT_MAX_PER_HOUR, filtrent l'essentiel avant d'arriver jusqu'ici, mais restent
- * pas infaillibles — au moins pas de ligne fantôme à chaque tentative qui les franchirait). */
-function assertValidFile(kind: "cv" | "lettre", file: File) {
+ * pas infaillibles — au moins pas de ligne fantôme à chaque tentative qui les franchirait).
+ *
+ * §correctif bug sweep 19/08/2026 : `file.type` est déclaré par le client (le nom du champ
+ * multipart), donc falsifiable par quiconque poste directement à cette fonction sans passer par le
+ * vrai formulaire — on vérifie maintenant aussi les premiers octets réels du fichier (signature
+ * "magic bytes"), pas seulement l'étiquette MIME annoncée. */
+const FILE_SIGNATURES: Record<string, (bytes: Uint8Array) => boolean> = {
+  "application/pdf": (b) => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46, // "%PDF"
+  "image/png": (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47, // \x89PNG
+  "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff, // JPEG SOI marker
+};
+
+async function assertValidFile(kind: "cv" | "lettre", file: File) {
   if (file.size > MAX_FILE_BYTES) throw new Error(`Fichier "${kind}" trop volumineux (5 Mo maximum).`);
   if (!ALLOWED_TYPES[file.type]) throw new Error(`Format de fichier "${kind}" non accepté (PDF, PNG ou JPEG uniquement).`);
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (!FILE_SIGNATURES[file.type](head)) {
+    throw new Error(`Fichier "${kind}" invalide (le contenu ne correspond pas au format déclaré).`);
+  }
+}
+
+// §correctif bug sweep 19/08/2026 : aucune limite de longueur n'existait sur les champs texte —
+// combiné à la limite de débit (voir plus bas), un abus pouvait pousser des payloads texte
+// répétés de plusieurs Mo dans `candidatures` sans jamais toucher les fichiers. Bornes larges mais
+// finies : un vrai candidat ne les atteint jamais, un abus systématique si.
+const MAX_LENGTHS = { nom: 100, prenom: 100, telephone: 30, lettreTexte: 5000 };
+const MAX_POSTES = 20;
+
+function assertValidTextFields(nom: string, prenom: string, telephone: string, lettreTexte: string, postes: string[]) {
+  if (nom.length > MAX_LENGTHS.nom) throw new Error("Nom trop long.");
+  if (prenom.length > MAX_LENGTHS.prenom) throw new Error("Prénom trop long.");
+  if (telephone.length > MAX_LENGTHS.telephone) throw new Error("Numéro de téléphone trop long.");
+  if (lettreTexte.length > MAX_LENGTHS.lettreTexte) throw new Error("Lettre de motivation trop longue.");
+  if (postes.length > MAX_POSTES) throw new Error("Trop de postes sélectionnés.");
 }
 
 // D16 (audit fiabilité du 19/08/2026) : mitigation légère contre l'abus de ce formulaire public
@@ -186,30 +216,38 @@ Deno.serve(async (req) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return jsonResponse({ error: "Adresse email invalide." }, 400);
   }
+  try {
+    assertValidTextFields(nom, prenom, telephone, lettreTexte, postes);
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
 
-  // Limite de débit (D16) : comptée avant toute autre validation coûteuse (fichiers) pour qu'un
-  // robot en boucle ne consomme même pas ce travail-là une fois la limite atteinte. Comptée par IP
-  // seule (pas par company_id) : une même IP qui viserait tour à tour plusieurs entreprises reste
-  // limitée globalement, pas contournable en changeant juste de company_id.
+  // §correctif bug sweep 19/08/2026 : comptage + insertion faits ATOMIQUEMENT côté serveur (voir
+  // check_candidature_rate_limit, migration 0031) — l'ancienne version (D16) faisait les deux en
+  // deux appels JS séparés sans verrou, une race condition qu'un petit burst de requêtes
+  // concurrentes depuis la même IP pouvait dépasser. Comptée par IP seule (pas par company_id) :
+  // une même IP qui viserait tour à tour plusieurs entreprises reste limitée globalement.
   const clientIp = getClientIp(req);
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { count: recentCount } = await supabaseAdmin
-    .from("candidature_submit_log")
-    .select("id", { count: "exact", head: true })
-    .eq("ip", clientIp)
-    .gte("created_at", oneHourAgo);
-  if ((recentCount ?? 0) >= RATE_LIMIT_MAX_PER_HOUR) {
+  const { data: rateLimitOk, error: rateLimitErr } = await supabaseAdmin.rpc("check_candidature_rate_limit", {
+    p_ip: clientIp,
+    p_company_id: companyId,
+    p_limit: RATE_LIMIT_MAX_PER_HOUR,
+  });
+  if (rateLimitErr) {
+    console.error("candidature-submit rate-limit check error:", rateLimitErr);
+    return jsonResponse({ error: "Erreur lors de l'envoi." }, 500);
+  }
+  if (!rateLimitOk) {
     return jsonResponse({ error: "Trop de candidatures envoyées récemment depuis votre connexion. Réessayez plus tard." }, 429);
   }
-  await supabaseAdmin.from("candidature_submit_log").insert({ ip: clientIp, company_id: companyId });
 
   if (!(cv instanceof File) || cv.size === 0) {
     return jsonResponse({ error: "Le CV est obligatoire." }, 400);
   }
 
   try {
-    assertValidFile("cv", cv);
-    if (lettre instanceof File && lettre.size > 0) assertValidFile("lettre", lettre);
+    await assertValidFile("cv", cv);
+    if (lettre instanceof File && lettre.size > 0) await assertValidFile("lettre", lettre);
   } catch (err) {
     return jsonResponse({ error: (err as Error).message }, 400);
   }
@@ -227,11 +265,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Erreur lors de l'envoi : " + insertErr.message }, 500);
   }
 
+  // §correctif bug sweep 19/08/2026 : chemins déjà uploadés avant un échec suivant (ex. le CV passe,
+  // la lettre échoue) — nettoyés explicitement dans le catch ci-dessous plutôt que laissés en
+  // fichier orphelin dans le bucket (un document personnel sans plus aucune ligne y pointant,
+  // invisible/impossible à retrouver ou supprimer depuis l'application — un vrai souci RGPD de
+  // rétention, pas seulement du stockage gaspillé).
+  const uploadedPaths: string[] = [];
   try {
     const patch: Record<string, string> = {};
     patch.cv_path = await uploadFile(companyId, inserted.id, "cv", cv);
+    uploadedPaths.push(patch.cv_path);
     if (lettre instanceof File && lettre.size > 0) {
       patch.lettre_path = await uploadFile(companyId, inserted.id, "lettre", lettre);
+      uploadedPaths.push(patch.lettre_path);
     }
 
     const { error: updateErr } = await supabaseAdmin.from("candidatures").update(patch).eq("id", inserted.id);
@@ -243,9 +289,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ success: true });
   } catch (err) {
     // Le fichier a été validé plus haut (assertValidFile) : un échec ici est un problème de stockage/
-    // réseau, pas une donnée invalide côté visiteur — on retire la ligne orpheline plutôt que de la
-    // laisser polluer la liste "Candidatures reçues" de l'entreprise avec une candidature sans cv_path.
+    // réseau, pas une donnée invalide côté visiteur — on retire la ligne orpheline ET les fichiers
+    // déjà uploadés plutôt que de laisser une candidature sans cv_path ou un fichier fantôme.
     console.error("candidature-submit upload/update error:", err);
+    if (uploadedPaths.length) {
+      await supabaseAdmin.storage.from("candidatures-files").remove(uploadedPaths).catch((cleanupErr) => {
+        console.error("candidature-submit orphan file cleanup error:", cleanupErr);
+      });
+    }
     await supabaseAdmin.from("candidatures").delete().eq("id", inserted.id);
     return jsonResponse({ error: "Erreur lors de l'envoi : " + (err as Error).message }, 500);
   }
