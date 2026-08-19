@@ -10151,7 +10151,11 @@ function calendarBadge(category, icon, names, pending = false) {
  * une fois qu'il y a beaucoup de monde). Recalcule son propre `sharedData` (une seule date, donc bon
  * marché) via buildCalendarSharedData plutôt que de dépendre d'un état capturé au rendu précédent. */
 function openCalendarDayModal(dateStr) {
-  const sharedData = buildCalendarSharedData([{ date: new Date(dateStr) }]);
+  // §correctif bug sweep 19/08/2026 : new Date(dateStr) traitait cette date pure comme un
+  // horodatage UTC — dans un fuseau derrière UTC, le 1er janvier retombait sur le 31 décembre
+  // (getFullYear() côté buildCalendarSharedData), chargeant la liste de jours fériés de la MAUVAISE
+  // année et faisant disparaître le badge "Jour de l'an" ce jour précis.
+  const sharedData = buildCalendarSharedData([{ date: parseISODateLocal(dateStr) }]);
   const info = getCalendarDayInfo(dateStr, sharedData);
 
   const sections = [
