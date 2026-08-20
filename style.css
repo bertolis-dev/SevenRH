@@ -28,7 +28,7 @@
      blanc/quasi-blanc) — sépare plus nettement la barre latérale, la barre du haut et chaque carte,
      demande explicite plutôt qu'une simple ombre discrète. */
   --color-border: #d6dae0;
-  --login-card-border: rgba(23, 40, 77, 0.38);
+  --login-card-border: rgba(23, 40, 77, 0.65);
   --color-text: #1a1d24;
   --color-text-muted: #6b7280;
   --color-primary: var(--landing-navy-700);
@@ -2691,7 +2691,7 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-bg: #14161a;
     --color-surface: #1c1f26;
     --color-border: #383c46;
-    --login-card-border: rgba(255, 255, 255, 0.25);
+    --login-card-border: rgba(74, 114, 173, 0.5);
     --color-text: #f2f3f5;
     --color-text-muted: #9aa0ab;
     /* §refonte identité 20/08/2026 : la teinte marine claire suffit en fond de bouton en mode clair
