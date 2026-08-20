@@ -1730,7 +1730,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .notif-wrapper { position: relative; }
 
-.notif-bell {
+.notif-bell, #btn-help {
   position: relative;
   font-size: 18px;
   width: 36px;
@@ -1738,7 +1738,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-radius: 50%;
 }
 
-.notif-bell:hover { background: var(--color-muted-soft); }
+.notif-bell:hover, #btn-help:hover { background: var(--color-muted-soft); }
 
 .notif-badge {
   position: absolute;
