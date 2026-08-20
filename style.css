@@ -535,7 +535,11 @@ p { margin: 0; line-height: 1.5; }
   cursor: pointer;
   color: var(--color-text-muted);
   padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.btn-icon svg { width: 16px; height: 16px; display: block; }
 
 /* Zone tactile agrandie (repère WCAG ~44x44) sans changer la taille visuelle, comme .chip-remove ci-dessous — le bouton fermer de modale (~15 endroits), la cloche et les icônes d'archivage des notifications en profitent tous d'un coup. */
 .btn-icon::before {

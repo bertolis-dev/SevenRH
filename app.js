@@ -261,8 +261,14 @@ const ICONS = {
   circleOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>',
   leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-8 0-14 5-14 13 0 1.5.3 2.5.3 2.5S7 20 8 19c6-6 12-6 12-15z"/><path d="M6 18c2-4 6-8 10-10"/></svg>',
   crown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><path d="M4 18l-1-9 5 4 4-7 4 7 5-4-1 9"/></svg>',
+  backpack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V6a5 5 0 0 1 10 0v2"/><path d="M5 8h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><path d="M9 8v13"/><path d="M15 8v13"/><rect x="9" y="12" width="6" height="4" rx="1"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.9M22 12s-1.6 2.8-4.4 4.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>',
+  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>',
   hourglass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 21h12"/><path d="M7 3c0 5 5 6 5 9s-5 4-5 9"/><path d="M17 3c0 5-5 6-5 9s5 4 5 9"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 5"/><path d="M20 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 19"/><path d="M4 21v-4h4"/></svg>',
   medal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 4 7 10"/><path d="M15 4l2 6"/><path d="M10 15.5l1.5 1.5L14.5 13.5"/></svg>',
@@ -1160,7 +1166,7 @@ function openLegalModal(type) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>${escapeHtml(content.title)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">${content.body}</div>
       <div class="modal-footer">
@@ -1398,7 +1404,7 @@ function openAboutModal() {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>${NEXUS_LOGO_MARK} À propos de Nexus</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted" style="margin-top: 0;">Nexus est un SIRH pensé pour réunir, dans un seul outil, tout ce qu'une équipe RH gère habituellement dans plusieurs logiciels séparés.</p>
@@ -1444,7 +1450,7 @@ function openChangelogModal() {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Nouveautés</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         ${CHANGELOG_ENTRIES.map(entry => `
@@ -2117,7 +2123,7 @@ function openForcedPasswordChangeModal() {
             <label for="f-forced-password">Nouveau mot de passe (6 caractères minimum) *</label>
             <div class="password-input-wrapper">
               <input class="input" type="password" id="f-forced-password" minlength="6" required autocomplete="new-password" data-strength-meter="true">
-              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
             </div>
             <div class="password-strength" id="f-forced-password-strength">
               <div class="password-strength-bar"><span></span><span></span><span></span></div>
@@ -2128,7 +2134,7 @@ function openForcedPasswordChangeModal() {
             <label for="f-forced-password-confirm">Confirmation *</label>
             <div class="password-input-wrapper">
               <input class="input" type="password" id="f-forced-password-confirm" minlength="6" required autocomplete="new-password" data-match-source="f-forced-password">
-              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+              <button type="button" class="btn-icon password-toggle" data-target="f-forced-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
             </div>
             <span class="password-match-indicator" id="f-forced-password-confirm-match"></span>
           </div>
@@ -2538,7 +2544,7 @@ function renderLoginView() {
           <label for="f-login-password">Mot de passe</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-login-password" required autocomplete="current-password">
-            <button type="button" class="btn-icon password-toggle" data-target="f-login-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-login-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
@@ -2614,7 +2620,7 @@ function renderSignupCompanyView() {
           <label for="f-signup-company-password">Mot de passe</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-signup-company-password" required minlength="6" autocomplete="new-password" data-strength-meter="true">
-            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
           <div class="password-strength" id="f-signup-company-password-strength">
             <div class="password-strength-bar"><span></span><span></span><span></span></div>
@@ -2625,7 +2631,7 @@ function renderSignupCompanyView() {
           <label for="f-signup-company-password-confirm">Confirmation</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-signup-company-password-confirm" required minlength="6" autocomplete="new-password" data-match-source="f-signup-company-password">
-            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-signup-company-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
           <span class="password-match-indicator" id="f-signup-company-password-confirm-match"></span>
         </div>
@@ -2693,7 +2699,7 @@ function renderBertolisLoginView() {
           <label for="f-bertolis-password">Mot de passe</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-bertolis-password" required autocomplete="current-password">
-            <button type="button" class="btn-icon password-toggle" data-target="f-bertolis-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-bertolis-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
         </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
@@ -2746,7 +2752,7 @@ function renderResetPasswordView() {
           <label for="f-reset-password">Nouveau mot de passe</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-reset-password" required minlength="6" data-strength-meter="true">
-            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
           <div class="password-strength" id="f-reset-password-strength">
             <div class="password-strength-bar"><span></span><span></span><span></span></div>
@@ -2757,7 +2763,7 @@ function renderResetPasswordView() {
           <label for="f-reset-password-confirm">Confirmation</label>
           <div class="password-input-wrapper">
             <input class="input" type="password" id="f-reset-password-confirm" required minlength="6" data-match-source="f-reset-password">
-            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+            <button type="button" class="btn-icon password-toggle" data-target="f-reset-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
           <span class="password-match-indicator" id="f-reset-password-confirm-match"></span>
         </div>
@@ -3084,7 +3090,7 @@ function openChangePasswordModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Modifier mon mot de passe</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="change-password-form">
         <div class="modal-body">
@@ -3092,14 +3098,14 @@ function openChangePasswordModal() {
             <label for="f-current-password">Mot de passe actuel</label>
             <div class="password-input-wrapper">
               <input class="input" type="password" id="f-current-password" required>
-              <button type="button" class="btn-icon password-toggle" data-target="f-current-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+              <button type="button" class="btn-icon password-toggle" data-target="f-current-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
             </div>
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-new-password">Nouveau mot de passe</label>
             <div class="password-input-wrapper">
               <input class="input" type="password" id="f-new-password" required minlength="6" data-strength-meter="true">
-              <button type="button" class="btn-icon password-toggle" data-target="f-new-password" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+              <button type="button" class="btn-icon password-toggle" data-target="f-new-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
             </div>
             <div class="password-strength" id="f-new-password-strength">
               <div class="password-strength-bar"><span></span><span></span><span></span></div>
@@ -3110,7 +3116,7 @@ function openChangePasswordModal() {
             <label for="f-new-password-confirm">Confirmation</label>
             <div class="password-input-wrapper">
               <input class="input" type="password" id="f-new-password-confirm" required minlength="6" data-match-source="f-new-password">
-              <button type="button" class="btn-icon password-toggle" data-target="f-new-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">👁️</button>
+              <button type="button" class="btn-icon password-toggle" data-target="f-new-password-confirm" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
             </div>
             <span class="password-match-indicator" id="f-new-password-confirm-match"></span>
           </div>
@@ -3261,7 +3267,7 @@ function openHelpModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>❓ ${escapeHtml(help.title)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">${help.body}${faqSection}${bonnesPratiquesSection}</div>
       <div class="modal-footer">
@@ -3317,7 +3323,7 @@ function bindGlobalEvents() {
     if (!input) return;
     const showing = input.type === 'text';
     input.type = showing ? 'password' : 'text';
-    toggle.textContent = showing ? '👁️' : '🙈';
+    toggle.innerHTML = showing ? ICONS.eye : ICONS.eyeOff;
     toggle.setAttribute('aria-label', showing ? 'Afficher le mot de passe' : 'Masquer le mot de passe');
   });
 
@@ -4358,7 +4364,7 @@ function openDashboardCustomizeModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Personnaliser le tableau de bord</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="dashboard-customize-form">
         <div class="modal-body">
@@ -4734,14 +4740,14 @@ function renderDashboardDirecteur() {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Effectif actif', actifs.length, '👥')}
-      ${kpiCard('Turn-over (12 mois)', formatPercentFR(turnover), '🔄')}
-      ${kpiCard('Ancienneté moyenne', `${formatNumberFR(anciennete)} an${anciennete >= 2 ? 's' : ''}`, '🎖️')}
-      ${kpiCard('Absentéisme (maladie)', formatPercentFR(absenteisme), '🌡️')}
-      ${kpiCard('Coût notes de frais', formatCurrencyFR(coutFrais), '🧾')}
-      ${kpiCard('Coût tickets restaurant', formatCurrencyFR(coutTickets), '🍽️')}
-      ${kpiCard('Demandes en attente (tous types)', enAttenteToutesEtapes, '⏳')}
-      ${masseSalariale !== null ? kpiCard('Masse salariale mensuelle', formatCurrencyFR(masseSalariale), '💰') : ''}
+      ${kpiCard('Effectif actif', actifs.length, ICONS.people)}
+      ${kpiCard('Turn-over (12 mois)', formatPercentFR(turnover), ICONS.refresh)}
+      ${kpiCard('Ancienneté moyenne', `${formatNumberFR(anciennete)} an${anciennete >= 2 ? 's' : ''}`, ICONS.medal)}
+      ${kpiCard('Absentéisme (maladie)', formatPercentFR(absenteisme), ICONS.thermometer)}
+      ${kpiCard('Coût notes de frais', formatCurrencyFR(coutFrais), ICONS.receipt)}
+      ${kpiCard('Coût tickets restaurant', formatCurrencyFR(coutTickets), ICONS.utensils)}
+      ${kpiCard('Demandes en attente (tous types)', enAttenteToutesEtapes, ICONS.hourglass)}
+      ${masseSalariale !== null ? kpiCard('Masse salariale mensuelle', formatCurrencyFR(masseSalariale), ICONS.coin) : ''}
     </div>
 
     <div class="dashboard-grid">
@@ -5513,7 +5519,7 @@ function renderEmployeesList() {
         <option value="Actif" ${state.filters.statut === 'Actif' ? 'selected' : ''}>Actif</option>
         <option value="Inactif" ${state.filters.statut === 'Inactif' ? 'selected' : ''}>Inactif</option>
       </select>
-      <button type="button" class="btn ${state.filters.favorisOnly ? 'btn-primary' : 'btn-secondary'} btn-sm" id="btn-toggle-favoris-filter">⭐ Favoris</button>
+      <button type="button" class="btn ${state.filters.favorisOnly ? 'btn-primary' : 'btn-secondary'} btn-sm" id="btn-toggle-favoris-filter">${icon(ICONS.starFilled, 13)} Favoris</button>
     </div>
 
     <div class="card table-card">
@@ -5570,7 +5576,7 @@ function renderEmployeeRow(e) {
         <div class="employee-cell">
           ${renderAvatar(e)}
           <div>
-            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? '⭐ ' : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
+            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? icon(ICONS.starFilled, 13) + ' ' : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
             <div class="employee-matricule">${escapeHtml(e.matricule)}</div>
           </div>
         </div>
@@ -5710,7 +5716,7 @@ function openImportSalariesModal() {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Importer des salariés (CSV)</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted">Fichier CSV (export Excel/Google Sheets). Colonnes reconnues automatiquement par en-tête : Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
@@ -6198,7 +6204,7 @@ function openDocumentModal(employeeId) {
     <div class="modal">
       <div class="modal-header">
         <h2>Ajouter un document</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="document-form">
         <div class="modal-body">
@@ -6312,7 +6318,7 @@ function openSupportTicketModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Signaler un problème / demander de l'aide</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="support-ticket-form">
         <div class="modal-body">
@@ -6643,7 +6649,7 @@ function openPlanEntretienModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Planifier un entretien</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="plan-entretien-form">
         <div class="modal-body">
@@ -6875,7 +6881,7 @@ function openProposeIdeeModal() {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Proposer une idée</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="propose-idee-form">
         <div class="modal-body">
@@ -7105,7 +7111,7 @@ function openAjouterAvenantModal(employeeId) {
     <div class="modal">
       <div class="modal-header">
         <h2>Enregistrer un avenant</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="avenant-form">
         <div class="modal-body">
@@ -7194,7 +7200,7 @@ function renderEmployeeDetail(id) {
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Directeur peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
-        <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? '⭐ Favori' : '☆ Favori'}</button>
+        <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? icon(ICONS.starFilled, 13) + ' Favori' : icon(ICONS.star, 13) + ' Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
@@ -7388,7 +7394,7 @@ function openChangeRoleModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Changer le rôle</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="changer-role-form">
         <div class="modal-body">
@@ -7434,7 +7440,7 @@ function openForcerMotDePasseModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Réinitialiser le mot de passe</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="forcer-mdp-form">
         <div class="modal-body">
@@ -7482,7 +7488,7 @@ function openCreerCompteConnexionModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Créer les identifiants de connexion</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted">
@@ -7657,7 +7663,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
         const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
         return `
           <div class="balance-card" style="--type-color:${escapeHtml(t.couleur)}">
-            ${canAdjust ? `<button type="button" class="btn-link balance-adjust-btn" data-adjust-compteur="${t.id}" title="Ajuster ce compteur">✎</button>` : ''}
+            ${canAdjust ? `<button type="button" class="btn-link balance-adjust-btn" data-adjust-compteur="${t.id}" title="Ajuster ce compteur">${icon(ICONS.pencil, 13)}</button>` : ''}
             <div class="balance-icon">${escapeHtml(t.icone)}</div>
             <div class="balance-name">${escapeHtml(t.nom)}</div>
             <div class="balance-value">${disponibleLabel}</div>
@@ -7679,7 +7685,7 @@ function openAjusterCompteurModal(employeeId, typeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Ajuster le compteur — ${escapeHtml(type.nom)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="adjust-compteur-form">
         <div class="modal-body">
@@ -7746,7 +7752,7 @@ function openCoordonneesModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Modifier mes coordonnées</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="coordonnees-form">
         <div class="modal-body">
@@ -7799,7 +7805,7 @@ function openEmployeePrintModal(id) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Fiche salarié</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <div class="print-area print-document">
@@ -7871,7 +7877,7 @@ function openAttestationEmployeurModal(id) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Attestation employeur</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
@@ -7928,7 +7934,7 @@ function openRegistreUniquePersonnelModal() {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Registre unique du personnel</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted" style="margin-bottom: 14px;">Document obligatoire (Code du travail, art. L1221-13), à présenter sur demande de l'inspection du travail. Classé par ordre chronologique d'embauche, salariés partis compris.</p>
@@ -8020,7 +8026,7 @@ function openIndexEgaliteModal() {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Index de l'égalité professionnelle</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> — cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
@@ -8071,7 +8077,7 @@ function openAjouterIndexEgaliteModal(defaultYear) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Index égalité pro — ${defaultYear}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="index-egalite-form">
         <div class="modal-body">
@@ -8132,7 +8138,7 @@ function openCertificatTravailModal(id) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>Certificat de travail</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         ${!dateSortie ? `<p class="field-warning visible">⚠ Aucune date de fin de contrat renseignée sur cette fiche — ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
@@ -8573,7 +8579,7 @@ function openRequestHistoryModal(request) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Historique de la demande</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         ${timeline.length === 0 ? '<p class="text-muted">Aucun historique disponible.</p>' : `
@@ -8623,7 +8629,7 @@ function openProlongerModal(requestId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Prolonger l'arrêt</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="prolonger-form">
         <div class="modal-body">
@@ -8682,7 +8688,7 @@ function openRegulariserModal(requestId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Régulariser la demande</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="regulariser-form">
         <div class="modal-body">
@@ -8833,7 +8839,7 @@ function openLeaveAttestationModal(requestId) {
     <div class="modal">
       <div class="modal-header">
         <h2>Attestation de congé</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <div class="print-area print-document">
@@ -9088,7 +9094,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
     <div class="modal">
       <div class="modal-header">
         <h2>${categorie === 'autre' ? 'Nouvelle demande d\'absence' : categorie === 'conge' ? 'Nouvelle demande de congé' : 'Nouvelle demande'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="leave-request-form">
         <div class="modal-body">
@@ -9504,7 +9510,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier le type de congé' : 'Nouveau type de congé'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="leave-type-form">
         <div class="modal-body">
@@ -10047,7 +10053,7 @@ function openCalendarQuickAddModal(dateStr) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${escapeHtml(formatDate(dateStr))}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <p class="text-muted" style="margin-top: 0;">Que souhaitez-vous ajouter ?</p>
@@ -10219,28 +10225,33 @@ function openCalendarDayModal(dateStr) {
   const sharedData = buildCalendarSharedData([{ date: parseISODateLocal(dateStr) }]);
   const info = getCalendarDayInfo(dateStr, sharedData);
 
+  // §refonte identité 20/08/2026 : items porte désormais {icon, text} séparément plutôt qu'une
+  // seule chaîne concaténée — text.icone (congé) peut être un emoji choisi librement par un RH
+  // (donnée utilisateur, toujours échappée via escapeIcon), à ne jamais mélanger dans la même
+  // chaîne qu'une icône ICONS.xxx de confiance (SVG, jamais échappée) sous peine de casser l'une
+  // des deux en forçant un traitement unique.
   const sections = [
-    { label: 'Congés / absences', items: info.conges.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.icone} ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}`) },
-    { label: 'Télétravail', items: info.teletravail.map(t => `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}`) },
-    { label: 'Anniversaires', items: info.anniversaires.map(e => `🎂 ${e.prenom} ${e.nom}`) },
-    { label: 'Arrivées', items: info.arrivees.map(e => `🚀 ${e.prenom} ${e.nom}`) },
-    { label: 'Départs', items: info.departs.map(e => `👋 ${e.prenom} ${e.nom}`) }
+    { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    { label: 'Anniversaires', items: info.anniversaires.map(e => ({ icon: ICONS.cake, text: `${e.prenom} ${e.nom}` })) },
+    { label: 'Arrivées', items: info.arrivees.map(e => ({ icon: ICONS.rocket, text: `${e.prenom} ${e.nom}` })) },
+    { label: 'Départs', items: info.departs.map(e => ({ icon: ICONS.exitDoor, text: `${e.prenom} ${e.nom}` })) }
   ].filter(s => s.items.length);
 
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${escapeHtml(formatDate(dateStr))}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         ${info.ferie ? `<span class="badge badge-danger" style="margin-bottom: 10px;">${escapeHtml(info.ferie.label)}</span>` : ''}
-        ${info.vacances ? `<span class="badge badge-info" style="margin-bottom: 10px;">🎒 ${escapeHtml(info.vacances.nom)}</span>` : ''}
+        ${info.vacances ? `<span class="badge badge-info" style="margin-bottom: 10px;">${icon(ICONS.backpack, 14)} ${escapeHtml(info.vacances.nom)}</span>` : ''}
         ${sections.length === 0 ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
           <div style="margin-bottom: 14px;">
             <div class="search-section-label" style="padding-left: 0;">${escapeHtml(s.label)}</div>
             <div class="mini-list">
-              ${s.items.map(i => `<div class="mini-list-item"><span>${escapeHtml(i)}</span></div>`).join('')}
+              ${s.items.map(i => `<div class="mini-list-item"><span>${escapeIcon(i.icon)} ${escapeHtml(i.text)}</span></div>`).join('')}
             </div>
           </div>
         `).join('')}
@@ -11014,7 +11025,7 @@ function openEtablissementModal(id) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier l\'établissement' : 'Nouvel établissement'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="etablissement-form">
         <div class="modal-body">
@@ -11184,7 +11195,7 @@ function openServiceModal(id) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${isEdit ? 'Renommer le service' : 'Nouveau service'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="service-form">
         <div class="modal-body">
@@ -11225,7 +11236,7 @@ function openEquipeManagersModal(serviceId, equipeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Managers de "${escapeHtml(equipe.nom)}"</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="equipe-managers-form">
         <div class="modal-body">
@@ -11551,7 +11562,7 @@ function openSchoolPeriodModal(index) {
     <div class="modal">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier la période' : 'Nouvelle période de vacances'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="school-period-form">
         <div class="modal-body">
@@ -11699,7 +11710,7 @@ function openJourFerieModal(existingHoliday) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${isNew ? 'Ajouter un jour férié' : 'Configurer ce jour férié'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="jour-ferie-form">
         <div class="modal-body">
@@ -11835,7 +11846,7 @@ function openFermetureModal(existing) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier la fermeture' : 'Nouvelle fermeture'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="fermeture-form">
         <div class="modal-body">
@@ -11964,7 +11975,7 @@ function openCategorieSalarieModal(id) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier la catégorie' : 'Nouvelle catégorie de salarié'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="categorie-salarie-form">
         <div class="modal-body">
@@ -12473,7 +12484,7 @@ function renderHorairesSemaine() {
                 <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
                 ${g.employees.map(e => `
                   <tr>
-                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                     ${weekDates.map(d => {
                       const info = computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests);
                       return `<td class="planning-cell planning-${info.level}">${info.label}</td>`;
@@ -12530,7 +12541,7 @@ function renderHorairesJour() {
                 if (info.level === 'leave') return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3">🏖️ Congé</td></tr>`;
                 return `
                   <tr>
-                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' 💻' : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' 💻' : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                     <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
                     <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
                     <td><strong>${formatNumberFR(info.heures)} h</strong></td>
@@ -12576,7 +12587,7 @@ function renderHorairesMois() {
               <tr class="planning-service-header"><td colspan="${daysInMonth + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
               ${g.employees.map(e => `
                 <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">✎</button></td>
+                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                   ${Array.from({ length: daysInMonth }, (_, i) => {
                     const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
                     return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? '🏖️' : formatNumberFR(info.heures)}</td>`;
@@ -12599,7 +12610,7 @@ function openHorairesModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Horaires — ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="horaires-form">
         <div class="modal-body">
@@ -12954,7 +12965,7 @@ function openTeleworkRequestModal(presetEmployeeId, draft, presetDate) {
     <div class="modal">
       <div class="modal-header">
         <h2>Nouvelle demande de télétravail</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="telework-request-form">
         <div class="modal-body">
@@ -13525,7 +13536,7 @@ function openExpenseModal(presetEmployeeId, draft) {
     <div class="modal">
       <div class="modal-header">
         <h2>Nouvelle note de frais</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="expense-form">
         <div class="modal-body">
@@ -13673,7 +13684,7 @@ function openExpenseDetailModal(id) {
     <div class="modal">
       <div class="modal-header">
         <h2>Note de frais</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
         <div class="print-area">
@@ -13796,12 +13807,12 @@ function renderMesTicketsRestaurant() {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Jours éligibles', result.nbTickets, '📅')}
-      ${kpiCard('Tickets attribués', result.nbTickets, '🍽️')}
-      ${kpiCard('Valeur unitaire', formatCurrencyFR(settings.ticketsValeurFaciale), '💶')}
-      ${kpiCard('Montant total', formatCurrencyFR(result.montantTotal), '💰')}
-      ${kpiCard('Part employeur', formatCurrencyFR(result.partEmployeur), '🏢')}
-      ${kpiCard('Part salarié', formatCurrencyFR(result.partSalarie), '👤')}
+      ${kpiCard('Jours éligibles', result.nbTickets, ICONS.calendar)}
+      ${kpiCard('Tickets attribués', result.nbTickets, ICONS.utensils)}
+      ${kpiCard('Valeur unitaire', formatCurrencyFR(settings.ticketsValeurFaciale), ICONS.coin)}
+      ${kpiCard('Montant total', formatCurrencyFR(result.montantTotal), ICONS.coin)}
+      ${kpiCard('Part employeur', formatCurrencyFR(result.partEmployeur), ICONS.building)}
+      ${kpiCard('Part salarié', formatCurrencyFR(result.partSalarie), ICONS.person)}
     </div>
 
     ${result.ajustement ? `
@@ -13922,10 +13933,10 @@ function renderTicketsEquipe() {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Tickets à émettre', totals.nbTickets, '🍽️')}
-      ${kpiCard('Montant total', formatCurrencyFR(totals.montantTotal), '💶')}
-      ${kpiCard('Part employeur', formatCurrencyFR(totals.partEmployeur), '🏢')}
-      ${kpiCard('Part salarié', formatCurrencyFR(totals.partSalarie), '👤')}
+      ${kpiCard('Tickets à émettre', totals.nbTickets, ICONS.utensils)}
+      ${kpiCard('Montant total', formatCurrencyFR(totals.montantTotal), ICONS.coin)}
+      ${kpiCard('Part employeur', formatCurrencyFR(totals.partEmployeur), ICONS.building)}
+      ${kpiCard('Part salarié', formatCurrencyFR(totals.partSalarie), ICONS.person)}
     </div>
 
     <div class="card table-card">
@@ -13960,7 +13971,7 @@ function openCorrigerTicketsModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Corriger les tickets — ${MONTH_NAMES[month]} ${year}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="corriger-tickets-form">
         <div class="modal-body">
@@ -14261,8 +14272,8 @@ function renderExportPaiePreparationTab(rows) {
                 <td>${formatDurationFR(r.maladieJours)}</td>
                 <td>${formatDurationFR(r.teletravailJours)}</td>
                 <td>${formatCurrencyFR(r.notesRembourser)}</td>
-                <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">✎</button></td>
-                <td>${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">✎</button></td>
+                <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">${icon(ICONS.pencil, 13)}</button></td>
+                <td>${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">${icon(ICONS.pencil, 13)}</button></td>
                 <td>${r.tickets.nbTickets}</td>
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
@@ -14413,9 +14424,9 @@ function renderRemuneration() {
       <p class="view-subtitle">${renseignes.length} salarié${renseignes.length > 1 ? 's' : ''} avec un salaire renseigné sur ${employees.length}</p>
     </div>
     <div class="kpi-grid">
-      ${kpiCard('Masse salariale mensuelle', formatCurrencyFR(total), '💰')}
-      ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), '📊')}
-      ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), '📈')}
+      ${kpiCard('Masse salariale mensuelle', formatCurrencyFR(total), ICONS.coin)}
+      ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), ICONS.chart)}
+      ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), ICONS.trendingUp)}
     </div>
     <div class="card table-card">
       <table class="table">
@@ -14466,7 +14477,7 @@ function openVariablesPaieModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Variables de paie — ${MONTH_NAMES[month]} ${year}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="variables-paie-form">
         <div class="modal-body">
@@ -14521,7 +14532,7 @@ function openHeuresSupModal(employeeId) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Heures supplémentaires — ${MONTH_NAMES[month]} ${year}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="heures-sup-form">
         <div class="modal-body">
@@ -14993,7 +15004,7 @@ function openRejectCandidatureModal(candidature) {
     <div class="modal modal-small">
       <div class="modal-header">
         <h2>Répondre à ${escapeHtml(candidature.prenom)} ${escapeHtml(candidature.nom)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="reject-candidature-form">
         <div class="modal-body">
@@ -15060,7 +15071,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
     <div class="modal modal-large">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier le salarié' : 'Nouveau salarié'}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">✕</button>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="employee-form">
         <div class="modal-body">
