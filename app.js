@@ -289,7 +289,7 @@ const NAV_ITEMS = [
   // (upload + liste + conversion en salarié) — le recrutement/ATS complet reste par ailleurs hors
   // scope de Nexus RH. Rattaché au module "rh" (pas de nouvelle ligne tarifaire) : qui paie déjà
   // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
-  { key: 'embauche', label: 'Embauche', icon: '🧑‍💼', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'rh' },
+  { key: 'embauche', label: 'Embauche', icon: '🧑‍💼', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
 
   // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
   // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
@@ -938,7 +938,15 @@ const LANDING_FEATURES = [
  * (gestion des salariés/préparation de paie/documents/organigramme) à un prix inférieur à la somme
  * de leurs prix pris séparément. Support intégré/Boîte à idées volontairement absents de cette
  * liste (retirés de la tarification à la carte sur demande, question de savoir s'ils restent
- * inclus gratuitement encore ouverte). */
+ * inclus gratuitement encore ouverte).
+ *
+ * §demande 20/08/2026 : "Embauche" (QR code candidature) sort du Module RH pour devenir un module
+ * à part (NAV_ITEMS: embauche passe de module:'rh' à module:'embauche') — jusqu'ici inclus
+ * silencieusement dans le Module RH sans jamais apparaître dans la grille tarifaire. ATTENTION
+ * migration : un client déjà en à la carte avec seulement "Module RH" actif perdrait l'accès à
+ * Embauche du jour au lendemain sans avoir explicitement souscrit ce nouveau module — vérifier s'il
+ * existe de vrais clients dans ce cas avant/après bascule en production (à ce jour, aucun vu côté
+ * Stripe production, la fonctionnalité à la carte étant très récente). */
 /** unite: comme Lucca, tous les modules ne se facturent pas sur la même base — la plupart par
  * salarié/mois, mais Notes de frais par DÉCLARANT/mois (seuls les salariés qui déposent vraiment des
  * notes de frais comptent, pas tout l'effectif) — voir le champ dédié "combien de déclarants ?" dans
@@ -952,7 +960,8 @@ const LANDING_ALACARTE_MODULES = [
   { key: 'tickets', label: 'Tickets restaurant', prix: 0.95, unite: 'salarié' }, // NAV_ITEMS: tickets
   { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
   { key: 'remuneration', label: 'Rémunération', prix: 1.50, unite: 'salarié' }, // NAV_ITEMS: remuneration
-  { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' } // NAV_ITEMS: entretiens
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: entretiens
+  { key: 'embauche', label: 'Embauche', prix: 1.90, unite: 'salarié' } // NAV_ITEMS: embauche
 ];
 
 const ABOUT_CATEGORIES = [

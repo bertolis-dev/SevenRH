@@ -3,6 +3,12 @@
 # périodicités = 14 Price à créer). À exécuter UNE FOIS en mode test (clé sk_test_...), à vérifier
 # dans le Dashboard Stripe, puis UNE FOIS en mode live (clé sk_live_...) une fois satisfait.
 #
+# Déjà exécuté en production le 17/08/2026 pour ces 7 modules — NE PAS RELANCER tel quel (la clé
+# d'idempotence Stripe n'est garantie que ~24h, un nouveau lancement plusieurs jours après pourrait
+# créer des Price en double). Pour un 8ᵉ module ajouté depuis ("embauche", 20/08/2026), voir le
+# script séparé stripe-setup-embauche-module.sh — volontairement PAS ajouté ici, justement pour
+# éviter ce risque.
+#
 # Chaque Price est "tiered"/"volume" : le tarif appliqué à TOUTE la quantité dépend du palier dans
 # lequel elle tombe (0-24 salariés : plein tarif, 25-49 : -5%, 50-99 : -10%, 100+ : -15%) — voir
 # ALACARTE_VOLUME_TIERS dans app.js. Chaque Price porte metadata.module=<clé> : c'est cette
