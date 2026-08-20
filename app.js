@@ -266,6 +266,32 @@ const ICONS = {
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.9M22 12s-1.6 2.8-4.4 4.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
+  checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><rect x="3" y="13" width="18" height="5" rx="1.5"/><circle cx="7.5" cy="18" r="1.3"/><circle cx="16.5" cy="18" r="1.3"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  wrench: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-.7-.7-2z"/></svg>',
+  printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/><circle cx="7.5" cy="12.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
+  clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v2H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>',
+  paperclip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5l6.5-6.5a3 3 0 1 1 4.2 4.2L11 18a5 5 0 1 1-7-7l7.5-7.5"/></svg>',
+  package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v9l9 5 9-5V8"/><line x1="12" y1="13" x2="12" y2="22"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg>',
+  thumbsUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9z"/><path d="M7 11l3.5-7c1 0 2 .8 2 2v3h5.5a2 2 0 0 1 2 2.4l-1.2 6A2 2 0 0 1 17 19H7"/></svg>',
+  scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="6" y1="21" x2="18" y2="21"/><path d="M12 5l-6 8h12z"/><path d="M4 13a2.5 2.5 0 0 0 5 0"/><path d="M15 13a2.5 2.5 0 0 0 5 0"/></svg>',
+  cabinet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1"/><line x1="5" y1="12" x2="19" y2="12"/><line x1="11.5" y1="7" x2="12.5" y2="7"/><line x1="11.5" y1="16" x2="12.5" y2="16"/></svg>',
+  puzzle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h4v2.2a1.6 1.6 0 1 0 2 1.5V4h4v4h-2.3a1.6 1.6 0 1 0 0 3.2H19v4h-4v-2.2a1.6 1.6 0 1 0-2-1.5V19H9v-4H6.7a1.6 1.6 0 1 1 0-3.2H9z"/></svg>',
+  stethoscope: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v6a4 4 0 0 0 8 0V3"/><path d="M9 13v2a5 5 0 0 0 10 0v-1.5"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  mobileAlert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="16.1"/></svg>',
+  warningTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 15H3z"/><line x1="12" y1="10" x2="12" y2="14.5"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>',
+  ticket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a1.5 1.5 0 0 0 0 3v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a1.5 1.5 0 0 0 0-3z"/><line x1="10" y1="7" x2="10" y2="17" stroke-dasharray="2 2"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,17 20,6"/></svg>',
+  percent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12" y2="7.6"/></svg>',
+  helpCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><line x1="12" y1="16.5" x2="12" y2="16.6"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>',
   person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>',
   starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>',
@@ -273,7 +299,8 @@ const ICONS = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 5"/><path d="M20 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 19"/><path d="M4 21v-4h4"/></svg>',
   medal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 4 7 10"/><path d="M15 4l2 6"/><path d="M10 15.5l1.5 1.5L14.5 13.5"/></svg>',
   thermometer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a2 2 0 0 0-2 2v9.5a4 4 0 1 0 4 0V5a2 2 0 0 0-2-2z"/><line x1="12" y1="7" x2="12" y2="13"/></svg>',
-  trendingUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-8"/><path d="M15 6h5v5"/></svg>'
+  trendingUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-8"/><path d="M15 6h5v5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0c0 3.5 1 5.5 2 6.5H4c1-1 2-3 2-6.5z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>'
 };
 
 /** Encapsule une icône ICONS.xxx dans un span de taille fixe pour un usage EN LIGNE dans du texte
@@ -574,7 +601,7 @@ function bindCandidatureFormEvents(companyId) {
     document.getElementById('candidature-root').innerHTML = `
       <div class="login-card">
         <div class="login-logo">${headerHtml}</div>
-        <h1>Candidature envoyée ✅</h1>
+        <h1>Candidature envoyée ${icon(ICONS.checkCircle, 22)}</h1>
         <p class="text-muted">Merci ! Votre candidature a bien été transmise à l'entreprise.</p>
       </div>
     `;
@@ -755,9 +782,9 @@ const LANDING_FEATURES = [
       title: 'Congés & absences',
       kpis: [['18', 'Jours CP restants'], ['2', 'Demandes en attente'], ['5', 'Absents cette semaine']],
       rows: [
-        ['🏖️ Congés payés — 22 au 26 sept.', 'success', 'Validé'],
-        ['🤒 Arrêt maladie — T. Bernard', 'info', 'Déclaré'],
-        ["📅 Vacances scolaires intégrées automatiquement", null, null]
+        [ICONS.sun, 'Congés payés — 22 au 26 sept.', 'success', 'Validé'],
+        [ICONS.thermometer, 'Arrêt maladie — T. Bernard', 'info', 'Déclaré'],
+        [ICONS.calendar, "Vacances scolaires intégrées automatiquement", null, null]
       ]
     }
   },
@@ -787,9 +814,9 @@ const LANDING_FEATURES = [
       title: 'Planning & télétravail',
       kpis: [['4/5', 'Jours au bureau'], ['1', 'Jour télétravail'], ['18', 'Salariés au bureau']],
       rows: [
-        ['💻 Télétravail — C. Lefèvre', 'info', "Aujourd'hui"],
-        ['🏢 Présentiel cette semaine — 18 salariés', 'success', 'À jour'],
-        ['✅ Quota hebdomadaire vérifié automatiquement', null, null]
+        [ICONS.laptop, 'Télétravail — C. Lefèvre', 'info', "Aujourd'hui"],
+        [ICONS.building, 'Présentiel cette semaine — 18 salariés', 'success', 'À jour'],
+        [ICONS.checkCircle, 'Quota hebdomadaire vérifié automatiquement', null, null]
       ]
     }
   },
@@ -818,9 +845,9 @@ const LANDING_FEATURES = [
       title: 'Préparation de paie',
       kpis: [['0', 'Anomalies détectées'], ['24', 'Salariés prêts'], ['15', 'Export le']],
       rows: [
-        ['✅ Aucune anomalie détectée', 'success', 'Prêt'],
-        ["📤 Export vers votre logiciel de paie", null, null],
-        ['🧾 Bulletins distribués — 24 salariés', 'info', 'Ce mois']
+        [ICONS.checkCircle, 'Aucune anomalie détectée', 'success', 'Prêt'],
+        [ICONS.upload, "Export vers votre logiciel de paie", null, null],
+        [ICONS.receipt, 'Bulletins distribués — 24 salariés', 'info', 'Ce mois']
       ]
     }
   },
@@ -849,9 +876,9 @@ const LANDING_FEATURES = [
       title: 'Notes de frais',
       kpis: [['104,70 €', 'Ce mois-ci'], ['3', 'En attente'], ['0', 'Rejetées']],
       rows: [
-        ['🧾 Taxi client — 32,50 €', 'warning', 'En attente'],
-        ["🧾 Repas d'affaires — 58,00 €", 'success', 'Validé'],
-        ['🚗 Trajet domicile-travail — 14,20 €', 'info', 'Remboursé']
+        [ICONS.receipt, 'Taxi client — 32,50 €', 'warning', 'En attente'],
+        [ICONS.receipt, "Repas d'affaires — 58,00 €", 'success', 'Validé'],
+        [ICONS.car, 'Trajet domicile-travail — 14,20 €', 'info', 'Remboursé']
       ]
     }
   },
@@ -880,9 +907,9 @@ const LANDING_FEATURES = [
       title: 'Tickets restaurant',
       kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
       rows: [
-        ["🍽️ Calculé automatiquement selon les jours travaillés", null, null],
-        ['✅ Régularisation appliquée — J. Petit', 'info', 'Ce mois'],
-        ['📊 Historique consultable par chaque salarié', null, null]
+        [ICONS.utensils, "Calculé automatiquement selon les jours travaillés", null, null],
+        [ICONS.checkCircle, 'Régularisation appliquée — J. Petit', 'info', 'Ce mois'],
+        [ICONS.chart, 'Historique consultable par chaque salarié', null, null]
       ]
     }
   },
@@ -910,9 +937,9 @@ const LANDING_FEATURES = [
       title: 'Organigramme',
       kpis: [['4', 'Services'], ['6', 'Managers'], ['24', 'Salariés']],
       rows: [
-        ['🗂️ Direction générale', null, null],
-        ['👥 Généré depuis les managers renseignés', null, null],
-        ['✅ Toujours à jour', 'success', 'Automatique']
+        [ICONS.orgchart, 'Direction générale', null, null],
+        [ICONS.people, 'Généré depuis les managers renseignés', null, null],
+        [ICONS.checkCircle, 'Toujours à jour', 'success', 'Automatique']
       ]
     }
   },
@@ -940,9 +967,9 @@ const LANDING_FEATURES = [
       title: 'Documents RH',
       kpis: [['18', 'Documents ce mois'], ['3', 'Échéances proches'], ['0', 'Manquants']],
       rows: [
-        ['📁 Contrat — J. Moreau', 'success', 'Archivé'],
-        ['⚠️ Titre de séjour — expire dans 25 jours', 'warning', 'À renouveler'],
-        ['✅ Certificat généré automatiquement', null, null]
+        [ICONS.folder, 'Contrat — J. Moreau', 'success', 'Archivé'],
+        [ICONS.warningTriangle, 'Titre de séjour — expire dans 25 jours', 'warning', 'À renouveler'],
+        [ICONS.checkCircle, 'Certificat généré automatiquement', null, null]
       ]
     }
   },
@@ -970,9 +997,9 @@ const LANDING_FEATURES = [
       title: 'Mes tickets',
       kpis: [['2', 'Ouverts'], ['5', 'Résolus ce mois'], ['4h', 'Délai moyen']],
       rows: [
-        ['🎫 Question sur mes congés', 'info', 'En cours'],
-        ["✅ Analyse automatique suggérée pour la RH", null, null],
-        ['✅ Ticket résolu', 'success', 'Terminé']
+        [ICONS.ticket, 'Question sur mes congés', 'info', 'En cours'],
+        [ICONS.checkCircle, "Analyse automatique suggérée pour la RH", null, null],
+        [ICONS.checkCircle, 'Ticket résolu', 'success', 'Terminé']
       ]
     }
   }
@@ -1263,8 +1290,8 @@ function renderMockCard(mock) {
       <div class="landing-mock-kpis">
         ${mock.kpis.map(([value, label]) => `<div class="landing-mock-kpi"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join('')}
       </div>
-      ${mock.rows.map(([text, badgeType, badgeLabel]) => `
-        <div class="landing-mock-row">${escapeHtml(text)}${badgeType ? ` <span class="badge badge-${escapeHtml(badgeType)}">${escapeHtml(badgeLabel)}</span>` : ''}</div>
+      ${mock.rows.map(([rowIcon, text, badgeType, badgeLabel]) => `
+        <div class="landing-mock-row">${icon(rowIcon, 14)} ${escapeHtml(text)}${badgeType ? ` <span class="badge badge-${escapeHtml(badgeType)}">${escapeHtml(badgeLabel)}</span>` : ''}</div>
       `).join('')}
     </div>
   `;
@@ -1516,9 +1543,9 @@ function renderLandingScreen() {
               <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
             </div>
             <div class="landing-trust-row">
-              <span>🔒 Paiement sécurisé par Stripe</span>
-              <span>🛡️ Accès isolé par entreprise</span>
-              <span>↩️ Résiliable à tout moment</span>
+              <span>${icon(ICONS.lock, 14)} Paiement sécurisé par Stripe</span>
+              <span>${icon(ICONS.shield, 14)} Accès isolé par entreprise</span>
+              <span>${icon(ICONS.undo, 14)} Résiliable à tout moment</span>
             </div>
           </div>
           <div class="landing-hero-mock" aria-hidden="true">
@@ -1533,9 +1560,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
                   <div class="landing-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
                 </div>
-                <div class="landing-mock-row">🏖️ Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">💻 Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
-                <div class="landing-mock-row">🧾 Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
+                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.laptop, 14)} Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
                 <div class="landing-mock-header">
@@ -1547,9 +1574,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>2</strong><span>Demandes en attente</span></div>
                   <div class="landing-mock-kpi"><strong>5</strong><span>Absents cette semaine</span></div>
                 </div>
-                <div class="landing-mock-row">🏖️ Congés payés — 22 au 26 sept. <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">🤒 Arrêt maladie — T. Bernard <span class="badge badge-info">Déclaré</span></div>
-                <div class="landing-mock-row">📅 Vacances scolaires intégrées automatiquement</div>
+                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congés payés — 22 au 26 sept. <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.thermometer, 14)} Arrêt maladie — T. Bernard <span class="badge badge-info">Déclaré</span></div>
+                <div class="landing-mock-row">${icon(ICONS.calendar, 14)} Vacances scolaires intégrées automatiquement</div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
                 <div class="landing-mock-header">
@@ -1561,9 +1588,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>3</strong><span>En attente</span></div>
                   <div class="landing-mock-kpi"><strong>0</strong><span>Rejetées</span></div>
                 </div>
-                <div class="landing-mock-row">🧾 Taxi client — 32,50 € <span class="badge badge-warning">En attente</span></div>
-                <div class="landing-mock-row">🧾 Repas d'affaires — 58,00 € <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">🚗 Trajet domicile-travail — 14,20 € <span class="badge badge-info">Remboursé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Taxi client — 32,50 € <span class="badge badge-warning">En attente</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Repas d'affaires — 58,00 € <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.car, 14)} Trajet domicile-travail — 14,20 € <span class="badge badge-info">Remboursé</span></div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
                 <div class="landing-mock-header">
@@ -1575,9 +1602,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>9,00 €</strong><span>Valeur faciale</span></div>
                   <div class="landing-mock-kpi"><strong>60 %</strong><span>Part employeur</span></div>
                 </div>
-                <div class="landing-mock-row">🍽️ Calculé automatiquement selon les jours travaillés</div>
-                <div class="landing-mock-row">✅ Régularisation appliquée — J. Petit <span class="badge badge-info">Ce mois</span></div>
-                <div class="landing-mock-row">📊 Historique consultable par chaque salarié</div>
+                <div class="landing-mock-row">${icon(ICONS.utensils, 14)} Calculé automatiquement selon les jours travaillés</div>
+                <div class="landing-mock-row">${icon(ICONS.checkCircle, 14)} Régularisation appliquée — J. Petit <span class="badge badge-info">Ce mois</span></div>
+                <div class="landing-mock-row">${icon(ICONS.chart, 14)} Historique consultable par chaque salarié</div>
               </div>
             </div>
             <div class="landing-mock-dots">
@@ -1757,7 +1784,7 @@ function renderLandingScreen() {
             <div class="landing-platform-icon">${ICONS.mobile}</div>
             <h3>Android</h3>
             <p class="text-muted">Via Chrome</p>
-            ${platform === 'android' ? '<button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>' : ''}
+            ${platform === 'android' ? `<button type="button" class="btn btn-gold" data-install-trigger>${icon(ICONS.mobileAlert, 14)} Installer Nexus</button>` : ''}
             <ol class="landing-steps">
               <li><span class="landing-step-num">1</span><span class="landing-step-text">Ouvrez ce site dans <strong>Chrome</strong></span></li>
               <li><span class="landing-step-num">2</span><span class="landing-step-text">Appuyez sur <strong>⋮</strong>, en haut à droite</span></li>
@@ -1894,8 +1921,8 @@ function computeAlacarteTotal() {
 
   const discountNote = document.getElementById('alacarte-discount-note');
   if (discountNote) {
-    discountNote.textContent = tier.rate > 0
-      ? `🎉 Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${employeeCount} salariés)`
+    discountNote.innerHTML = tier.rate > 0
+      ? `${icon(ICONS.percent, 13)} Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${employeeCount} salariés)`
       : '';
   }
 }
@@ -2078,7 +2105,7 @@ function bindLandingSimulator() {
     const partEmployeurParTicket = valeurFaciale * partEmployeurPct / 100;
     const note = document.getElementById('sim-urssaf-note');
     if (partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026) {
-      note.innerHTML = `⚠️ Avec ces valeurs, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre — au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`;
+      note.innerHTML = `${icon(ICONS.warningTriangle, 14)} Avec ces valeurs, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre — au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`;
     } else {
       note.textContent = `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre — dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Ces paramètres sont personnalisables dans l'application, qui tient aussi compte des congés, absences et télétravail de chaque salarié.`;
     }
@@ -2194,7 +2221,7 @@ function renderSyncFailureBanner() {
   }
   banner.style.display = 'flex';
   banner.innerHTML = `
-    <span>⚠️ ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur — ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+    <span>${icon(ICONS.warningTriangle, 14)} ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur — ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
   `;
 }
 
@@ -2211,7 +2238,7 @@ function renderNonSouscritBanner() {
   const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
   banner.style.display = 'flex';
   banner.innerHTML = `
-    <span>🔒 Accès d'essai limité à 1 salarié. Souscrivez une offre pour inviter votre équipe.</span>
+    <span>${icon(ICONS.lock, 14)} Accès d'essai limité à 1 salarié. Souscrivez une offre pour inviter votre équipe.</span>
     ${canGererAbonnement ? `<button type="button" class="btn btn-sm btn-primary" id="btn-banner-abonnement">Voir les offres</button>` : ''}
   `;
   const btn = document.getElementById('btn-banner-abonnement');
@@ -2566,7 +2593,7 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
       ${isInstalledApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>'}
 
-      <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">🔧 Accès BERTOLIS (éditeur)</button>
+      <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">${icon(ICONS.wrench, 12)} Accès BERTOLIS (éditeur)</button>
     </div>
   `;
 }
@@ -2996,9 +3023,9 @@ function renderUserMenuPanel() {
       <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
       <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
     </div>
-    ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">⚙️ Paramètres</button>` : ''}
-    ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">💳 Abonnement</button>` : ''}
-    <button type="button" class="user-menu-item" id="btn-user-menu-support">🎫 Aide / Signaler un problème</button>
+    ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
+    ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
+    <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
@@ -3266,7 +3293,7 @@ function openHelpModal() {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>❓ ${escapeHtml(help.title)}</h2>
+        <h2>${icon(ICONS.helpCircle, 18)} ${escapeHtml(help.title)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">${help.body}${faqSection}${bonnesPratiquesSection}</div>
@@ -3341,7 +3368,7 @@ function bindGlobalEvents() {
       if (!sourceInput || !indicator) return;
       if (!confirmInput.value) { indicator.className = 'password-match-indicator'; indicator.textContent = ''; return; }
       const match = sourceInput.value === confirmInput.value;
-      indicator.textContent = match ? '✓ Les mots de passe correspondent' : '✕ Les mots de passe sont différents';
+      indicator.innerHTML = match ? `${icon(ICONS.check, 12)} Les mots de passe correspondent` : `${icon(ICONS.close, 12)} Les mots de passe sont différents`;
       indicator.className = 'password-match-indicator ' + (match ? 'match-ok' : 'match-bad');
     });
   });
@@ -3885,21 +3912,21 @@ function syncNotifications() {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
-    candidates.push(makeNotification(`leave-${r.id}`, '🏖️', 'Demande de congé en attente',
+    candidates.push(makeNotification(`leave-${r.id}`, ICONS.sun, 'Demande de congé en attente',
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' }, employee.id));
   });
 
   teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
-    candidates.push(makeNotification(`telework-${r.id}`, '💻', 'Demande de télétravail en attente',
+    candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
       `${employee.prenom} ${employee.nom}`, 'absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }, employee.id));
   });
 
   expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
-    candidates.push(makeNotification(`expense-${n.id}`, '🧾', 'Note de frais en attente',
+    candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
   });
 
@@ -3910,7 +3937,7 @@ function syncNotifications() {
   supportTicketRepository.getAll().filter(t => t.statut === 'resolu' || t.statut === 'livre').forEach(t => {
     const employee = employeeRepository.getById(t.employeeId);
     if (!employee) return;
-    candidates.push(makeNotification(`ticket-status-${t.id}-${t.statut}-${t.dateModification}`, '🎫',
+    candidates.push(makeNotification(`ticket-status-${t.id}-${t.statut}-${t.dateModification}`, ICONS.ticket,
       t.statut === 'livre' ? 'Ticket livré' : 'Ticket résolu',
       `${employee.prenom} ${employee.nom} · ${t.titre}`, 'mes-tickets', {}, employee.id));
   });
@@ -3922,44 +3949,44 @@ function syncNotifications() {
   entretienRepository.getAll().filter(e => e.statut === 'a_planifier').forEach(e => {
     const employee = employeeRepository.getById(e.employeeId);
     if (!employee) return;
-    candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, '🗒️', 'Entretien planifié',
+    candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, ICONS.notepad, 'Entretien planifié',
       `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${e.heurePrevue}` : ''}`, 'entretiens', {}, employee.id));
   });
 
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
   // widgets d'aperçu du tableau de bord) — sinon le 6e salarié et au-delà n'est simplement jamais notifié.
   getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`birthday-${x.employee.id}-${x.next.getFullYear()}`, '🎂', 'Anniversaire à venir',
+    candidates.push(makeNotification(`birthday-${x.employee.id}-${x.next.getFullYear()}`, ICONS.cake, 'Anniversaire à venir',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   getUpcomingSeniorityAnniversaries(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`seniority-${x.employee.id}-${x.years}`, '🏅', `${x.years} ans d'ancienneté`,
+    candidates.push(makeNotification(`seniority-${x.employee.id}-${x.years}`, ICONS.medal, `${x.years} ans d'ancienneté`,
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
-    candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, '📄', 'Fin de contrat proche',
+    candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, ICONS.document, 'Fin de contrat proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
   getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
-    candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, '📄', 'Fin de période d\'essai proche',
+    candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, ICONS.document, 'Fin de période d\'essai proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
   getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, '🗒️', 'Entretien professionnel à programmer',
+    candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, ICONS.notepad, 'Entretien professionnel à programmer',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, '🗒️', 'Bilan à 6 ans à réaliser',
+    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, ICONS.notepad, 'Bilan à 6 ans à réaliser',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`visite-medicale-${x.employee.id}-${toISODate(x.next)}`, '🩺', x.premiereVisite ? 'Visite médicale d\'embauche à programmer' : 'Visite médicale à programmer',
+    candidates.push(makeNotification(`visite-medicale-${x.employee.id}-${toISODate(x.next)}`, ICONS.stethoscope, x.premiereVisite ? 'Visite médicale d\'embauche à programmer' : 'Visite médicale à programmer',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
@@ -3972,7 +3999,7 @@ function syncNotifications() {
     const employee = employeeRepository.getById(d.employeeId);
     if (!employee) return;
     const title = daysUntil < 0 ? 'Document expiré' : 'Document arrivant à expiration';
-    candidates.push(makeNotification(`document-expiry-${d.id}`, '📄', title,
+    candidates.push(makeNotification(`document-expiry-${d.id}`, ICONS.document, title,
       `${employee.prenom} ${employee.nom} · ${d.categorie} · ${d.nom} · ${formatDate(d.dateExpiration)}`,
       'employee-detail', { currentEmployeeId: employee.id }, employee.id));
   });
@@ -4055,7 +4082,7 @@ function renderNotifPanel() {
 function renderNotifItem(n) {
   return `
     <div class="notif-item ${n.lu ? '' : 'unread'}">
-      <span class="notif-icon">${escapeHtml(n.icon)}</span>
+      <span class="notif-icon">${escapeIcon(n.icon)}</span>
       <div class="notif-body" data-notif-open="${n.id}" tabindex="0" role="button" aria-label="${escapeHtml(n.title)}">
         <div class="notif-title">${escapeHtml(n.title)}</div>
         <div class="notif-message">${escapeHtml(n.message)}</div>
@@ -4063,8 +4090,8 @@ function renderNotifItem(n) {
       </div>
       <div class="notif-actions">
         ${n.archive
-          ? `<button class="btn-icon" data-notif-unarchive="${n.id}" title="Désarchiver">↩️</button>`
-          : `<button class="btn-icon" data-notif-archive="${n.id}" title="Archiver">🗄️</button>`}
+          ? `<button class="btn-icon" data-notif-unarchive="${n.id}" title="Désarchiver">${icon(ICONS.undo, 13)}</button>`
+          : `<button class="btn-icon" data-notif-archive="${n.id}" title="Archiver">${icon(ICONS.archive, 13)}</button>`}
       </div>
     </div>
   `;
@@ -4347,7 +4374,7 @@ function widgetsForRole(role) {
 }
 
 function renderDashboardCustomizeButton() {
-  return `<button class="btn btn-secondary btn-sm" id="btn-customize-dashboard">🧩 Personnaliser</button>`;
+  return `<button class="btn btn-secondary btn-sm" id="btn-customize-dashboard">${icon(ICONS.puzzle, 14)} Personnaliser</button>`;
 }
 
 function bindDashboardEvents() {
@@ -5205,7 +5232,7 @@ function renderUpcomingBirthdaysCard(birthdays) {
           ${birthdays.map(x => `
             <div class="mini-list-item">
               <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}</span>
-              <span class="text-muted">${x.daysUntil === 0 ? 'Aujourd\'hui 🎂' : formatDate(toISODate(x.next))}</span>
+              <span class="text-muted">${x.daysUntil === 0 ? `Aujourd'hui ${icon(ICONS.cake, 13)}` : formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
         </div>
@@ -5223,7 +5250,7 @@ function renderUpcomingSeniorityCard(seniorityAnniversaries) {
           ${seniorityAnniversaries.map(x => `
             <div class="mini-list-item">
               <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${x.years} ans</span>
-              <span class="text-muted">${x.daysUntil === 0 ? 'Aujourd\'hui 🏅' : formatDate(toISODate(x.next))}</span>
+              <span class="text-muted">${x.daysUntil === 0 ? `Aujourd'hui ${icon(ICONS.medal, 13)}` : formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
         </div>
@@ -5488,15 +5515,15 @@ function renderEmployeesList() {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
-        ${canSeeRegistrePersonnel ? '<button class="btn btn-secondary" id="btn-registre-personnel">📋 Registre du personnel</button>' : ''}
-        ${canSeeRegistrePersonnel ? '<button class="btn btn-secondary" id="btn-index-egalite">⚖️ Index égalité pro</button>' : ''}
+        ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
+        ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
     </div>
     ${indexEgaliteRappel ? `
       <div class="card" style="margin-bottom: 12px; border-left: 3px solid var(--color-danger, #d33);">
-        <p class="${indexEgaliteRappel.retard ? 'text-danger' : ''}" style="font-weight: 600;">${indexEgaliteRappel.retard ? '⚠️ En retard : ' : '⚖️ '}Index égalité professionnelle ${indexEgaliteRappel.anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${indexEgaliteRappel.currentYear}${indexEgaliteRappel.retard ? ' (dépassée)' : ''}.</p>
+        <p class="${indexEgaliteRappel.retard ? 'text-danger' : ''}" style="font-weight: 600;">${indexEgaliteRappel.retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : icon(ICONS.scale, 14) + ' '}Index égalité professionnelle ${indexEgaliteRappel.anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${indexEgaliteRappel.currentYear}${indexEgaliteRappel.retard ? ' (dépassée)' : ''}.</p>
       </div>
     ` : ''}
 
@@ -5765,7 +5792,7 @@ function openImportSalariesModal() {
     const mappedIndexes = new Set(Object.values(mapping));
     const unmapped = headerRow.filter((h, i) => !mappedIndexes.has(i));
     document.getElementById('import-preview-zone').innerHTML = `
-      ${unmapped.length ? `<p class="field-warning visible">⚠ Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces colonnes seront ignorées.</p>` : ''}
+      ${unmapped.length ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces colonnes seront ignorées.</p>` : ''}
       <p><span class="badge badge-success">${okCount} à créer</span> <span class="badge badge-warning">${dupCount} doublon${dupCount > 1 ? 's' : ''} ignoré${dupCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
@@ -5799,7 +5826,7 @@ function openImportSalariesModal() {
       auditLogRepository.logAudit('Création', 'Salariés (import CSV)', `${results.created} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}`);
       document.getElementById('import-preview-zone').innerHTML = `
         <div class="empty-state">
-          <div class="empty-icon">✅</div>
+          <div class="empty-icon">${ICONS.checkCircle}</div>
           <p><strong>${results.created}</strong> salarié${results.created > 1 ? 's' : ''} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}.</p>
         </div>
       `;
@@ -5841,7 +5868,7 @@ function renderStatutBadge(statut) {
 function renderEmptyState() {
   return `
     <div class="empty-state">
-      <div class="empty-icon">🔍</div>
+      <div class="empty-icon">${ICONS.search}</div>
       <p>Aucun salarié ne correspond à votre recherche.</p>
     </div>
   `;
@@ -6025,7 +6052,7 @@ function renderOrganigramme() {
       </select>
     </div>
     <div class="card org-chart-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun salarié ne correspond à ces filtres.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.cabinet}</div><p>Aucun salarié ne correspond à ces filtres.</p></div>` : `
         <ul class="org-tree">
           ${roots.map(r => renderOrgNode(r, childrenOf)).join('')}
         </ul>
@@ -6446,7 +6473,7 @@ function renderTicketComment(c) {
  * automatiquement côté serveur (update_ticket_statut, 0018_ticket_suivi_livraison.sql). */
 function renderTicketDeliveryBanner(statut, dateLivraison) {
   if (statut !== 'livre' || !dateLivraison) return '';
-  return `<p class="text-muted" style="margin-top:0;">📦 Livré le ${formatDateTime(dateLivraison)}</p>`;
+  return `<p class="text-muted" style="margin-top:0;">${icon(ICONS.package, 14)} Livré le ${formatDateTime(dateLivraison)}</p>`;
 }
 
 /** Historique horodaté des changements de statut (0018_ticket_suivi_livraison.sql) — même
@@ -6475,7 +6502,7 @@ function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
   if (!aiAnalysis) return '';
   return `
     <div class="card" style="border: 1px dashed var(--color-primary); background: var(--color-primary-soft);">
-      <div class="search-section-label" style="padding-left:0;">✅ Analyse automatique — n'a pas modifié votre demande</div>
+      <div class="search-section-label" style="padding-left:0;">${icon(ICONS.checkCircle, 14)} Analyse automatique — n'a pas modifié votre demande</div>
       <p style="margin:6px 0;"><strong>Catégorie suggérée :</strong> ${escapeHtml(aiAnalysis.categorieSuggeree || '—')} · <strong>Priorité suggérée :</strong> ${escapeHtml(aiAnalysis.prioriteSuggeree || '—')}</p>
       ${aiAnalysis.resume ? `<p style="margin:6px 0;">${escapeHtml(aiAnalysis.resume)}</p>` : ''}
       ${Array.isArray(aiAnalysis.pointsCles) && aiAnalysis.pointsCles.length ? `<ul style="margin:6px 0;">${aiAnalysis.pointsCles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
@@ -6493,7 +6520,7 @@ function renderTicketDescriptionAndAi(description, contexte, pieceJointe, aiAnal
     <div class="card">
       ${description ? `<p>${escapeHtml(description).replace(/\n/g, '<br>')}</p>` : ''}
       ${contexte && contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(contexte.vue)}</p>` : ''}
-      ${pieceJointe ? `<p><a href="${pieceJointe.dataUrl}" download="${escapeHtml(pieceJointe.nom)}" class="btn-link">📎 ${escapeHtml(pieceJointe.nom)}</a></p>` : ''}
+      ${pieceJointe ? `<p><a href="${pieceJointe.dataUrl}" download="${escapeHtml(pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 13)} ${escapeHtml(pieceJointe.nom)}</a></p>` : ''}
     </div>
   `;
   if (!aiAnalysis) return descriptionCard;
@@ -6825,7 +6852,7 @@ function renderIdeeRow(idee, userId) {
       </span>
       <span class="detail-header-actions">
         <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'} idee-vote-btn" data-vote-idee="${idee.id}" title="${aVote ? 'Retirer mon vote' : 'Voter pour cette idée'}">
-          👍 ${votes.length}
+          ${icon(ICONS.thumbsUp, 13)} ${votes.length}
         </button>
       </span>
     </div>
@@ -6947,7 +6974,7 @@ function renderIdeeDetail(id) {
       </div>
       <div class="detail-header-actions">
         ${statutControls}
-        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'}" id="btn-vote-idee">👍 ${votes.length}</button>
+        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'}" id="btn-vote-idee">${icon(ICONS.thumbsUp, 13)} ${votes.length}</button>
       </div>
     </div>
     ${idee.description ? `<div class="card"><p style="margin:0;">${escapeHtml(idee.description).replace(/\n/g, '<br>')}</p></div>` : ''}
@@ -7201,7 +7228,7 @@ function renderEmployeeDetail(id) {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? icon(ICONS.starFilled, 13) + ' Favori' : icon(ICONS.star, 13) + ' Favori'}</button>
-        <button class="btn btn-secondary" id="btn-print-employee-fiche">🖨️ Fiche PDF</button>
+        <button class="btn btn-secondary" id="btn-print-employee-fiche">${icon(ICONS.printer, 14)} Fiche PDF</button>
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
         ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
@@ -8031,7 +8058,7 @@ function openIndexEgaliteModal() {
       <div class="modal-body">
         <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> — cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
         ${!concerne ? `<p class="text-muted" style="margin-top: 8px;">Non obligatoire pour ${anneePrecedente} : effectif sous 50 salariés au 31 décembre ${anneePrecedente} (${effectifAnneePrecedente}).</p>` : ''}
-        ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? '⚠️ En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${currentYear}${retard ? ' (dépassée)' : ''}.</p>` : ''}
+        ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${currentYear}${retard ? ' (dépassée)' : ''}.</p>` : ''}
         <div class="mini-list" style="margin-top: 12px;">
           ${anneesDeclarees.length === 0 ? `<p class="text-muted">Aucune année déclarée.</p>` : anneesDeclarees.map(year => {
             const r = records[year];
@@ -8141,7 +8168,7 @@ function openCertificatTravailModal(id) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        ${!dateSortie ? `<p class="field-warning visible">⚠ Aucune date de fin de contrat renseignée sur cette fiche — ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
+        ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de fin de contrat renseignée sur cette fiche — ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
         <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
           <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
@@ -8397,7 +8424,7 @@ function renderCongesDemandes(categorie = 'conge') {
     </div>
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">🏖️</div><p>Aucune demande ne correspond à ces filtres.</p></div>` : `
+      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>Aucune demande ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead>
             <tr>
@@ -8991,10 +9018,10 @@ function draftSummaryLabel(draft) {
     return `${type ? escapeHtml(type.icone) + ' ' + escapeHtml(type.nom) : 'Type non choisi'}${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
   }
   if (draft.type === 'teletravail') {
-    return `💻 Télétravail${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
+    return `${icon(ICONS.laptop, 13)} Télétravail${c.dateDebut ? ' · ' + formatDate(c.dateDebut) : ''}`;
   }
   if (draft.type === 'frais') {
-    return `🧾 ${escapeHtml(c.libelle || c.categorie || 'Note de frais')}${c.montantTTC ? ' · ' + formatCurrencyFR(Number(c.montantTTC)) : ''}`;
+    return `${icon(ICONS.receipt, 13)} ${escapeHtml(c.libelle || c.categorie || 'Note de frais')}${c.montantTTC ? ' · ' + formatCurrencyFR(Number(c.montantTTC)) : ''}`;
   }
   return 'Brouillon';
 }
@@ -9086,8 +9113,8 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
     const ferie = getAllPublicHolidays(Number(presetDate.slice(0, 4)), settings).find(h => h.date === presetDate);
     const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
     const vacances = schoolHolidays ? findSchoolHolidayPeriod(presetDate, settings.schoolZone, schoolHolidays) : null;
-    if (ferie) contextBanner = `<p class="text-muted" style="margin-top:0;">📅 ${escapeHtml(formatDate(presetDate))} est un jour férié (${escapeHtml(ferie.label)}).</p>`;
-    else if (vacances) contextBanner = `<p class="text-muted" style="margin-top:0;">🎒 ${escapeHtml(formatDate(presetDate))} est en période de vacances scolaires (${escapeHtml(vacances.nom)}).</p>`;
+    if (ferie) contextBanner = `<p class="text-muted" style="margin-top:0;">${icon(ICONS.calendar, 14)} ${escapeHtml(formatDate(presetDate))} est un jour férié (${escapeHtml(ferie.label)}).</p>`;
+    else if (vacances) contextBanner = `<p class="text-muted" style="margin-top:0;">${icon(ICONS.backpack, 14)} ${escapeHtml(formatDate(presetDate))} est en période de vacances scolaires (${escapeHtml(vacances.nom)}).</p>`;
   }
 
   const html = `
@@ -9677,7 +9704,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
           ${RULE_CRITERIA[regle.critere].operators.map(op => `<option value="${op}" ${regle.operateur === op ? 'selected' : ''}>${op === '>=' ? 'au moins' : op === '<=' ? 'au plus' : 'parmi'}</option>`).join('')}
         </select>
         ${renderRegleValueInput(regle, index)}
-        <button type="button" class="btn-icon" data-remove-regle="${index}" aria-label="Retirer" title="Retirer">✕</button>
+        <button type="button" class="btn-icon" data-remove-regle="${index}" aria-label="Retirer" title="Retirer">${icon(ICONS.close, 12)}</button>
       </div>
     `).join('');
     bindReglesRowEvents();
@@ -9810,7 +9837,7 @@ function renderCalendrierValidationsCard(user) {
 
   const item = (count, label, nav, navParams) => !count ? '' : `
     <button type="button" class="action-center-item" data-nav="${nav}" data-nav-params='${escapeHtml(JSON.stringify(navParams))}'>
-      <span class="action-center-icon">✅</span>
+      <span class="action-center-icon">${icon(ICONS.checkCircle, 16)}</span>
       <span class="action-center-label">${count} ${label}${count > 1 ? 's' : ''} en attente de validation</span>
       <span class="action-center-arrow">→</span>
     </button>
@@ -9985,7 +10012,7 @@ function renderCalendrier() {
     </div>
 
     ${renderCalendarFilterBar()}
-    ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">📅 Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
+    ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">${icon(ICONS.calendar, 14)} Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
   `;
 }
 
@@ -10058,10 +10085,10 @@ function openCalendarQuickAddModal(dateStr) {
       <div class="modal-body">
         <p class="text-muted" style="margin-top: 0;">Que souhaitez-vous ajouter ?</p>
         <button type="button" class="legend-item" id="btn-quick-add-conge" style="margin-bottom: 8px;">
-          🏖️ Congé / absence
+          ${icon(ICONS.sun, 15)} Congé / absence
         </button>
         <button type="button" class="legend-item" id="btn-quick-add-teletravail">
-          💻 Télétravail
+          ${icon(ICONS.laptop, 15)} Télétravail
         </button>
       </div>
     </div>
@@ -10592,7 +10619,7 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
   return `
     <div class="card abonnement-summary-card">
       <div class="abonnement-summary-header">
-        <div class="abonnement-summary-icon">🧩</div>
+        <div class="abonnement-summary-icon">${ICONS.puzzle}</div>
         <div>
           <h2 style="margin-bottom: 4px;">Abonnement à la carte</h2>
           <div class="badge-row">
@@ -10629,7 +10656,7 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
       </table>
       ${effectifDesaligne ? `
         <div style="margin-top: 16px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--color-warning-soft); color: var(--color-warning); font-size: 14px;">
-          ⚠️ La facturation ne correspond plus à votre effectif actuel (${nbSalaries} salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''}). Actualisez votre abonnement pour l'aligner.
+          ${icon(ICONS.warningTriangle, 14)} La facturation ne correspond plus à votre effectif actuel (${nbSalaries} salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''}). Actualisez votre abonnement pour l'aligner.
         </div>
       ` : ''}
       <div class="detail-header-actions" style="margin-top: 16px;">
@@ -10752,8 +10779,8 @@ function computeAbonnementAlacarteTotal(nbSalaries) {
 
   const discountNote = document.getElementById('abo-alacarte-discount-note');
   if (discountNote) {
-    discountNote.textContent = tier.rate > 0
-      ? `🎉 Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${nbSalaries} salariés)`
+    discountNote.innerHTML = tier.rate > 0
+      ? `${icon(ICONS.percent, 13)} Remise volume de ${Math.round(tier.rate * 100)} % appliquée (${nbSalaries} salariés)`
       : '';
   }
 }
@@ -11113,8 +11140,8 @@ function renderServiceCard(service) {
         ${service.equipes.length === 0 ? '<p class="text-muted">Aucune équipe.</p>' : service.equipes.map(eq => `
           <span class="chip">
             ${escapeHtml(eq.nom)}${eq.managerIds.length ? ` · ${escapeHtml(eq.managerIds.map(id => managerShortName(id)).join(', '))}` : ''}
-            <button type="button" class="chip-remove" data-manage-equipe="${service.id}:${eq.id}" title="Gérer les managers">👤</button>
-            <button type="button" class="chip-remove" data-delete-equipe="${service.id}:${eq.id}" title="Supprimer">✕</button>
+            <button type="button" class="chip-remove" data-manage-equipe="${service.id}:${eq.id}" title="Gérer les managers">${icon(ICONS.person, 12)}</button>
+            <button type="button" class="chip-remove" data-delete-equipe="${service.id}:${eq.id}" title="Supprimer">${icon(ICONS.close, 12)}</button>
           </span>
         `).join('')}
       </div>
@@ -11338,7 +11365,7 @@ function renderSettingsListCard(listDef, items) {
         ${items.map((item, i) => `
           <span class="chip">
             ${escapeHtml(item)}
-            <button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">✕</button>
+            <button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
           </span>
         `).join('')}
       </div>
@@ -11481,7 +11508,7 @@ function renderParametresVacances() {
   return `
     ${coverageGap ? `
       <div class="card" style="border-color: var(--color-warning); background: var(--color-warning-soft); margin-bottom: 16px;">
-        <p style="margin: 0;">⚠️ Aucune période de vacances scolaires n'est définie pour le mois en cours. Ajoutez l'année scolaire suivante ci-dessous pour que le calendrier reste à jour.</p>
+        <p style="margin: 0;">${icon(ICONS.warningTriangle, 14)} Aucune période de vacances scolaires n'est définie pour le mois en cours. Ajoutez l'année scolaire suivante ci-dessous pour que le calendrier reste à jour.</p>
       </div>
     ` : ''}
     <div class="card">
@@ -11789,7 +11816,7 @@ function renderParametresFermetures() {
         </div>
         <button class="btn btn-primary btn-sm" id="btn-add-fermeture">+ Ajouter une fermeture</button>
       </div>
-      ${fermetures.length === 0 ? `<div class="empty-state"><div class="empty-icon">🏢</div><p>Aucune fermeture programmée.</p></div>` : `
+      ${fermetures.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.building}</div><p>Aucune fermeture programmée.</p></div>` : `
         <table class="table">
           <thead><tr><th>Nom</th><th>Du</th><th>Au</th><th></th></tr></thead>
           <tbody>
@@ -12043,7 +12070,7 @@ function renderParametresComptes() {
     <div class="card">
       <h2>Comptes salariés</h2>
       <p class="text-muted">Un salarié créé n'a pas de compte de connexion par défaut — créez ses identifiants ici, ou depuis sa fiche (carte "Compte"). ${avecCompte} salarié${avecCompte > 1 ? 's' : ''} déjà connecté${avecCompte > 1 ? 's' : ''}.</p>
-      ${sansCompte.length === 0 ? `<div class="empty-state"><div class="empty-icon">✅</div><p>Tous les salariés actifs ont déjà un compte.</p></div>` : `
+      ${sansCompte.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.checkCircle}</div><p>Tous les salariés actifs ont déjà un compte.</p></div>` : `
         <div class="mini-list" style="margin-top: 12px;">
           ${sansCompte.map(e => `
             <div class="mini-list-item">
@@ -12069,7 +12096,7 @@ function renderParametresQualite() {
     <div class="card">
       <h2>Qualité des données</h2>
       <p class="text-muted">Contrôles automatiques sur les salariés actifs — à corriger avant que ça ne pose problème en paie ou en déclaration.</p>
-      ${issues.length === 0 ? `<div class="empty-state"><div class="empty-icon">✅</div><p>Aucun problème détecté.</p></div>` : `
+      ${issues.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.checkCircle}</div><p>Aucun problème détecté.</p></div>` : `
         <div class="mini-list" style="margin-top: 12px;">
           ${issues.map(issue => `
             <div class="mini-list-item quality-issue-row">
@@ -12118,7 +12145,7 @@ function renderParametresAudit() {
         <input type="date" id="audit-filter-date-debut" class="input" value="${escapeHtml(filters.dateDebut)}" title="Depuis le">
         <input type="date" id="audit-filter-date-fin" class="input" value="${escapeHtml(filters.dateFin)}" title="Jusqu'au">
       </div>
-      ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗂️</div><p>Aucun événement ne correspond à ces filtres.</p></div>` : `
+      ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.cabinet}</div><p>Aucun événement ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th></tr></thead>
           <tbody>
@@ -12310,7 +12337,7 @@ function renderPlanningSemaine() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}</tr></thead>
           <tbody>
@@ -12348,7 +12375,7 @@ function renderPlanningMois() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
           <tbody>
@@ -12384,7 +12411,7 @@ function renderPlanningAnnee() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${MONTH_NAMES.map(m => `<th>${m.slice(0, 3)}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
@@ -12430,7 +12457,7 @@ function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
   // Une demi-journée (matin OU après-midi, sur une date isolée) ne doit faire disparaître que la
   // moitié concernée des heures, pas la journée entière.
   const isHalfDayLeave = Boolean(leaveToday && leaveToday.demiJournee && leaveToday.dateDebut === leaveToday.dateFin);
-  if (leaveToday && !isHalfDayLeave) return { heures: 0, label: '🏖️', level: 'leave' };
+  if (leaveToday && !isHalfDayLeave) return { heures: 0, label: icon(ICONS.sun, 14), level: 'leave' };
 
   const matinHeures = timeRangeToHours(employee.horaireMatinDebut, employee.horaireMatinFin);
   const apremHeures = timeRangeToHours(employee.horaireApresMidiDebut, employee.horaireApresMidiFin);
@@ -12438,7 +12465,7 @@ function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
     ? (leaveToday.demiJournee === 'matin' ? apremHeures : matinHeures)
     : matinHeures + apremHeures);
   const onTelework = teleworkRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-  const label = `${formatNumberFR(heures)} h${isHalfDayLeave ? ' 🏖️' : ''}${onTelework ? ' 💻' : ''}`;
+  const label = `${formatNumberFR(heures)} h${isHalfDayLeave ? ' ' + icon(ICONS.sun, 13) : ''}${onTelework ? ' ' + icon(ICONS.laptop, 13) : ''}`;
   return { heures, label, level: isHalfDayLeave ? 'leave' : (onTelework ? 'remote' : 'office') };
 }
 
@@ -12474,7 +12501,7 @@ function renderHorairesSemaine() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
@@ -12528,7 +12555,7 @@ function renderHorairesJour() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th><th>Matin</th><th>Après-midi</th><th>Total</th></tr></thead>
           <tbody>
@@ -12538,10 +12565,10 @@ function renderHorairesJour() {
                 const travaille = (e.joursTravailles || []).includes(weekday);
                 if (!travaille) return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
                 const info = computeDailyHours(e, dateStr, leaveRequests, teleworkRequests);
-                if (info.level === 'leave') return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3">🏖️ Congé</td></tr>`;
+                if (info.level === 'leave') return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3">${icon(ICONS.sun, 14)} Congé</td></tr>`;
                 return `
                   <tr>
-                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' 💻' : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' ' + icon(ICONS.laptop, 13) : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                     <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
                     <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
                     <td><strong>${formatNumberFR(info.heures)} h</strong></td>
@@ -12579,7 +12606,7 @@ function renderHorairesMois() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Aucun salarié à afficher.</p></div>` : `
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
@@ -12590,7 +12617,7 @@ function renderHorairesMois() {
                   <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                   ${Array.from({ length: daysInMonth }, (_, i) => {
                     const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
-                    return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? '🏖️' : formatNumberFR(info.heures)}</td>`;
+                    return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? icon(ICONS.sun, 12) : formatNumberFR(info.heures)}</td>`;
                   }).join('')}
                   <td><strong>${formatNumberFR(totalMois(e))} h</strong></td>
                 </tr>
@@ -12842,7 +12869,7 @@ function renderTeletravailDemandes() {
     </div>
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">💻</div><p>Aucune demande de télétravail.</p></div>` : `
+      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.laptop}</div><p>Aucune demande de télétravail.</p></div>` : `
         <table class="table">
           <thead><tr><th>Salarié</th><th>Période</th><th>Jours</th><th>Statut</th><th></th></tr></thead>
           <tbody>${pageItems.map(renderTeleworkRequestRow).join('')}</tbody>
@@ -13263,12 +13290,12 @@ function renderPlanningCell(employee, date, teleworkRequests, leaveRequests) {
     return `<td class="planning-cell planning-off">—</td>`;
   }
   if (leaveRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin)) {
-    return `<td class="planning-cell planning-leave" title="Congé">🏖️</td>`;
+    return `<td class="planning-cell planning-leave" title="Congé">${icon(ICONS.sun, 14)}</td>`;
   }
   if (teleworkRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin)) {
-    return `<td class="planning-cell planning-remote" title="Télétravail">🏠</td>`;
+    return `<td class="planning-cell planning-remote" title="Télétravail">${icon(ICONS.home, 14)}</td>`;
   }
-  return `<td class="planning-cell planning-office" title="Présent au bureau">🏢</td>`;
+  return `<td class="planning-cell planning-office" title="Présent au bureau">${icon(ICONS.building, 14)}</td>`;
 }
 
 function countPresentOnDate(date, employees, teleworkRequests, leaveRequests) {
@@ -13379,7 +13406,7 @@ function renderFrais() {
     </div>
 
     <div class="card table-card">
-      ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">🧾</div><p>Aucune note de frais ne correspond à ces filtres.</p></div>` : `
+      ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucune note de frais ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead>
             <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th>Montant TTC</th><th>Statut</th><th></th></tr>
@@ -13817,7 +13844,7 @@ function renderMesTicketsRestaurant() {
 
     ${result.ajustement ? `
       <div class="card" style="margin-top: 12px;">
-        <p style="margin: 0;">⚖️ Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? ` — ${escapeHtml(regularisation)}` : ''}</p>
+        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? ` — ${escapeHtml(regularisation)}` : ''}</p>
       </div>
     ` : ''}
 
@@ -14236,18 +14263,18 @@ function renderExportPaiePreparationTab(rows) {
   return `
     ${!anomalies.length ? `
       <div class="card" style="text-align: center; padding: 24px;">
-        <div style="font-size: 32px;">✅</div>
+        <div style="font-size: 32px; display: flex; align-items: center; justify-content: center;">${icon(ICONS.checkCircle, 32)}</div>
         <p>Aucune anomalie détectée pour ${MONTH_NAMES[state.paieMonth]} ${state.paieYear}. Prêt pour l'export.</p>
       </div>
     ` : `
-      ${anomalySection('🚫 Bloquantes — à corriger avant export', bloquantes, 'badge-danger')}
-      ${anomalySection('⚠️ Avertissements', avertissements, 'badge-warning')}
-      ${anomalySection('ℹ️ Informations', informations, 'badge-info')}
+      ${anomalySection(`${icon(ICONS.block, 15)} Bloquantes — à corriger avant export`, bloquantes, 'badge-danger')}
+      ${anomalySection(`${icon(ICONS.warningTriangle, 15)} Avertissements`, avertissements, 'badge-warning')}
+      ${anomalySection(`${icon(ICONS.info, 15)} Informations`, informations, 'badge-info')}
     `}
 
     <div class="card table-card">
       <h3 style="padding: 14px 14px 0;">Récapitulatif par salarié</h3>
-      ${!rows.length ? `<div class="empty-state"><div class="empty-icon">🧾</div><p>Aucun salarié pour ce mois.</p></div>` : `
+      ${!rows.length ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucun salarié pour ce mois.</p></div>` : `
         <table class="table">
           <thead>
             <tr>
@@ -14303,7 +14330,7 @@ function renderExportPaieExportTab(rows) {
           </select>
         </div>
       </div>
-      <p class="text-muted" style="margin-top: 8px;">⚠️ Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel — les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
+      <p class="text-muted" style="margin-top: 8px;">${icon(ICONS.warningTriangle, 14)} Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel — les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
       ${modele === 'personnalise' ? `
         <div class="form-grid" style="margin-top: 12px;">
           ${checkboxField('paieCol.conges', 'Congés', colonnes.conges)}
@@ -14315,7 +14342,7 @@ function renderExportPaieExportTab(rows) {
     </div>
 
     <div class="card table-card">
-      ${rows.length === 0 ? `<div class="empty-state"><div class="empty-icon">📤</div><p>Aucun salarié à exporter pour ce mois.</p></div>` : `
+      ${rows.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.upload}</div><p>Aucun salarié à exporter pour ce mois.</p></div>` : `
         <table class="table">
           <thead>
             <tr>
@@ -14734,7 +14761,7 @@ function renderPostesOuvertsCard(postesOuverts) {
               <span class="text-muted" style="font-size: 12px;">Places</span>
               <input type="number" class="input poste-ouvert-qty" min="1" step="1" value="${poste.quantite}" data-index="${i}">
             </label>
-            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">✕</button>
+            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
           </div>
         `).join('')}
       </div>
@@ -14814,7 +14841,7 @@ function renderEmbauche() {
         <p class="text-muted" style="margin-bottom: 8px;">Lien de candidature</p>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <input type="text" class="input" id="embauche-link" value="${escapeHtml(url)}" readonly style="flex: 1; min-width: 0;">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-share-embauche-link">🔗 Partager</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-share-embauche-link">${icon(ICONS.link, 13)} Partager</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-embauche-link">Copier</button>
         </div>
       </div>
@@ -15085,7 +15112,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
                 <label for="f-email">Email *</label>
                 <input class="input" type="email" id="f-email" name="email" value="${escapeHtml(employee.email || '')}" required
                   data-check-duplicate-email="true" data-exclude-id="${escapeHtml(employee.id || '')}">
-                <span class="field-warning" id="f-email-duplicate-warning">⚠ Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
+                <span class="field-warning" id="f-email-duplicate-warning">${icon(ICONS.warningTriangle, 13)} Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
               </div>
               ${textField('telephone', 'Téléphone', employee.telephone)}
               ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
