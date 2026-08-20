@@ -10532,6 +10532,7 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
       <div class="detail-grid" style="margin-top: 16px;">
         ${infoRow('Date de début', formatDate(abo.dateDebut))}
         ${infoRow('Prochain renouvellement', abo.dateRenouvellement ? formatDate(abo.dateRenouvellement) : '—')}
+        ${infoRow('Nombre de salariés actifs', `${nbSalaries}`)}
         ${infoRow('Coût estimé', `${formatCurrencyFR(abo.periodicite === 'annuel' ? totalMensuel * 10 : totalMensuel)} / ${abo.periodicite === 'annuel' ? 'an' : 'mois'}`)}
       </div>
       <table class="table" style="margin-top: 16px;">
