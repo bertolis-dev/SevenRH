@@ -64,11 +64,9 @@ const MODULES: Record<string, { unite: "salarie" | "declarant"; priceIds: { mens
   remuneration: { unite: "salarie", priceIds: { mensuel: "price_1U5NipCAcL94JssKBf9fUyfd", annuel: "price_1U5NiqCAcL94JssKkdBt3kw0" } },
   entretiens: { unite: "salarie", priceIds: { mensuel: "price_1U5NXuCAcL94JssKNYIyAShJ", annuel: "price_1U5NXuCAcL94JssKDoOPle5z" } },
   // §demande 20/08/2026 : "embauche" sort du module "rh" (où il était inclus gratuitement/
-  // silencieusement) pour devenir son propre module facturé — remplacer ces deux price_XXX par les
-  // vraies valeurs renvoyées par stripe-setup-modules.sh une fois exécuté (voir ce script). TANT QUE
-  // CES DEUX VALEURS RESTENT DES PLACEHOLDERS, un checkout/resync sur "embauche" échouera côté
-  // Stripe (price introuvable) — ne pas exposer ce module aux clients avant de les avoir remplacées.
-  embauche: { unite: "salarie", priceIds: { mensuel: "price_REMPLACER_MENSUEL_EMBAUCHE", annuel: "price_REMPLACER_ANNUEL_EMBAUCHE" } },
+  // silencieusement) pour devenir son propre module facturé — Price réels (mode PRODUCTION) créés
+  // le 20/08/2026 via stripe-setup-embauche-module.sh.
+  embauche: { unite: "salarie", priceIds: { mensuel: "price_1U6UF5CAcL94JssKa63bSnO0", annuel: "price_1U6UF6CAcL94JssKoETMMO3b" } },
 };
 
 function statutFromStripeStatus(stripeStatus: string): string {
