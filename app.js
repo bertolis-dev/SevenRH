@@ -897,18 +897,18 @@ const LANDING_FEATURES = [
     text: 'Vos salariés posent leurs questions directement depuis l\'application.',
     detail: [
       "Tickets support ouverts directement depuis l'application, sans outil externe",
-      "Analyse assistée par IA pour accélérer le traitement par l'équipe RH",
+      "Analyse automatique pour accélérer le traitement par l'équipe RH",
       "Suivi de statut et date de livraison pour chaque demande",
       "Notification en temps réel à chaque mise à jour du ticket"
     ],
     howItWorks: [
       "Le salarié ouvre un ticket directement depuis l'application, sans outil externe.",
-      "Une analyse assistée par IA aide l'équipe RH à traiter la demande plus vite.",
+      "Une analyse automatique aide l'équipe RH à traiter la demande plus vite.",
       "Le salarié suit le statut et la date de livraison jusqu'à la résolution."
     ],
     audience: [
       { role: 'Salarié', text: "Pose sa question sans chercher un contact ou un outil séparé." },
-      { role: 'RH', text: "Traite les demandes avec l'aide de l'IA, sans changer d'outil." },
+      { role: 'RH', text: "Traite les demandes avec une analyse automatique, sans changer d'outil." },
       { role: 'Direction', text: "A une vue d'ensemble du volume et du traitement des demandes internes." }
     ],
     related: [6, 0],
@@ -917,7 +917,7 @@ const LANDING_FEATURES = [
       kpis: [['2', 'Ouverts'], ['5', 'Résolus ce mois'], ['4h', 'Délai moyen']],
       rows: [
         ['🎫 Question sur mes congés', 'info', 'En cours'],
-        ["🤖 Analyse IA suggérée pour la RH", null, null],
+        ["✅ Analyse automatique suggérée pour la RH", null, null],
         ['✅ Ticket résolu', 'success', 'Terminé']
       ]
     }
@@ -1004,7 +1004,7 @@ const ABOUT_CATEGORIES = [
     title: 'Support & pilotage',
     items: [
       "Tickets support intégrés, avec suivi de statut et date de livraison",
-      "Analyse automatique des tickets assistée par IA",
+      "Analyse automatique des tickets pour accélérer leur traitement",
       "Tableaux de bord adaptés à chaque rôle (salarié, manager, RH, comptabilité, directeur)",
       "Recherche globale instantanée (Ctrl+K)",
       "Notifications en temps réel"
@@ -6407,7 +6407,7 @@ function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
   if (!aiAnalysis) return '';
   return `
     <div class="card" style="border: 1px dashed var(--color-primary); background: var(--color-primary-soft);">
-      <div class="search-section-label" style="padding-left:0;">🤖 Suggestion de l'IA — n'a pas modifié votre demande</div>
+      <div class="search-section-label" style="padding-left:0;">✅ Analyse automatique — n'a pas modifié votre demande</div>
       <p style="margin:6px 0;"><strong>Catégorie suggérée :</strong> ${escapeHtml(aiAnalysis.categorieSuggeree || '—')} · <strong>Priorité suggérée :</strong> ${escapeHtml(aiAnalysis.prioriteSuggeree || '—')}</p>
       ${aiAnalysis.resume ? `<p style="margin:6px 0;">${escapeHtml(aiAnalysis.resume)}</p>` : ''}
       ${Array.isArray(aiAnalysis.pointsCles) && aiAnalysis.pointsCles.length ? `<ul style="margin:6px 0;">${aiAnalysis.pointsCles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
