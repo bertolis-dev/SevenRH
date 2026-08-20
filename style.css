@@ -22,6 +22,15 @@
   --color-danger: #dc2626;
   --color-danger-soft: #fef2f2;
   --color-muted-soft: #f1f2f4;
+  /* §correctif 20/08/2026 : jetons dédiés au TEXTE écrit avec --color-primary/--color-info (liens,
+     onglet actif, badge, initiales d'avatar) — identiques aux couleurs de base en mode clair, mais
+     éclaircis en mode sombre (voir le bloc dark mode) où le bleu/indigo d'origine, jamais pensé pour
+     être lu sur un fond quasi noir, tombait sous le seuil de contraste lisible (mesuré ~2.4-3.2:1,
+     sous les 4.5:1 recommandés). Ne PAS utiliser --color-primary/--color-info directement pour du
+     texte : réservés aux fonds (boutons, cases à cocher, bordures), où éclaircir casserait le
+     contraste inverse (texte blanc dessus). */
+  --color-primary-text: var(--color-primary);
+  --color-info-text: var(--color-info);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -105,6 +114,12 @@ p { margin: 0; line-height: 1.5; }
   letter-spacing: 0.01em;
 }
 
+/* §correctif 20/08/2026 : logo.png a un fond transparent avec un tracé "N" en bleu marine très
+   sombre (proche de #0a1f3c) — invisible en mode sombre, où #sidebar prend un fond quasi noir de la
+   même famille de teinte. Fond clair fixe (jamais themé, contrairement à --color-surface) : garde un
+   contraste correct dans les deux modes plutôt que de dépendre d'une deuxième version du fichier
+   logo. box-sizing: border-box pour que le padding ne fasse pas dépasser la taille déjà utilisée
+   partout (sidebar, écrans de connexion, page publique). */
 .logo-mark {
   display: inline-flex;
   align-items: center;
@@ -112,6 +127,10 @@ p { margin: 0; line-height: 1.5; }
   width: 46px;
   height: 46px;
   flex-shrink: 0;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 5px;
+  box-sizing: border-box;
 }
 
 .logo-icon { width: 100%; height: 100%; display: block; object-fit: contain; }
@@ -146,7 +165,7 @@ p { margin: 0; line-height: 1.5; }
 }
 
 .nav-item:hover { background: var(--color-muted-soft); color: var(--color-text); }
-.nav-item.active { background: var(--color-primary-soft); color: var(--color-primary); }
+.nav-item.active { background: var(--color-primary-soft); color: var(--color-primary-text); }
 
 /* Bouton "☰" du menu mobile (voir @media 860px pour son rôle réel) — invisible sur desktop, la
    sidebar y affiche déjà #sidebar-nav en entier, pas besoin de le déplier. */
@@ -478,7 +497,7 @@ p { margin: 0; line-height: 1.5; }
 .btn-link {
   background: none;
   border: none;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -623,7 +642,7 @@ p { margin: 0; line-height: 1.5; }
   align-items: center;
   justify-content: center;
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: 700;
   font-size: 13px;
 }
@@ -645,7 +664,7 @@ p { margin: 0; line-height: 1.5; }
 
 .badge-success { background: var(--color-success-soft); color: var(--color-success); }
 .badge-warning { background: var(--color-warning-soft); color: var(--color-warning); }
-.badge-info { background: var(--color-info-soft); color: var(--color-info); }
+.badge-info { background: var(--color-info-soft); color: var(--color-info-text); }
 .badge-muted { background: var(--color-muted-soft); color: var(--color-text-muted); }
 .badge-danger { background: var(--color-danger-soft); color: var(--color-danger); }
 
@@ -682,14 +701,14 @@ p { margin: 0; line-height: 1.5; }
 .about-category h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
 .about-category ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
 .about-category li { font-size: 13px; color: var(--color-text-muted); line-height: 1.45; padding-left: 14px; position: relative; }
-.about-category li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
+.about-category li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary-text); font-weight: 700; }
 
 .changelog-entry { margin-bottom: 20px; }
 .changelog-entry:last-child { margin-bottom: 0; }
 .changelog-entry h3 { margin: 0 0 10px; font-size: 14px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .changelog-entry ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .changelog-entry li { font-size: 13.5px; color: var(--color-text); line-height: 1.5; padding-left: 16px; position: relative; }
-.changelog-entry li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary); font-weight: 700; }
+.changelog-entry li::before { content: '•'; position: absolute; left: 0; color: var(--color-primary-text); font-weight: 700; }
 
 .info-row {
   display: flex;
@@ -788,7 +807,7 @@ p { margin: 0; line-height: 1.5; }
   min-height: 0;
 }
 
-.modal-body a { color: var(--color-primary); }
+.modal-body a { color: var(--color-primary-text); }
 
 .modal-footer {
   display: flex;
@@ -861,7 +880,7 @@ p { margin: 0; line-height: 1.5; }
 }
 
 .tab:hover { color: var(--color-text); }
-.tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.tab.active { color: var(--color-primary-text); border-bottom-color: var(--color-primary-text); }
 
 /* Repli mobile pour les écrans à beaucoup d'onglets (Paramètres, 12+) — voir @media 860px. Caché
    par défaut : le bouton .tab classique reste le contrôle normal sur desktop. */
@@ -2642,6 +2661,8 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-warning-soft: #2a1f0f;
     --color-info-soft: #10203a;
     --color-danger-soft: #2a1414;
+    --color-primary-text: #818cf8;
+    --color-info-text: #60a5fa;
   }
 }
 
