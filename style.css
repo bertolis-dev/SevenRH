@@ -5,14 +5,34 @@
    ========================================================================= */
 
 :root {
+  /* Identité de marque (bleu marine/or, repris du logo) — déclarée en tête pour servir de source
+     unique à --color-primary ci-dessous ET aux classes .landing-*/.feature-* (page publique).
+     Définie ici plutôt que sur .landing-page : le bouton flottant (#landing-sticky-cta) et les
+     modales (#modal-root) sont des siblings de .landing-page dans le DOM, pas des descendants, donc
+     n'auraient jamais vu ces variables sinon (bug réel trouvé en vérifiant la couleur réellement
+     appliquée, pas juste sa présence). */
+  --landing-navy-900: #0e1a33;
+  --landing-navy-700: #17284d;
+  --landing-navy-500: #24406e;
+  --landing-gold-500: #c99a54;
+  --landing-gold-300: #e3c08a;
+  --landing-gold-soft: #f8efe0;
+
+  /* §refonte identité 20/08/2026 : l'accent interactif de l'application (boutons, liens, éléments
+     actifs) reprend désormais le bleu marine de la marque au lieu d'un indigo générique (#4f46e5 —
+     littéralement la couleur "indigo-600" par défaut de Tailwind/shadcn, sans lien avec l'identité
+     Nexus, alors que la page publique avait déjà sa propre identité). */
   --color-bg: #f6f7f9;
   --color-surface: #ffffff;
-  --color-border: #e6e8eb;
+  /* §refonte identité 20/08/2026 : bordure renforcée (était #e6e8eb, presque invisible sur un fond
+     blanc/quasi-blanc) — sépare plus nettement la barre latérale, la barre du haut et chaque carte,
+     demande explicite plutôt qu'une simple ombre discrète. */
+  --color-border: #d6dae0;
   --color-text: #1a1d24;
   --color-text-muted: #6b7280;
-  --color-primary: #4f46e5;
-  --color-primary-hover: #4338ca;
-  --color-primary-soft: #eef2ff;
+  --color-primary: var(--landing-navy-700);
+  --color-primary-hover: var(--landing-navy-900);
+  --color-primary-soft: #eaeef5;
   --color-success: #16a34a;
   --color-success-soft: #ecfdf3;
   --color-warning: #b45309;
@@ -43,17 +63,6 @@
   --topbar-height: 64px;
   --mobile-nav-height: 64px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-
-  /* Identité de marque de la landing (bleu marine/or) — définie ici plutôt que sur .landing-page :
-     le bouton flottant (#landing-sticky-cta) et les modales (#modal-root) sont des siblings de
-     .landing-page dans le DOM, pas des descendants, donc n'auraient jamais vu ces variables sinon
-     (bug réel trouvé en vérifiant la couleur réellement appliquée, pas juste sa présence). */
-  --landing-navy-900: #0e1a33;
-  --landing-navy-700: #17284d;
-  --landing-navy-500: #24406e;
-  --landing-gold-500: #c99a54;
-  --landing-gold-300: #e3c08a;
-  --landing-gold-soft: #f8efe0;
 }
 
 * { box-sizing: border-box; }
@@ -183,7 +192,11 @@ p { margin: 0; line-height: 1.5; }
 .nav-section-label:first-child { padding-top: 4px; }
 .nav-item.disabled { opacity: 0.6; }
 
-.nav-icon { font-size: 16px; }
+/* §refonte identité 20/08/2026 : item.icon est désormais un <svg> (voir ICONS, app.js), plus un
+   caractère emoji — currentColor lui fait suivre automatiquement la couleur du bouton (survol/actif
+   inclus), sans classe supplémentaire à gérer. */
+.nav-icon { display: inline-flex; flex-shrink: 0; }
+.nav-icon svg { width: 18px; height: 18px; display: block; }
 .nav-label { flex: 1; }
 .nav-soon {
   font-size: 10px;
@@ -2573,7 +2586,7 @@ textarea.input { resize: vertical; font-family: inherit; }
     padding: 12px 14px;
     width: 100%;
   }
-  .nav-icon { font-size: 18px; }
+  .nav-icon svg { width: 20px; height: 20px; }
   .nav-label { font-size: 14px; white-space: normal; }
   .logo-text, .nav-soon { display: none; }
   .mobile-nav-toggle {
@@ -2652,16 +2665,24 @@ textarea.input { resize: vertical; font-family: inherit; }
   :root {
     --color-bg: #14161a;
     --color-surface: #1c1f26;
-    --color-border: #2a2d36;
+    --color-border: #383c46;
     --color-text: #f2f3f5;
     --color-text-muted: #9aa0ab;
-    --color-primary-soft: #232244;
+    /* §refonte identité 20/08/2026 : la teinte marine claire suffit en fond de bouton en mode clair
+       (contraste énorme avec le texte blanc), mais en mode sombre elle se confond presque avec les
+       cartes (--color-surface, elle-même déjà très sombre — mesuré : à peine 1.1:1 de différence).
+       Une teinte plus claire ici fait vraiment "ressortir" un bouton d'une carte, tout en restant
+       dans la même famille de bleu marine (même teinte, juste plus clair) plutôt qu'un bleu
+       quelconque. */
+    --color-primary: #4a72ad;
+    --color-primary-hover: #3a5a8f;
+    --color-primary-soft: #192134;
     --color-muted-soft: #23262e;
     --color-success-soft: #0f2a1c;
     --color-warning-soft: #2a1f0f;
     --color-info-soft: #10203a;
     --color-danger-soft: #2a1414;
-    --color-primary-text: #818cf8;
+    --color-primary-text: #7694d6;
     --color-info-text: #60a5fa;
   }
 }

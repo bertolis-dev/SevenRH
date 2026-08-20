@@ -222,6 +222,38 @@ const NAVPARAMS_CONGES_A_VALIDER = { absencesHubTab: 'conges', congesTab: 'deman
 const NAVPARAMS_TELETRAVAIL_A_VALIDER = { absencesHubTab: 'teletravail', teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
 const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
 
+/** §refonte identité 20/08/2026 : jeu d'icônes vectorielles (traits fins, cohérentes avec le bleu
+ * marine/or de la marque) partagé par TOUTE l'application — navigation, page publique, cartes de
+ * tableau de bord — à la place des emoji d'origine, dont le rendu dépend de la police système du
+ * visiteur/l'OS et casse le ton "logiciel professionnel" recherché (c'est aussi, très concrètement,
+ * l'un des tics visuels les plus reconnaissables d'une interface générée par IA plutôt que dessinée).
+ * Formes génériques (calendrier, dossier, horloge...), jamais un tracé complexe ni une bibliothèque
+ * copiée. `currentColor` : chaque icône prend automatiquement la couleur du texte qui l'accompagne
+ * (actif/inactif dans la nav, etc.) sans classe supplémentaire. */
+const ICONS = {
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="7" y1="3" x2="7" y2="7"/><line x1="17" y1="3" x2="17" y2="7"/><line x1="7" y1="13.5" x2="9" y2="13.5"/><line x1="12" y1="13.5" x2="14" y2="13.5"/><line x1="16" y1="13.5" x2="18" y2="13.5"/></svg>',
+  laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="9" rx="1.2"/><path d="M3 17h18l-1.5 3H4.5L3 17z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>',
+  utensils: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="3" x2="7" y2="21"/><line x1="5" y1="3" x2="5" y2="9"/><line x1="9" y1="3" x2="9" y2="9"/><path d="M5 9c0 1.5 1 2 2 2s2-.5 2-2"/><path d="M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
+  orgchart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="15" width="6" height="4" rx="1"/><rect x="15" y="15" width="6" height="4" rx="1"/><line x1="12" y1="7" x2="12" y2="11"/><line x1="6" y1="15" x2="6" y2="11"/><line x1="18" y1="15" x2="18" y2="11"/><line x1="6" y1="11" x2="18" y2="11"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
+  headset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M20 19v1a3 3 0 0 1-3 3h-3"/></svg>',
+  desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>',
+  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>',
+  schedule: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.5" y1="4.5" x2="6.5" y2="6.5"/><line x1="17.5" y1="17.5" x2="19.5" y2="19.5"/><line x1="4.5" y1="19.5" x2="6.5" y2="17.5"/><line x1="17.5" y1="6.5" x2="19.5" y2="4.5"/></svg>',
+  notepad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v2H9z"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>',
+  lightbulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.4.3.5.7.5 1.1v.5h6v-.5c0-.4.1-.8.5-1.1A6 6 0 0 0 12 3z"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="8" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.8"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>',
+  coin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15.5c.5 1 1.6 1.5 3 1.5 1.9 0 3-1 3-2.3 0-3-6-1.3-6-4.2 0-1.3 1.1-2.3 3-2.3 1.4 0 2.5.5 3 1.5"/><line x1="12" y1="6.5" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="17.5"/></svg>',
+  personPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><line x1="18" y1="7" x2="18" y2="13"/><line x1="15" y1="10" x2="21" y2="10"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.9 7.9 0 0 0 0-2l2-1.5-2-3.5-2.4.6a8 8 0 0 0-1.7-1L15 3h-6l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-.6-2 3.5L4.6 11a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-.6a8 8 0 0 0 1.7 1L9 21h6l.3-2.6a8 8 0 0 0 1.7-1l2.4.6 2-3.5-2-1.5z"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>'
+};
+
 /** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
  * comme "Mon équipe" (voir renderEmployeesList).
  *
@@ -232,14 +264,14 @@ const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '
  * voir renderSidebar()/navigateTo() pour la résolution. `group` est purement un indice d'affichage
  * (regroupement visuel) — n'affecte jamais qui voit quoi, ça reste `roles`/`permissions` seuls. */
 const NAV_ITEMS = [
-  { key: 'dashboard', label: 'Accueil', icon: '📊', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
+  { key: 'dashboard', label: 'Accueil', icon: ICONS.chart, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
 
   // ---- Personnel ----
   // `module` (voir LANDING_ALACARTE_MODULES/hasModule) : sans effet pour un abonnement classique
   // (essai/essentiel/professionnel/premium, toujours tout inclus) — ne restreint que les
   // entreprises passées à la carte, selon les modules réellement souscrits.
-  { key: 'planning', label: 'Planning', icon: '🗓️', roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
-  { key: 'calendrier', label: 'Calendrier', icon: '📅', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
+  { key: 'planning', label: 'Planning', icon: ICONS.schedule, roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
+  { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
   // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
   // logique de regroupement que Planning/Calendrier ci-dessus, appliquée cette fois à 3 écrans
@@ -249,25 +281,25 @@ const NAV_ITEMS = [
   // Autres absences/Télétravail, jamais mise à jour) était la seule à l'exclure, la privant de tout
   // moyen d'exercer cette permission — un salarié Comptabilité a autant besoin de poser des congés
   // que les autres.
-  { key: 'absences', label: 'Congés & absences', icon: '🏖️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges' },
-  { key: 'frais', label: 'Notes de frais', icon: '🧾', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'frais' },
-  { key: 'mes-documents', label: 'Mes documents', icon: '📁', roles: ['salarie'], group: 'personnel', module: 'rh' },
+  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges' },
+  { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'frais' },
+  { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: ['salarie'], group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
-  { key: 'mes-tickets', label: 'Mes tickets', icon: '🎫', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'mes-tickets', label: 'Mes tickets', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
   // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
   // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
   // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
-  { key: 'entretiens', label: 'Entretiens', icon: '🗒️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'entretiens' },
+  { key: 'entretiens', label: 'Entretiens', icon: ICONS.notepad, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'entretiens' },
   // Contrairement aux autres entrées "personnel" (données propres au salarié), la boîte à idées est
   // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
   // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
   // individuel (proposer/voter), pas un outil de pilotage d'équipe.
-  { key: 'idees', label: "Boîte à idées", icon: '💡', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'idees', label: "Boîte à idées", icon: ICONS.lightbulb, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
-  { key: 'employees', label: 'Salariés', icon: '👥', roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'rh' },
-  { key: 'organigramme', label: 'Organigramme', icon: '🗂️', roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
+  { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'rh' },
+  { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
   // vers exactement la même vue que leur pendant "Personnel", juste avec des navParams différents.
@@ -278,29 +310,29 @@ const NAV_ITEMS = [
   // §sprint refonte UX §10 : ouvert à tous désormais (vue personnelle par défaut) — RH/Comptabilité/
   // Directeur gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2 entrées
   // de menu distinctes pour un même écran.
-  { key: 'tickets', label: 'Tickets restaurant', icon: '🍽️', roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'tickets' },
-  { key: 'export-paie', label: 'Préparation de paie', icon: '📤', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
+  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'tickets' },
+  { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
   // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
   // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
   // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Directeur
   // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
-  { key: 'remuneration', label: 'Rémunération', icon: '💰', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
+  { key: 'remuneration', label: 'Rémunération', icon: ICONS.coin, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
   // Demande du 17/08/2026 : dépôt de candidature via QR code, périmètre volontairement minimal
   // (upload + liste + conversion en salarié) — le recrutement/ATS complet reste par ailleurs hors
   // scope de Nexus RH. Rattaché au module "rh" (pas de nouvelle ligne tarifaire) : qui paie déjà
   // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
-  { key: 'embauche', label: 'Embauche', icon: '🧑‍💼', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
+  { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
 
   // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
   // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
   // sur un petit écran, n'apporte rien. Desktop inchangé (renderSidebar filtre uniquement en dessous
   // de 860px, voir bindMobileNavVisibility).
-  { key: 'parametres', label: 'Paramètres', icon: '⚙️', roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES], hideOnMobile: true },
+  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES], hideOnMobile: true },
   // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
   // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
-  { key: 'parametres', label: 'Abonnement', icon: '💳', roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' }, hideOnMobile: true }
+  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' }, hideOnMobile: true }
 ];
 
 /** true si l'entreprise a accès à ce module (voir LANDING_ALACARTE_MODULES) — toujours vrai pour un
@@ -655,27 +687,9 @@ function showLogin(defaultView) {
  * nouvelle version publiée avec `gh release create`. */
 const DESKTOP_APP_DOWNLOAD_URL = 'https://github.com/thomasaubert-star/SevenRH/releases/download/v1.0.0/Nexus-Setup-1.0.0.exe';
 
-/** Icônes vectorielles de la landing (traits simples, cohérentes avec le bleu marine/or) — à la
- * place des emoji d'origine, dont le rendu dépend de la police système du visiteur et casse le
- * ton "logiciel professionnel" recherché. Formes génériques (calendrier, dossier...), pas de tracé
- * complexe ni de bibliothèque d'icônes copiée. */
-const LANDING_SVG_ICONS = {
-  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="7" y1="3" x2="7" y2="7"/><line x1="17" y1="3" x2="17" y2="7"/><line x1="7" y1="13.5" x2="9" y2="13.5"/><line x1="12" y1="13.5" x2="14" y2="13.5"/><line x1="16" y1="13.5" x2="18" y2="13.5"/></svg>',
-  laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="9" rx="1.2"/><path d="M3 17h18l-1.5 3H4.5L3 17z"/></svg>',
-  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg>',
-  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>',
-  utensils: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="3" x2="7" y2="21"/><line x1="5" y1="3" x2="5" y2="9"/><line x1="9" y1="3" x2="9" y2="9"/><path d="M5 9c0 1.5 1 2 2 2s2-.5 2-2"/><path d="M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
-  orgchart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="15" width="6" height="4" rx="1"/><rect x="15" y="15" width="6" height="4" rx="1"/><line x1="12" y1="7" x2="12" y2="11"/><line x1="6" y1="15" x2="6" y2="11"/><line x1="18" y1="15" x2="18" y2="11"/><line x1="6" y1="11" x2="18" y2="11"/></svg>',
-  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
-  headset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M20 19v1a3 3 0 0 1-3 3h-3"/></svg>',
-  desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>',
-  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/></svg>',
-  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>'
-};
-
 const LANDING_FEATURES = [
   {
-    icon: LANDING_SVG_ICONS.calendar, title: 'Congés & absences',
+    icon: ICONS.calendar, title: 'Congés & absences',
     text: "Demandes, validation par workflow, compteurs automatiques et export.",
     detail: [
       "Types de congés et d'absences entièrement paramétrables (règles d'acquisition, plafond, report d'une année sur l'autre)",
@@ -708,7 +722,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.laptop, title: 'Planning & télétravail',
+    icon: ICONS.laptop, title: 'Planning & télétravail',
     text: 'Vue équipe, calendrier partagé et suivi du télétravail au jour le jour.',
     detail: [
       "Vue personnelle et vue équipe, avec bascule d'un clic",
@@ -740,7 +754,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.chart, title: 'Préparation de paie',
+    icon: ICONS.chart, title: 'Préparation de paie',
     text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie.",
     detail: [
       "Détection automatique des anomalies (ex. compteur de congés négatif) avant l'export",
@@ -771,7 +785,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.receipt, title: 'Notes de frais',
+    icon: ICONS.receipt, title: 'Notes de frais',
     text: 'Justificatifs, validation et remboursement suivis de bout en bout.',
     detail: [
       "Saisie rapide avec justificatif joint à chaque dépense",
@@ -802,7 +816,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.utensils, title: 'Tickets restaurant',
+    icon: ICONS.utensils, title: 'Tickets restaurant',
     text: 'Calcul automatique selon les jours travaillés, part employeur incluse.',
     detail: [
       "Calcul automatique selon les jours réellement travaillés (tient compte des congés, absences et télétravail)",
@@ -833,7 +847,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.orgchart, title: 'Organigramme',
+    icon: ICONS.orgchart, title: 'Organigramme',
     text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.',
     detail: [
       "Généré automatiquement à partir du manager renseigné sur chaque fiche salarié — rien à redessiner à la main",
@@ -863,7 +877,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.folder, title: 'Documents RH',
+    icon: ICONS.folder, title: 'Documents RH',
     text: 'Contrats, attestations et documents générés automatiquement.',
     detail: [
       "Coffre-fort documentaire par salarié, avec catégories personnalisables",
@@ -893,7 +907,7 @@ const LANDING_FEATURES = [
     }
   },
   {
-    icon: LANDING_SVG_ICONS.headset, title: 'Support intégré',
+    icon: ICONS.headset, title: 'Support intégré',
     text: 'Vos salariés posent leurs questions directement depuis l\'application.',
     detail: [
       "Tickets support ouverts directement depuis l'application, sans outil externe",
@@ -1134,7 +1148,7 @@ function renderLandingNavMenu() {
   return `
     <div class="landing-nav-menu">
       <button type="button" class="btn btn-secondary btn-sm landing-nav-menu-trigger" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
-        ${LANDING_SVG_ICONS.menu} <span class="landing-nav-menu-label">Menu</span>
+        ${ICONS.menu} <span class="landing-nav-menu-label">Menu</span>
       </button>
       <div class="landing-nav-menu-panel">
         <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
@@ -1680,7 +1694,7 @@ function renderLandingScreen() {
         <div class="landing-install-grid">
           <div class="card landing-platform-card ${platform === 'desktop' ? 'landing-platform-card-active' : ''}">
             ${platform === 'desktop' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">${LANDING_SVG_ICONS.desktop}</div>
+            <div class="landing-platform-icon">${ICONS.desktop}</div>
             <h3>Ordinateur</h3>
             <p class="text-muted">Windows, via Chrome ou Edge</p>
             <a class="btn btn-gold" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger (.exe)</a>
@@ -1689,7 +1703,7 @@ function renderLandingScreen() {
           </div>
           <div class="card landing-platform-card ${platform === 'ios' ? 'landing-platform-card-active' : ''}">
             ${platform === 'ios' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">${LANDING_SVG_ICONS.mobile}</div>
+            <div class="landing-platform-icon">${ICONS.mobile}</div>
             <h3>iPhone & iPad</h3>
             <p class="text-muted">Via Safari (obligatoire)</p>
             <ol class="landing-steps">
@@ -1700,7 +1714,7 @@ function renderLandingScreen() {
           </div>
           <div class="card landing-platform-card ${platform === 'android' ? 'landing-platform-card-active' : ''}">
             ${platform === 'android' ? '<div class="landing-platform-badge">Votre appareil</div>' : ''}
-            <div class="landing-platform-icon">${LANDING_SVG_ICONS.mobile}</div>
+            <div class="landing-platform-icon">${ICONS.mobile}</div>
             <h3>Android</h3>
             <p class="text-muted">Via Chrome</p>
             ${platform === 'android' ? '<button type="button" class="btn btn-gold" data-install-trigger>📲 Installer Nexus</button>' : ''}
