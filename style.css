@@ -674,11 +674,13 @@ p { margin: 0; line-height: 1.5; }
 .badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
 }
+.badge svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
 
 .badge-row { display: flex; gap: 6px; margin-top: 8px; }
 
@@ -983,6 +985,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* Contenu du popover "Filtres" (voir .dropdown-panel) — chaque entrée est un vrai <button> avec un
    état "inactif" pour la catégorie masquée. Réutilisé aussi par le popover d'ajout rapide (case
    vide du calendrier), même patron "liste de lignes cliquables verticales". */
+.legend-item svg { width: 15px; height: 15px; display: block; flex-shrink: 0; }
 .legend-item {
   display: flex;
   align-items: center;
@@ -1107,6 +1110,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   padding: 1px 6px;
   cursor: default;
 }
+.calendar-badge svg { width: 12px; height: 12px; vertical-align: -2px; }
 
 .calendar-tooltip {
   position: absolute;
@@ -1229,6 +1233,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-table th:first-child, .planning-table td:first-child { text-align: left; }
 
 .planning-cell { font-size: 16px; }
+.planning-cell svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
 .planning-off { color: var(--color-text-muted); font-size: 13px; }
 .planning-leave { background: var(--color-warning-soft); }
 .planning-remote { background: var(--color-info-soft); }
@@ -1310,7 +1315,9 @@ textarea.input { resize: vertical; font-family: inherit; }
   font-size: 26px;
   border-radius: var(--radius-lg);
   background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
+.abonnement-summary-icon svg { width: 26px; height: 26px; display: block; }
 
 .abonnement-jauge { margin-top: 16px; }
 .abonnement-jauge-label {
@@ -1448,6 +1455,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-page .offre-card-match .offre-card-match-badge { display: block; }
 
 .offre-card-icon { font-size: 28px; margin-bottom: 8px; }
+.offre-card-icon svg { width: 28px; height: 28px; display: block; }
 
 .offre-card h3 { font-size: 16px; margin-bottom: 4px; }
 

@@ -279,6 +279,15 @@ function icon(svg, size = 16) {
   return `<span class="icon-inline" style="width:${size}px;height:${size}px;">${svg}</span>`;
 }
 
+/** Un champ "icon" est parfois une de nos icônes ICONS.xxx (SVG, chaîne de confiance — jamais
+ * échappée), parfois un emoji choisi par un RH sur un type de congé/absence (donnée utilisateur,
+ * toujours échappée) — ex. getTodayPresenceStatus, renderPresenceCard. Centralise cette distinction
+ * plutôt que de la répéter à chaque endroit qui affiche ce genre de champ mixte (même principe que
+ * renderResultIcon/kpiCard). */
+function escapeIcon(value) {
+  return typeof value === 'string' && value.startsWith('<svg') ? value : escapeHtml(value);
+}
+
 /** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
  * comme "Mon équipe" (voir renderEmployeesList).
  *
@@ -3714,14 +3723,8 @@ function performGlobalSearch(term) {
   return results.slice(0, 8);
 }
 
-/** result.icon est soit une de nos icônes ICONS.xxx (SVG, jamais échappée — chaîne de confiance,
- * pas une donnée utilisateur), soit type.icone (emoji choisi par un RH dans Paramètres → Types
- * d'absences, donnée utilisateur, toujours échappée). Distingue les deux à l'affichage plutôt que
- * de forcer un seul traitement qui casserait l'un des deux cas. */
 function renderResultIcon(iconValue) {
-  return typeof iconValue === 'string' && iconValue.startsWith('<svg')
-    ? `<span class="search-result-icon">${iconValue}</span>`
-    : `<span class="search-result-icon">${escapeHtml(iconValue)}</span>`;
+  return `<span class="search-result-icon">${escapeIcon(iconValue)}</span>`;
 }
 
 function searchResultItemHTML(result, index, isHighlighted) {
@@ -4611,10 +4614,10 @@ function renderDashboardSalarie(user) {
   const requests = [
     ...leaveRepository.getAll().filter(r => r.employeeId === user.id).map(r => {
       const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
-      return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', date: r.dateDebut, statut: r.statut };
+      return { label: type ? type.nom : 'Congé', icon: type ? type.icone : ICONS.sun, date: r.dateDebut, statut: r.statut };
     }),
-    ...teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: '💻', date: r.dateDebut, statut: r.statut })),
-    ...expenseRepository.getAll().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: '🧾', date: n.date, statut: n.statut }))
+    ...teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: ICONS.laptop, date: r.dateDebut, statut: r.statut })),
+    ...expenseRepository.getAll().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: ICONS.receipt, date: n.date, statut: n.statut }))
   ];
   const enAttente = requests.filter(r => r.statut === 'En attente').sort((a, b) => a.date.localeCompare(b.date));
   const aVenir = requests
@@ -4632,9 +4635,9 @@ function renderDashboardSalarie(user) {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Statut aujourd\'hui', `${today.icon} ${today.label}`, '📅')}
-      ${kpiCard('Demandes en attente', enAttente.length, '⏳')}
-      ${kpiCard('Ancienneté', calculateAnciennete(user.dateEmbauche), '🎂')}
+      ${kpiCard('Statut aujourd\'hui', today.label, today.icon)}
+      ${kpiCard('Demandes en attente', enAttente.length, ICONS.hourglass)}
+      ${kpiCard('Ancienneté', calculateAnciennete(user.dateEmbauche), ICONS.cake)}
     </div>
 
     ${isDashboardWidgetVisible(user, 'soldes') ? `
@@ -4652,7 +4655,7 @@ function renderDashboardSalarie(user) {
           <div class="mini-list">
             ${enAttente.map(r => `
               <div class="mini-list-item">
-                <span>${escapeHtml(r.icon)} ${escapeHtml(r.label)} · ${formatDate(r.date)}</span>
+                <span>${escapeIcon(r.icon)} ${escapeHtml(r.label)} · ${formatDate(r.date)}</span>
                 <span class="badge badge-warning">En attente</span>
               </div>
             `).join('')}
@@ -4665,7 +4668,7 @@ function renderDashboardSalarie(user) {
           <div class="mini-list">
             ${aVenir.map(r => `
               <div class="mini-list-item">
-                <span>${escapeHtml(r.icon)} ${escapeHtml(r.label)}</span>
+                <span>${escapeIcon(r.icon)} ${escapeHtml(r.label)}</span>
                 <span class="text-muted">${formatDate(r.date)}</span>
               </div>
             `).join('')}
@@ -5313,23 +5316,23 @@ function getTodayPresenceStatus(employee, leaveRequests, teleworkRequests) {
   const weekday = WEEKDAY_LABELS[(new Date().getDay() + 6) % 7];
 
   if (!(employee.joursTravailles || []).includes(weekday)) {
-    return { label: 'Repos', icon: '⚪', level: 'muted' };
+    return { label: 'Repos', icon: ICONS.circleOutline, level: 'muted' };
   }
 
   const onLeave = (leaveRequests || leaveRepository.getAll()).find(r =>
     r.employeeId === employee.id && r.statut === 'Validé' && today >= r.dateDebut && today <= r.dateFin);
   if (onLeave) {
     const type = leaveTypeRepository.getLeaveTypeById(onLeave.typeId);
-    return { label: type ? type.nom : 'Congé', icon: type ? type.icone : '🏖️', level: 'warning' };
+    return { label: type ? type.nom : 'Congé', icon: type ? type.icone : ICONS.sun, level: 'warning' };
   }
 
   const onTelework = (teleworkRequests || teleworkRepository.getAll()).find(r =>
     r.employeeId === employee.id && r.statut === 'Validé' && today >= r.dateDebut && today <= r.dateFin);
   if (onTelework) {
-    return { label: 'Télétravail', icon: '💻', level: 'info' };
+    return { label: 'Télétravail', icon: ICONS.laptop, level: 'info' };
   }
 
-  return { label: 'Présent', icon: '🏢', level: 'success' };
+  return { label: 'Présent', icon: ICONS.building, level: 'success' };
 }
 
 const PRESENCE_CARD_LIMIT = 30;
@@ -5363,7 +5366,7 @@ function renderPresenceCard() {
           ${visibleRows.map(r => `
             <div class="mini-list-item">
               <span>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</span>
-              <span class="badge badge-${r.status.level}">${escapeHtml(r.status.icon)} ${escapeHtml(r.status.label)}</span>
+              <span class="badge badge-${r.status.level}">${escapeIcon(r.status.icon)} ${escapeHtml(r.status.label)}</span>
             </div>
           `).join('')}
         </div>
@@ -5376,14 +5379,11 @@ function renderPresenceCard() {
 function kpiCard(label, value, icon) {
   // value peut provenir de texte libre saisi par un administrateur (ex. nom d'un type de congé) —
   // jamais interpolé sans échappement, sinon une valeur malveillante s'exécute chez tout salarié
-  // dont le tableau de bord affiche cette carte. icon, en revanche, est soit une de nos icônes
-  // ICONS.xxx (SVG, chaîne de confiance — jamais échappée), soit un emoji littéral fixé dans le
-  // code (jamais une donnée utilisateur à ce jour dans les appels de kpiCard) — même distinction
-  // que renderResultIcon (recherche globale), pour la même raison.
-  const iconHtml = typeof icon === 'string' && icon.startsWith('<svg') ? icon : escapeHtml(icon);
+  // dont le tableau de bord affiche cette carte. icon passe par escapeIcon (voir plus haut) : SVG
+  // de confiance non échappé, emoji/texte échappé comme value.
   return `
     <div class="kpi-card">
-      <div class="kpi-icon">${iconHtml}</div>
+      <div class="kpi-icon">${escapeIcon(icon)}</div>
       <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>
     </div>
@@ -9889,12 +9889,11 @@ function bindMoiEquipeToggleEvents() {
  * calendrier légende/filtres) — une seule source de vérité pour le libellé, l'icône et la classe de
  * couleur, réutilisée à la fois par la légende et par les badges de case pour rester cohérentes. */
 const CALENDAR_FILTER_CATEGORIES = [
-  { key: 'conge', label: 'Congé', icon: '🏖️', swatchClass: 'legend-conge' },
-  { key: 'anniversaire', label: 'Anniversaire', icon: '🎂', swatchClass: 'legend-anniversaire' },
-  { key: 'teletravail', label: 'Télétravail', icon: '💻', swatchClass: 'legend-teletravail' },
-  // §sprint refonte UX : 🎉 remplacé par 🚀, moins ambigu (fête générique vs prise de poste).
-  { key: 'arrivee', label: 'Arrivée', icon: '🚀', swatchClass: 'legend-arrivee' },
-  { key: 'depart', label: 'Départ', icon: '👋', swatchClass: 'legend-depart' },
+  { key: 'conge', label: 'Congé', icon: ICONS.sun, swatchClass: 'legend-conge' },
+  { key: 'anniversaire', label: 'Anniversaire', icon: ICONS.cake, swatchClass: 'legend-anniversaire' },
+  { key: 'teletravail', label: 'Télétravail', icon: ICONS.laptop, swatchClass: 'legend-teletravail' },
+  { key: 'arrivee', label: 'Arrivée', icon: ICONS.rocket, swatchClass: 'legend-arrivee' },
+  { key: 'depart', label: 'Départ', icon: ICONS.exitDoor, swatchClass: 'legend-depart' },
   { key: 'ferie', label: 'Jour férié', icon: null, swatchClass: 'legend-holiday' },
   { key: 'vacances', label: 'Vacances scolaires', icon: null, swatchClass: 'legend-school' }
 ];
@@ -10164,13 +10163,13 @@ function renderCalendarCell(cell, sharedData) {
   const teletravailEnAttente = info.teletravail.filter(t => t.statut !== 'Validé');
 
   const badges = [
-    congesValides.length && filters.conge !== false ? calendarBadge('conge', '🏖️', congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}`)) : '',
-    congesEnAttente.length && filters.conge !== false ? calendarBadge('conge', '🏖️', congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''} (en attente)`), true) : '',
-    teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
-    teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', '💻', teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
-    info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', '🎂', info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
-    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', '🚀', info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
-    info.departs.length && filters.depart !== false ? calendarBadge('depart', '👋', info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
+    congesValides.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}`)) : '',
+    congesEnAttente.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''} (en attente)`), true) : '',
+    teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
+    teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
+    info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', ICONS.cake, info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
+    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', ICONS.rocket, info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
+    info.departs.length && filters.depart !== false ? calendarBadge('depart', ICONS.exitDoor, info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
   ].join('');
 
   // §4 (reprise) : le survol des badges (.calendar-tooltip) reste utile sur desktop mais est
@@ -10514,12 +10513,12 @@ const OFFRE_TARIFS = {
  * nombre de salariés (voir le commentaire au-dessus de OFFRES_BERTOLIS, data.js) — toutes les
  * fonctionnalités du logiciel sont incluses dans les 3 offres payantes, inutile de le prétendre autrement. */
 const OFFRE_PRESENTATION = {
-  essentiel: { icon: '🌱', accroche: "Pour démarrer avec une petite équipe." },
-  professionnel: { icon: '🚀', accroche: 'Pour une entreprise en croissance.', misEnAvant: true },
+  essentiel: { icon: ICONS.leaf, accroche: "Pour démarrer avec une petite équipe." },
+  professionnel: { icon: ICONS.rocket, accroche: 'Pour une entreprise en croissance.', misEnAvant: true },
   // conditionLabel : nombreSalariesMax vaut null (illimité) pour Premium, mais "25 salariés et
   // plus" reflète mieux à qui l'offre s'adresse (au-delà du plafond Professionnel, fixé à 25) qu'un
   // vague "illimité" — voir renderParametresAbonnement, qui l'utilise à la place du texte générique.
-  premium: { icon: '👑', accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '25 salariés et plus' }
+  premium: { icon: ICONS.crown, accroche: 'Pour une grande structure, sans limite de salariés.', conditionLabel: '25 salariés et plus' }
 };
 
 /** Une seule carte d'offre, réutilisée par l'écran Paramètres > Abonnement ET par la page
@@ -10534,13 +10533,13 @@ function renderOffreCard(key, o, periodicite, ctaHtml, extraClass = '') {
     <div class="offre-card ${extraClass} ${presentation.misEnAvant ? 'offre-card-recommandee' : ''}" data-offre-key="${key}">
       ${presentation.misEnAvant ? '<div class="offre-card-ribbon">Recommandée</div>' : ''}
       <div class="offre-card-match-badge">Pour votre équipe</div>
-      <div class="offre-card-icon">${escapeHtml(presentation.icon || '💳')}</div>
+      <div class="offre-card-icon">${escapeIcon(presentation.icon || ICONS.card)}</div>
       <h3>${escapeHtml(o.label)}</h3>
       <p class="text-muted offre-card-accroche">${escapeHtml(presentation.accroche || '')}</p>
       <p class="offre-prix">${o[periodicite]} € <span class="text-muted">/ ${periodicite === 'annuel' ? 'an' : 'mois'}</span></p>
       ${mensualise ? `<p class="text-muted offre-card-mensualise">${mensualise}</p>` : ''}
       <div class="offre-card-condition">
-        <span>👥</span> ${presentation.conditionLabel || (plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`)}
+        ${icon(ICONS.people, 14)} ${presentation.conditionLabel || (plafondOffre === null ? 'Salariés illimités' : `Jusqu'à ${plafondOffre} salariés`)}
       </div>
       ${ctaHtml}
     </div>
@@ -10642,7 +10641,7 @@ function renderAbonnementLegacyActif(abo, statutBadge) {
   return `
     <div class="card abonnement-summary-card">
       <div class="abonnement-summary-header">
-        <div class="abonnement-summary-icon">${escapeHtml((OFFRE_PRESENTATION[abo.offre] || {}).icon || '💳')}</div>
+        <div class="abonnement-summary-icon">${escapeIcon((OFFRE_PRESENTATION[abo.offre] || {}).icon || ICONS.card)}</div>
         <div>
           <h2 style="margin-bottom: 4px;">${escapeHtml(offre.label)}</h2>
           <div class="badge-row">
@@ -12192,16 +12191,16 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   if (onLeave) {
     const type = leaveTypeRepository.getLeaveTypeById(onLeave.typeId);
     const pending = onLeave.statut !== 'Validé';
-    return { icon: type ? type.icone : '🏖️', level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
+    return { icon: type ? type.icone : ICONS.sun, level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
   }
 
   const onTelework = teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
   if (onTelework) {
     const pending = onTelework.statut !== 'Validé';
-    return { icon: '💻', level: 'remote', title: `Télétravail${pending ? ' (en attente)' : ''}`, pending, requestId: onTelework.id, requestType: 'telework' };
+    return { icon: ICONS.laptop, level: 'remote', title: `Télétravail${pending ? ' (en attente)' : ''}`, pending, requestId: onTelework.id, requestType: 'telework' };
   }
 
-  return { icon: '🏢', level: 'office', title: 'Présent' };
+  return { icon: ICONS.building, level: 'office', title: 'Présent' };
 }
 
 /** Un salarié a-t-il été en poste à un moment quelconque de [periodStart, periodEnd] (dates ISO) ?
@@ -12279,7 +12278,7 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
     title="${escapeHtml(status.title)}"
     data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
     ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
-  >${status.icon}</td>`;
+  >${escapeIcon(status.icon)}</td>`;
 }
 
 function renderPlanningSemaine() {
