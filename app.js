@@ -262,7 +262,12 @@ const ICONS = {
   leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-8 0-14 5-14 13 0 1.5.3 2.5.3 2.5S7 20 8 19c6-6 12-6 12-15z"/><path d="M6 18c2-4 6-8 10-10"/></svg>',
   crown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><path d="M4 18l-1-9 5 4 4-7 4 7 5-4-1 9"/></svg>',
   person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
-  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>'
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>',
+  hourglass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 21h12"/><path d="M7 3c0 5 5 6 5 9s-5 4-5 9"/><path d="M17 3c0 5-5 6-5 9s5 4 5 9"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 5"/><path d="M20 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 19"/><path d="M4 21v-4h4"/></svg>',
+  medal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 4 7 10"/><path d="M15 4l2 6"/><path d="M10 15.5l1.5 1.5L14.5 13.5"/></svg>',
+  thermometer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a2 2 0 0 0-2 2v9.5a4 4 0 1 0 4 0V5a2 2 0 0 0-2-2z"/><line x1="12" y1="7" x2="12" y2="13"/></svg>',
+  trendingUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-8"/><path d="M15 6h5v5"/></svg>'
 };
 
 /** Encapsule une icône ICONS.xxx dans un span de taille fixe pour un usage EN LIGNE dans du texte
@@ -4436,14 +4441,14 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   return `
     ${isVisible('kpis') ? `
     <div class="kpi-grid">
-      ${kpiCard('Salariés actifs', actifs.length, '👥')}
-      ${kpiCard('Contrats CDI', cdi, '📄')}
-      ${kpiCard('Contrats CDD', cdd, '⏳')}
-      ${kpiCard('Services', services, '🏢')}
-      ${kpiCard('Demandes de congé en attente', demandesEnAttente.length, '🏖️')}
-      ${kpiCard('En télétravail aujourd\'hui', teletravailAujourdhui.length, '💻')}
-      ${kpiCard('Notes de frais en attente', notesEnAttente.length, '🧾')}
-      ${kpiCard('Tickets restaurant ce mois', ticketsCeMois, '🍽️')}
+      ${kpiCard('Salariés actifs', actifs.length, ICONS.people)}
+      ${kpiCard('Contrats CDI', cdi, ICONS.document)}
+      ${kpiCard('Contrats CDD', cdd, ICONS.hourglass)}
+      ${kpiCard('Services', services, ICONS.building)}
+      ${kpiCard('Demandes de congé en attente', demandesEnAttente.length, ICONS.sun)}
+      ${kpiCard('En télétravail aujourd\'hui', teletravailAujourdhui.length, ICONS.laptop)}
+      ${kpiCard('Notes de frais en attente', notesEnAttente.length, ICONS.receipt)}
+      ${kpiCard('Tickets restaurant ce mois', ticketsCeMois, ICONS.utensils)}
     </div>
     ` : ''}
 
@@ -5369,12 +5374,16 @@ function renderPresenceCard() {
 }
 
 function kpiCard(label, value, icon) {
-  // value/icon peuvent provenir de texte libre saisi par un administrateur (ex. nom/icône d'un
-  // type de congé) — jamais interpolés sans échappement, sinon une valeur malveillante s'exécute
-  // chez tout salarié dont le tableau de bord affiche cette carte.
+  // value peut provenir de texte libre saisi par un administrateur (ex. nom d'un type de congé) —
+  // jamais interpolé sans échappement, sinon une valeur malveillante s'exécute chez tout salarié
+  // dont le tableau de bord affiche cette carte. icon, en revanche, est soit une de nos icônes
+  // ICONS.xxx (SVG, chaîne de confiance — jamais échappée), soit un emoji littéral fixé dans le
+  // code (jamais une donnée utilisateur à ce jour dans les appels de kpiCard) — même distinction
+  // que renderResultIcon (recherche globale), pour la même raison.
+  const iconHtml = typeof icon === 'string' && icon.startsWith('<svg') ? icon : escapeHtml(icon);
   return `
     <div class="kpi-card">
-      <div class="kpi-icon">${escapeHtml(icon)}</div>
+      <div class="kpi-icon">${iconHtml}</div>
       <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>
     </div>

@@ -6,7 +6,7 @@
 
 :root {
   /* Identité de marque (bleu marine/or, repris du logo) — déclarée en tête pour servir de source
-     unique à --color-primary ci-dessous ET aux classes .landing-*/.feature-* (page publique).
+     unique à --color-primary ci-dessous ET aux classes .landing-* / .feature-* (page publique).
      Définie ici plutôt que sur .landing-page : le bouton flottant (#landing-sticky-cta) et les
      modales (#modal-root) sont des siblings de .landing-page dans le DOM, pas des descendants, donc
      n'auraient jamais vu ces variables sinon (bug réel trouvé en vérifiant la couleur réellement
@@ -459,6 +459,7 @@ p { margin: 0; line-height: 1.5; }
 }
 
 .kpi-icon { font-size: 20px; margin-bottom: 8px; }
+.kpi-icon svg { width: 20px; height: 20px; display: block; }
 .kpi-value { font-size: 26px; font-weight: 700; }
 .kpi-label { font-size: 13px; color: var(--color-text-muted); margin-top: 2px; }
 
