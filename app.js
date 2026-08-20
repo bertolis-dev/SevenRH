@@ -699,6 +699,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     || sessionStorage.getItem('sevenrh_password_recovery_pending')
     || sessionStorage.getItem('sevenrh_pending_reset_email')
     || new URLSearchParams(window.location.search).get('signup') === '1'
+    || new URLSearchParams(window.location.search).get('editeur') === '1'
     || isInstalledApp()
   ) {
     // Un flux d'authentification est déjà en cours (confirmation d'email, récupération de mot de
@@ -739,6 +740,14 @@ function showLogin(defaultView) {
     // Lien "Créer mon entreprise" partagé (ex. campagne email) pointant directement vers le signup.
     history.replaceState({}, '', window.location.pathname);
     state.authView = 'signup-company';
+  } else if (new URLSearchParams(window.location.search).get('editeur') === '1') {
+    // Accès éditeur BERTOLIS (§9.6) — plus de bouton visible sur l'écran de connexion public (retiré
+    // lors de la refonte identité, pas professionnel pour un client) : seule cette URL, jamais liée
+    // nulle part dans l'app, y mène désormais. Voir aussi la condition équivalente dans
+    // DOMContentLoaded (sinon un visiteur non authentifié tomberait sur la landing page avant même
+    // d'atteindre ce bloc).
+    history.replaceState({}, '', window.location.pathname);
+    state.authView = 'bertolis';
   } else {
     state.authView = defaultView || 'login';
   }
@@ -2592,8 +2601,6 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
       ${isInstalledApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>'}
-
-      <button type="button" class="btn-link" id="btn-bertolis-login" style="margin-top: 10px; opacity: 0.6;">${icon(ICONS.wrench, 12)} Accès BERTOLIS (éditeur)</button>
     </div>
   `;
 }
@@ -2840,13 +2847,6 @@ function bindLoginScreenEvents() {
     state.authView = 'forgot';
     state.authError = '';
     state.pendingReset = null;
-    renderLoginScreen();
-  });
-
-  const bertolisBtn = document.getElementById('btn-bertolis-login');
-  if (bertolisBtn) bertolisBtn.addEventListener('click', () => {
-    state.authView = 'bertolis';
-    state.authError = '';
     renderLoginScreen();
   });
 
