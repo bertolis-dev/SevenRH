@@ -197,6 +197,11 @@ p { margin: 0; line-height: 1.5; }
    inclus), sans classe supplémentaire à gérer. */
 .nav-icon { display: inline-flex; flex-shrink: 0; }
 .nav-icon svg { width: 18px; height: 18px; display: block; }
+
+/* Voir icon() (app.js) — wrapper générique pour une icône ICONS.xxx insérée en ligne dans du texte
+   (titres, listes, badges), ailleurs que dans .nav-icon (sidebar, son propre wrapper dédié). */
+.icon-inline { display: inline-flex; flex-shrink: 0; vertical-align: middle; margin-top: -2px; }
+.icon-inline svg { width: 100%; height: 100%; display: block; }
 .nav-label { flex: 1; }
 .nav-soon {
   font-size: 10px;
@@ -412,6 +417,7 @@ p { margin: 0; line-height: 1.5; }
 
 .search-result-item:hover, .search-result-item.highlighted { background: var(--color-muted-soft); }
 .search-result-icon { font-size: 16px; flex-shrink: 0; }
+.search-result-icon svg { width: 16px; height: 16px; display: block; }
 .search-result-label { font-weight: 600; font-size: 13px; }
 .search-result-sublabel { font-size: 12px; color: var(--color-text-muted); }
 
@@ -1554,7 +1560,8 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .action-center-item:hover { background: var(--color-muted-soft); border-color: var(--color-primary); }
-.action-center-icon { font-size: 18px; }
+.action-center-icon { font-size: 18px; flex-shrink: 0; }
+.action-center-icon svg { width: 18px; height: 18px; display: block; }
 .action-center-label { flex: 1; }
 .action-center-arrow { color: var(--color-text-muted); }
 

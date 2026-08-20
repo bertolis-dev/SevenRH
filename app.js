@@ -251,8 +251,28 @@ const ICONS = {
   coin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15.5c.5 1 1.6 1.5 3 1.5 1.9 0 3-1 3-2.3 0-3-6-1.3-6-4.2 0-1.3 1.1-2.3 3-2.3 1.4 0 2.5.5 3 1.5"/><line x1="12" y1="6.5" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="17.5"/></svg>',
   personPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><line x1="18" y1="7" x2="18" y2="13"/><line x1="15" y1="10" x2="21" y2="10"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.9 7.9 0 0 0 0-2l2-1.5-2-3.5-2.4.6a8 8 0 0 0-1.7-1L15 3h-6l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-.6-2 3.5L4.6 11a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-.6a8 8 0 0 0 1.7 1L9 21h6l.3-2.6a8 8 0 0 0 1.7-1l2.4.6 2-3.5-2-1.5z"/></svg>',
-  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>'
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>',
+  cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7"/><line x1="4" y1="21" x2="20" y2="21"/><path d="M4 17c1.2 0 1.2-1 2.4-1s1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1"/><line x1="12" y1="12" x2="12" y2="8.5"/><path d="M12 8.5c-.8 0-1.4-.7-1.4-1.5S11.2 5.5 12 4.5c.8 1 1.4 1.7 1.4 2.5S12.8 8.5 12 8.5z"/></svg>',
+  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2 4 5.5 4 9 0 2-.5 3.7-1.3 5.2L12 19l-2.7-2.8C8.5 14.7 8 13 8 11c0-3.5 1.5-7 4-9z"/><path d="M9.5 14.5 7 16v3l2.5-1.2"/><path d="M14.5 14.5 17 16v3l-2.5-1.2"/><circle cx="12" cy="10" r="1.3"/></svg>',
+  exitDoor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4"/><path d="M16 17l4-5-4-5"/><line x1="20" y1="12" x2="9" y2="12"/></svg>',
+  building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><rect x="8" y="7" width="3" height="3"/><rect x="13" y="7" width="3" height="3"/><rect x="8" y="13" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/></svg>',
+  document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l3 3v15H7z"/><path d="M14 3v3h3"/><line x1="9.5" y1="11" x2="14.5" y2="11"/><line x1="9.5" y1="15" x2="14.5" y2="15"/></svg>',
+  block: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  circleOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>',
+  leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-8 0-14 5-14 13 0 1.5.3 2.5.3 2.5S7 20 8 19c6-6 12-6 12-15z"/><path d="M6 18c2-4 6-8 10-10"/></svg>',
+  crown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><path d="M4 18l-1-9 5 4 4-7 4 7 5-4-1 9"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.3 1.4 6.3L12 16.9l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z"/></svg>'
 };
+
+/** Encapsule une icône ICONS.xxx dans un span de taille fixe pour un usage EN LIGNE dans du texte
+ * (titres, lignes de liste, badges) — un <svg> sans width/height explicite retombe sur la taille
+ * par défaut du navigateur (300×150), illisible mélangé à du texte. `.nav-icon` (sidebar) a déjà
+ * son propre wrapper dédié ; utiliser icon() partout ailleurs plutôt que réinventer un wrapper par
+ * endroit. */
+function icon(svg, size = 16) {
+  return `<span class="icon-inline" style="width:${size}px;height:${size}px;">${svg}</span>`;
+}
 
 /** roles: qui voit l'entrée de menu. 'employees' reste visible au manager, mais affiché et filtré
  * comme "Mon équipe" (voir renderEmployeesList).
@@ -980,7 +1000,7 @@ const LANDING_ALACARTE_MODULES = [
 
 const ABOUT_CATEGORIES = [
   {
-    icon: '👥',
+    icon: ICONS.people,
     title: 'Salariés & organisation',
     items: [
       "Fiche complète par salarié : contrat, coordonnées, documents, historique",
@@ -991,7 +1011,7 @@ const ABOUT_CATEGORIES = [
     ]
   },
   {
-    icon: '🏖️',
+    icon: ICONS.sun,
     title: 'Congés, absences & télétravail',
     items: [
       "Types de congés et d'absences entièrement paramétrables (acquisition, plafond, report)",
@@ -1003,7 +1023,7 @@ const ABOUT_CATEGORIES = [
     ]
   },
   {
-    icon: '📤',
+    icon: ICONS.upload,
     title: 'Paie & notes de frais',
     items: [
       "Préparation de paie avec détection automatique des anomalies avant export",
@@ -1013,7 +1033,7 @@ const ABOUT_CATEGORIES = [
     ]
   },
   {
-    icon: '📁',
+    icon: ICONS.folder,
     title: 'Documents & conformité',
     items: [
       "Coffre-fort documentaire par salarié",
@@ -1023,7 +1043,7 @@ const ABOUT_CATEGORIES = [
     ]
   },
   {
-    icon: '🎫',
+    icon: ICONS.headset,
     title: 'Support & pilotage',
     items: [
       "Tickets support intégrés, avec suivi de statut et date de livraison",
@@ -1034,7 +1054,7 @@ const ABOUT_CATEGORIES = [
     ]
   },
   {
-    icon: '⚙️',
+    icon: ICONS.gear,
     title: 'Accès, sécurité & installation',
     items: [
       "Gestion fine des rôles et des permissions, avec surcharges individuelles possibles",
@@ -1371,7 +1391,7 @@ function openAboutModal() {
         <div class="about-modal-grid">
           ${ABOUT_CATEGORIES.map(cat => `
             <div class="about-category">
-              <h3>${cat.icon} ${escapeHtml(cat.title)}</h3>
+              <h3>${icon(cat.icon)} ${escapeHtml(cat.title)}</h3>
               <ul>${cat.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
             </div>
           `).join('')}
@@ -3597,7 +3617,7 @@ function performGlobalSearch(term) {
     const haystack = normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`);
     if (haystack.includes(q)) {
       results.push({
-        icon: favoriteRepository.isFavoriteEmployee(e.id) ? '⭐' : '👤',
+        icon: favoriteRepository.isFavoriteEmployee(e.id) ? ICONS.star : ICONS.person,
         label: `${e.prenom} ${e.nom}`,
         sublabel: e.poste || e.service || 'Salarié',
         nav: 'employee-detail',
@@ -3627,7 +3647,7 @@ function performGlobalSearch(term) {
     if (!employee || !isVisible(employee.id)) return;
     if (normalizeForSearch(`${employee.prenom} ${employee.nom} télétravail`).includes(q)) {
       results.push({
-        icon: '💻',
+        icon: ICONS.laptop,
         label: `${employee.prenom} ${employee.nom}`,
         sublabel: `Télétravail · ${formatDate(r.dateDebut)} · ${r.statut}`,
         nav: 'absences',
@@ -3642,7 +3662,7 @@ function performGlobalSearch(term) {
     const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`);
     if (haystack.includes(q)) {
       results.push({
-        icon: '🧾',
+        icon: ICONS.receipt,
         label: `${employee.prenom} ${employee.nom} · ${n.libelle}`,
         sublabel: `Note de frais · ${formatCurrencyFR(n.montantTTC)} · ${n.statut}`,
         nav: 'frais',
@@ -3658,7 +3678,7 @@ function performGlobalSearch(term) {
     serviceRepository.getAll().forEach(s => {
       if (normalizeForSearch(s.nom).includes(q)) {
         results.push({
-          icon: '🏢',
+          icon: ICONS.building,
           label: s.nom,
           sublabel: 'Service',
           nav: 'organigramme',
@@ -3668,7 +3688,7 @@ function performGlobalSearch(term) {
       (s.equipes || []).forEach(eq => {
         if (normalizeForSearch(eq.nom).includes(q)) {
           results.push({
-            icon: '🧑‍🤝‍🧑',
+            icon: ICONS.people,
             label: eq.nom,
             sublabel: `Équipe · ${s.nom}`,
             nav: 'organigramme',
@@ -3683,16 +3703,26 @@ function performGlobalSearch(term) {
     PARAMETRES_SEARCH_SECTIONS
       .filter(s => !s.permission || hasPermission(user, s.permission))
       .filter(s => normalizeForSearch(s.label).includes(q) || s.keywords.some(k => normalizeForSearch(k).includes(q)))
-      .forEach(s => results.push({ icon: '⚙️', label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
+      .forEach(s => results.push({ icon: ICONS.gear, label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
   }
 
   return results.slice(0, 8);
 }
 
+/** result.icon est soit une de nos icônes ICONS.xxx (SVG, jamais échappée — chaîne de confiance,
+ * pas une donnée utilisateur), soit type.icone (emoji choisi par un RH dans Paramètres → Types
+ * d'absences, donnée utilisateur, toujours échappée). Distingue les deux à l'affichage plutôt que
+ * de forcer un seul traitement qui casserait l'un des deux cas. */
+function renderResultIcon(iconValue) {
+  return typeof iconValue === 'string' && iconValue.startsWith('<svg')
+    ? `<span class="search-result-icon">${iconValue}</span>`
+    : `<span class="search-result-icon">${escapeHtml(iconValue)}</span>`;
+}
+
 function searchResultItemHTML(result, index, isHighlighted) {
   return `
     <div class="search-result-item ${isHighlighted ? 'highlighted' : ''}" data-result-index="${index}">
-      <span class="search-result-icon">${escapeHtml(result.icon)}</span>
+      ${renderResultIcon(result.icon)}
       <div>
         <div class="search-result-label">${escapeHtml(result.label)}</div>
         <div class="search-result-sublabel">${escapeHtml(result.sublabel)}</div>
@@ -3717,7 +3747,7 @@ function renderFavoritesDropdown(resultsBox) {
     <div class="search-section-label">Favoris</div>
     ${favorites.map(e => `
       <div class="search-result-item" data-favorite-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}">
-        <span class="search-result-icon">⭐</span>
+        <span class="search-result-icon">${ICONS.star}</span>
         <div>
           <div class="search-result-label">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
           <div class="search-result-sublabel">${escapeHtml(e.poste || '—')}</div>
@@ -4474,20 +4504,20 @@ function renderDashboardActionCenter(employees, employeeIds) {
     const congesEnAttente = pendingFor(leaveRepository);
     const teletravailEnAttente = pendingFor(teleworkRepository);
     const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
-    if (congesEnAttente.length) items.push({ icon: '🏖️', label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'absences', navParams: NAVPARAMS_CONGES_A_VALIDER });
-    if (teletravailEnAttente.length) items.push({ icon: '💻', label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
-    if (contractEnds.length) items.push({ icon: '📄', label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
+    if (congesEnAttente.length) items.push({ icon: ICONS.sun, label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'absences', navParams: NAVPARAMS_CONGES_A_VALIDER });
+    if (teletravailEnAttente.length) items.push({ icon: ICONS.laptop, label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
+    if (contractEnds.length) items.push({ icon: ICONS.document, label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
   }
 
   const fraisEnAttente = pendingFor(expenseRepository);
-  if (fraisEnAttente.length) items.push({ icon: '🧾', label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
+  if (fraisEnAttente.length) items.push({ icon: ICONS.receipt, label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
 
   if (hasPermission(user, PERMISSIONS.EXPORTER_PAIE)) {
     const now = new Date();
     const bloquantes = getPaieAnomalies(now.getFullYear(), now.getMonth()).filter(a => a.severity === 'bloquante');
     items.push(bloquantes.length
-      ? { icon: '🚫', label: `${bloquantes.length} anomalie${bloquantes.length > 1 ? 's' : ''} bloquante${bloquantes.length > 1 ? 's' : ''} avant l'export paie`, nav: 'export-paie', navParams: { paieTab: 'preparation' } }
-      : { icon: '📤', label: `Préparation de paie : aucune anomalie ce mois-ci`, nav: 'export-paie', navParams: { paieTab: 'preparation' } });
+      ? { icon: ICONS.block, label: `${bloquantes.length} anomalie${bloquantes.length > 1 ? 's' : ''} bloquante${bloquantes.length > 1 ? 's' : ''} avant l'export paie`, nav: 'export-paie', navParams: { paieTab: 'preparation' } }
+      : { icon: ICONS.upload, label: `Préparation de paie : aucune anomalie ce mois-ci`, nav: 'export-paie', navParams: { paieTab: 'preparation' } });
   }
 
   if (hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT)) {
@@ -4500,7 +4530,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
     const settings = settingsRepository.getSettings();
     const totalTickets = employees.filter(e => e.statut === 'Actif')
       .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
-    items.push({ icon: '🍽️', label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
+    items.push({ icon: ICONS.utensils, label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
   }
 
   if (!items.length) return '';
