@@ -169,11 +169,25 @@ p { margin: 0; line-height: 1.5; }
   gap: 2px;
   padding: 8px;
   /* #sidebar est en position:fixed (hauteur = 100vh) : sans ça, un compte avec beaucoup d'entrées
-     de menu (Directeur...) sur un écran court (téléphone) poussait les derniers éléments
-     ("Paramètres"...) sous le bas de l'écran, purement inatteignables (rien ne défilait). */
+     de menu (Directeur...) sur un écran court (téléphone) poussait les derniers éléments sous le
+     bas de l'écran, purement inatteignables (rien ne défilait). */
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* §retour du 21/08/2026 "mets tickets et boîte à idées tout en bas, qui ne bouge pas" : en dehors
+   de la zone défilante #sidebar-nav (qui a flex:1 ci-dessus) — reste donc toujours visible en bas
+   de la barre latérale sans jamais défiler avec le reste, quelle que soit la longueur du menu
+   au-dessus. Vide sur mobile (voir renderSidebar, app.js) : le panneau déroulant y est temporaire,
+   pas besoin d'une zone fixe séparée — les deux menus sont simplement en fin de cette même liste. */
+#sidebar-nav-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
 }
 
 .nav-item {
@@ -2805,6 +2819,7 @@ textarea.input { resize: vertical; font-family: inherit; }
      ligne flex, alignement et hauteur garantis sans calcul de position séparé. #sidebar ne sert
      plus que d'ancre invisible pour #sidebar-nav (voir bindGlobalEvents, app.js, pour
      l'ouverture/fermeture — classe .open). */
+  #sidebar-nav-pinned { display: none; }
   #sidebar {
     top: 0;
     left: 0;

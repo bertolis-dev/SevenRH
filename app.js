@@ -390,16 +390,16 @@ const NAV_ITEMS = [
   // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
   { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
 
-  // hideOnMobile (§sprint refonte UX §12) : ces deux entrées restent accessibles sur mobile via le
-  // menu utilisateur (renderUserMenuPanel) — les dupliquer aussi dans la barre du bas, déjà à l'étroit
-  // sur un petit écran, n'apporte rien. Desktop inchangé (renderSidebar filtre uniquement en dessous
-  // de 860px, voir bindMobileNavVisibility).
-  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES], hideOnMobile: true },
+  // §retour du 21/08/2026 : retirées de la barre latérale (mobile ET desktop) — restent accessibles
+  // uniquement via le menu utilisateur en haut à droite (renderUserMenuPanel), qui les propose déjà
+  // toutes les deux. navItemsForRole() les garde côté permissions (navigateTo() doit toujours
+  // pouvoir y aller depuis ce menu) ; seul renderSidebar() filtre leur AFFICHAGE dans la barre.
+  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
   // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
   // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
-  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' }, hideOnMobile: true }
+  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
 ];
 
 /** true si l'entreprise a accès à ce module (voir LANDING_ALACARTE_MODULES) — toujours vrai pour un
@@ -4255,11 +4255,13 @@ const MOBILE_NAV_QUERY = window.matchMedia('(max-width: 860px)');
 function renderSidebar() {
   const user = authRepository.getCurrentUser();
   if (!user) return;
-  // §sprint refonte UX §12 : sur mobile, "Paramètres"/"Abonnement" restent accessibles via le menu
-  // utilisateur (renderUserMenuPanel) — pas besoin de les dupliquer dans une barre du bas déjà à
-  // l'étroit. Desktop (même #sidebar-nav, juste réorienté en CSS) n'est jamais filtré.
-  const items = navItemsForRole(user).filter(i => !(i.hideOnMobile && MOBILE_NAV_QUERY.matches));
+  // §retour du 21/08/2026 : "Paramètres"/"Abonnement" retirés de la barre latérale (mobile ET
+  // desktop) — restent accessibles via le menu utilisateur en haut à droite (renderUserMenuPanel),
+  // qui les propose déjà. navItemsForRole() les garde côté permissions (navigateTo() doit toujours
+  // pouvoir y aller depuis ce menu) ; seul l'AFFICHAGE ici les exclut.
+  const items = navItemsForRole(user).filter(i => i.key !== 'parametres');
   const nav = document.getElementById('sidebar-nav');
+  const pinnedNav = document.getElementById('sidebar-nav-pinned');
   // Referme toujours le panneau mobile "☰" au changement de vue (innerHTML reconstruit juste après
   // ne touche jamais la classe de #sidebar-nav lui-même — sans ce reset, le panneau resterait
   // ouvert après avoir cliqué un item, voir bindGlobalEvents pour l'ouverture).
@@ -4279,14 +4281,25 @@ function renderSidebar() {
   // Sprint SIRH premium §5 : regroupement visuel "Personnel"/"Équipe" — seulement si le rôle a
   // vraiment les deux (un salarié n'a que des items "personnel" → liste plate, comportement inchangé).
   const withIndex = items.map((item, index) => ({ item, index }));
-  const showGroups = items.some(i => i.group === 'personnel') && items.some(i => i.group === 'equipe');
+  // §retour du 21/08/2026 "mets tickets et boîte à idées tout en bas, qui ne bouge pas" : rendus à
+  // part dans #sidebar-nav-pinned, hors de la zone défilante #sidebar-nav — toujours visibles sans
+  // jamais défiler avec le reste, quelle que soit la longueur du menu au-dessus (desktop). Sur
+  // mobile, #sidebar-nav-pinned reste vide (voir plus bas) : le panneau déroulant y est temporaire,
+  // pas besoin d'une zone fixe séparée — ces deux menus sont simplement ajoutés en fin de liste.
+  const PINNED_KEYS = ['mes-tickets', 'idees'];
+  const pinned = PINNED_KEYS.map(key => withIndex.find(x => x.item.key === key)).filter(Boolean);
+  const pinnedHtml = pinned.map(x => renderItem(x.item, x.index)).join('');
+  const scrollable = withIndex.filter(x => !PINNED_KEYS.includes(x.item.key));
 
+  const showGroups = scrollable.some(x => x.item.group === 'personnel') && scrollable.some(x => x.item.group === 'equipe');
+
+  let scrollableHtml;
   if (showGroups) {
-    const dashboard = withIndex.filter(x => !x.item.group && x.item.key === 'dashboard');
-    const personnel = withIndex.filter(x => x.item.group === 'personnel');
-    const equipe = withIndex.filter(x => x.item.group === 'equipe');
-    const reste = withIndex.filter(x => !x.item.group && x.item.key !== 'dashboard');
-    nav.innerHTML =
+    const dashboard = scrollable.filter(x => !x.item.group && x.item.key === 'dashboard');
+    const personnel = scrollable.filter(x => x.item.group === 'personnel');
+    const equipe = scrollable.filter(x => x.item.group === 'equipe');
+    const reste = scrollable.filter(x => !x.item.group && x.item.key !== 'dashboard');
+    scrollableHtml =
       dashboard.map(x => renderItem(x.item, x.index)).join('') +
       '<div class="nav-section-label">Personnel</div>' +
       personnel.map(x => renderItem(x.item, x.index)).join('') +
@@ -4294,13 +4307,23 @@ function renderSidebar() {
       equipe.map(x => renderItem(x.item, x.index)).join('') +
       reste.map(x => renderItem(x.item, x.index)).join('');
   } else {
-    nav.innerHTML = withIndex.map(x => renderItem(x.item, x.index)).join('');
+    scrollableHtml = scrollable.map(x => renderItem(x.item, x.index)).join('');
   }
 
-  nav.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = items[Number(btn.dataset.navIndex)];
-      navigateTo(item.key, item.navParams || {});
+  if (MOBILE_NAV_QUERY.matches) {
+    nav.innerHTML = scrollableHtml + pinnedHtml;
+    pinnedNav.innerHTML = '';
+  } else {
+    nav.innerHTML = scrollableHtml;
+    pinnedNav.innerHTML = pinnedHtml;
+  }
+
+  [nav, pinnedNav].forEach(container => {
+    container.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = items[Number(btn.dataset.navIndex)];
+        navigateTo(item.key, item.navParams || {});
+      });
     });
   });
 }
