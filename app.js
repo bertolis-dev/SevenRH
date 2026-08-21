@@ -4873,10 +4873,12 @@ function renderDashboardDirecteur() {
 
 // ---- Préparation des données des graphiques ----
 
-// §retour du 21/08/2026 : remis comme avant sur demande — la palette dédiée (--chart-1..7) avait
-// été introduite pour qu'une barre sur 6 ne se confonde plus avec le texte des libellés (même
-// teinte que --color-text-muted), mais le rendu ne convenait pas. Revenu aux teintes de l'app.
-const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-info)', 'var(--color-danger)', 'var(--color-text-muted)'];
+// §retour du 21/08/2026 : une seule teinte (bleu marine, la couleur de base de l'app) pour toutes
+// les barres/segments plutôt qu'une palette multicolore — demande explicite ("garder le bleu
+// marine et doré", jamais une couleur différente par élément) et évite au passage le non-sens
+// sémantique de success/warning/danger sur des séries purement catégorielles (service, contrat).
+// CHART_COLORS[i % CHART_COLORS.length] retombe donc toujours sur cette même teinte.
+const CHART_COLORS = ['var(--color-primary)'];
 
 function getServiceBreakdown(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
@@ -5206,12 +5208,17 @@ function renderDonutChartSVG(data) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
+  // Depuis que tous les segments partagent la même teinte (CHART_COLORS, §retour du 21/08/2026),
+  // un petit espace entre eux reste indispensable pour distinguer les segments à l'œil — sans lui,
+  // plusieurs segments de même couleur se confondraient en un seul anneau plein.
+  const gap = data.length > 1 ? 3 : 0;
   let offset = 0;
 
   const segments = data.map(d => {
-    const dash = (d.value / total) * circumference;
+    const rawDash = (d.value / total) * circumference;
+    const dash = Math.max(rawDash - gap, 0);
     const circle = `<circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="${escapeHtml(d.color)}" stroke-width="${strokeWidth}" stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size / 2} ${size / 2})" />`;
-    offset += dash;
+    offset += rawDash;
     return circle;
   }).join('');
 
