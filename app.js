@@ -4873,11 +4873,10 @@ function renderDashboardDirecteur() {
 
 // ---- Préparation des données des graphiques ----
 
-// §retour du 21/08/2026 : réutilisait success/warning/info/danger/muted pour des séries purement
-// catégorielles (aucun sens "bon/mauvais") — --color-text-muted comme couleur de REMPLISSAGE
-// rendait une barre sur 6 quasi invisible (même teinte que le texte des libellés autour). Palette
-// dédiée, mêmes teintes que .avatar-color-* (voir style.css), pensée pour ce genre d'usage.
-const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)'];
+// §retour du 21/08/2026 : remis comme avant sur demande — la palette dédiée (--chart-1..7) avait
+// été introduite pour qu'une barre sur 6 ne se confonde plus avec le texte des libellés (même
+// teinte que --color-text-muted), mais le rendu ne convenait pas. Revenu aux teintes de l'app.
+const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-info)', 'var(--color-danger)', 'var(--color-text-muted)'];
 
 function getServiceBreakdown(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');

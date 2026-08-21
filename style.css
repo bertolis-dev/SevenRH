@@ -50,19 +50,6 @@
   --color-danger: #dc2626;
   --color-danger-soft: #fef2f2;
   --color-muted-soft: #f1f2f4;
-  /* Palette qualitative pour les graphiques catégoriels (répartition par service, par type de
-   * contrat...) — retour du 21/08/2026 : ces graphiques réutilisaient les jetons success/warning/
-   * info/danger/muted alors qu'aucune de ces séries n'a de sens "bon/mauvais" (voir CHART_COLORS,
-   * app.js), ce qui rendait certaines barres illisibles (--color-text-muted comme couleur de
-   * REMPLISSAGE d'une barre — la même teinte que le texte des libellés autour, quasi invisible).
-   * Mêmes teintes que .avatar-color-* (côté texte, plus saturé, adapté à un remplissage plein). */
-  --chart-1: #0f766e;
-  --chart-2: #7c3aed;
-  --chart-3: #be185d;
-  --chart-4: #4f46e5;
-  --chart-5: #c2410c;
-  --chart-6: #0e7490;
-  --chart-7: #a21caf;
   /* Jeton d'accent or dédié à l'app (calendrier — badge "arrivée", §passe couleur du 21/08/2026),
      distinct de --landing-gold-* qui reste figé pour la page publique (toujours sur fond marine
      sombre, jamais affectée par le thème clair/sombre de l'app). Vaut la même teinte qu'ici en
@@ -2970,13 +2957,6 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-gold-soft: #2e2410;
     --color-primary-text: #7694d6;
     --color-info-text: #60a5fa;
-    --chart-1: #5eead4;
-    --chart-2: #c4b5fd;
-    --chart-3: #f9a8d4;
-    --chart-4: #a5b4fc;
-    --chart-5: #fdba74;
-    --chart-6: #67e8f9;
-    --chart-7: #f0abfc;
   }
 
   /* Palette d'avatars (voir .avatar-color-0..6 plus haut) — fonds assombris, textes éclaircis, même
