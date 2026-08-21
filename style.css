@@ -2849,6 +2849,11 @@ textarea.input { resize: vertical; font-family: inherit; }
   .mobile-nav-toggle svg { width: 20px; height: 20px; display: block; }
   #main-column { margin-left: 0; }
   #view-root { padding: 16px; }
+  /* Demande du 21/08/2026 : 2 colonnes plutôt qu'une seule pleine largeur, pour moins défiler sur
+     une grille de nombreuses cartes KPI (jusqu'à 15 sur le tableau de bord RH/Directeur) — forcé en
+     dur plutôt que de compter sur auto-fit/minmax, qui retombait sur une seule colonne à cette
+     largeur malgré la place suffisante mesurée. */
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .calendar-cell { height: 84px; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
@@ -2885,8 +2890,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 @media (max-width: 480px) {
   /* Sous ce seuil, l'espace disponible (~270px après sidebar + marges) est inférieur
      aux minimums de colonne de ces grilles : on repasse en une seule colonne plutôt
-     que de laisser le contenu déborder du conteneur. */
-  .kpi-grid,
+     que de laisser le contenu déborder du conteneur. .kpi-grid gardée à part (demande du
+     21/08/2026) : ses cartes (juste un nombre + une icône + un court libellé) restent lisibles
+     bien plus étroites que les grilles ci-dessous (champs de formulaire, tableaux), donc 2
+     colonnes plutôt qu'une seule pleine largeur — voir sa propre règle plus haut. */
   .dashboard-grid,
   .detail-grid,
   .settings-lists-grid {
