@@ -464,7 +464,21 @@ p { margin: 0; line-height: 1.5; }
   box-shadow: var(--shadow-sm);
 }
 
-.kpi-icon { font-size: 20px; margin-bottom: 8px; }
+/* Puce colorée (§passe couleur "premium" du 21/08/2026) — même patron que .landing-feature-icon
+   (fond teinté, icône colorée) plutôt qu'une icône nue de la couleur du texte : c'est ce petit
+   changement qui fait le plus "sentir" davantage de couleur dans l'app, sans transformer les KPI
+   en arc-en-ciel façon Trello (une seule teinte marine, cohérente partout). */
+.kpi-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  margin-bottom: 10px;
+}
 .kpi-icon svg { width: 20px; height: 20px; display: block; }
 .kpi-value { font-size: 26px; font-weight: 700; }
 .kpi-label { font-size: 13px; color: var(--color-text-muted); margin-top: 2px; }
@@ -511,7 +525,7 @@ p { margin: 0; line-height: 1.5; }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
-.btn-primary { background: var(--color-primary); color: white; border-color: var(--color-primary-hover); }
+.btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)); color: white; border-color: var(--color-primary-hover); }
 .btn-primary:hover { background: var(--color-primary-hover); }
 
 .btn-secondary { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
@@ -769,8 +783,18 @@ p { margin: 0; line-height: 1.5; }
   gap: 8px;
 }
 
-.empty-icon { font-size: 32px; display: flex; align-items: center; justify-content: center; }
-.empty-icon svg { width: 32px; height: 32px; display: block; }
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  margin-bottom: 4px;
+}
+.empty-icon svg { width: 26px; height: 26px; display: block; }
 
 /* ---------------------------------------------------------------------
    Modales
@@ -1465,9 +1489,20 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .landing-page .offre-card-match { border-color: var(--landing-gold-500); box-shadow: 0 0 0 2px var(--landing-gold-500), var(--shadow-md); }
 .landing-page .offre-card-match .offre-card-match-badge { display: block; }
+.landing-page .offre-card-match .offre-card-icon { background: var(--landing-gold-soft); color: var(--landing-navy-900); }
 
-.offre-card-icon { font-size: 28px; margin-bottom: 8px; }
-.offre-card-icon svg { width: 28px; height: 28px; display: block; }
+.offre-card-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  margin-bottom: 10px;
+}
+.offre-card-icon svg { width: 22px; height: 22px; display: block; }
 
 .offre-card h3 { font-size: 16px; margin-bottom: 4px; }
 
@@ -2171,7 +2206,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .feature-page-back-short { display: none; }
 .landing-topbar-cta-short { display: none; }
 
-.btn-gold { background: var(--landing-gold-500); color: #221704; }
+.btn-gold { background: linear-gradient(135deg, var(--landing-gold-500), var(--landing-gold-300)); color: #221704; }
 .btn-gold:hover { background: var(--landing-gold-300); }
 .btn-ghost-light { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
 .btn-ghost-light:hover { background: rgba(255, 255, 255, 0.1); }
