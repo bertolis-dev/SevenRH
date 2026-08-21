@@ -8562,9 +8562,11 @@ function bindAbsencesHubEvents() {
   const btnAValider = document.getElementById('btn-conges-a-valider') || document.getElementById('btn-autres-absences-a-valider') || document.getElementById('btn-teletravail-a-valider');
   if (btnAValider) {
     btnAValider.addEventListener('click', () => {
-      if (tab === 'teletravail') Object.assign(state, NAVPARAMS_TELETRAVAIL_A_VALIDER);
-      else Object.assign(state, NAVPARAMS_CONGES_A_VALIDER);
-      render();
+      // navigateTo (pas Object.assign + render() seul) : depuis l'ajout de "Congés à valider" côté
+      // Équipe (retour du 21/08/2026), l'état de surbrillance de la barre latérale dépend de
+      // congesFilters — sans renderSidebar(), ce bouton laissait "Congés & absences" surligné au
+      // lieu de "Congés à valider" après avoir pourtant bien appliqué le même filtre.
+      navigateTo('absences', tab === 'teletravail' ? NAVPARAMS_TELETRAVAIL_A_VALIDER : NAVPARAMS_CONGES_A_VALIDER);
     });
   }
 
