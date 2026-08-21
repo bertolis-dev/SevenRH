@@ -546,7 +546,9 @@ p { margin: 0; line-height: 1.5; }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
-.btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)); color: white; border-color: var(--color-primary-hover); transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; }
+/* Pas de bordure (retour explicite du 21/08/2026, revient sur la demande initiale de bordure) —
+   juste le dégradé, sans contour supplémentaire. */
+.btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)); color: white; transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; }
 /* Lueur douce au survol (§passe "premium ++" du 21/08/2026) — même idée que .landing-page .btn-primary,
    étendue à l'appli connectée : repos inchangé (pas de poids visuel ajouté partout), la couleur ne
    "s'allume" qu'à l'interaction. */
