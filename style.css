@@ -1425,6 +1425,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   position: sticky;
   top: 90px;
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--landing-gold-500);
   border-radius: var(--radius-md);
   padding: 22px 20px;
   text-align: center;
@@ -1432,7 +1433,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .alacarte-total-label { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
 .alacarte-discount-note { margin: 4px 0 0; font-size: 12.5px; font-weight: 600; color: var(--landing-gold-500); min-height: 1em; }
-.alacarte-total-card strong { display: block; font-size: 30px; margin: 8px 0; color: var(--color-text); }
+.alacarte-total-card strong { display: block; font-size: 30px; margin: 8px 0; }
 @media (max-width: 860px) {
   .alacarte-builder { grid-template-columns: 1fr; }
   .alacarte-total-card { position: static; }
@@ -2411,8 +2412,24 @@ textarea.input { resize: vertical; font-family: inherit; }
   gap: 24px;
   border-bottom: 1px solid var(--color-border);
 }
+/* Dégradé de texte (§passe couleur du 21/08/2026) — réservé aux GROS chiffres mis en avant (chiffres
+   clés, prix total du simulateur). Utilise --color-primary/--color-primary-hover (PAS les jetons
+   --landing-navy-* figés) : ces sections de la landing, hors bandeau hero, suivent bien le thème
+   clair/sombre du visiteur via --color-bg (contrairement au hero, toujours sur fond marine fixe) —
+   un dégradé en navy figé y serait resté d'un navy bien trop sombre, quasi illisible, sur le fond
+   presque noir du mode sombre. `color` sert de repli pour les navigateurs sans support de
+   background-clip:text (ignorent alors le dégradé, gardent juste ce ton plein, déjà correct dans
+   les deux thèmes puisque --color-primary l'est aussi). */
+.landing-gradient-number {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--color-primary);
+  -webkit-text-fill-color: transparent;
+}
+
 .landing-stat-tile { text-align: center; }
-.landing-stat-tile strong { display: block; font-size: 32px; font-weight: 800; color: var(--landing-navy-900); line-height: 1; margin-bottom: 8px; }
+.landing-stat-tile strong { display: block; font-size: 32px; font-weight: 800; line-height: 1; margin-bottom: 8px; }
 .landing-stat-tile span { display: block; font-size: 13px; color: var(--color-text-muted); line-height: 1.4; }
 @media (max-width: 860px) {
   .landing-stats-band { grid-template-columns: repeat(2, 1fr); padding: 28px 20px; gap: 20px; }

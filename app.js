@@ -1647,19 +1647,19 @@ function renderLandingScreen() {
 
       <section class="landing-stats-band">
         <div class="landing-stat-tile">
-          <strong>${LANDING_ALACARTE_MODULES.length}</strong>
+          <strong class="landing-gradient-number">${LANDING_ALACARTE_MODULES.length}</strong>
           <span>Modules à la carte, vous ne payez que ceux que vous utilisez</span>
         </div>
         <div class="landing-stat-tile">
-          <strong>0</strong>
+          <strong class="landing-gradient-number">0</strong>
           <span>Engagement de durée — ajoutez ou retirez un module quand vous voulez</span>
         </div>
         <div class="landing-stat-tile">
-          <strong>0</strong>
+          <strong class="landing-gradient-number">0</strong>
           <span>Ressaisie : congés, absences et télétravail alimentent directement le calcul des tickets restaurant et de la paie</span>
         </div>
         <div class="landing-stat-tile">
-          <strong>100%</strong>
+          <strong class="landing-gradient-number">100%</strong>
           <span>Du prix affiché en clair, aucun devis obligatoire</span>
         </div>
       </section>
@@ -1742,7 +1742,7 @@ function renderLandingScreen() {
           </div>
           <div class="alacarte-total-card">
             <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
-            <strong id="alacarte-total">—</strong>
+            <strong id="alacarte-total" class="landing-gradient-number">—</strong>
             <p class="alacarte-discount-note" id="alacarte-discount-note"></p>
             <p class="landing-simulator-note">Estimation — le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
             <button type="button" class="btn btn-primary btn-arrow-cta" style="width: 100%; margin-top: 8px;" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
