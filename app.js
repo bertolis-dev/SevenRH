@@ -4569,7 +4569,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
     <div class="kpi-grid">
       ${kpiCard('Salariés actifs', actifs.length, ICONS.people)}
       ${kpiCard('Contrats CDI', cdi, ICONS.document)}
-      ${kpiCard('Contrats CDD', cdd, ICONS.hourglass)}
+      ${kpiCard('Contrats CDD', cdd, ICONS.calendar)}
       ${kpiCard('Services', services, ICONS.building)}
       ${kpiCard('Demandes de congé en attente', demandesEnAttente.length, ICONS.sun)}
       ${kpiCard('En télétravail aujourd\'hui', teletravailAujourdhui.length, ICONS.laptop)}
