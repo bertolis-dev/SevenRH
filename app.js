@@ -348,7 +348,12 @@ const NAV_ITEMS = [
   // Autres absences/Télétravail, jamais mise à jour) était la seule à l'exclure, la privant de tout
   // moyen d'exercer cette permission — un salarié Comptabilité a autant besoin de poser des congés
   // que les autres.
-  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges' },
+  // navParams (retour du 21/08/2026, ajout de "Congés à valider" ci-dessous, même clé) : sans lui,
+  // cliquer ici après avoir visité "Congés à valider" laissait state.congesFilters.statut sur "En
+  // attente" (Object.assign(state, {}) ne réinitialise rien) — cette entrée restait donc filtrée sur
+  // les demandes en attente au lieu de revenir à la vue personnelle par défaut. Remet explicitement
+  // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
+  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '' } } },
   { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'frais' },
   { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: ['salarie'], group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
@@ -365,6 +370,13 @@ const NAV_ITEMS = [
   { key: 'idees', label: "Boîte à idées", icon: ICONS.lightbulb, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
 
   // ---- Équipe ----
+  // §retour du 21/08/2026 : entrée dédiée "Congés à valider" (même écran "absences" que la version
+  // Personnel ci-dessus, juste préréglé sur l'onglet Congés + les demandes en attente — voir
+  // NAVPARAMS_CONGES_A_VALIDER) — sans elle, une entreprise n'ayant souscrit qu'au module "conges"
+  // n'a jamais aucun menu "Équipe", donc jamais les étiquettes Personnel/Équipe (voir showGroups,
+  // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
+  // voir isNavItemActive) plutôt qu'un nouvel écran.
+  { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER },
   { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'rh' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
