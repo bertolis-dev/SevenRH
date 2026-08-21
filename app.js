@@ -3053,7 +3053,7 @@ function renderUserMenuPanel() {
   panel.innerHTML = `
     <div class="user-menu-header">
       <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
-      <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
+      <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
       ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
     ${otherAccounts.length ? `
@@ -6138,7 +6138,7 @@ function renderOrgNode(employee, childrenOf) {
         ${renderAvatar(employee)}
         <div class="org-node-name">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</div>
         <div class="org-node-poste">${escapeHtml(employee.poste || '—')}</div>
-        <span class="badge badge-info">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
+        <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
       </div>
       ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
     </li>

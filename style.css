@@ -43,6 +43,13 @@
   --color-danger: #dc2626;
   --color-danger-soft: #fef2f2;
   --color-muted-soft: #f1f2f4;
+  /* Jeton d'accent or dédié à l'app (calendrier — badge "arrivée", §passe couleur du 21/08/2026),
+     distinct de --landing-gold-* qui reste figé pour la page publique (toujours sur fond marine
+     sombre, jamais affectée par le thème clair/sombre de l'app). Vaut la même teinte qu'ici en
+     clair, mais reçoit son propre assombrissement en mode sombre plus bas — contrairement à
+     --landing-gold-*, qui rendrait beaucoup trop clair/criard sur une carte sombre. */
+  --color-gold: var(--landing-gold-500);
+  --color-gold-soft: var(--landing-gold-soft);
   /* §correctif 20/08/2026 : jetons dédiés au TEXTE écrit avec --color-primary/--color-info (liens,
      onglet actif, badge, initiales d'avatar) — identiques aux couleurs de base en mode clair, mais
      éclaircis en mode sombre (voir le bloc dark mode) où le bleu/indigo d'origine, jamais pensé pour
@@ -713,6 +720,9 @@ p { margin: 0; line-height: 1.5; }
 .badge-info { background: var(--color-info-soft); color: var(--color-info-text); }
 .badge-muted { background: var(--color-muted-soft); color: var(--color-text-muted); }
 .badge-danger { background: var(--color-danger-soft); color: var(--color-danger); }
+/* Réservé aux tags identitaires (rôle du compte) plutôt qu'à un statut — jamais mélangé avec les
+   badges success/warning/info/danger ci-dessus, qui gardent leur sens fonctionnel intact. */
+.badge-primary { background: var(--color-primary-soft); color: var(--color-primary-text); }
 
 .anomaly-list { margin: 0; padding-left: 20px; }
 .anomaly-list li { margin-bottom: 4px; }
@@ -1051,7 +1061,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .legend-conge { background: var(--color-success-soft); border: 1px solid var(--color-success); }
 .legend-teletravail { background: var(--color-primary-soft); border: 1px solid var(--color-primary); }
 .legend-anniversaire { background: var(--color-warning-soft); border: 1px solid var(--color-warning); }
-.legend-arrivee { background: var(--color-success-soft); border: 1px solid var(--color-success); }
+.legend-arrivee { background: var(--color-gold-soft); border: 1px solid var(--color-gold); }
 .legend-depart { background: var(--color-muted-soft); border: 1px solid var(--color-text-muted); }
 
 /* Précédent/Suivant sur les côtés du calendrier plutôt qu'en haut (retour utilisateur : plus
@@ -1175,7 +1185,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .calendar-badge-conge { background: var(--color-success-soft); border-color: var(--color-success); }
 .calendar-badge-teletravail { background: var(--color-primary-soft); border-color: var(--color-primary); }
 .calendar-badge-anniversaire { background: var(--color-warning-soft); border-color: var(--color-warning); }
-.calendar-badge-arrivee { background: var(--color-success-soft); border-color: var(--color-success); }
+/* Or plutôt que le même vert que "congé" (§passe couleur du 21/08/2026) — une arrivée est un moment
+   à part, pas juste "encore une absence en moins" : la seule catégorie du calendrier à utiliser
+   l'accent or de la marque, pour marquer clairement sa singularité plutôt que de la fondre dans le
+   code couleur des congés/absences. */
+.calendar-badge-arrivee { background: var(--color-gold-soft); border-color: var(--color-gold); }
 .calendar-badge-depart { background: var(--color-muted-soft); border-color: var(--color-text-muted); }
 
 /* Sprint SIRH premium §2 : demande non validée — visible mais visuellement distincte (semi-transparente, bordure en pointillés) d'une demande déjà validée. */
@@ -2798,6 +2812,7 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-warning-soft: #2a1f0f;
     --color-info-soft: #10203a;
     --color-danger-soft: #2a1414;
+    --color-gold-soft: #2e2410;
     --color-primary-text: #7694d6;
     --color-info-text: #60a5fa;
   }
