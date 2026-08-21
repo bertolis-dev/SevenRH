@@ -665,7 +665,7 @@ const DB = {
 
     if (localStorage.getItem(BERTOLIS_ADMINS_KEY) === null) {
       localStorage.setItem(BERTOLIS_ADMINS_KEY, JSON.stringify([
-        { id: generateId('bertolis'), prenom: 'Admin', nom: 'BERTOLIS', email: 'admin@bertolis.fr', motDePasse: 'Bertolis1234' }
+        { id: generateId('bertolis'), prenom: 'Admin', nom: 'BERTOLIS', email: 'dev@nexus-rh.com', motDePasse: 'RdW_v#w@W^+9qBn2^5tJ' }
       ]));
     }
   },
