@@ -275,9 +275,14 @@ p { margin: 0; line-height: 1.5; }
 
 /* Champs mot de passe — bouton "afficher" (œil) + indicateur de correspondance pour les paires
    mot de passe/confirmation, partout où ils apparaissent (connexion, inscription, réinitialisation). */
-.password-input-wrapper { position: relative; }
-.password-input-wrapper .input { padding-right: 40px; }
-.password-toggle {
+.password-input-wrapper { position: relative; display: block; }
+.password-input-wrapper .input { width: 100%; padding-right: 40px; }
+/* .btn-icon.password-toggle (deux classes) plutôt que .password-toggle seul : .btn-icon pose aussi
+   position:relative (repère de zone tactile, voir plus bas) — même spécificité qu'un simple
+   .password-toggle, donc c'est l'ORDRE dans le fichier qui déciderait, et .btn-icon vient après.
+   Résultat observé sans ce doublement de classe : le bouton restait position:relative, poussé dans
+   le flux normal sous le champ au lieu de flotter dedans, à droite, centré verticalement. */
+.btn-icon.password-toggle {
   position: absolute;
   right: 4px;
   top: 50%;
