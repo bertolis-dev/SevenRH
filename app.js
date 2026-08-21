@@ -5926,9 +5926,16 @@ function renderAvatar(e) {
   return `<div class="avatar avatar-initials ${getAvatarColorClass(e.prenom, e.nom)}">${escapeHtml(getInitials(e.prenom, e.nom))}</div>`;
 }
 
+/** CDI/CDD gardent une vraie portée sémantique (permanent/temporaire, garde badge-success/warning) —
+ * les 4 autres types n'ont pas d'axe "bon/mauvais" naturel, tous plaqués sur badge-info avant : une
+ * seule teinte pour 4 concepts différents. Réutilise directement les teintes .avatar-color-* (même
+ * fond/texte que les avatars, §passe couleur "premium ++" du 21/08/2026) plutôt que de dupliquer une
+ * seconde palette. */
 function renderContratBadge(type) {
-  const map = { CDI: 'success', CDD: 'warning', Stage: 'info', Alternance: 'info', Apprentissage: 'info', Intérim: 'muted' };
-  return `<span class="badge badge-${map[type] || 'muted'}">${escapeHtml(type || '—')}</span>`;
+  const semantic = { CDI: 'badge-success', CDD: 'badge-warning' };
+  const categorical = { Stage: 'avatar-color-1', Alternance: 'avatar-color-3', Apprentissage: 'avatar-color-5', 'Intérim': 'avatar-color-0' };
+  const cls = semantic[type] || categorical[type] || 'badge-muted';
+  return `<span class="badge ${cls}">${escapeHtml(type || '—')}</span>`;
 }
 
 function renderStatutBadge(statut) {

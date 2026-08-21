@@ -507,9 +507,15 @@ p { margin: 0; line-height: 1.5; }
    Cartes
    --------------------------------------------------------------------- */
 
+/* Liseré gauche marine (§passe couleur "premium ++, les cartes" du 21/08/2026) — signature visuelle
+   cohérente sur TOUTES les cartes de contenu de l'appli (façon Linear/Vercel), plutôt qu'une
+   bordure neutre identique à n'importe quel autre encadré. Ne concerne que .card : les cartes déjà
+   spécialement traitées (offre "recommandée", carte de prix...) gardent leur propre accent, pas de
+   double liseré. */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
   border-radius: var(--radius-md);
   padding: 22px 24px;
   box-shadow: var(--shadow-sm);
@@ -2933,5 +2939,8 @@ textarea.input { resize: vertical; font-family: inherit; }
     width: 100%;
     padding: 24px;
   }
+  /* Le liseré de couleur de .card (voir plus haut) n'a pas sa place sur un document imprimé — gaspille
+     de l'encre couleur pour un simple conteneur, jamais pensé comme un vrai repère ici. */
+  .card { border-left-color: var(--color-border); box-shadow: none; }
 }
 
