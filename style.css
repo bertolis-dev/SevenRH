@@ -193,9 +193,7 @@ p { margin: 0; line-height: 1.5; }
 }
 
 .nav-item:hover { background: var(--color-muted-soft); color: var(--color-text); }
-/* Liseré latéral (§passe "premium ++" du 21/08/2026) — repère de couleur net sur l'item actif, en
-   plus de la teinte de fond, plutôt que de compter sur elle seule pour se faire remarquer. */
-.nav-item.active { background: var(--color-primary-soft); color: var(--color-primary-text); box-shadow: inset 3px 0 0 var(--color-primary); }
+.nav-item.active { background: var(--color-primary-soft); color: var(--color-primary-text); }
 
 /* Bouton "☰" du menu mobile (voir @media 860px pour son rôle réel) — invisible sur desktop, la
    sidebar y affiche déjà #sidebar-nav en entier, pas besoin de le déplier. */
@@ -507,15 +505,12 @@ p { margin: 0; line-height: 1.5; }
    Cartes
    --------------------------------------------------------------------- */
 
-/* Liseré gauche marine (§passe couleur "premium ++, les cartes" du 21/08/2026) — signature visuelle
-   cohérente sur TOUTES les cartes de contenu de l'appli (façon Linear/Vercel), plutôt qu'une
-   bordure neutre identique à n'importe quel autre encadré. Ne concerne que .card : les cartes déjà
-   spécialement traitées (offre "recommandée", carte de prix...) gardent leur propre accent, pas de
-   double liseré. */
+/* Retour explicite : pas de liseré/trait de couleur (essayé puis refusé le 21/08/2026) — de la
+   couleur par un REMPLISSAGE doux plutôt qu'un contour. Léger voile marine en coin (même idée que
+   la sidebar), assez discret pour ne jamais gêner la lecture du texte posé dessus. */
 .card {
-  background: var(--color-surface);
+  background: linear-gradient(135deg, var(--color-surface), var(--color-primary-soft) 320%);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-primary);
   border-radius: var(--radius-md);
   padding: 22px 24px;
   box-shadow: var(--shadow-sm);
@@ -1456,11 +1451,13 @@ textarea.input { resize: vertical; font-family: inherit; }
    de page, pour rester à l'endroit où ce chiffre s'applique concrètement. */
 .alacarte-module-unit-count { display: flex; align-items: center; gap: 8px; margin: 10px 0 0 29px; font-size: 12.5px; color: var(--color-text-muted); }
 .alacarte-module-unit-count input { width: 70px; padding: 4px 8px; font-size: 13px; }
+/* Pas de trait/liseré (retour explicite du 21/08/2026) — un voile or plutôt qu'un contour, pour
+   distinguer cette carte "prix final" du reste sans y ajouter une bordure. */
 .alacarte-total-card {
   position: sticky;
   top: 90px;
+  background: linear-gradient(135deg, var(--color-surface), var(--color-gold-soft) 320%);
   border: 1px solid var(--color-border);
-  border-top: 3px solid var(--landing-gold-500);
   border-radius: var(--radius-md);
   padding: 22px 20px;
   text-align: center;
@@ -2939,8 +2936,8 @@ textarea.input { resize: vertical; font-family: inherit; }
     width: 100%;
     padding: 24px;
   }
-  /* Le liseré de couleur de .card (voir plus haut) n'a pas sa place sur un document imprimé — gaspille
+  /* Le voile de couleur de .card (voir plus haut) n'a pas sa place sur un document imprimé — gaspille
      de l'encre couleur pour un simple conteneur, jamais pensé comme un vrai repère ici. */
-  .card { border-left-color: var(--color-border); box-shadow: none; }
+  .card { background: white; box-shadow: none; }
 }
 
