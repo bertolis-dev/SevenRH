@@ -5669,7 +5669,7 @@ function renderEmployeeRow(e) {
         <div class="employee-cell">
           ${renderAvatar(e)}
           <div>
-            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? icon(ICONS.starFilled, 13) + ' ' : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
+            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> ` : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
             <div class="employee-matricule">${escapeHtml(e.matricule)}</div>
           </div>
         </div>
@@ -7293,7 +7293,7 @@ function renderEmployeeDetail(id) {
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Directeur peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
-        <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? icon(ICONS.starFilled, 13) + ' Favori' : icon(ICONS.star, 13) + ' Favori'}</button>
+        <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> Favori` : icon(ICONS.star, 13) + ' Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">${icon(ICONS.printer, 14)} Fiche PDF</button>
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
