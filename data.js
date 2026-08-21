@@ -2892,6 +2892,11 @@ function makeEmptyEmployee() {
     heuresSupplementaires: {}, // { 'AAAA-MM': heures } — heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
     typesAbsenceDesactives: [], // Sprint SIRH premium SS1 : ids de types actifs/visibles au niveau entreprise
                                  // mais explicitement désactivés pour CE salarié (liste blanche par défaut : vide = tout ce que l'entreprise autorise)
+    menusDesactives: [], // §retour du 21/08/2026 "pouvoir enlever l'accès à tous les menus" : clés NAV_ITEMS
+                          // (app.js) explicitement retirées de la navigation de CE salarié, en plus de ce que
+                          // son rôle/ses permissions/les modules souscrits par l'entreprise autoriseraient déjà
+                          // normalement (liste blanche par défaut : vide = tout ce que son rôle autorise) —
+                          // voir baseNavItemsForRole/navItemsForRole/renderMenusAutorisesCard (app.js)
     dateCreation: null,
     dateModification: null,
 

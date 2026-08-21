@@ -78,6 +78,7 @@ function employeeFromRow(row) {
     ticketsAjustements: d.ticketsAjustements ?? {},
     variablesPaie: d.variablesPaie ?? {},
     typesAbsenceDesactives: d.typesAbsenceDesactives ?? [],
+    menusDesactives: d.menusDesactives ?? [],
     dateCreation: row.created_at,
     dateModification: row.updated_at,
     role: row.role,

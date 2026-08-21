@@ -415,12 +415,25 @@ function hasModule(moduleKey) {
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
  * surcharges de permissions individuelles (§8) en plus du défaut de son rôle. */
-function navItemsForRole(user) {
+/** Ce que ce rôle/ces permissions/les modules souscrits par l'entreprise autoriseraient
+ * normalement, AVANT toute restriction manuelle par salarié (menusDesactives) — sert à la fois de
+ * base à navItemsForRole ci-dessous et de liste de cases à cocher dans renderMenusAutorisesCard. */
+function baseNavItemsForRole(user) {
   return NAV_ITEMS.filter(item => {
     if (item.module && !hasModule(item.module)) return false;
     if (item.permissions) return item.permissions.some(p => hasPermission(user, p));
     return item.roles.includes(user.role);
   });
+}
+
+/** §retour du 21/08/2026 "pouvoir enlever l'accès à tous les menus" : au-delà du rôle/des
+ * permissions/des modules souscrits (baseNavItemsForRole), un administrateur peut retirer
+ * individuellement des menus à CE salarié (voir renderMenusAutorisesCard) — sauf "Accueil",
+ * toujours conservé comme page de repli (voir navigateTo, qui y redirige quand une vue demandée
+ * n'est plus autorisée). */
+function navItemsForRole(user) {
+  const desactives = new Set(user.menusDesactives || []);
+  return baseNavItemsForRole(user).filter(item => item.key === 'dashboard' || !desactives.has(item.key));
 }
 
 // ---------------------------------------------------------------------------
@@ -7407,6 +7420,8 @@ function renderEmployeeDetail(id) {
 
       ${renderPermissionsCard(e, user)}
 
+      ${renderMenusAutorisesCard(e, user)}
+
       ${renderEmployeeDocumentsCard(e)}
 
       ${canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : ''}
@@ -7737,6 +7752,55 @@ function bindPermissionsCardEvents(employeeId) {
       auditLogRepository.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = ${evt.target.value || 'défaut du rôle'}`);
       showToast('Permission mise à jour.');
       navigateTo('employee-detail', { currentEmployeeId: employeeId });
+    });
+  });
+}
+
+/** §retour du 21/08/2026 "pouvoir enlever l'accès à tous les menus [...] un pavé pour choisir les
+ * modules que les salariés ont le droit d'utiliser" : décocher un menu ici le retire de la
+ * navigation de CE salarié uniquement (voir navItemsForRole) — au-delà de ce que son rôle/ses
+ * permissions/les modules souscrits par l'entreprise autorisent déjà (baseNavItemsForRole), jamais
+ * en plus. "Accueil" n'est volontairement pas proposé : toujours conservé comme page de repli.
+ * Même garde-fou que Permissions individuelles : jamais sur sa propre fiche. */
+function renderMenusAutorisesCard(e, user) {
+  if (!hasPermission(user, PERMISSIONS.GERER_PERMISSIONS) || user.id === e.id) return '';
+  const seen = new Set();
+  const items = baseNavItemsForRole(e).filter(item => {
+    if (item.key === 'dashboard' || seen.has(item.key)) return false;
+    seen.add(item.key);
+    return true;
+  });
+  if (items.length === 0) return '';
+  const desactives = new Set(e.menusDesactives || []);
+  return `
+    <div class="card">
+      <h2>Menus autorisés</h2>
+      <p class="text-muted">Décochez un menu pour le retirer de la navigation de ce salarié — sans effet sur les autres salariés.</p>
+      <div class="form-grid checkbox-grid">
+        ${items.map(item => `
+          <div class="form-field form-field-checkbox">
+            <label>
+              <input type="checkbox" data-menu-autorise="${item.key}" ${desactives.has(item.key) ? '' : 'checked'}>
+              ${icon(item.icon, 14)} ${escapeHtml(item.label)}
+            </label>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindMenusAutorisesCardEvents(employeeId) {
+  document.querySelectorAll('[data-menu-autorise]').forEach(checkbox => {
+    checkbox.addEventListener('change', (evt) => {
+      const key = evt.target.dataset.menuAutorise;
+      const employee = employeeRepository.getById(employeeId);
+      const desactives = new Set(employee.menusDesactives || []);
+      if (evt.target.checked) desactives.delete(key); else desactives.add(key);
+      employeeRepository.update(employeeId, { menusDesactives: [...desactives] });
+      const navItem = NAV_ITEMS.find(i => i.key === key);
+      auditLogRepository.logAudit('Modification', 'Menus autorisés', `${employee.prenom} ${employee.nom} · ${navItem ? navItem.label : key} ${evt.target.checked ? 'autorisé' : 'retiré'}`);
+      showToast('Mis à jour.');
     });
   });
 }
@@ -8298,6 +8362,7 @@ function bindEmployeeDetailEvents() {
   if (certificatBtn) certificatBtn.addEventListener('click', () => openCertificatTravailModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
+  bindMenusAutorisesCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
   bindChecklistEvents(state.currentEmployeeId);
 
