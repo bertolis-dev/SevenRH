@@ -34,6 +34,13 @@
   --color-primary: var(--landing-navy-700);
   --color-primary-hover: var(--landing-navy-900);
   --color-primary-soft: #eaeef5;
+  /* Puces d'icône PURES (KPI, écrans vides, cartes d'offre — pas de texte dedans) : distinct de
+     --color-primary-soft, resté quasi invisible mesuré au contraste (1.16:1 clair, 1.03:1 sombre —
+     autant dire aucune différence perceptible avec la carte derrière) une fois que le retour "je ne
+     vois pas la différence" a poussé à vérifier plutôt que supposer. --color-primary-soft reste
+     inchangé pour les badges/nav actif où du TEXTE est posé dessus (son contraste texte est déjà
+     correct, l'assombrir davantage l'aurait fait chuter sous les seuils WCAG). */
+  --color-chip-bg: #c9d9f2;
   --color-success: #16a34a;
   --color-success-soft: #ecfdf3;
   --color-warning: #b45309;
@@ -482,7 +489,7 @@ p { margin: 0; line-height: 1.5; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  background: var(--color-primary-soft);
+  background: var(--color-chip-bg);
   color: var(--color-primary-text);
   margin-bottom: 10px;
 }
@@ -800,7 +807,7 @@ p { margin: 0; line-height: 1.5; }
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--color-primary-soft);
+  background: var(--color-chip-bg);
   color: var(--color-primary-text);
   margin-bottom: 4px;
 }
@@ -1364,7 +1371,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   justify-content: center;
   font-size: 26px;
   border-radius: var(--radius-lg);
-  background: var(--color-primary-soft);
+  background: var(--color-chip-bg);
   color: var(--color-primary-text);
 }
 .abonnement-summary-icon svg { width: 26px; height: 26px; display: block; }
@@ -1513,7 +1520,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  background: var(--color-primary-soft);
+  background: var(--color-chip-bg);
   color: var(--color-primary-text);
   margin-bottom: 10px;
 }
@@ -2824,6 +2831,11 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-primary: #4a72ad;
     --color-primary-hover: #3a5a8f;
     --color-primary-soft: #192134;
+    /* Même repère que --color-primary-soft ci-dessus, mais poussé plus loin puisque rien n'est écrit
+       DESSUS (pure puce d'icône) : peut se permettre de ressortir plus nettement de la carte sans
+       faire chuter de contraste de texte. Mesuré : 1.46:1 face à --color-surface (bien perceptible)
+       contre 1.03:1 pour --color-primary-soft. */
+    --color-chip-bg: #263a5f;
     --color-muted-soft: #23262e;
     --color-success-soft: #0f2a1c;
     --color-warning-soft: #2a1f0f;
