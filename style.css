@@ -211,11 +211,21 @@ p { margin: 0; line-height: 1.5; }
 .nav-section-label:first-child { padding-top: 4px; }
 .nav-item.disabled { opacity: 0.6; }
 
-/* §refonte identité 20/08/2026 : item.icon est désormais un <svg> (voir ICONS, app.js), plus un
-   caractère emoji — currentColor lui fait suivre automatiquement la couleur du bouton (survol/actif
-   inclus), sans classe supplémentaire à gérer. */
-.nav-icon { display: inline-flex; flex-shrink: 0; }
-.nav-icon svg { width: 18px; height: 18px; display: block; }
+/* §passe "vraies couleurs" du 21/08/2026 — chaque item de menu garde sa propre puce colorée (même
+   palette que les avatars, .avatar-color-*, voir getAvatarColorClass) plutôt qu'une icône neutre
+   suivant juste la couleur du texte du bouton : c'est CETTE variété, un vrai jeu de couleurs plutôt
+   qu'une seule teinte déclinée, qui rend une barre latérale "premium" façon Notion/ClickUp/Asana.
+   Couleur fixe volontairement indépendante du survol/actif du bouton (repère visuel constant). */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+}
+.nav-icon svg { width: 16px; height: 16px; display: block; }
 
 /* Voir icon() (app.js) — wrapper générique pour une icône ICONS.xxx insérée en ligne dans du texte
    (titres, listes, badges), ailleurs que dans .nav-icon (sidebar, son propre wrapper dédié). */

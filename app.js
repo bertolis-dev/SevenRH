@@ -4257,7 +4257,7 @@ function renderSidebar() {
     const label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
     return `
     <button class="nav-item ${isNavItemActive(item, items) ? 'active' : ''}" data-nav-index="${index}" aria-label="${escapeHtml(label)}">
-      <span class="nav-icon">${item.icon}</span>
+      <span class="nav-icon ${getAvatarColorClass(item.key, '')}">${item.icon}</span>
       <span class="nav-label">${escapeHtml(label)}</span>
     </button>
   `;
@@ -5484,9 +5484,12 @@ function kpiCard(label, value, icon) {
   // jamais interpolé sans échappement, sinon une valeur malveillante s'exécute chez tout salarié
   // dont le tableau de bord affiche cette carte. icon passe par escapeIcon (voir plus haut) : SVG
   // de confiance non échappé, emoji/texte échappé comme value.
+  // §passe "vraies couleurs" du 21/08/2026 : puce colorée par hachage du libellé (même palette que
+  // les avatars/le menu) plutôt qu'un seul marine partout — chaque carte KPI d'une grille ressort
+  // avec sa propre couleur, stable d'un rendu à l'autre pour un même libellé.
   return `
     <div class="kpi-card">
-      <div class="kpi-icon">${escapeIcon(icon)}</div>
+      <div class="kpi-icon ${getAvatarColorClass(label, '')}">${escapeIcon(icon)}</div>
       <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>
     </div>
