@@ -2092,15 +2092,15 @@ function renderTicketsSimulatorSection(alt) {
         </div>
         <div class="landing-simulator-results">
           <div class="landing-simulator-result">
-            <strong id="sim-result-total">—</strong>
+            <strong id="sim-result-total" class="landing-gradient-number">—</strong>
             <span>Coût total / mois</span>
           </div>
           <div class="landing-simulator-result">
-            <strong id="sim-result-employeur">—</strong>
+            <strong id="sim-result-employeur" class="landing-gradient-number">—</strong>
             <span id="sim-result-employeur-label">Part employeur</span>
           </div>
           <div class="landing-simulator-result">
-            <strong id="sim-result-salarie">—</strong>
+            <strong id="sim-result-salarie" class="landing-gradient-number">—</strong>
             <span id="sim-result-salarie-label">Part salarié</span>
           </div>
         </div>
