@@ -5748,13 +5748,24 @@ function guessEmployeeColumnMapping(headers) {
 
 /** Aucune date d'un tableur externe n'arrive garantie au format ISO (YYYY-MM-DD) attendu partout
  * ailleurs dans Nexus — accepte aussi le format français JJ/MM/AAAA le plus courant à l'export
- * Excel, sans quoi la quasi-totalité des lignes importées échoueraient sur ce seul champ. */
+ * Excel, sans quoi la quasi-totalité des lignes importées échoueraient sur ce seul champ.
+ * Accepte aussi le point/tiret comme séparateur (variantes courantes à l'export) et l'année sur 2
+ * chiffres (retour du 21/08/2026 : des cellules Excel non reconnues comme dates, donc saisies en
+ * texte libre, arrivaient dans des formats que la seule variante JJ/MM/AAAA à barres ne couvrait
+ * pas). Les vraies cellules de type Date sont, elles, converties AVANT d'arriver ici — voir
+ * l'appel à XLSX.read/sheet_to_json (cellDates:true) dans openImportSalariesModal. */
 function parseImportDate(value) {
   if (!value) return '';
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  const frMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const frMatch = trimmed.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
   if (frMatch) return `${frMatch[3]}-${frMatch[2].padStart(2, '0')}-${frMatch[1].padStart(2, '0')}`;
+  const frMatchAnnee2Chiffres = trimmed.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2})$/);
+  if (frMatchAnnee2Chiffres) {
+    const yy = Number(frMatchAnnee2Chiffres[3]);
+    const year = yy <= 69 ? 2000 + yy : 1900 + yy; // même pivot que les navigateurs (1970/2069)
+    return `${year}-${frMatchAnnee2Chiffres[2].padStart(2, '0')}-${frMatchAnnee2Chiffres[1].padStart(2, '0')}`;
+  }
   return '';
 }
 
@@ -5841,12 +5852,28 @@ function openImportSalariesModal() {
     reader.onload = () => {
       let rows;
       try {
-        const workbook = XLSX.read(reader.result, { type: 'array' });
+        // cellDates:true + raw:true (retour du 21/08/2026) : une vraie cellule Excel de type Date
+        // arrive ici comme un objet Date JS, quel que soit son format d'affichage dans le fichier
+        // d'origine (JJ/MM/AAAA, MM/JJ/AAAA, texte...) — on la formate nous-même en JJ/MM/AAAA
+        // ci-dessous, sans dépendre du format d'affichage Excel qui variait trop pour être fiable.
+        // Une cellule saisie en texte libre (pas une vraie cellule Date) reste une chaîne, traitée
+        // ensuite par parseImportDate (accepte plusieurs séparateurs et l'année sur 2 chiffres).
+        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        // raw:false formate dates/nombres en texte tel qu'affiché dans Excel (ex. "21/08/2026"),
-        // pas leur valeur brute (numéro de série) — c'est ce format que parseImportDate attend.
-        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' })
-          .map(row => row.map(cell => (cell == null ? '' : String(cell))))
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+          .map(row => row.map(cell => {
+            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
+              // SheetJS construit ces Date en UTC (minuit UTC de ce jour-là, une date Excel n'ayant
+              // pas de fuseau horaire) — les getters LOCAUX (getDate/getMonth/getFullYear)
+              // décaleraient d'un jour en arrière dans tout fuseau en retard sur UTC (repéré en
+              // testant depuis un fuseau américain). Toujours lire via les getters UTC pour rester
+              // correct quel que soit le fuseau du navigateur de l'utilisateur.
+              const jj = String(cell.getUTCDate()).padStart(2, '0');
+              const mm = String(cell.getUTCMonth() + 1).padStart(2, '0');
+              return `${jj}/${mm}/${cell.getUTCFullYear()}`;
+            }
+            return cell == null ? '' : String(cell);
+          }))
           .filter(row => row.some(cell => cell !== ''));
       } catch (err) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible — vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
@@ -5886,7 +5913,7 @@ function openImportSalariesModal() {
                 <td>${escapeHtml(r.record.nom)}</td>
                 <td>${escapeHtml(r.record.prenom)}</td>
                 <td>${escapeHtml(r.record.email)}</td>
-                <td>${escapeHtml(r.record.dateEmbauche)}</td>
+                <td>${escapeHtml(formatDate(r.record.dateEmbauche))}</td>
                 <td>${r.status === 'ok'
                   ? '<span class="badge badge-success">OK</span>'
                   : r.status === 'duplicate'
