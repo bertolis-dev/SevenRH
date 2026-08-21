@@ -3071,6 +3071,21 @@ function getInitials(prenom, nom) {
   return (a + b).toUpperCase() || '?';
 }
 
+/** Palette d'avatars façon Slack/Trello (§passe couleur "premium ++, pas que les boutons" du
+ * 21/08/2026) — une couleur stable par personne (hachage simple du nom complet, jamais aléatoire :
+ * la même personne garde toujours la même couleur d'un rendu à l'autre) plutôt qu'un avatar marine
+ * unique partout, pour que les listes de salariés/l'organigramme/les notifications donnent une vraie
+ * impression de variété plutôt qu'une app en deux tons. Voir .avatar-color-0..6 (style.css) pour les
+ * paires fond/texte, tenues à l'écart des teintes déjà prises par le sens fonctionnel (succès/alerte/
+ * danger/info/marine/or). */
+const AVATAR_COLOR_COUNT = 7;
+function getAvatarColorClass(prenom, nom) {
+  const name = `${prenom || ''}${nom || ''}`;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return `avatar-color-${hash % AVATAR_COLOR_COUNT}`;
+}
+
 // ---------------------------------------------------------------------------
 // Congés — modèle de données
 // ---------------------------------------------------------------------------

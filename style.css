@@ -119,7 +119,11 @@ p { margin: 0; line-height: 1.5; }
 
 #sidebar {
   width: var(--sidebar-width);
-  background: var(--color-surface);
+  /* Léger voile marine du haut vers le bas (§passe couleur "premium ++" du 21/08/2026) — la barre
+     latérale reste sinon la plus grande zone plate/neutre de toute l'appli, visible en permanence
+     sur chaque écran : un aplat uni s'y voit plus qu'ailleurs. Étiré à 250% pour que la teinte
+     reste discrète sur la hauteur réellement visible sans défiler (pas un dégradé franc). */
+  background: linear-gradient(180deg, var(--color-surface), var(--color-primary-soft) 250%);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -709,6 +713,19 @@ p { margin: 0; line-height: 1.5; }
   font-weight: 700;
   font-size: 13px;
 }
+
+/* Palette d'avatars façon Slack/Trello (§passe couleur "premium ++, pas que les boutons" du
+   21/08/2026, voir getAvatarColorClass — data.js) : une couleur stable par personne plutôt qu'un
+   seul avatar marine partout. Teintes choisies pour rester à l'écart des couleurs déjà porteuses
+   d'un sens fonctionnel (succès/alerte/danger/info/marine/or). Contraste texte vérifié ≥4.5:1 dans
+   les deux thèmes (mode sombre réécrit plus bas, comme --color-*). */
+.avatar-color-0 { background: #ccfbf1; color: #0f766e; }
+.avatar-color-1 { background: #ede9fe; color: #7c3aed; }
+.avatar-color-2 { background: #fce7f3; color: #be185d; }
+.avatar-color-3 { background: #e0e7ff; color: #4f46e5; }
+.avatar-color-4 { background: #ffedd5; color: #c2410c; }
+.avatar-color-5 { background: #cffafe; color: #0e7490; }
+.avatar-color-6 { background: #fae8ff; color: #a21caf; }
 
 /* ---------------------------------------------------------------------
    Badges
@@ -2850,6 +2867,16 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-primary-text: #7694d6;
     --color-info-text: #60a5fa;
   }
+
+  /* Palette d'avatars (voir .avatar-color-0..6 plus haut) — fonds assombris, textes éclaircis, même
+     principe que --color-*-soft/--color-*-text ci-dessus, contraste texte vérifié ≥6.2:1. */
+  .avatar-color-0 { background: #134e4a; color: #5eead4; }
+  .avatar-color-1 { background: #2e1065; color: #c4b5fd; }
+  .avatar-color-2 { background: #4a0d2c; color: #f9a8d4; }
+  .avatar-color-3 { background: #1e1b4b; color: #a5b4fc; }
+  .avatar-color-4 { background: #431407; color: #fdba74; }
+  .avatar-color-5 { background: #164e63; color: #67e8f9; }
+  .avatar-color-6 { background: #4a044e; color: #f0abfc; }
 }
 
 /* ---------------------------------------------------------------------

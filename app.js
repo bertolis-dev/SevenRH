@@ -3013,6 +3013,10 @@ function renderUserMenuButton() {
   const user = authRepository.getCurrentUser();
   const button = document.getElementById('btn-user-menu');
   button.textContent = user ? getInitials(user.prenom, user.nom) : '?';
+  // Retire l'éventuelle couleur d'un précédent compte (bascule multi-compte) avant d'appliquer la
+  // sienne — jamais deux classes avatar-color-* accumulées sur le même bouton.
+  button.className = button.className.replace(/\bavatar-color-\d+\b/g, '').trim();
+  if (user) button.classList.add(getAvatarColorClass(user.prenom, user.nom));
 }
 
 function bindUserMenuEvents() {
@@ -3060,7 +3064,7 @@ function renderUserMenuPanel() {
       <div class="user-menu-section-label">Autres comptes</div>
       ${otherAccounts.map(a => `
         <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
-          <span class="avatar avatar-initials user-menu-account-avatar">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
+          <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
           <span class="user-menu-account-info">
             <span class="user-menu-account-name">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
             <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
@@ -5919,7 +5923,7 @@ function renderAvatar(e) {
   if (e.photo) {
     return `<img class="avatar" src="${e.photo}" alt="">`;
   }
-  return `<div class="avatar avatar-initials">${escapeHtml(getInitials(e.prenom, e.nom))}</div>`;
+  return `<div class="avatar avatar-initials ${getAvatarColorClass(e.prenom, e.nom)}">${escapeHtml(getInitials(e.prenom, e.nom))}</div>`;
 }
 
 function renderContratBadge(type) {
