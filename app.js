@@ -4257,7 +4257,7 @@ function renderSidebar() {
     const label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
     return `
     <button class="nav-item ${isNavItemActive(item, items) ? 'active' : ''}" data-nav-index="${index}" aria-label="${escapeHtml(label)}">
-      <span class="nav-icon ${getAvatarColorClass(item.key, '')}">${item.icon}</span>
+      <span class="nav-icon">${item.icon}</span>
       <span class="nav-label">${escapeHtml(label)}</span>
     </button>
   `;
@@ -4445,6 +4445,26 @@ function widgetsForRole(role) {
 
 function renderDashboardCustomizeButton() {
   return `<button class="btn btn-secondary btn-sm" id="btn-customize-dashboard">${icon(ICONS.puzzle, 14)} Personnaliser</button>`;
+}
+
+/** Bandeau d'accueil du tableau de bord (§retour "de vraies couleurs, marine + or" du 21/08/2026) —
+ * remplace le simple <h1>/<p class="view-subtitle"> par un vrai bloc marine en dégradé avec une
+ * touche or lumineuse en coin, partagé par les 4 variantes de dashboard (RH/Manager/Directeur/
+ * Salarié). Volontairement TOUJOURS sombre, quel que soit le thème clair/sombre choisi (même
+ * principe que .landing-hero) : mélanger un fond fixe avec du texte thème-aware a déjà cassé le
+ * contraste une fois cette session (voir le correctif du 21/08 sur la landing) — ici tout le
+ * contenu (titre, sous-titre, bouton) est explicitement stylé pour CE fond, jamais pour le thème
+ * ambiant. */
+function renderDashboardHero(title, subtitle, actionsHtml) {
+  return `
+    <div class="dashboard-hero">
+      <div class="dashboard-hero-text">
+        <h1>${escapeHtml(title)}</h1>
+        <p>${escapeHtml(subtitle)}</p>
+      </div>
+      ${actionsHtml ? `<div class="dashboard-hero-actions">${actionsHtml}</div>` : ''}
+    </div>
+  `;
 }
 
 function bindDashboardEvents() {
@@ -4681,13 +4701,7 @@ function renderDashboardRH() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const user = authRepository.getCurrentUser();
   return `
-    <div class="view-header-row">
-      <div>
-        <h1>Accueil</h1>
-        <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
-      </div>
-      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
-    </div>
+    ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
     ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
@@ -4699,13 +4713,7 @@ function renderDashboardManager() {
   const employees = employeeRepository.getAll().filter(e => !e.archive && visibleIds.includes(e.id));
   const user = authRepository.getCurrentUser();
   return `
-    <div class="view-header-row">
-      <div>
-        <h1>Accueil</h1>
-        <p class="view-subtitle">Vue d'ensemble de votre équipe</p>
-      </div>
-      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
-    </div>
+    ${renderDashboardHero('Accueil', "Vue d'ensemble de votre équipe", renderDashboardCustomizeButton())}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, visibleIds) : ''}
     ${renderOperationalDashboardBody(employees, visibleIds)}
     ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
@@ -4729,13 +4737,7 @@ function renderDashboardSalarie(user) {
     .slice(0, 5);
 
   return `
-    <div class="view-header-row">
-      <div>
-        <h1>Bonjour ${escapeHtml(user.prenom)}</h1>
-        <p class="view-subtitle">Votre espace personnel</p>
-      </div>
-      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
-    </div>
+    ${renderDashboardHero(`Bonjour ${user.prenom}`, 'Votre espace personnel', renderDashboardCustomizeButton())}
 
     <div class="kpi-grid">
       ${kpiCard('Statut aujourd\'hui', today.label, today.icon)}
@@ -4820,13 +4822,7 @@ function renderDashboardDirecteur() {
 
   const user = authRepository.getCurrentUser();
   return `
-    <div class="view-header-row">
-      <div>
-        <h1>Accueil</h1>
-        <p class="view-subtitle">Vue d'ensemble de votre effectif</p>
-      </div>
-      <div class="detail-header-actions">${renderDashboardCustomizeButton()}</div>
-    </div>
+    ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
 
@@ -5484,12 +5480,12 @@ function kpiCard(label, value, icon) {
   // jamais interpolé sans échappement, sinon une valeur malveillante s'exécute chez tout salarié
   // dont le tableau de bord affiche cette carte. icon passe par escapeIcon (voir plus haut) : SVG
   // de confiance non échappé, emoji/texte échappé comme value.
-  // §passe "vraies couleurs" du 21/08/2026 : puce colorée par hachage du libellé (même palette que
-  // les avatars/le menu) plutôt qu'un seul marine partout — chaque carte KPI d'une grille ressort
-  // avec sa propre couleur, stable d'un rendu à l'autre pour un même libellé.
+  // §retour du 21/08/2026 : marine/or gardés comme base de la charte — pas une couleur différente
+  // par carte (essayé, jugé trop "juste des noms colorés"), un dégradé marine plus riche qu'un
+  // aplat pour la puce (voir .kpi-icon, style.css).
   return `
     <div class="kpi-card">
-      <div class="kpi-icon ${getAvatarColorClass(label, '')}">${escapeIcon(icon)}</div>
+      <div class="kpi-icon">${escapeIcon(icon)}</div>
       <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>
     </div>

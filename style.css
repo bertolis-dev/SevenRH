@@ -211,11 +211,9 @@ p { margin: 0; line-height: 1.5; }
 .nav-section-label:first-child { padding-top: 4px; }
 .nav-item.disabled { opacity: 0.6; }
 
-/* §passe "vraies couleurs" du 21/08/2026 — chaque item de menu garde sa propre puce colorée (même
-   palette que les avatars, .avatar-color-*, voir getAvatarColorClass) plutôt qu'une icône neutre
-   suivant juste la couleur du texte du bouton : c'est CETTE variété, un vrai jeu de couleurs plutôt
-   qu'une seule teinte déclinée, qui rend une barre latérale "premium" façon Notion/ClickUp/Asana.
-   Couleur fixe volontairement indépendante du survol/actif du bouton (repère visuel constant). */
+/* §retour du 21/08/2026 : marine/or gardés comme base de la charte plutôt qu'une couleur différente
+   par item (essayé, jugé "juste des noms colorés" sans vrai travail de design) — puce en dégradé
+   marine, plus riche qu'un aplat, cohérente avec le reste (boutons, sidebar). */
 .nav-icon {
   display: inline-flex;
   align-items: center;
@@ -224,6 +222,8 @@ p { margin: 0; line-height: 1.5; }
   width: 26px;
   height: 26px;
   border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--color-chip-bg), var(--color-primary-soft));
+  color: var(--color-primary-text);
 }
 .nav-icon svg { width: 16px; height: 16px; display: block; }
 
@@ -477,6 +477,56 @@ p { margin: 0; line-height: 1.5; }
 .view-header-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .view-subtitle { color: var(--color-text-muted); font-size: 14px; margin-top: 2px; }
 
+/* Bandeau d'accueil du tableau de bord (§retour "de vraies couleurs, marine + or, ça doit donner
+   envie" du 21/08/2026) — voir renderDashboardHero (app.js). Toujours sombre, quel que soit le
+   thème choisi (même principe que .landing-hero) : tout le contenu posé dessus est stylé pour CE
+   fond précisément, jamais pour le thème ambiant — un texte thème-aware ici recasserait le même
+   problème de contraste déjà rencontré (et corrigé) sur la landing plus tôt dans la session. */
+.dashboard-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--landing-navy-700), var(--landing-navy-900));
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-md);
+}
+/* Halo or décoratif en coin — la touche "premium" qui donne envie de regarder, sans devenir un
+   vrai élément d'interface (purement décoratif, aria-hidden via son absence de contenu/rôle). */
+.dashboard-hero::before {
+  content: '';
+  position: absolute;
+  top: -70px;
+  right: -70px;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, var(--landing-gold-500), transparent 70%);
+  opacity: 0.4;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.dashboard-hero-text { position: relative; z-index: 1; }
+.dashboard-hero-text h1 { color: #fff; margin: 0 0 4px; }
+.dashboard-hero-text p { color: rgba(255, 255, 255, 0.75); margin: 0; font-size: 14px; }
+.dashboard-hero-actions { position: relative; z-index: 1; flex-shrink: 0; }
+/* Le bouton "Personnaliser" (.btn-secondary) est thème-aware par défaut (pensé pour une carte
+   claire/sombre ordinaire) — jamais adapté à ce fond toujours sombre, donc réécrit ici explicitement
+   plutôt que de dépendre du thème ambiant. */
+.dashboard-hero-actions .btn-secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.dashboard-hero-actions .btn-secondary:hover { background: rgba(255, 255, 255, 0.22); }
+@media (max-width: 480px) {
+  .dashboard-hero { padding: 22px 20px; }
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -492,10 +542,10 @@ p { margin: 0; line-height: 1.5; }
   box-shadow: var(--shadow-sm);
 }
 
-/* Puce colorée (§passe couleur "premium" du 21/08/2026) — même patron que .landing-feature-icon
-   (fond teinté, icône colorée) plutôt qu'une icône nue de la couleur du texte : c'est ce petit
-   changement qui fait le plus "sentir" davantage de couleur dans l'app, sans transformer les KPI
-   en arc-en-ciel façon Trello (une seule teinte marine, cohérente partout). */
+/* Puce colorée en dégradé (§passe couleur "premium" du 21/08/2026, ravivé le même jour : marine/or
+   gardés comme base plutôt qu'une couleur par carte) — même patron que .landing-feature-icon
+   (fond teinté, icône colorée) plutôt qu'une icône nue de la couleur du texte, avec un dégradé pour
+   plus de profondeur qu'un aplat. */
 .kpi-icon {
   width: 40px;
   height: 40px;
@@ -503,7 +553,7 @@ p { margin: 0; line-height: 1.5; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  background: var(--color-chip-bg);
+  background: linear-gradient(135deg, var(--color-chip-bg), var(--color-primary-soft));
   color: var(--color-primary-text);
   margin-bottom: 10px;
 }
