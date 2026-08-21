@@ -680,6 +680,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderLoginScreen();
   });
 
+  window.SupabaseSync.onSessionRefreshed((session) => DB._touchSavedAccountToken(session));
+
   const restored = await DB.restoreSession();
   const lastAuthError = DB.getLastAuthError();
   // Une session de récupération de mot de passe est une session valide comme une autre : si
@@ -751,6 +753,23 @@ function showLogin(defaultView) {
   } else {
     state.authView = defaultView || 'login';
   }
+  renderLoginScreen();
+}
+
+/** "Ajouter un compte" (bascule multi-entreprise, menu utilisateur) — contrairement à showLogin(),
+ * ignore volontairement tout flux d'authentification en attente (inscription/récupération d'un
+ * AUTRE compte) : on part toujours de l'écran de connexion propre, et le compte actuel reste
+ * intact en mémoire (DB._companiesCache) tant que ce nouveau formulaire n'a pas été validé — voir
+ * btn-cancel-add-account (bindLoginScreenEvents) pour l'annulation, qui se contente de rappeler
+ * showApp() sans rien à restaurer. */
+function openAddAccountFlow() {
+  state.authContext = 'add-account';
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('bertolis-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
+  document.getElementById('login-root').style.display = 'flex';
+  state.authView = 'login';
+  state.authError = '';
   renderLoginScreen();
 }
 
@@ -2130,6 +2149,7 @@ function showApp() {
   sessionStorage.removeItem('sevenrh_pending_signup_email');
   sessionStorage.removeItem('sevenrh_pending_reset_email');
   sessionStorage.removeItem('sevenrh_password_recovery_pending');
+  state.authContext = null;
   Object.assign(state, getInitialViewState());
   document.getElementById('login-root').style.display = 'none';
   document.getElementById('bertolis-root').style.display = 'none';
@@ -2570,7 +2590,7 @@ function renderLoginView() {
   return `
     <div class="login-card">
       <div class="login-logo">${NEXUS_LOGO_MARK} Nexus</div>
-      <h1>Connexion</h1>
+      <h1>${state.authContext === 'add-account' ? 'Ajouter un compte' : 'Connexion'}</h1>
       <form id="login-form">
         <div class="form-field">
           <label for="f-login-email">Email</label>
@@ -2600,7 +2620,9 @@ function renderLoginView() {
       <button type="button" class="btn-link" id="btn-forgot-password">Mot de passe oublié ?</button>
       <button type="button" class="btn-link" id="btn-goto-signup-company">Créer mon entreprise</button>
       <button type="button" class="btn-link" id="btn-goto-resend-confirmation">Vous n'avez pas reçu l'email de confirmation ?</button>
-      ${isInstalledApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>'}
+      ${state.authContext === 'add-account'
+        ? '<button type="button" class="btn-link" id="btn-cancel-add-account">← Retour à mon compte</button>'
+        : (isInstalledApp() ? '' : '<button type="button" class="btn-link" id="btn-goto-landing">← Accueil</button>')}
     </div>
   `;
 }
@@ -2925,6 +2947,9 @@ function bindLoginScreenEvents() {
   const gotoLandingBtn = document.getElementById('btn-goto-landing');
   if (gotoLandingBtn) gotoLandingBtn.addEventListener('click', () => showLanding());
 
+  const cancelAddAccountBtn = document.getElementById('btn-cancel-add-account');
+  if (cancelAddAccountBtn) cancelAddAccountBtn.addEventListener('click', () => showApp());
+
   const signupCompanyForm = document.getElementById('signup-company-form');
   if (signupCompanyForm) signupCompanyForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
@@ -3017,19 +3042,59 @@ function renderUserMenuPanel() {
   // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
   const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
   const canGererParametres = ['rh', 'directeur'].includes(user.role) && hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
+  const currentCompany = DB.getCurrentCompany();
+
+  // Comptes gardés en parallèle (bascule multi-entreprise façon Gmail, demande du 21/08/2026) — un
+  // compte de connexion différent (auth Supabase distinct) par entreprise, jamais plusieurs
+  // entreprises sous UN seul compte (voir SAVED_ACCOUNTS_KEY, data.js). L'actif ne se réaffiche pas
+  // dans sa propre liste de bascule.
+  const otherAccounts = authRepository.getSavedAccounts().filter(a => a.id !== authRepository.getCurrentAccountId());
 
   panel.innerHTML = `
     <div class="user-menu-header">
       <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
       <span class="badge badge-info">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
+      ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
+    ${otherAccounts.length ? `
+      <div class="user-menu-section-label">Autres comptes</div>
+      ${otherAccounts.map(a => `
+        <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
+          <span class="avatar avatar-initials user-menu-account-avatar">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
+          <span class="user-menu-account-info">
+            <span class="user-menu-account-name">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
+            <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
+          </span>
+        </button>
+      `).join('')}
+    ` : ''}
+    <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
+    <div class="user-menu-divider"></div>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
-    <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter</button>
+    <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter${otherAccounts.length ? ' de ce compte' : ''}</button>
   `;
+
+  document.querySelectorAll('[data-switch-account]').forEach(row => {
+    row.addEventListener('click', async () => {
+      row.disabled = true;
+      const result = await authRepository.switchAccount(row.dataset.switchAccount);
+      if (!result.success) {
+        showToast(result.error, 'error');
+        renderUserMenuPanel();
+        return;
+      }
+      document.getElementById('user-menu-panel').classList.remove('open');
+      showApp();
+    });
+  });
+  document.getElementById('btn-add-account').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    openAddAccountFlow();
+  });
 
   if (canGererParametres) {
     document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
@@ -3056,9 +3121,10 @@ function renderUserMenuPanel() {
     document.getElementById('user-menu-panel').classList.remove('open');
     exportMyDataRGPD();
   });
-  document.getElementById('btn-logout').addEventListener('click', () => {
-    authRepository.logout();
-    showLogin();
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    const result = await authRepository.logout();
+    if (result.switchedTo) showApp();
+    else showLogin();
   });
 }
 

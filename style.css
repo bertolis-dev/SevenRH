@@ -1820,14 +1820,15 @@ textarea.input { resize: vertical; font-family: inherit; }
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: 220px;
+  width: 260px;
+  max-height: 70vh;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   z-index: 40;
   display: none;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .user-menu-panel.open { display: block; }
@@ -1903,6 +1904,55 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .user-menu-item:hover { background: var(--color-muted-soft); }
+
+/* Bascule multi-entreprise (menu utilisateur, demande du 21/08/2026) — même patron visuel que
+   .user-menu-item pour les lignes de compte, avec un mini avatar et deux lignes de texte. */
+.user-menu-section-label {
+  padding: 10px 14px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.user-menu-divider { border-top: 1px solid var(--color-border); margin: 4px 0; }
+
+.user-menu-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.user-menu-account-row:hover { background: var(--color-muted-soft); }
+.user-menu-account-row:disabled { opacity: 0.5; cursor: default; }
+
+.user-menu-account-avatar { width: 26px; height: 26px; font-size: 11px; }
+
+.user-menu-account-info { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+
+.user-menu-account-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-menu-account-detail {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* §sprint refonte UX : patron générique de popover, dérivé de .notif-panel/.user-menu-panel — pour
    ne plus avoir un système de "petit panneau flottant" différent à chaque nouvel usage (filtres

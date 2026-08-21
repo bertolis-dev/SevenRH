@@ -8,6 +8,13 @@
 
 const ROOT_KEY = 'sevenrh_companies';
 const CURRENT_COMPANY_KEY = 'sevenrh_current_company_id';
+/** Comptes de connexion gardés en parallèle (bascule multi-entreprise façon Gmail, demande du
+ * 21/08/2026) — chaque entrée garde son propre jeton Supabase (access + refresh token), PAS de
+ * rapport avec les "comptes de connexion" créés pour un salarié au sein d'UNE entreprise
+ * (openCreerCompteConnexionModal) : ici il s'agit de plusieurs comptes Supabase Auth DIFFÉRENTS
+ * (donc potentiellement dans des entreprises différentes) gardés utilisables sans ressaisir de mot
+ * de passe. Voir DB.getSavedAccounts()/switchToSavedAccount()/logoutCurrentAccount() plus bas. */
+const SAVED_ACCOUNTS_KEY = 'sevenrh_saved_accounts';
 const NOTIF_STORAGE_LIMIT = 500; // même logique que le Journal d'audit (borné à 2000) : évite une croissance illimitée du blob localStorage au fil des années
 
 /**
@@ -2272,6 +2279,108 @@ const DB = {
     return this._currentEmployeeId !== null;
   },
 
+  // ---- Comptes gardés en parallèle (bascule multi-entreprise, voir SAVED_ACCOUNTS_KEY) ----
+
+  getSavedAccounts() {
+    try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || '[]'); }
+    catch (err) { return []; }
+  },
+
+  _saveSavedAccounts(accounts) {
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(accounts));
+  },
+
+  /** Enregistre/actualise l'entrée de ce compte après une connexion réussie (login, restauration de
+   * session, création d'entreprise) — jamais appelé directement par l'UI, uniquement par les
+   * méthodes ci-dessous qui viennent de réussir une hydratation complète. */
+  _upsertSavedAccount(session, employee, company) {
+    if (!session || !session.user) return;
+    this._currentAuthUserId = session.user.id;
+    const accounts = this.getSavedAccounts();
+    const idx = accounts.findIndex(a => a.id === session.user.id);
+    const entry = {
+      id: session.user.id,
+      email: session.user.email || '',
+      prenom: employee ? employee.prenom : '',
+      nom: employee ? employee.nom : '',
+      companyName: (company && company.raisonSociale) || '',
+      session: { access_token: session.access_token, refresh_token: session.refresh_token, expires_at: session.expires_at }
+    };
+    if (idx === -1) accounts.push(entry); else accounts[idx] = entry;
+    this._saveSavedAccounts(accounts);
+  },
+
+  /** Le jeton d'accès est rotaté automatiquement par Supabase (TOKEN_REFRESHED) tant que l'onglet
+   * reste ouvert — sans ça, le refresh_token stocké ici pour ce compte devient rapidement périmé et
+   * la bascule échouerait la prochaine fois qu'on y revient, même resté connecté sans interruption.
+   * Voir l'abonnement window.SupabaseSync.onSessionRefreshed dans app.js (DOMContentLoaded). */
+  _touchSavedAccountToken(session) {
+    if (!session || !session.user) return;
+    const accounts = this.getSavedAccounts();
+    const idx = accounts.findIndex(a => a.id === session.user.id);
+    if (idx === -1) return;
+    accounts[idx].session = { access_token: session.access_token, refresh_token: session.refresh_token, expires_at: session.expires_at };
+    this._saveSavedAccounts(accounts);
+  },
+
+  removeSavedAccount(accountId) {
+    this._saveSavedAccounts(this.getSavedAccounts().filter(a => a.id !== accountId));
+  },
+
+  /** Bascule vers un compte déjà enregistré (voir SAVED_ACCOUNTS_KEY) sans redemander de mot de
+   * passe : réutilise son refresh_token stocké pour réactiver sa session Supabase, puis rehydrate
+   * l'entreprise correspondante. Si le jeton s'avère périmé (session révoquée, mot de passe changé
+   * depuis...), le compte est retiré de la liste plutôt que de rester bloqué en échec silencieux.
+   *
+   * LIMITE CONNUE : un seul client Supabase pour toute la page, donc UN SEUL onglet à la fois peut
+   * avoir tel ou tel compte "actif" — Supabase synchronise sa session entre onglets du même
+   * navigateur (stockage partagé), donc basculer ICI bascule aussi tout autre onglet déjà ouvert
+   * sur ce site. Sans conséquence pour un usage à un seul onglet (le cas normal), mais un onglet
+   * resté ouvert sur une autre entreprise se retrouverait basculé silencieusement en arrière-plan.
+   * Isoler vraiment chaque onglet demanderait un client Supabase par onglet — hors scope ici. */
+  async switchToSavedAccount(accountId) {
+    const target = this.getSavedAccounts().find(a => a.id === accountId);
+    if (!target) return { success: false, error: 'Compte introuvable.' };
+    const switchResult = await window.SupabaseSync.switchToSession(target.session);
+    if (!switchResult.success) {
+      this.removeSavedAccount(accountId);
+      return { success: false, error: 'Cette session a expiré — reconnectez ce compte avec son mot de passe.' };
+    }
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (!company) {
+      this.removeSavedAccount(accountId);
+      return { success: false, error: 'Aucun salarié associé à ce compte.' };
+    }
+    this._currentEmployeeId = company._currentEmployeeId;
+    this._companiesCache = [company];
+    this._currentAuthUserId = accountId;
+    localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+    const employee = this.getEmployeeById(this._currentEmployeeId);
+    this.logAudit('Connexion', 'Session', `${employee.prenom} ${employee.nom} (${ROLE_LABELS[employee.role] || employee.role})`);
+    return { success: true, employee };
+  },
+
+  /** Déconnexion "façon Gmail" (choix explicite du 21/08/2026) : ne révoque QUE le compte actif,
+   * puis bascule automatiquement sur un autre compte déjà enregistré s'il en reste un — jamais de
+   * déconnexion globale surprise pour les autres comptes gardés en parallèle. */
+  async logoutCurrentAccount() {
+    const user = this.getCurrentUser();
+    if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
+    const leavingAccountId = this._currentAuthUserId;
+    await window.SupabaseSync.signOut();
+    if (leavingAccountId) this.removeSavedAccount(leavingAccountId);
+    this._currentEmployeeId = null;
+    this._companiesCache = null;
+    this._currentAuthUserId = null;
+
+    const remaining = this.getSavedAccounts();
+    if (remaining.length > 0) {
+      const switchResult = await this.switchToSavedAccount(remaining[0].id);
+      if (switchResult.success) return { success: true, switchedTo: switchResult.employee };
+    }
+    return { success: true, switchedTo: null };
+  },
+
   /** Point d'entrée asynchrone (le seul de toute l'authentification) : connexion Supabase Auth +
    * rapatriement complet de l'entreprise dans le cache mémoire. Une fois résolu, TOUT le reste de
    * l'app (getCurrentUser, getEmployees, etc.) reste synchrone comme avant — voir le plan de
@@ -2299,6 +2408,7 @@ const DB = {
 
     this._currentEmployeeId = company._currentEmployeeId;
     this._companiesCache = [company];
+    this._upsertSavedAccount(authResult.session, this.getEmployeeById(company._currentEmployeeId), company);
     localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
     const employee = this.getEmployeeById(this._currentEmployeeId);
     this.logAudit('Connexion', 'Session', `${employee.prenom} ${employee.nom} (${ROLE_LABELS[employee.role] || employee.role})`);
@@ -2348,6 +2458,8 @@ const DB = {
     this._companiesCache = [company];
     localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
     const employee = this.getEmployeeById(this._currentEmployeeId);
+    const session = await window.SupabaseSync.getSession();
+    this._upsertSavedAccount(session, employee, company);
     if (rpcResult.success) {
       seedLeaveTypes().forEach(lt => this.addLeaveType(lt));
       this.saveSchoolHolidays(seedSchoolHolidays());
@@ -2363,14 +2475,6 @@ const DB = {
     return window.SupabaseSync.resendSignupConfirmation(email);
   },
 
-  async logout() {
-    const user = this.getCurrentUser();
-    if (user) this.logAudit('Déconnexion', 'Session', `${user.prenom} ${user.nom}`);
-    await window.SupabaseSync.signOut();
-    this._currentEmployeeId = null;
-    this._companiesCache = null;
-  },
-
   /** Restaure la session au chargement de la page si un jeton Supabase valide existe encore
    * (persisté par le client Supabase lui-même dans son propre coin de localStorage) — évite de
    * forcer une reconnexion à chaque rafraîchissement de page. Retourne true si une session a bien
@@ -2382,7 +2486,9 @@ const DB = {
     if (company) {
       this._currentEmployeeId = company._currentEmployeeId;
       this._companiesCache = [company];
+      this._currentAuthUserId = session.user.id;
       localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
+      this._upsertSavedAccount(session, this.getEmployeeById(company._currentEmployeeId), company);
       return true;
     }
     // Aucune fiche salarié trouvée : si ce compte vient d'un signUpNewCompany dont la création
@@ -2603,11 +2709,15 @@ const authRepository = {
   loginWithOAuth: (provider) => DB.loginWithOAuth(provider),
   signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
   resendSignupConfirmation: (email) => DB.resendSignupConfirmation(email),
-  logout: () => DB.logout(),
+  logout: () => DB.logoutCurrentAccount(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),
   requestPasswordReset: (email) => DB.requestPasswordReset(email),
   resetPasswordWithToken: (token, newPassword) => DB.resetPasswordWithToken(token, newPassword),
-  changerMotDePassePremiereConnexion: (newPassword) => DB.changerMotDePassePremiereConnexion(newPassword)
+  changerMotDePassePremiereConnexion: (newPassword) => DB.changerMotDePassePremiereConnexion(newPassword),
+  getSavedAccounts: () => DB.getSavedAccounts(),
+  getCurrentAccountId: () => DB._currentAuthUserId,
+  switchAccount: (accountId) => DB.switchToSavedAccount(accountId),
+  removeSavedAccount: (accountId) => DB.removeSavedAccount(accountId)
 };
 
 const settingsRepository = {

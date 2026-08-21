@@ -823,10 +823,18 @@ async function sendPasswordResetEmail(email) {
  * immédiatement à l'inscription si l'évènement est déjà passé. */
 let passwordRecoveryDetected = false;
 const passwordRecoveryCallbacks = [];
-supabase.auth.onAuthStateChange((event) => {
+// Bascule multi-compte (§ comptes gardés en parallèle, voir DB.getSavedAccounts()) : le
+// refresh_token stocké pour le compte ACTIF doit suivre chaque rotation automatique, sinon il
+// devient périmé après le premier rafraîchissement silencieux et la bascule échoue la prochaine
+// fois qu'on revient sur ce compte — même en restant connecté sans interruption entre les deux.
+const sessionRefreshCallbacks = [];
+supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
     passwordRecoveryDetected = true;
     passwordRecoveryCallbacks.forEach(cb => cb());
+  }
+  if (event === 'TOKEN_REFRESHED' && session) {
+    sessionRefreshCallbacks.forEach(cb => cb(session));
   }
 });
 
@@ -837,6 +845,21 @@ function onPasswordRecovery(callback) {
 
 function wasPasswordRecoveryDetected() {
   return passwordRecoveryDetected;
+}
+
+function onSessionRefreshed(callback) {
+  sessionRefreshCallbacks.push(callback);
+}
+
+/** Réactive une session déjà connue (compte gardé en parallèle, voir DB.switchToSavedAccount) sans
+ * repasser par signInWithPassword — remplace la session active du client par celle-ci. */
+async function switchToSession(storedSession) {
+  const { error } = await supabase.auth.setSession({
+    access_token: storedSession.access_token,
+    refresh_token: storedSession.refresh_token
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,6 +1032,7 @@ async function pushClearAuditLog(companyId) {
 window.SupabaseSync = {
   signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
+  switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
