@@ -4827,7 +4827,7 @@ function renderDashboardDirecteur() {
     ${renderOperationalDashboardBody(employees, null)}
 
     ${isDashboardWidgetVisible(user, 'indicateursDirection') ? `
-    <div class="view-header" style="margin-top: 8px;">
+    <div style="margin: 8px 0 20px;">
       <h2 style="margin:0;">Indicateurs Direction</h2>
       <p class="view-subtitle">Pilotage RH avancé</p>
     </div>
@@ -4860,7 +4860,11 @@ function renderDashboardDirecteur() {
 
 // ---- Préparation des données des graphiques ----
 
-const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-info)', 'var(--color-danger)', 'var(--color-text-muted)'];
+// §retour du 21/08/2026 : réutilisait success/warning/info/danger/muted pour des séries purement
+// catégorielles (aucun sens "bon/mauvais") — --color-text-muted comme couleur de REMPLISSAGE
+// rendait une barre sur 6 quasi invisible (même teinte que le texte des libellés autour). Palette
+// dédiée, mêmes teintes que .avatar-color-* (voir style.css), pensée pour ce genre d'usage.
+const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)'];
 
 function getServiceBreakdown(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
@@ -10060,7 +10064,7 @@ function renderCalendrier() {
   const coverageGap = isMonthBeyondSchoolYearCoverage(state.calendarYear, state.calendarMonth, schoolHolidays);
 
   return `
-    <div class="view-header-row">
+    <div class="view-header view-header-row">
       <div class="calendar-month-nav">
         <button type="button" class="calendar-month-nav-btn" id="btn-cal-prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
         <div>
@@ -13452,7 +13456,7 @@ function renderFrais() {
   const canValider = ['manager', 'rh', 'directeur', 'comptabilite'].includes(user.role);
 
   return `
-    <div class="view-header-row">
+    <div class="view-header view-header-row">
       <div>
         <h1>Notes de frais</h1>
         <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC</p>
@@ -13897,7 +13901,7 @@ function renderMesTicketsRestaurant() {
   }
 
   return `
-    <div class="view-header-row">
+    <div class="view-header view-header-row">
       <div>
         <h1>Mes tickets restaurant</h1>
         <p class="view-subtitle">${MONTH_NAMES[month]} ${year} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur)</p>
@@ -14022,7 +14026,7 @@ function renderTicketsEquipe() {
   }), { nbTickets: 0, montantTotal: 0, partEmployeur: 0, partSalarie: 0 });
 
   return `
-    <div class="view-header-row">
+    <div class="view-header view-header-row">
       <div>
         <h1>Tickets restaurant</h1>
         <p class="view-subtitle">${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur)</p>
@@ -14290,7 +14294,7 @@ function renderExportPaie() {
   const tab = state.paieTab || 'preparation';
 
   return `
-    <div class="view-header-row">
+    <div class="view-header view-header-row">
       <div>
         <h1>Préparation de paie</h1>
         <p class="view-subtitle">${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · ${rows.length} salarié${rows.length > 1 ? 's' : ''}</p>
