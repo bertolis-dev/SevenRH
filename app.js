@@ -5600,10 +5600,10 @@ function renderEmployeesList() {
         <p class="view-subtitle">${visible.length} salarié${visible.length > 1 ? 's' : ''}</p>
       </div>
       <div class="detail-header-actions">
-        <button class="btn btn-secondary" id="btn-export-employees">Exporter CSV</button>
+        <button class="btn btn-secondary" id="btn-export-employees">Exporter Excel</button>
         ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
         ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
-        ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer CSV</button>' : ''}
+        ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer Excel</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
     </div>
@@ -5705,15 +5705,15 @@ function renderEmployeeRow(e) {
 
 /** Exporte la liste visible (déjà filtrée/scopée par rôle) — pas les archivés, pas les champs confidentiels. */
 // ---------------------------------------------------------------------------
-// Import de masse de salariés (CSV) — même esprit que l'export ci-dessous mais dans l'autre sens :
+// Import/export de masse de salariés (Excel, retour du 21/08/2026 — remplace le CSV de la v1) :
 // gros gain à l'arrivée d'une nouvelle entreprise sur Nexus (dizaines de salariés à saisir un par
-// un sinon). Volontairement CSV uniquement pour cette v1 (pas de .xlsx : nécessiterait une
-// dépendance externe — SheetJS ou équivalent — non présente dans ce projet 100% vanilla JS ; un
-// export Excel→CSV reste à un clic pour l'utilisateur).
+// un sinon). Utilise SheetJS (xlsx.full.min.js, vendorisé — voir index.html, même principe que
+// qrcode.js) pour lire/écrire de vrais fichiers .xlsx ouvrables tels quels dans Excel/Google
+// Sheets — XLSX.read() accepte aussi un .csv déposé par erreur, sans code supplémentaire.
 // ---------------------------------------------------------------------------
 
 /** Alias reconnus par en-tête (normalisés via normalizeForSearch, donc déjà insensibles à la casse
- * et aux accents) — couvre le format généré par exportEmployeesCSV ci-dessous ET quelques
+ * et aux accents) — couvre le format généré par exportEmployeesExcel ci-dessous ET quelques
  * variantes anglophones/informelles courantes dans un tableur importé de l'extérieur. */
 const IMPORT_EMPLOYEE_FIELD_ALIASES = {
   matricule: ['matricule', 'id', 'employee id', 'identifiant'],
@@ -5728,28 +5728,6 @@ const IMPORT_EMPLOYEE_FIELD_ALIASES = {
   dateEmbauche: ["date d'embauche", 'date embauche', 'hire date', "date d'entree", 'date entree'],
   dateNaissance: ['date de naissance', 'birthdate', 'date naissance', 'date of birth']
 };
-
-function parseCSVText(text) {
-  const firstLine = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n'));
-  const delimiter = firstLine.includes(';') ? ';' : ',';
-  const lines = text.split(/\r?\n/).filter(l => l.length > 0);
-  const parseLine = (line) => {
-    const cells = [];
-    let cur = '', inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (inQuotes) {
-        if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = false; } }
-        else cur += c;
-      } else if (c === '"') inQuotes = true;
-      else if (c === delimiter) { cells.push(cur); cur = ''; }
-      else cur += c;
-    }
-    cells.push(cur);
-    return cells;
-  };
-  return lines.map(parseLine);
-}
 
 function guessEmployeeColumnMapping(headers) {
   const mapping = {};
@@ -5828,12 +5806,12 @@ function openImportSalariesModal() {
   const html = `
     <div class="modal modal-large">
       <div class="modal-header">
-        <h2>Importer des salariés (CSV)</h2>
+        <h2>Importer des salariés (Excel)</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier CSV (export Excel/Google Sheets). Colonnes reconnues automatiquement par en-tête : Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
-        <input type="file" id="f-import-file" accept=".csv,text/csv">
+        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
         <div id="import-preview-zone" style="margin-top: 16px;"></div>
       </div>
       <div class="modal-footer">
@@ -5855,7 +5833,19 @@ function openImportSalariesModal() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const rows = parseCSVText(String(reader.result));
+      let rows;
+      try {
+        const workbook = XLSX.read(reader.result, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        // raw:false formate dates/nombres en texte tel qu'affiché dans Excel (ex. "21/08/2026"),
+        // pas leur valeur brute (numéro de série) — c'est ce format que parseImportDate attend.
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' })
+          .map(row => row.map(cell => (cell == null ? '' : String(cell))))
+          .filter(row => row.some(cell => cell !== ''));
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible — vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
+        return;
+      }
       if (rows.length < 2) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier vide ou illisible (au moins une ligne d'en-têtes + une ligne de données attendues).</p>`;
         return;
@@ -5865,7 +5855,7 @@ function openImportSalariesModal() {
       currentPreview = buildImportPreviewRows(dataRows, mapping);
       renderImportPreview(currentPreview, mapping, headerRow);
     };
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);
   });
 
   function renderImportPreview(preview, mapping, headerRow) {
@@ -5923,7 +5913,7 @@ function openImportSalariesModal() {
   }
 }
 
-function exportEmployeesCSV() {
+function exportEmployeesExcel() {
   const { list } = getFilteredSortedEmployees();
   const visible = list.filter(e => !e.archive);
   const headers = ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Ancienneté', 'Statut'];
@@ -5931,7 +5921,10 @@ function exportEmployeesCSV() {
     e.matricule, e.nom, e.prenom, e.email, e.telephone, e.poste, e.service, e.equipe,
     e.typeContrat, formatDate(e.dateEmbauche), calculateAnciennete(e.dateEmbauche), e.statut
   ]);
-  exportRowsToCSV(headers, rows, 'salaries.csv');
+  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Salariés');
+  XLSX.writeFile(workbook, 'salaries.xlsx');
   auditLogRepository.logAudit('Export', 'Salariés', `${visible.length} salarié${visible.length > 1 ? 's' : ''}`);
 }
 
@@ -6014,7 +6007,7 @@ function bindEmployeesListEvents() {
   const importEmployeesBtn = document.getElementById('btn-import-employees');
   if (importEmployeesBtn) importEmployeesBtn.addEventListener('click', openImportSalariesModal);
 
-  document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesCSV);
+  document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesExcel);
   const registreBtn = document.getElementById('btn-registre-personnel');
   if (registreBtn) registreBtn.addEventListener('click', openRegistreUniquePersonnelModal);
   const indexEgaliteBtn = document.getElementById('btn-index-egalite');
@@ -7301,7 +7294,7 @@ function renderEmployeeDetail(id) {
   const canEditCoordonnees = !canEdit && user.id === e.id && hasPermission(user, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES);
   // § VOIR_INFOS_CONTRACTUELLES : scope restreint à convention collective/statut pro/dates de fin
   // de contrat et de période d'essai — PAS type de contrat/date d'embauche/ancienneté, que
-  // exportEmployeesCSV (cf. son commentaire) déclare déjà explicitement non confidentiels.
+  // exportEmployeesExcel (cf. son commentaire) déclare déjà explicitement non confidentiels.
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   return `
