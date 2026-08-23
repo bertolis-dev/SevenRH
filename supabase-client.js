@@ -411,11 +411,26 @@ async function syncTable(tableName, rows, toRowFn, companyId) {
  * satisfaire à la fois la policy INSERT et la policy UPDATE pour un "INSERT ... ON CONFLICT DO
  * UPDATE", même quand la ligne existe déjà et qu'il s'agit clairement d'une modification — un
  * manager qui n'a pas le droit de CRÉER un salarié se voyait donc bloqué en voulant juste modifier
- * sa propre fiche existante. */
+ * sa propre fiche existante.
+ *
+ * insertRows envoie UNE LIGNE PAR REQUÊTE (revue de code du 23/08/2026) plutôt qu'un seul insert
+ * groupé : Postgres refuse un INSERT multi-lignes EN ENTIER dès qu'une seule ligne viole une policy
+ * RLS — une demande refusée emportait donc avec elle toutes les demandes légitimes de la même
+ * salve, alors qu'elles n'avaient rien à se reprocher. Les erreurs sont collectées puis relancées
+ * ensemble, pour que le message remonté à l'utilisateur (voir _pushInBackground, data.js) reflète
+ * tout ce qui a échoué, pas seulement la première ligne fautive. */
 async function insertRows(tableName, rows, toRowFn, companyId) {
   if (rows.length === 0) return;
-  const { error } = await supabase.from(tableName).insert(rows.map(r => toRowFn(r, companyId)));
-  if (error) throw error;
+  const results = await Promise.all(
+    rows.map(r => supabase.from(tableName).insert(toRowFn(r, companyId)))
+  );
+  const errors = results.map(res => res.error).filter(Boolean);
+  if (errors.length) {
+    const first = errors[0];
+    throw errors.length === 1
+      ? first
+      : Object.assign(new Error(`${errors.length} lignes refusées sur ${rows.length} (${tableName}) — première erreur : ${first.message}`), { cause: first });
+  }
 }
 
 async function updateRows(tableName, rows, toRowFn, companyId) {

@@ -2372,6 +2372,14 @@ const DB = {
     this._currentEmployeeId = null;
     this._companiesCache = null;
     this._currentAuthUserId = null;
+    // §correctif revue de code du 23/08/2026 : vider AUSSI le cache persistant, pas seulement le
+    // cache mémoire. Sans ça, l'intégralité du jeu de données de l'entreprise — salariés, salaires,
+    // congés, journal d'audit — restait lisible dans le localStorage du navigateur après une
+    // déconnexion, sur un poste RH souvent partagé. Le cache est de toute façon reconstruit par
+    // hydrateCurrentCompany() à la connexion suivante : rien n'est perdu, seule la copie locale
+    // devenue sans propriétaire disparaît.
+    localStorage.removeItem(ROOT_KEY);
+    localStorage.removeItem(CURRENT_COMPANY_KEY);
 
     const remaining = this.getSavedAccounts();
     if (remaining.length > 0) {

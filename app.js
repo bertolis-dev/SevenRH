@@ -9255,13 +9255,39 @@ function bindDraftsCardEvents(resumeHandler) {
 // ---- Modale : Nouvelle demande de congé ----
 
 /**
- * Champ "Salarié" des modales de demande : un Salarié ne peut demander que pour
- * lui-même (champ verrouillé), les autres rôles gardent le sélecteur, restreint
- * à leur périmètre visible (équipe pour un manager, tout le monde pour RH/Directeur).
+ * Champ "Salarié" des modales de demande : qui n'a le droit de saisir que pour lui-même voit un
+ * champ verrouillé, les autres gardent le sélecteur, restreint aux salariés pour lesquels ils
+ * peuvent réellement écrire (voir requestTargetIdsForCurrentUser juste en dessous).
  */
-function employeeFieldForRequest(presetEmployeeId, employees) {
+/** Qui peut déposer une demande POUR UN AUTRE salarié — doit rester le strict miroir des policies
+ * RLS d'insertion (0032_demandes_pour_autrui.sql) : tout écart ici recrée exactement le bug corrigé
+ * par cette migration (une demande acceptée à l'écran, refusée par Postgres, perdue au rechargement
+ * sans autre trace qu'un toast). `getVisibleEmployeeIdsForCurrentUser` ne convient PAS comme
+ * critère : il donne à la Comptabilité une visibilité entreprise entière au titre de son rôle,
+ * alors qu'elle n'a aucune permission de gestion des absences et ne peut donc écrire que pour
+ * elle-même. */
+function requestTargetIdsForCurrentUser(kind) {
   const user = authRepository.getCurrentUser();
-  if (user.role === ROLES.SALARIE) {
+  if (!user) return [];
+  const canActForAll = kind === 'frais'
+    ? hasPermission(user, PERMISSIONS.VALIDER_NOTE_FRAIS)
+    : hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(user, PERMISSIONS.SAISIR_MALADIE);
+  if (canActForAll) return null; // toute l'entreprise
+  const managedIds = employeeRepository.getAll()
+    .filter(e => (e.managerIds || []).includes(user.id))
+    .map(e => e.id);
+  // Un manager ne dépose une note de frais pour son équipe que s'il la contrôle (même nuance que
+  // expenses_insert : controlerNoteFrais côté manager, validerNoteFrais côté RH).
+  const canActForTeam = kind !== 'frais' || hasPermission(user, PERMISSIONS.CONTROLER_NOTE_FRAIS);
+  return canActForTeam ? [user.id, ...managedIds] : [user.id];
+}
+
+function employeeFieldForRequest(presetEmployeeId, employees, kind = 'absence') {
+  const user = authRepository.getCurrentUser();
+  const targetIds = requestTargetIdsForCurrentUser(kind);
+  // Un seul destinataire possible (soi-même) : champ verrouillé plutôt qu'un sélecteur à une entrée
+  // — cas du rôle Salarié, et de tout rôle sans droit de saisie pour autrui.
+  if (targetIds !== null && targetIds.length === 1) {
     return `
       <input type="hidden" id="f-employeeId" name="employeeId" value="${escapeHtml(user.id)}">
       <div class="form-field">
@@ -9270,8 +9296,7 @@ function employeeFieldForRequest(presetEmployeeId, employees) {
       </div>
     `;
   }
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  const scoped = visibleIds === null ? employees : employees.filter(e => visibleIds.includes(e.id));
+  const scoped = targetIds === null ? employees : employees.filter(e => targetIds.includes(e.id));
   return selectField('employeeId', 'Salarié', null, presetEmployeeId || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
 }
 
@@ -9423,7 +9448,15 @@ function uploadJustificatifBestEffort({ uploader, employeeId, recordId, file, pa
   // l'utilisateur a rouvert une autre modale d'upload).
   uploader(company.id, employeeId, recordId, file)
     .then(path => patcher({ nom: file.name, path }))
-    .catch(() => { /* échec silencieux, voir commentaire ci-dessus */ });
+    .catch(err => {
+      // §correctif revue de code du 23/08/2026 : l'échec était totalement muet. Le salarié joignait
+      // son arrêt de travail, l'envoi échouait (réseau, refus RLS, fichier illisible), la demande
+      // partait sans pièce et PERSONNE n'était prévenu — ni lui, ni le valideur, qui voyait
+      // seulement "justificatif manquant" et refusait. Une demande sans justificatif reste
+      // volontairement créée (la perdre serait pire), mais l'utilisateur doit savoir quoi refaire.
+      console.error('Échec de l\'envoi du justificatif :', err);
+      showToast('La demande est enregistrée, mais le justificatif n\'a pas pu être envoyé. Rouvrez la demande pour le joindre à nouveau.', 'error');
+    });
 }
 
 function updateLeaveRequestHints() {
@@ -13533,9 +13566,19 @@ function bindTeletravailPlanningEvents() {
  * retour chariot s'exécuterait comme une formule chez le destinataire du fichier (comptable,
  * cabinet de paie) qui l'ouvre dans Excel/LibreOffice. Un guillemet simple en préfixe force
  * l'interprétation en texte — invisible à l'affichage, appliqué avant l'échappement CSV normal
- * (guillemets/délimiteur) par les deux fonctions d'export du projet. */
+ * (guillemets/délimiteur) par les deux fonctions d'export du projet.
+ *
+ * Le "-" demande une exception (revue de code du 23/08/2026) : préfixer sans discernement
+ * transformait TOUT MONTANT NÉGATIF en texte dans l'export paie — or une retenue sur salaire
+ * (ajusterVariablesPaie n'exige qu'un nombre fini, le négatif est un cas normal) ou un ajustement
+ * négatif de tickets restaurant en produisent légitimement. Le gestionnaire de paie recevait alors
+ * "'-150,50" : visuellement correct, mais ignoré par toute somme. Un nombre négatif bien formé —
+ * chiffres, séparateurs de milliers et décimale française comprises — est donc laissé intact ; il
+ * ne peut de toute façon pas être interprété comme une formule. */
 function neutralizeCsvFormulaInjection(str) {
-  return /^[=+\-@\t\r]/.test(str) ? "'" + str : str;
+  if (!/^[=+\-@\t\r]/.test(str)) return str;
+  if (/^-\d[\d  .,]*$/.test(str)) return str; // nombre négatif (espace fine/insécable des milliers incluse)
+  return "'" + str;
 }
 
 function csvEscape(value) {
@@ -13776,7 +13819,7 @@ function openExpenseModal(presetEmployeeId, draft) {
       <form id="expense-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
+            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees, 'frais')}
             ${selectField('categorie', 'Catégorie', settings.categoriesFrais, champs.categorie || settings.categoriesFrais[0])}
             ${textField('date', 'Date de la dépense', champs.date || '', true, 'date')}
             ${textField('libelle', 'Libellé', champs.libelle || '', true)}

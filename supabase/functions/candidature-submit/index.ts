@@ -109,12 +109,21 @@ function assertValidTextFields(nom: string, prenom: string, telephone: string, l
 const RATE_LIMIT_MAX_PER_HOUR = 5;
 
 function getClientIp(req: Request): string {
-  // x-forwarded-for peut contenir plusieurs IP séparées par des virgules (chaîne de proxys) — la
-  // première est celle du visiteur d'origine. "unknown" en repli plutôt que planter si l'en-tête
-  // manque (mieux vaut une limite un peu large partagée par tous les "unknown" que bloquer le
-  // formulaire entier si l'infrastructure ne pose pas cet en-tête pour une raison quelconque).
+  // §correctif revue de code du 23/08/2026 : prendre le DERNIER maillon de x-forwarded-for, pas le
+  // premier. Cet en-tête est cumulatif — chaque proxy traversé AJOUTE l'adresse qu'il a vue à la
+  // suite de ce qui existait déjà. Un client qui envoie lui-même "X-Forwarded-For: 1.2.3.4" fait
+  // donc arriver ici "1.2.3.4, <sa vraie IP>" : lire le premier élément revenait à indexer la
+  // limite de débit sur une valeur QUE L'APPELANT CHOISIT, qu'un script n'a qu'à faire varier à
+  // chaque requête pour n'être jamais compté deux fois. Le dernier élément est celui ajouté par le
+  // proxy de confiance le plus proche de nous, donc le seul qu'un client ne peut pas forger.
+  // À revérifier si l'infrastructure change (un maillon de plus en aval décalerait ce choix) :
+  //   curl -X POST -H "X-Forwarded-For: 1.2.3.4" ... puis comparer l'ip enregistrée dans
+  //   candidature_submit_log — elle ne doit jamais valoir 1.2.3.4.
   const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
+  if (forwarded) {
+    const hops = forwarded.split(",").map(h => h.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
+  }
   return req.headers.get("x-real-ip") || "unknown";
 }
 
