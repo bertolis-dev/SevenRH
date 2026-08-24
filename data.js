@@ -2360,6 +2360,23 @@ const DB = {
     return { success: true, employee };
   },
 
+  /** Vide le cache de l'entreprise, en mémoire ET sur disque (correctif de la revue du 23/08/2026).
+   * Sans la partie disque, tout le jeu de données (salariés, salaires, congés, journal d'audit)
+   * restait lisible dans le localStorage après une déconnexion, sur un poste RH souvent partagé.
+   * Rien n'est perdu : hydrateCurrentCompany() reconstruit le cache à la connexion suivante.
+   *
+   * À appeler sur TOUS les chemins de déconnexion, pas seulement le bouton "Se déconnecter" : une
+   * connexion refusée (aucune fiche salarié, abonnement suspendu ou résilié) laissait sinon en
+   * place le cache du salarié précédent sur cette machine, alors même qu'on vient de refuser
+   * l'accès. */
+  _purgeLocalCompanyCache() {
+    this._currentEmployeeId = null;
+    this._companiesCache = null;
+    this._currentAuthUserId = null;
+    localStorage.removeItem(ROOT_KEY);
+    localStorage.removeItem(CURRENT_COMPANY_KEY);
+  },
+
   /** Déconnexion "façon Gmail" (choix explicite du 21/08/2026) : ne révoque QUE le compte actif,
    * puis bascule automatiquement sur un autre compte déjà enregistré s'il en reste un — jamais de
    * déconnexion globale surprise pour les autres comptes gardés en parallèle. */
@@ -2369,17 +2386,7 @@ const DB = {
     const leavingAccountId = this._currentAuthUserId;
     await window.SupabaseSync.signOut();
     if (leavingAccountId) this.removeSavedAccount(leavingAccountId);
-    this._currentEmployeeId = null;
-    this._companiesCache = null;
-    this._currentAuthUserId = null;
-    // §correctif revue de code du 23/08/2026 : vider AUSSI le cache persistant, pas seulement le
-    // cache mémoire. Sans ça, l'intégralité du jeu de données de l'entreprise — salariés, salaires,
-    // congés, journal d'audit — restait lisible dans le localStorage du navigateur après une
-    // déconnexion, sur un poste RH souvent partagé. Le cache est de toute façon reconstruit par
-    // hydrateCurrentCompany() à la connexion suivante : rien n'est perdu, seule la copie locale
-    // devenue sans propriétaire disparaît.
-    localStorage.removeItem(ROOT_KEY);
-    localStorage.removeItem(CURRENT_COMPANY_KEY);
+    this._purgeLocalCompanyCache();
 
     const remaining = this.getSavedAccounts();
     if (remaining.length > 0) {
@@ -2401,11 +2408,13 @@ const DB = {
     const company = await window.SupabaseSync.hydrateCurrentCompany();
     if (!company) {
       await window.SupabaseSync.signOut();
+      this._purgeLocalCompanyCache();
       return { success: false, error: 'Aucun salarié associé à ce compte.' };
     }
     const statutAbonnement = company.abonnement && company.abonnement.statut;
     if (statutAbonnement === 'suspendu' || statutAbonnement === 'resilie') {
       await window.SupabaseSync.signOut();
+      this._purgeLocalCompanyCache();
       return {
         success: false,
         error: statutAbonnement === 'resilie'
@@ -2513,6 +2522,7 @@ const DB = {
     // (l'utilisateur atterrirait muettement sur la page d'accueil publique, sans comprendre
     // pourquoi) : on déconnecte et on renseigne un message qu'app.js affichera à la place.
     await window.SupabaseSync.signOut();
+    this._purgeLocalCompanyCache();
     this._lastAuthError = 'Aucun salarié associé à ce compte. Contactez votre RH pour obtenir un accès.';
     return false;
   },

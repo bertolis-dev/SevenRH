@@ -9273,6 +9273,15 @@ function requestTargetIdsForCurrentUser(kind) {
     ? hasPermission(user, PERMISSIONS.VALIDER_NOTE_FRAIS)
     : hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(user, PERMISSIONS.SAISIR_MALADIE);
   if (canActForAll) return null; // toute l'entreprise
+
+  // Le champ "Manager(s)" d'une fiche accepte N'IMPORTE QUEL salarié non archivé, sans condition de
+  // rôle (voir openEmployeeModal). Sans ce test sur le rôle, un salarié désigné comme manager de
+  // quelqu'un se verrait donc proposer un sélecteur pour déposer des demandes à la place de ses
+  // collègues : un droit qu'il n'avait pas auparavant, et qu'il ne pourrait de toute façon pas
+  // exercer jusqu'au bout, isCurrentWorkflowStepFor exigeant le rôle manager pour valider l'étape.
+  // On s'aligne donc sur la validation : seul le rôle manager ouvre le périmètre équipe.
+  if (user.role !== ROLES.MANAGER) return [user.id];
+
   const managedIds = employeeRepository.getAll()
     .filter(e => (e.managerIds || []).includes(user.id))
     .map(e => e.id);
@@ -13577,9 +13586,19 @@ function bindTeletravailPlanningEvents() {
  * ne peut de toute façon pas être interprété comme une formule. */
 function neutralizeCsvFormulaInjection(str) {
   if (!/^[=+\-@\t\r]/.test(str)) return str;
-  if (/^-\d[\d  .,]*$/.test(str)) return str; // nombre négatif (espace fine/insécable des milliers incluse)
+  // Les séparateurs de milliers sont écrits en \u… et JAMAIS en caractère littéral :
+  // toLocaleString('fr-FR') ne produit pas une espace ordinaire mais, selon la version d'ICU, une
+  // espace fine insécable (U+202F, cas actuel) ou une espace insécable (U+00A0). La première
+  // version de ce correctif ne contenait qu'une espace ordinaire, indiscernable des autres à la
+  // relecture : elle laissait bien passer "-150,50" mais transformait "-1 250,50" en texte, si
+  // bien que le bug n'était corrigé qu'en dessous de 1 000 €. Tabulation et retour chariot restent
+  // hors de cette classe : ils ne peuvent pas apparaître dans un nombre, et les exempter
+  // affaiblirait la protection sans rien apporter.
+  if (/^-\d[\d.,\u0020\u00a0\u2009\u202f]*$/.test(str)) return str;
   return "'" + str;
 }
+
+
 
 function csvEscape(value) {
   const str = neutralizeCsvFormulaInjection(String(value === null || value === undefined ? '' : value));
