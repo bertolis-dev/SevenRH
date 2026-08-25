@@ -4745,6 +4745,63 @@ function renderDashboardHero(title, subtitle, actionsHtml) {
 function bindDashboardEvents() {
   const btn = document.getElementById('btn-customize-dashboard');
   if (btn) btn.addEventListener('click', openDashboardCustomizeModal);
+
+  const declarerInterventionBtn = document.getElementById('btn-declarer-intervention-astreinte');
+  if (declarerInterventionBtn) {
+    declarerInterventionBtn.addEventListener('click', () => openDeclarerInterventionModal(declarerInterventionBtn.dataset.astreinteId));
+  }
+}
+
+/** §7.21 : une intervention EST du temps de travail effectif (contrairement à l'astreinte elle-
+ * même) — se déclare depuis le bandeau tableau de bord de l'intéressé, jamais depuis l'écran de
+ * gestion Planning (réservé à qui peut PLANIFIER des astreintes, pas à celui qui les vit). */
+function openDeclarerInterventionModal(astreinteId) {
+  const user = authRepository.getCurrentUser();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Déclarer une intervention</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="declarer-intervention-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field"><label>Date</label><input type="date" class="input" id="f-intervention-date" value="${escapeHtml(toISODate(new Date()))}" required></div>
+            <div class="form-field"><label>Heure de début</label><input type="time" class="input" id="f-intervention-debut" required></div>
+            <div class="form-field"><label>Heure de fin</label><input type="time" class="input" id="f-intervention-fin" required></div>
+          </div>
+          <div class="form-field"><label>Description</label><textarea class="input" id="f-intervention-description" rows="2" placeholder="Motif de l'intervention"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('declarer-intervention-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const employee = employeeRepository.getById(user.id);
+    const astreintes = (employee.astreintes || []).map(a => a.id !== astreinteId ? a : {
+      ...a,
+      interventions: [...(a.interventions || []), {
+        id: generateId('interv'),
+        date: document.getElementById('f-intervention-date').value,
+        heureDebut: document.getElementById('f-intervention-debut').value,
+        heureFin: document.getElementById('f-intervention-fin').value,
+        description: document.getElementById('f-intervention-description').value.trim()
+      }]
+    });
+    employeeRepository.update(user.id, { astreintes });
+    closeModal();
+    showToast('Intervention déclarée.');
+    render();
+  });
 }
 
 function openDashboardCustomizeModal() {
@@ -4793,10 +4850,27 @@ function openDashboardCustomizeModal() {
 function renderDashboard() {
   const user = authRepository.getCurrentUser();
   if (!user) return '';
-  if (user.role === ROLES.SALARIE) return renderDashboardSalarie(user);
-  if (user.role === ROLES.MANAGER) return renderDashboardManager();
-  if (user.role === ROLES.PROPRIETAIRE) return renderDashboardProprietaire();
-  return renderDashboardRH();
+  // §7.21 : bandeau d'astreinte personnel, devant TOUS les tableaux de bord (n'importe quel rôle
+  // peut être d'astreinte) — la vue équipe correspondante vit dans Planning → Astreintes.
+  const astreinteBanner = renderMyAstreinteBanner(user);
+  if (user.role === ROLES.SALARIE) return astreinteBanner + renderDashboardSalarie(user);
+  if (user.role === ROLES.MANAGER) return astreinteBanner + renderDashboardManager();
+  if (user.role === ROLES.PROPRIETAIRE) return astreinteBanner + renderDashboardProprietaire();
+  return astreinteBanner + renderDashboardRH();
+}
+
+function renderMyAstreinteBanner(user) {
+  const employee = employeeRepository.getById(user.id);
+  const astreinte = employee ? findMyUpcomingAstreinte(employee) : null;
+  if (!astreinte) return '';
+  const today = toISODate(new Date());
+  const enCours = astreinte.dateDebut <= today;
+  return `
+    <div class="card" style="border: 1px solid var(--color-gold); margin-bottom: 16px;">
+      ${icon(ICONS.bell, 14)} ${enCours ? "Vous êtes actuellement d'astreinte" : "Vous serez d'astreinte"} du ${formatDate(astreinte.dateDebut)} au ${formatDate(astreinte.dateFin)}.
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-declarer-intervention-astreinte" data-astreinte-id="${astreinte.id}" style="margin-left: 10px;">Déclarer une intervention</button>
+    </div>
+  `;
 }
 
 /** Bloc KPI + graphiques + naissances/fins de contrat + présence, partagé par les vues RH/Manager/Propriétaire. `employeeIds` = null pour l'entreprise entière, sinon liste restreinte (équipe d'un manager). */
@@ -5447,6 +5521,29 @@ function getUpcomingVisitesMedicales(daysAhead = 60, employees, limit = 5) {
     .filter(x => x.daysUntil <= daysAhead)
     .sort((a, b) => a.daysUntil - b.daysUntil)
     .slice(0, limit);
+}
+
+// ---- Astreintes (§correctif audit du 23/08/2026, §7.21) ----
+
+function makeEmptyAstreinte() {
+  return { id: generateId('ast'), dateDebut: '', dateFin: '', indemniteMontant: 0, commentaire: '', interventions: [], dateCreation: new Date().toISOString() };
+}
+
+/** Toutes les périodes d'un salarié qui chevauchent l'intervalle donné — utilisé par la
+ * préparation de paie (indemnité due sur le mois) et par l'écran de gestion (Planning). */
+function getAstreintesOverlapping(employee, dateDebut, dateFin) {
+  return (employee.astreintes || []).filter(a => a.dateDebut && a.dateFin && a.dateDebut <= dateFin && a.dateFin >= dateDebut);
+}
+
+/** Période en cours OU commençant dans les `joursAvant` prochains jours, pour le bandeau tableau de
+ * bord de l'intéressé lui-même — jamais une vue équipe ici (qui vit dans Planning → Astreintes,
+ * réservée à qui a MODIFIER_SALARIE) : chacun ne voit que SA PROPRE astreinte sur son accueil. */
+function findMyUpcomingAstreinte(employee, joursAvant = 14) {
+  const today = toISODate(new Date());
+  const horizon = toISODate(new Date(Date.now() + joursAvant * 86400000));
+  return (employee.astreintes || [])
+    .filter(a => a.dateDebut && a.dateFin && a.dateFin >= today && a.dateDebut <= horizon)
+    .sort((a, b) => a.dateDebut.localeCompare(b.dateDebut))[0] || null;
 }
 
 // ---- Rendu des graphiques SVG (aucune librairie externe) ----
@@ -13624,17 +13721,21 @@ function renderPlanning() {
       <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
       <button class="tab ${state.planningView === 'annee' ? 'active' : ''}" data-planning-view="annee">Année</button>
       <button class="tab ${state.planningView === 'horaires' ? 'active' : ''}" data-planning-view="horaires">Horaires</button>
+      <button class="tab ${state.planningView === 'astreintes' ? 'active' : ''}" data-planning-view="astreintes">Astreintes</button>
     </div>
+    ${state.planningView !== 'astreintes' ? `
     <div class="toolbar card">
       <select id="planning-filter-service" class="input">
         <option value="">Tous les services</option>
         ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.planningFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
     </div>
+    ` : ''}
     <div id="planning-content">
       ${state.planningView === 'mois' ? renderPlanningMois()
         : state.planningView === 'annee' ? renderPlanningAnnee()
         : state.planningView === 'horaires' ? renderPlanningHoraires()
+        : state.planningView === 'astreintes' ? renderPlanningAstreintes()
         : renderPlanningSemaine()}
     </div>
   `;
@@ -14040,10 +14141,14 @@ function bindPlanningEvents() {
   });
   bindMoiEquipeToggleEvents();
 
-  document.getElementById('planning-filter-service').addEventListener('change', (e) => {
-    state.planningFilters.service = e.target.value;
-    render();
-  });
+  // §7.21 : pas de filtre service sur l'onglet Astreintes (toolbar non rendue, voir renderPlanning).
+  const filterServiceSelect = document.getElementById('planning-filter-service');
+  if (filterServiceSelect) {
+    filterServiceSelect.addEventListener('change', (e) => {
+      state.planningFilters.service = e.target.value;
+      render();
+    });
+  }
 
   const horairesSemaineActive = state.planningView === 'horaires' && state.horairesView !== 'jour' && state.horairesView !== 'mois';
   if (state.planningView === 'semaine' || horairesSemaineActive) {
@@ -14092,6 +14197,178 @@ function bindPlanningEvents() {
   // (celles qui affichent une case par jour via renderPlanningStatusCell) ; Année/Horaires n'ont pas
   // de case "un salarié, un jour" de ce type.
   if (state.planningView === 'semaine' || state.planningView === 'mois') bindPlanningDragEvents();
+
+  if (state.planningView === 'astreintes') bindPlanningAstreintesEvents();
+}
+
+/** §7.21 : liste des astreintes (toutes entreprises visibles pour l'utilisateur, via
+ * getVisibleEmployeeIdsForCurrentUser — même portée que le reste de Planning), la planification
+ * elle-même reste réservée à MODIFIER_SALARIE (RH/Propriétaire, pas Manager) : décider qui est
+ * d'astreinte est une décision de même niveau que modifier un salarié, pas une lecture d'équipe. */
+function renderPlanningAstreintes() {
+  const user = authRepository.getCurrentUser();
+  const canManage = hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  let employees = employeeRepository.getAll().filter(e => !e.archive);
+  if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
+
+  const rows = employees
+    .flatMap(e => (e.astreintes || []).map(a => ({ employee: e, astreinte: a })))
+    .sort((a, b) => b.astreinte.dateDebut.localeCompare(a.astreinte.dateDebut));
+
+  return `
+    <div class="view-header-row">
+      <p class="view-subtitle">${rows.length} période${rows.length > 1 ? 's' : ''} d'astreinte</p>
+      ${canManage ? '<button type="button" class="btn btn-primary btn-sm" id="btn-add-astreinte">+ Ajouter une astreinte</button>' : ''}
+    </div>
+    <div class="card table-card">
+      ${rows.length === 0 ? '<div class="empty-state"><p>Aucune astreinte enregistrée.</p></div>' : `
+        <table class="table">
+          <thead><tr><th>Salarié</th><th>Période</th><th>Indemnité</th><th>Interventions</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(({ employee, astreinte }) => `
+              <tr>
+                <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+                <td>${formatDate(astreinte.dateDebut)} → ${formatDate(astreinte.dateFin)}</td>
+                <td>${formatCurrencyFR(astreinte.indemniteMontant || 0)}</td>
+                <td>${(astreinte.interventions || []).length}</td>
+                <td class="detail-header-actions">
+                  <button type="button" class="btn-link" data-view-astreinte="${employee.id}:${astreinte.id}">Détails</button>
+                  ${canManage ? `<button type="button" class="btn-link" data-delete-astreinte="${employee.id}:${astreinte.id}">Supprimer</button>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+function bindPlanningAstreintesEvents() {
+  const addBtn = document.getElementById('btn-add-astreinte');
+  if (addBtn) addBtn.addEventListener('click', openAjouterAstreinteModal);
+
+  document.querySelectorAll('[data-view-astreinte]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [employeeId, astreinteId] = btn.dataset.viewAstreinte.split(':');
+      openAstreinteDetailModal(employeeId, astreinteId);
+    });
+  });
+
+  document.querySelectorAll('[data-delete-astreinte]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [employeeId, astreinteId] = btn.dataset.deleteAstreinte.split(':');
+      openConfirm({
+        title: 'Supprimer cette astreinte ?',
+        message: 'Les interventions déjà déclarées seront perdues.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          const employee = employeeRepository.getById(employeeId);
+          const astreintes = (employee.astreintes || []).filter(a => a.id !== astreinteId);
+          employeeRepository.update(employeeId, { astreintes });
+          showToast('Astreinte supprimée.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+function openAjouterAstreinteModal() {
+  const employees = employeeRepository.getAll().filter(e => !e.archive).sort((a, b) => a.nom.localeCompare(b.nom));
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Ajouter une astreinte</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="add-astreinte-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label>Salarié</label>
+            <select class="input" id="f-astreinte-employee" required>
+              <option value="">Sélectionner...</option>
+              ${employees.map(e => `<option value="${e.id}">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-grid">
+            <div class="form-field"><label>Date de début</label><input type="date" class="input" id="f-astreinte-debut" required></div>
+            <div class="form-field"><label>Date de fin</label><input type="date" class="input" id="f-astreinte-fin" required></div>
+          </div>
+          <div class="form-field"><label>Indemnité (€)</label><input type="number" min="0" step="0.01" class="input" id="f-astreinte-indemnite" value="0"></div>
+          <div class="form-field"><label>Commentaire (optionnel)</label><textarea class="input" id="f-astreinte-commentaire" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('add-astreinte-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const employeeId = document.getElementById('f-astreinte-employee').value;
+    const dateDebut = document.getElementById('f-astreinte-debut').value;
+    const dateFin = document.getElementById('f-astreinte-fin').value;
+    if (!employeeId) { showToast('Sélectionnez un salarié.', 'error'); return; }
+    if (dateFin < dateDebut) { showToast('La date de fin doit être après la date de début.', 'error'); return; }
+    const employee = employeeRepository.getById(employeeId);
+    const astreinte = Object.assign(makeEmptyAstreinte(), {
+      dateDebut, dateFin,
+      indemniteMontant: parseFloat(document.getElementById('f-astreinte-indemnite').value) || 0,
+      commentaire: document.getElementById('f-astreinte-commentaire').value.trim()
+    });
+    employeeRepository.update(employeeId, { astreintes: [...(employee.astreintes || []), astreinte] });
+    closeModal();
+    showToast('Astreinte ajoutée.');
+    render();
+  });
+}
+
+function openAstreinteDetailModal(employeeId, astreinteId) {
+  const employee = employeeRepository.getById(employeeId);
+  const astreinte = (employee.astreintes || []).find(a => a.id === astreinteId);
+  if (!astreinte) return;
+  const interventions = astreinte.interventions || [];
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Astreinte — ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        ${infoRow('Période', `${formatDate(astreinte.dateDebut)} → ${formatDate(astreinte.dateFin)}`)}
+        ${infoRow('Indemnité', formatCurrencyFR(astreinte.indemniteMontant || 0))}
+        ${astreinte.commentaire ? infoRow('Commentaire', astreinte.commentaire) : ''}
+        <h3 style="margin-top: 16px;">Interventions</h3>
+        ${interventions.length === 0 ? '<p class="text-muted">Aucune intervention déclarée.</p>' : `
+          <div class="timeline">
+            ${interventions.map(i => `
+              <div class="timeline-item">
+                <div class="timeline-date text-muted">${formatDate(i.date)} · ${escapeHtml(i.heureDebut)}–${escapeHtml(i.heureFin)}</div>
+                <div class="timeline-label">${escapeHtml(i.description || 'Intervention')}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-close-modal-footer">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-close-modal-footer').addEventListener('click', closeModal);
 }
 
 /** Sprint SIRH premium §3 : glisser une case de congé/télétravail VALIDÉ (renderPlanningStatusCell
@@ -15592,6 +15869,17 @@ function getPaieAnomalies(year, month) {
       if (joursRestants > 0) {
         anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris) — à valider avec votre expert-comptable` });
       }
+    }
+
+    // §correctif audit du 23/08/2026 (§7.21) : indemnité d'astreinte due sur le mois affiché, pour
+    // qu'elle soit vue au bon moment plutôt que de dépendre de quelqu'un qui consulte la fiche du
+    // salarié un par un — montant somme des périodes qui chevauchent le mois (une période à cheval
+    // sur deux mois compte sur les deux, elle n'est pas prorata-temporisée : le montant saisi est
+    // celui de la période entière, à charge du gestionnaire de paie de répartir si besoin).
+    const astreintesDuMois = getAstreintesOverlapping(e, monthStart, monthEnd);
+    const indemniteAstreinte = astreintesDuMois.reduce((sum, a) => sum + (a.indemniteMontant || 0), 0);
+    if (indemniteAstreinte > 0) {
+      anomalies.push({ severity: 'information', type: 'indemnite_astreinte', employee: e, message: `Indemnité d'astreinte à verser : ${formatCurrencyFR(indemniteAstreinte)} (${astreintesDuMois.length} période${astreintesDuMois.length > 1 ? 's' : ''})` });
     }
   });
 

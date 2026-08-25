@@ -2963,6 +2963,13 @@ function makeEmptyEmployee() {
     // de la fiche pour un signal beaucoup plus bruyant que ce qui compte réellement : les avenants
     // formels, pas chaque correction de coquille). Voir openAjouterAvenantModal (app.js).
     avenants: [],
+    // §correctif audit du 23/08/2026 (§7.21) : périodes d'astreinte — [{ id, dateDebut, dateFin,
+    // indemniteMontant, commentaire, interventions: [{id, date, heureDebut, heureFin, description}],
+    // dateCreation }]. Même patron que avenants ci-dessus (champ sur l'employé, pas une table à part)
+    // plutôt qu'une nouvelle table Supabase : employees_update (0002_rls_policies.sql) laisse déjà un
+    // salarié modifier SA PROPRE ligne, ce qui suffit pour qu'il déclare lui-même une intervention sur
+    // SA propre astreinte sans nouvelle policy à écrire. Voir openAjouterAstreinteModal (app.js).
+    astreintes: [],
 
     tempsTravail: 'Temps plein',
     pourcentageActivite: 100,
