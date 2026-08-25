@@ -381,6 +381,32 @@ function notificationToRow(n, companyId) {
   return { id, company_id: companyId, data: rest };
 }
 
+/** §correctif audit du 23/08/2026 (2.5) : omettre .limit() (comme le faisait déjà leave_requests/
+ * expenses/documents, voir le commentaire D4/D10 plus bas) ne suffit PAS à récupérer tout
+ * l'historique — PostgREST tronque quand même silencieusement au-delà de son propre plafond serveur
+ * (db-max-rows, souvent 1000 par défaut), quelle que soit la requête du client. Seule une vraie
+ * pagination par .range() dépasse ce plafond. Indispensable pour les tables dont un calcul (solde
+ * de congés, compteur...) a besoin de l'historique COMPLET, pas juste la première page — une
+ * entreprise avec plusieurs années d'ancienneté et plusieurs dizaines de salariés dépasse vite 1000
+ * lignes cumulées de leave_requests.
+ *
+ * queryFactory : fonction qui renvoie une NOUVELLE requête Supabase à chaque appel (le générateur
+ * de requête n'est pas réutilisable une fois awaité) — ex. () => supabase.from('x').select('*')...
+ * Renvoie { data, error } comme un appel Supabase normal, pour rester un remplacement direct dans
+ * le Promise.all() de hydrateCurrentCompany ci-dessous. */
+async function fetchAllRows(queryFactory, pageSize = 1000) {
+  const rows = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await queryFactory().range(offset, offset + pageSize - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    offset += pageSize;
+  }
+  return { data: rows, error: null };
+}
+
 // ---------------------------------------------------------------------------
 // Synchronisation générique : upsert de toutes les lignes de la liste locale + suppression de
 // celles qui n'y sont plus (la liste locale reste la source de vérité après une écriture optimiste).
@@ -577,29 +603,31 @@ async function hydrateCurrentCompany() {
     supabase.from('etablissements').select('*').eq('company_id', companyId),
     supabase.from('services').select('*').eq('company_id', companyId),
     supabase.from('leave_types').select('*').eq('company_id', companyId),
-    // D4/D10 (audit fiabilité du 19/08/2026) : aucune de ces requêtes n'avait de .order() — au-delà
-    // du plafond de lignes par défaut de Supabase (1000, réglage projet, pas dans ce code), l'ordre
-    // renvoyé n'est pas garanti, donc pas forcément les plus récentes. Ajout d'un tri explicite
-    // partout par cohérence, même si seul audit_log dépasse vraiment 1000 lignes en pratique
-    // aujourd'hui. Pas de .limit() ajouté sur les tables métier (congés/télétravail/frais/
-    // documents/tickets/entretiens/idées/brouillons) : les calculs de solde/compteur ont besoin de
-    // l'historique complet, tronquer ici introduirait le même genre de bug que D17 plutôt que de le
-    // corriger — seuls audit_log et notifications (des flux de consultation, pas des données de
-    // calcul) reçoivent une limite explicite, alignée sur les 2000 déjà utilisés côté client par
-    // appendAuditLogEntry.
-    supabase.from('leave_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    // D4/D10 (audit fiabilité du 19/08/2026) : aucune de ces requêtes n'avait de .order() — ajout
+    // d'un tri explicite partout par cohérence. Leur raisonnement d'alors ("pas de .limit() sur les
+    // tables métier = on récupère tout l'historique, nécessaire aux calculs de solde/compteur")
+    // était incomplet : PostgREST tronque quand même silencieusement au-delà de son propre plafond
+    // serveur (db-max-rows), QUELLE QUE SOIT la requête du client, .limit() ou pas — §correctif
+    // audit du 23/08/2026 (2.5). leave_requests/telework_requests/expenses/documents (calculs de
+    // solde/compteur/quota) passent donc par fetchAllRows (pagination réelle par .range()) plutôt
+    // qu'une requête unique. support_tickets/entretiens/idées/brouillons restent en requête simple
+    // (consultation pure, comme audit_log/notifications ci-dessous) : aucun calcul n'en dépend.
+    fetchAllRows(() => supabase.from('leave_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
     supabase.from('leave_requests_calendar').select('*').eq('company_id', companyId),
-    supabase.from('telework_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    fetchAllRows(() => supabase.from('telework_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
     supabase.from('telework_requests_calendar').select('*').eq('company_id', companyId),
-    supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
-    supabase.from('documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+    fetchAllRows(() => supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
     supabase.from('support_tickets').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('entretiens').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('idees').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('drafts').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('notifications').select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(500),
     supabase.from('favorites').select('*').eq('company_id', companyId),
-    supabase.from('audit_log').select('*').eq('company_id', companyId).order('date', { ascending: false }).limit(2000),
+    // §correctif audit du 23/08/2026 (2.5) : .limit(2000) n'a jamais eu d'effet réel — le plafond
+    // serveur (souvent 1000) s'appliquait déjà avant. Valeur honnête plutôt que trompeuse ; pas de
+    // fetchAllRows ici, volontairement (consultation pure, voir commentaire plus haut).
+    supabase.from('audit_log').select('*').eq('company_id', companyId).order('date', { ascending: false }).limit(1000),
     supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle(),

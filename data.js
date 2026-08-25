@@ -670,10 +670,17 @@ const DB = {
     const migratedAnciennete = companies.map(c => migrateAncienneteVersAutresAbsences(c)).some(Boolean);
     if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete) this.saveCompanies(companies);
 
-    if (localStorage.getItem(BERTOLIS_ADMINS_KEY) === null) {
-      localStorage.setItem(BERTOLIS_ADMINS_KEY, JSON.stringify([
-        { id: generateId('bertolis'), prenom: 'Admin', nom: 'BERTOLIS', email: 'dev@nexus-rh.com', motDePasse: 'RdW_v#w@W^+9qBn2^5tJ' }
-      ]));
+    // §correctif audit du 23/08/2026 : cette clé contenait un identifiant BERTOLIS auto-semé avec
+    // un mot de passe EN CLAIR, comparé côté client (bertolisLogin ci-dessous) — visible par
+    // n'importe qui lisant data.js sur le dépôt public. Retiré activement (pas juste "ne plus
+    // re-semer") pour purger aussi les navigateurs qui l'avaient déjà, y compris celui de l'équipe
+    // BERTOLIS elle-même. La Console BERTOLIS (§9.6) reste d'ailleurs déconnectée des vraies
+    // données Supabase (getAllCompaniesForBertolis lit le cache LOCAL, pas une vraie requête
+    // multi-entreprises) — un vestige d'avant la migration, jamais reconnecté ni resécurisé depuis.
+    // Tant qu'aucun remplacement par une vraie vérification serveur n'est fait, cet écran reste
+    // volontairement inaccessible (aucun admin ne peut plus être créé par ce mécanisme).
+    if (localStorage.getItem(BERTOLIS_ADMINS_KEY) !== null) {
+      localStorage.removeItem(BERTOLIS_ADMINS_KEY);
     }
   },
 

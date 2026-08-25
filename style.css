@@ -2110,6 +2110,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .user-menu-account-row:hover { background: var(--color-muted-soft); }
 .user-menu-account-row:disabled { opacity: 0.5; cursor: default; }
 
+/* §correctif audit du 23/08/2026 (2.8) : bouton "retirer ce compte" — voir renderUserMenuPanel. */
+.user-menu-account-wrap { display: flex; align-items: center; }
+.user-menu-account-wrap .user-menu-account-row { flex: 1; min-width: 0; }
+.user-menu-account-remove { flex-shrink: 0; margin-right: 8px; width: 24px; height: 24px; }
+
 .user-menu-account-avatar { width: 26px; height: 26px; font-size: 11px; }
 
 .user-menu-account-info { display: flex; flex-direction: column; min-width: 0; gap: 1px; }

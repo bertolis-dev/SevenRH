@@ -3094,13 +3094,16 @@ function renderUserMenuPanel() {
     ${otherAccounts.length ? `
       <div class="user-menu-section-label">Autres comptes</div>
       ${otherAccounts.map(a => `
-        <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
-          <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
-          <span class="user-menu-account-info">
-            <span class="user-menu-account-name">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
-            <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
-          </span>
-        </button>
+        <div class="user-menu-account-wrap">
+          <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
+            <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
+            <span class="user-menu-account-info">
+              <span class="user-menu-account-name">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
+              <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
+            </span>
+          </button>
+          <button type="button" class="btn-icon user-menu-account-remove" data-remove-account="${escapeHtml(a.id)}" title="Retirer ce compte de cet appareil" aria-label="Retirer ce compte de cet appareil">${icon(ICONS.close, 13)}</button>
+        </div>
       `).join('')}
     ` : ''}
     <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
@@ -3124,6 +3127,18 @@ function renderUserMenuPanel() {
       }
       document.getElementById('user-menu-panel').classList.remove('open');
       showApp();
+    });
+  });
+  // §correctif audit du 23/08/2026 (2.8) : jusqu'ici aucun moyen de retirer un compte gardé en
+  // parallèle sur cet appareil — son refresh_token restait dans localStorage indéfiniment, sans
+  // expiration, offrant une bascule sans mot de passe à quiconque reprend ce navigateur. Ne
+  // révoque que la mémorisation LOCALE (removeSavedAccount, déjà existant) : n'affecte pas la
+  // session active de ce compte ailleurs, exactement comme "Se déconnecter" pour le compte actif.
+  document.querySelectorAll('[data-remove-account]').forEach(btn => {
+    btn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      authRepository.removeSavedAccount(btn.dataset.removeAccount);
+      renderUserMenuPanel();
     });
   });
   document.getElementById('btn-add-account').addEventListener('click', () => {
@@ -4362,18 +4377,43 @@ const DETAIL_VIEW_MODULE = {
   'candidature-detail': 'rh'
 };
 
+/** §correctif audit du 23/08/2026 (2.9) : à quelle entrée NAV_ITEMS une vue de détail "appartient"
+ * pour la vérification de menusDesactives — DETAIL_VIEW_MODULE ci-dessus ne couvre que le module
+ * souscrit par l'ENTREPRISE, jamais la restriction individuelle par SALARIÉ (renderMenusAutorisesCard).
+ * Retirer "Salariés" du menu d'un salarié précis ne l'empêchait donc pas d'atteindre une fiche via
+ * une notification/un lien direct, contrairement au menu lui-même. */
+const DETAIL_VIEW_NAV_KEY = {
+  'employee-detail': 'employees',
+  'entretien-detail': 'entretiens',
+  'ticket-detail': 'mes-tickets',
+  'idee-detail': 'idees',
+  'candidature-detail': 'embauche'
+};
+
 function moduleForView(view) {
   const navItem = NAV_ITEMS.find(i => i.key === view);
   return navItem ? navItem.module : DETAIL_VIEW_MODULE[view];
 }
 
+/** Combine module souscrit (entreprise) ET menusDesactives (salarié précis) pour UNE vue, qu'elle
+ * ait sa propre entrée de menu ou soit une vue de détail sans entrée propre (voir
+ * DETAIL_VIEW_NAV_KEY). Utilisé par render() ci-dessous comme garde-fou de dernier recours. */
+function isViewBlockedForCurrentUser(view) {
+  const requiredModule = moduleForView(view);
+  if (requiredModule && !hasModule(requiredModule)) return true;
+  const user = authRepository.getCurrentUser();
+  if (!user) return false;
+  const navKey = NAV_ITEMS.some(i => i.key === view) ? view : DETAIL_VIEW_NAV_KEY[view];
+  return Boolean(navKey && navKey !== 'dashboard' && (user.menusDesactives || []).includes(navKey));
+}
+
 function render() {
   // Garde-fou de dernier recours (défense en profondeur, comme §15) : quel que soit le chemin qui a
   // amené ici (navigateTo filtre déjà les entrées de menu, mais un lien direct vers une vue de détail
-  // ne passe pas forcément par elle), une entreprise sans le module requis n'affiche jamais l'écran —
-  // retour silencieux à l'accueil, même comportement que navigateTo() sur une entrée de menu bloquée.
-  const requiredModule = moduleForView(state.view);
-  if (requiredModule && !hasModule(requiredModule)) {
+  // ne passe pas forcément par elle), ni un module non souscrit ni un menu retiré individuellement
+  // (menusDesactives) n'affichent jamais l'écran — retour silencieux à l'accueil, même comportement
+  // que navigateTo() sur une entrée de menu bloquée.
+  if (isViewBlockedForCurrentUser(state.view)) {
     state.view = 'dashboard';
     renderSidebar();
     render();
@@ -5757,10 +5797,30 @@ function renderEmployeeRow(e) {
 // ---------------------------------------------------------------------------
 // Import/export de masse de salariés (Excel, retour du 21/08/2026 — remplace le CSV de la v1) :
 // gros gain à l'arrivée d'une nouvelle entreprise sur Nexus (dizaines de salariés à saisir un par
-// un sinon). Utilise SheetJS (xlsx.full.min.js, vendorisé — voir index.html, même principe que
-// qrcode.js) pour lire/écrire de vrais fichiers .xlsx ouvrables tels quels dans Excel/Google
-// Sheets — XLSX.read() accepte aussi un .csv déposé par erreur, sans code supplémentaire.
+// un sinon). Utilise SheetJS (xlsx.full.min.js, vendorisé — même principe que qrcode.js) pour
+// lire/écrire de vrais fichiers .xlsx ouvrables tels quels dans Excel/Google Sheets — XLSX.read()
+// accepte aussi un .csv déposé par erreur, sans code supplémentaire.
 // ---------------------------------------------------------------------------
+
+let _xlsxLoadPromise = null;
+/** §correctif audit du 23/08/2026 (2.7) : xlsx.full.min.js (~930 Ko) n'est plus chargé en statique
+ * pour tout le monde (index.html) — injecté à la demande, une seule fois, seulement quand
+ * Exporter/Importer Excel est réellement utilisé. Réutilise la version (`?v=...`) déjà posée sur
+ * app.js pour ne pas avoir un second numéro de cache-busting à maintenir à la main. */
+function loadXLSXLibrary() {
+  if (window.XLSX) return Promise.resolve();
+  if (_xlsxLoadPromise) return _xlsxLoadPromise;
+  const appScript = document.querySelector('script[src*="app.js"]');
+  const version = appScript && appScript.src.includes('?') ? appScript.src.split('?')[1] : '';
+  _xlsxLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'xlsx.full.min.js' + (version ? '?' + version : '');
+    script.onload = () => resolve();
+    script.onerror = () => { _xlsxLoadPromise = null; reject(new Error('Impossible de charger la bibliothèque Excel (vérifiez votre connexion).')); };
+    document.head.appendChild(script);
+  });
+  return _xlsxLoadPromise;
+}
 
 /** Alias reconnus par en-tête (normalisés via normalizeForSearch, donc déjà insensibles à la casse
  * et aux accents) — couvre le format généré par exportEmployeesExcel ci-dessous ET quelques
@@ -5864,6 +5924,10 @@ function importEmployeesRows(previewRows) {
 }
 
 function openImportSalariesModal() {
+  // Démarré ici (jamais attendu) plutôt qu'au changement de fichier : le temps que l'utilisateur
+  // choisisse son fichier dans la boîte de dialogue système couvre en général tout le téléchargement
+  // — voir loadXLSXLibrary(), attendu pour de vrai plus bas, dans reader.onload.
+  loadXLSXLibrary().catch(() => {});
   const html = `
     <div class="modal modal-large">
       <div class="modal-header">
@@ -5893,7 +5957,13 @@ function openImportSalariesModal() {
     const file = evt.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      try {
+        await loadXLSXLibrary();
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">${escapeHtml(err.message)}</p>`;
+        return;
+      }
       let rows;
       try {
         // cellDates:true + raw:true (retour du 21/08/2026) : une vraie cellule Excel de type Date
@@ -5990,7 +6060,13 @@ function openImportSalariesModal() {
   }
 }
 
-function exportEmployeesExcel() {
+async function exportEmployeesExcel() {
+  try {
+    await loadXLSXLibrary();
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
   const { list } = getFilteredSortedEmployees();
   const visible = list.filter(e => !e.archive);
   const headers = ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Ancienneté', 'Statut'];
