@@ -149,7 +149,7 @@ async function notifySlackNewCandidature(companyId: string, nom: string, prenom:
     await fetch(integration.slack_webhook_url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: `🧑‍💼 *Nouvelle candidature*\n${prenom} ${nom} — voir l'onglet Embauche` }),
+      body: JSON.stringify({ text: `🧑‍💼 *Nouvelle candidature*\n${prenom} ${nom} : voir l'onglet Embauche` }),
     });
   } catch {
     // Une notification Slack ratée ne doit jamais faire échouer le dépôt de candidature lui-même.
@@ -175,7 +175,7 @@ async function sendConfirmationEmail(candidateEmail: string, candidateName: stri
       body: JSON.stringify({
         from: buildFromAddress(raisonSociale),
         to: candidateEmail,
-        subject: `Candidature reçue — ${raisonSociale}`,
+        subject: `Candidature reçue : ${raisonSociale}`,
         html,
       }),
     });

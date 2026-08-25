@@ -45,7 +45,7 @@ const TEMPLATE_TITLES: Record<Template, string> = {
   a_valider: "Une demande attend votre validation",
   validee: "Votre demande a été validée",
   refusee: "Votre demande a été refusée",
-  relance: "Rappel — une demande attend toujours votre validation",
+  relance: "Rappel : une demande attend toujours votre validation",
 };
 
 function buildEmailHtml(template: Template, raisonSociale: string, logo: string | null, employeeName: string, typeLabel: string, periode: string, motif?: string): string {
@@ -55,7 +55,7 @@ function buildEmailHtml(template: Template, raisonSociale: string, logo: string 
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(raisonSociale)}" style="max-height: 48px; margin-bottom: 16px;">` : ""}
       <h2 style="margin: 0 0 12px;">${escapeHtml(title)}</h2>
-      <p>${escapeHtml(employeeName)} — ${escapeHtml(typeLabel)}</p>
+      <p>${escapeHtml(employeeName)} : ${escapeHtml(typeLabel)}</p>
       <p><strong>Période :</strong> ${escapeHtml(periode)}</p>
       ${motifHtml}
       <p style="margin-top: 20px; color: #6b7280; font-size: 13px;">Connectez-vous à Nexus pour voir le détail et agir si besoin.</p>
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
   if (!recipients || !recipients.length) return jsonResponse({ success: true, sent: 0 });
 
   const html = buildEmailHtml(template as Template, company.raison_sociale, company.data?.logo || null, employeeName, typeLabel, periode, motif);
-  const subject = `${TEMPLATE_TITLES[template as Template]} — ${company.raison_sociale}`;
+  const subject = `${TEMPLATE_TITLES[template as Template]} : ${company.raison_sociale}`;
 
   let sent = 0;
   for (const recipient of recipients) {

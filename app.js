@@ -482,7 +482,7 @@ function renderCandidatureForm(companyId) {
     <div class="login-card">
       <div class="login-logo" id="candidature-company-header">${NEXUS_LOGO_MARK} Nexus</div>
       <h1>Déposer ma candidature</h1>
-      <p class="text-muted">Renseignez vos coordonnées et joignez votre CV — l'entreprise recevra votre candidature directement.</p>
+      <p class="text-muted">Renseignez vos coordonnées et joignez votre CV, l'entreprise recevra votre candidature directement.</p>
       <p class="login-error" id="candidature-error" role="alert" style="display: none;"></p>
       <form id="candidature-form">
         <!-- D16 (audit fiabilité du 19/08/2026) : honeypot anti-robot, jamais visible ni atteignable
@@ -851,8 +851,8 @@ const LANDING_FEATURES = [
       title: 'Congés & absences',
       kpis: [['18', 'Jours CP restants'], ['2', 'Demandes en attente'], ['5', 'Absents cette semaine']],
       rows: [
-        [ICONS.sun, 'Congés payés — 22 au 26 sept.', 'success', 'Validé'],
-        [ICONS.thermometer, 'Arrêt maladie — T. Bernard', 'info', 'Déclaré'],
+        [ICONS.sun, 'Congés payés : 22 au 26 sept.', 'success', 'Validé'],
+        [ICONS.thermometer, 'Arrêt maladie : T. Bernard', 'info', 'Déclaré'],
         [ICONS.calendar, "Vacances scolaires intégrées automatiquement", null, null]
       ]
     }
@@ -883,8 +883,8 @@ const LANDING_FEATURES = [
       title: 'Planning & télétravail',
       kpis: [['4/5', 'Jours au bureau'], ['1', 'Jour télétravail'], ['18', 'Salariés au bureau']],
       rows: [
-        [ICONS.laptop, 'Télétravail — C. Lefèvre', 'info', "Aujourd'hui"],
-        [ICONS.building, 'Présentiel cette semaine — 18 salariés', 'success', 'À jour'],
+        [ICONS.laptop, 'Télétravail : C. Lefèvre', 'info', "Aujourd'hui"],
+        [ICONS.building, 'Présentiel cette semaine : 18 salariés', 'success', 'À jour'],
         [ICONS.checkCircle, 'Quota hebdomadaire vérifié automatiquement', null, null]
       ]
     }
@@ -894,14 +894,14 @@ const LANDING_FEATURES = [
     text: "Anomalies détectées automatiquement avant l'export vers votre logiciel de paie.",
     detail: [
       "Détection automatique des anomalies (ex. compteur de congés négatif) avant l'export",
-      "Confirmation obligatoire en cas d'anomalie bloquante — jamais d'export silencieux",
+      "Confirmation obligatoire en cas d'anomalie bloquante : jamais d'export silencieux",
       "Export vers votre logiciel de paie",
       "Récapitulatif mensuel par salarié : absences, primes, variables saisies",
       "Distribution dématérialisée des bulletins de paie"
     ],
     howItWorks: [
       "Nexus détecte automatiquement les anomalies (compteurs négatifs, incohérences) avant l'export.",
-      "Vous confirmez explicitement si une anomalie bloquante est détectée — jamais d'export silencieux.",
+      "Vous confirmez explicitement si une anomalie bloquante est détectée : jamais d'export silencieux.",
       "Le récapitulatif mensuel (absences, primes, variables) part vers votre logiciel de paie."
     ],
     audience: [
@@ -916,7 +916,7 @@ const LANDING_FEATURES = [
       rows: [
         [ICONS.checkCircle, 'Aucune anomalie détectée', 'success', 'Prêt'],
         [ICONS.upload, "Export vers votre logiciel de paie", null, null],
-        [ICONS.receipt, 'Bulletins distribués — 24 salariés', 'info', 'Ce mois']
+        [ICONS.receipt, 'Bulletins distribués : 24 salariés', 'info', 'Ce mois']
       ]
     }
   },
@@ -945,9 +945,9 @@ const LANDING_FEATURES = [
       title: 'Notes de frais',
       kpis: [['104,70 €', 'Ce mois-ci'], ['3', 'En attente'], ['0', 'Rejetées']],
       rows: [
-        [ICONS.receipt, 'Taxi client — 32,50 €', 'warning', 'En attente'],
-        [ICONS.receipt, "Repas d'affaires — 58,00 €", 'success', 'Validé'],
-        [ICONS.car, 'Trajet domicile-travail — 14,20 €', 'info', 'Remboursé']
+        [ICONS.receipt, 'Taxi client : 32,50 €', 'warning', 'En attente'],
+        [ICONS.receipt, "Repas d'affaires : 58,00 €", 'success', 'Validé'],
+        [ICONS.car, 'Trajet domicile-travail : 14,20 €', 'info', 'Remboursé']
       ]
     }
   },
@@ -977,7 +977,7 @@ const LANDING_FEATURES = [
       kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
       rows: [
         [ICONS.utensils, "Calculé automatiquement selon les jours travaillés", null, null],
-        [ICONS.checkCircle, 'Régularisation appliquée — J. Petit', 'info', 'Ce mois'],
+        [ICONS.checkCircle, 'Régularisation appliquée : J. Petit', 'info', 'Ce mois'],
         [ICONS.chart, 'Historique consultable par chaque salarié', null, null]
       ]
     }
@@ -986,7 +986,7 @@ const LANDING_FEATURES = [
     icon: ICONS.orgchart, title: 'Organigramme',
     text: 'Hiérarchie, services et équipes visualisés en un coup d\'œil.',
     detail: [
-      "Généré automatiquement à partir du manager renseigné sur chaque fiche salarié — rien à redessiner à la main",
+      "Généré automatiquement à partir du manager renseigné sur chaque fiche salarié, rien à redessiner à la main",
       "Vue par service et par équipe",
       "Détection et correction automatique des cycles hiérarchiques (ex. deux salariés qui se managent mutuellement)",
       "Toujours à jour : une arrivée, un départ ou un changement de manager suffit"
@@ -1036,8 +1036,8 @@ const LANDING_FEATURES = [
       title: 'Documents RH',
       kpis: [['18', 'Documents ce mois'], ['3', 'Échéances proches'], ['0', 'Manquants']],
       rows: [
-        [ICONS.folder, 'Contrat — J. Moreau', 'success', 'Archivé'],
-        [ICONS.warningTriangle, 'Titre de séjour — expire dans 25 jours', 'warning', 'À renouveler'],
+        [ICONS.folder, 'Contrat : J. Moreau', 'success', 'Archivé'],
+        [ICONS.warningTriangle, 'Titre de séjour : expire dans 25 jours', 'warning', 'À renouveler'],
         [ICONS.checkCircle, 'Certificat généré automatiquement', null, null]
       ]
     }
@@ -1248,7 +1248,7 @@ const LEGAL_CONTENT = {
       <p style="margin-top:0;">Nexus traite les données nécessaires à la gestion des ressources humaines des entreprises clientes (salariés, congés, notes de frais, documents RH...).</p>
       <p>Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface).</p>
       <p>Chaque salarié peut demander l'export de ses propres données personnelles à tout moment depuis l'application.</p>
-      <p>Les paiements sont traités directement par Stripe — Nexus ne stocke aucune donnée de carte bancaire.</p>
+      <p>Les paiements sont traités directement par Stripe. Nexus ne stocke aucune donnée de carte bancaire.</p>
       <p>Pour toute question relative à vos données personnelles : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
     `
   }
@@ -1464,7 +1464,7 @@ function renderFeatureDetailPage(index) {
 
       <section class="landing-cta-banner">
         <h2>Prêt à simplifier votre gestion RH ?</h2>
-        <p>Créez votre entreprise en quelques minutes — aucune carte bancaire requise pour commencer.</p>
+        <p>Créez votre entreprise en quelques minutes, aucune carte bancaire requise pour commencer.</p>
         <div class="landing-cta-banner-actions">
           <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
@@ -1483,7 +1483,7 @@ function renderFeatureDetailPage(index) {
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
           </nav>
         </div>
-        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       </footer>
     </div>
   `;
@@ -1606,7 +1606,7 @@ function renderLandingScreen() {
           <div class="landing-hero-text">
             <span class="badge landing-badge-gold">Nouveau · Installable comme une application</span>
             <h1>Le SIRH simple pour piloter congés, planning, paie et notes de frais</h1>
-            <p>Nexus centralise la gestion RH de votre entreprise dans un seul outil clair — sans papier, sans tableur, accessible à toute votre équipe selon son rôle.</p>
+            <p>Nexus centralise la gestion RH de votre entreprise dans un seul outil clair, sans papier, sans tableur, accessible à toute votre équipe selon son rôle.</p>
             <div class="landing-hero-cta">
               <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
               <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
@@ -1629,9 +1629,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>3</strong><span>Congés en attente</span></div>
                   <div class="landing-mock-kpi"><strong>128</strong><span>Tickets resto</span></div>
                 </div>
-                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congé validé — J. Moreau <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">${icon(ICONS.laptop, 14)} Télétravail — C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
-                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Note de frais — 42,00 € <span class="badge badge-warning">En attente</span></div>
+                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congé validé : J. Moreau <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.laptop, 14)} Télétravail : C. Lefèvre <span class="badge badge-info">Aujourd'hui</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Note de frais : 42,00 € <span class="badge badge-warning">En attente</span></div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
                 <div class="landing-mock-header">
@@ -1643,8 +1643,8 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>2</strong><span>Demandes en attente</span></div>
                   <div class="landing-mock-kpi"><strong>5</strong><span>Absents cette semaine</span></div>
                 </div>
-                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congés payés — 22 au 26 sept. <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">${icon(ICONS.thermometer, 14)} Arrêt maladie — T. Bernard <span class="badge badge-info">Déclaré</span></div>
+                <div class="landing-mock-row">${icon(ICONS.sun, 14)} Congés payés : 22 au 26 sept. <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.thermometer, 14)} Arrêt maladie : T. Bernard <span class="badge badge-info">Déclaré</span></div>
                 <div class="landing-mock-row">${icon(ICONS.calendar, 14)} Vacances scolaires intégrées automatiquement</div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
@@ -1657,9 +1657,9 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>3</strong><span>En attente</span></div>
                   <div class="landing-mock-kpi"><strong>0</strong><span>Rejetées</span></div>
                 </div>
-                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Taxi client — 32,50 € <span class="badge badge-warning">En attente</span></div>
-                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Repas d'affaires — 58,00 € <span class="badge badge-success">Validé</span></div>
-                <div class="landing-mock-row">${icon(ICONS.car, 14)} Trajet domicile-travail — 14,20 € <span class="badge badge-info">Remboursé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Taxi client : 32,50 € <span class="badge badge-warning">En attente</span></div>
+                <div class="landing-mock-row">${icon(ICONS.receipt, 14)} Repas d'affaires : 58,00 € <span class="badge badge-success">Validé</span></div>
+                <div class="landing-mock-row">${icon(ICONS.car, 14)} Trajet domicile-travail : 14,20 € <span class="badge badge-info">Remboursé</span></div>
               </div>
               <div class="landing-mock-card landing-mock-slide">
                 <div class="landing-mock-header">
@@ -1672,7 +1672,7 @@ function renderLandingScreen() {
                   <div class="landing-mock-kpi"><strong>60 %</strong><span>Part employeur</span></div>
                 </div>
                 <div class="landing-mock-row">${icon(ICONS.utensils, 14)} Calculé automatiquement selon les jours travaillés</div>
-                <div class="landing-mock-row">${icon(ICONS.checkCircle, 14)} Régularisation appliquée — J. Petit <span class="badge badge-info">Ce mois</span></div>
+                <div class="landing-mock-row">${icon(ICONS.checkCircle, 14)} Régularisation appliquée : J. Petit <span class="badge badge-info">Ce mois</span></div>
                 <div class="landing-mock-row">${icon(ICONS.chart, 14)} Historique consultable par chaque salarié</div>
               </div>
             </div>
@@ -1693,7 +1693,7 @@ function renderLandingScreen() {
         </div>
         <div class="landing-stat-tile">
           <strong class="landing-gradient-number">0</strong>
-          <span>Engagement de durée — ajoutez ou retirez un module quand vous voulez</span>
+          <span>Engagement de durée : ajoutez ou retirez un module quand vous voulez</span>
         </div>
         <div class="landing-stat-tile">
           <strong class="landing-gradient-number">0</strong>
@@ -1708,7 +1708,7 @@ function renderLandingScreen() {
       <section class="landing-section" id="landing-fonctionnalites">
         <div class="landing-section-head">
           <h2>Tout ce qu'il faut, rien de superflu</h2>
-          <p>Toutes les fonctionnalités sont incluses dans chaque offre — seul le nombre de salariés change.</p>
+          <p>Toutes les fonctionnalités sont incluses dans chaque offre, seul le nombre de salariés change.</p>
         </div>
         <div class="landing-features-grid">
           ${LANDING_FEATURES.map((f, i) => `
@@ -1730,12 +1730,12 @@ function renderLandingScreen() {
           <div class="landing-step-card">
             <div class="landing-step-badge">1</div>
             <h3>Créez votre entreprise</h3>
-            <p class="text-muted">Renseignez le nom de votre entreprise — aucune carte bancaire requise pour commencer.</p>
+            <p class="text-muted">Renseignez le nom de votre entreprise, aucune carte bancaire requise pour commencer.</p>
           </div>
           <div class="landing-step-card">
             <div class="landing-step-badge">2</div>
             <h3>Ajoutez vos salariés</h3>
-            <p class="text-muted">En masse (import CSV/Excel) ou un par un — chacun reçoit un accès adapté à son rôle.</p>
+            <p class="text-muted">En masse (import CSV/Excel) ou un par un ; chacun reçoit un accès adapté à son rôle.</p>
           </div>
           <div class="landing-step-card">
             <div class="landing-step-badge">3</div>
@@ -1748,7 +1748,7 @@ function renderLandingScreen() {
       <section class="landing-section" id="landing-tarifs">
         <div class="landing-section-head">
           <h2>Composez votre abonnement</h2>
-          <p>Choisissez uniquement les modules dont vous avez besoin — le prix s'ajuste en direct.</p>
+          <p>Choisissez uniquement les modules dont vous avez besoin, le prix s'ajuste en direct.</p>
         </div>
         <div class="landing-employee-slider">
           <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
@@ -1785,7 +1785,7 @@ function renderLandingScreen() {
             <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
             <strong id="alacarte-total" class="landing-gradient-number">—</strong>
             <p class="alacarte-discount-note" id="alacarte-discount-note"></p>
-            <p class="landing-simulator-note">Estimation — le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
+            <p class="landing-simulator-note">Estimation : le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
             <button type="button" class="btn btn-primary btn-arrow-cta" style="width: 100%; margin-top: 8px;" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           </div>
         </div>
@@ -1825,7 +1825,7 @@ function renderLandingScreen() {
       <section class="landing-section landing-install-section" id="landing-installer">
         <div class="landing-section-head">
           <h2>Installez Nexus en 1 minute</h2>
-          <p>Une icône sur votre bureau ou votre écran d'accueil — ouverture instantanée, comme une vraie application. Gratuit, sans magasin d'applications.</p>
+          <p>Une icône sur votre bureau ou votre écran d'accueil, ouverture instantanée, comme une vraie application. Gratuit, sans magasin d'applications.</p>
         </div>
         <div class="landing-install-grid">
           <div class="card landing-platform-card ${platform === 'desktop' ? 'landing-platform-card-active' : ''}">
@@ -1834,7 +1834,7 @@ function renderLandingScreen() {
             <h3>Ordinateur</h3>
             <p class="text-muted">Windows, via Chrome ou Edge</p>
             <a class="btn btn-gold" href="${DESKTOP_APP_DOWNLOAD_URL}">⬇️ Télécharger (.exe)</a>
-            <p class="landing-platform-note">Windows peut afficher "Windows a protégé votre PC" (pas de certificat payant) — cliquez "Informations complémentaires" puis "Exécuter quand même".</p>
+            <p class="landing-platform-note">Windows peut afficher "Windows a protégé votre PC" (pas de certificat payant) : cliquez "Informations complémentaires" puis "Exécuter quand même".</p>
             <button type="button" class="btn-link" data-install-trigger style="margin-top: 6px;">Ou installer depuis le navigateur</button>
           </div>
           <div class="card landing-platform-card ${platform === 'ios' ? 'landing-platform-card-active' : ''}">
@@ -1865,7 +1865,7 @@ function renderLandingScreen() {
 
       <section class="landing-cta-banner">
         <h2>Prêt à simplifier votre gestion RH ?</h2>
-        <p>Créez votre entreprise en quelques minutes — aucune carte bancaire requise pour commencer.</p>
+        <p>Créez votre entreprise en quelques minutes, aucune carte bancaire requise pour commencer.</p>
         <div class="landing-cta-banner-actions">
           <button type="button" class="btn btn-gold btn-arrow-cta" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           <button type="button" class="btn btn-ghost-light" data-landing-action="login">Se connecter</button>
@@ -1884,7 +1884,7 @@ function renderLandingScreen() {
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
           </nav>
         </div>
-        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS — Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       </footer>
     </div>
 
@@ -2110,7 +2110,7 @@ function renderTicketsSimulatorSection(alt) {
     <section class="landing-section${alt ? ' landing-section-alt' : ''}" id="landing-simulateur">
       <div class="landing-section-head">
         <h2>Combien coûteraient vos tickets restaurant ?</h2>
-        <p>Estimation rapide avec les valeurs par défaut — entièrement personnalisable une fois votre compte créé.</p>
+        <p>Estimation rapide avec les valeurs par défaut, entièrement personnalisable une fois votre compte créé.</p>
       </div>
       <div class="landing-simulator-card">
         <div class="landing-simulator-inputs">
@@ -2174,9 +2174,9 @@ function bindLandingSimulator() {
     const partEmployeurParTicket = valeurFaciale * partEmployeurPct / 100;
     const note = document.getElementById('sim-urssaf-note');
     if (partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026) {
-      note.innerHTML = `${icon(ICONS.warningTriangle, 14)} Avec ces valeurs, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre — au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`;
+      note.innerHTML = `${icon(ICONS.warningTriangle, 14)} Avec ces valeurs, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre, au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`;
     } else {
-      note.textContent = `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre — dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Ces paramètres sont personnalisables dans l'application, qui tient aussi compte des congés, absences et télétravail de chaque salarié.`;
+      note.textContent = `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre, dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Ces paramètres sont personnalisables dans l'application, qui tient aussi compte des congés, absences et télétravail de chaque salarié.`;
     }
   };
   employeesInput.addEventListener('input', update);
@@ -2215,7 +2215,7 @@ function openForcedPasswordChangeModal() {
       </div>
       <form id="forced-password-change-form">
         <div class="modal-body">
-          <p class="text-muted">Vous vous êtes connecté avec un mot de passe temporaire — choisissez-en un nouveau avant de continuer.</p>
+          <p class="text-muted">Vous vous êtes connecté avec un mot de passe temporaire. Choisissez-en un nouveau avant de continuer.</p>
           <div class="form-field">
             <label for="f-forced-password">Nouveau mot de passe (6 caractères minimum) *</label>
             <div class="password-input-wrapper">
@@ -2291,7 +2291,7 @@ function renderSyncFailureBanner() {
   }
   banner.style.display = 'flex';
   banner.innerHTML = `
-    <span>${icon(ICONS.warningTriangle, 14)} ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur — ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+    <span>${icon(ICONS.warningTriangle, 14)} ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
   `;
 }
 
@@ -2598,6 +2598,20 @@ function bindBertolisTicketsEvents() {
       showToast('Suggestion appliquée.');
       state.bertolisTicketsData = null;
       renderBertolisConsole();
+    });
+  }
+
+  // §6.8 : copie seulement le brouillon dans le champ de réponse — jamais un envoi direct, on
+  // relit/modifie avant de cliquer sur "Envoyer" comme pour toute autre réponse.
+  const prefillAiReplyBtn = document.getElementById('btn-ticket-prefill-ai-reply');
+  if (prefillAiReplyBtn) {
+    prefillAiReplyBtn.addEventListener('click', () => {
+      const ticket = (state.bertolisTicketsData.tickets || []).find(t => t.id === state.bertolisCurrentTicketId);
+      const texte = ticket && ticket.data && ticket.data.aiAnalysis && ticket.data.aiAnalysis.reponseSuggeree;
+      const textarea = document.getElementById('f-bertolis-ticket-comment');
+      if (!texte || !textarea) return;
+      textarea.value = texte;
+      textarea.focus();
     });
   }
 }
@@ -3279,7 +3293,7 @@ async function copyIcalSubscriptionLink(scope) {
   }
   try {
     await navigator.clipboard.writeText(result.url);
-    showToast(`Lien d'abonnement calendrier (${scope === 'equipe' ? 'équipe' : 'moi'}) copié — collez-le dans "S'abonner à un calendrier" (Outlook/Google Agenda).`);
+    showToast(`Lien d'abonnement calendrier (${scope === 'equipe' ? 'équipe' : 'moi'}) copié : collez-le dans "S'abonner à un calendrier" (Outlook/Google Agenda).`);
   } catch {
     openIcalLinkFallbackModal(result.url);
   }
@@ -3392,36 +3406,36 @@ function openChangePasswordModal() {
 const HELP_CONTENT = {
   dashboard: {
     title: 'Accueil',
-    body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Propriétaire voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
-           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`,
+    body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Propriétaire voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance ; cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
+           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas. Le réglage est propre à votre compte.</p>`,
     faq: [
-      { q: 'Un bloc masqué est-il perdu ?', r: 'Non, "Personnaliser" ne fait que le masquer sur votre compte — aucune donnée n\'est supprimée, et vous pouvez le réafficher à tout moment.' },
+      { q: 'Un bloc masqué est-il perdu ?', r: 'Non, "Personnaliser" ne fait que le masquer sur votre compte, aucune donnée n\'est supprimée, et vous pouvez le réafficher à tout moment.' },
       { q: 'Pourquoi je ne vois pas le Centre d\'action ?', r: 'Il n\'apparaît que pour les rôles Manager/RH/Propriétaire, et seulement s\'il y a au moins un élément à signaler (aucun bruit si tout est à jour).' }
     ],
-    bonnesPratiques: ['Passez par le Centre d\'action plutôt que par la recherche pour traiter vos demandes en attente — les filtres sont déjà appliqués.', 'Consultez la Préparation de paie depuis son raccourci ici avant chaque export, pas seulement le jour de la paie.']
+    bonnesPratiques: ['Passez par le Centre d\'action plutôt que par la recherche pour traiter vos demandes en attente : les filtres sont déjà appliqués.', 'Consultez la Préparation de paie depuis son raccourci ici avant chaque export, pas seulement le jour de la paie.']
   },
   employees: {
     title: 'Salariés',
     body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Propriétaire, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`,
-    faq: [{ q: 'Pourquoi certains salariés n\'apparaissent pas ?', r: 'Un manager ne voit que son équipe. Un salarié archivé n\'apparaît plus par défaut — utilisez le filtre de statut pour le retrouver.' }],
+    faq: [{ q: 'Pourquoi certains salariés n\'apparaissent pas ?', r: 'Un manager ne voit que son équipe. Un salarié archivé n\'apparaît plus par défaut : utilisez le filtre de statut pour le retrouver.' }],
     bonnesPratiques: ['Utilisez les filtres établissement/service avant de chercher un nom : la liste peut être longue sur une grande entreprise.']
   },
   organigramme: {
     title: 'Organigramme',
     body: `<p>Arbre hiérarchique basé sur les rattachements managers de chaque salarié. Filtrez par établissement/service/équipe, repliez/dépliez les branches, cliquez une personne pour ouvrir sa fiche.</p>`,
-    faq: [{ q: 'Un salarié apparaît au mauvais endroit ?', r: 'L\'arbre suit strictement le champ "Manager(s)" de la fiche salarié — corrigez-le depuis sa fiche, l\'organigramme se met à jour automatiquement.' }]
+    faq: [{ q: 'Un salarié apparaît au mauvais endroit ?', r: 'L\'arbre suit strictement le champ "Manager(s)" de la fiche salarié : corrigez-le depuis sa fiche, l\'organigramme se met à jour automatiquement.' }]
   },
   absences: {
     title: 'Congés & absences',
     body: `<p>3 onglets : <strong>Congés</strong> (congés payés, RTT, ancienneté...), <strong>Absences</strong> (maladie, événements familiaux, et tout autre type paramétrable), <strong>Télétravail</strong> (demandes + planning hebdomadaire). Dans Congés/Absences, créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
-           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...) — règles d'acquisition, workflow de validation, justificatif obligatoire — se fait désormais uniquement dans Paramètres > Types d'absences.</p>`,
+           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...), à savoir les règles d'acquisition, le workflow de validation et le justificatif obligatoire, se fait désormais uniquement dans Paramètres > Types d'absences.</p>`,
     faq: [
-      { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée — seuls Manager/RH/Propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
-      { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer — l\'historique garde la trace de la correction et le motif.' },
-      { q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche — un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' },
+      { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée : seuls Manager/RH/Propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
+      { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer : l\'historique garde la trace de la correction et le motif.' },
+      { q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche : un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' },
       { q: 'Le quota de télétravail semble faux ?', r: 'Il se recalcule par semaine ISO (lundi à dimanche) en cumulant toutes les demandes Validées/En attente de cette semaine, pas seulement la demande en cours de saisie.' }
     ],
-    bonnesPratiques: ['Enregistrez en brouillon dès que les dates ne sont pas encore certaines, plutôt que d\'attendre d\'avoir toutes les informations pour ouvrir le formulaire.', 'Vérifiez le solde affiché dans le formulaire avant de valider une demande d\'équipe — un compteur négatif remontera de toute façon en Préparation de paie.', 'Cochez "Justificatif obligatoire" sur les types qui légalement en exigent un (arrêt maladie...) — cela remonte comme anomalie en Préparation de paie si oublié.']
+    bonnesPratiques: ['Enregistrez en brouillon dès que les dates ne sont pas encore certaines, plutôt que d\'attendre d\'avoir toutes les informations pour ouvrir le formulaire.', 'Vérifiez le solde affiché dans le formulaire avant de valider une demande d\'équipe : un compteur négatif remontera de toute façon en Préparation de paie.', 'Cochez "Justificatif obligatoire" sur les types qui légalement en exigent un (arrêt maladie...) : cela remonte comme anomalie en Préparation de paie si oublié.']
   },
   calendrier: {
     title: 'Calendrier',
@@ -3430,10 +3444,10 @@ const HELP_CONTENT = {
   },
   planning: {
     title: 'Planning',
-    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service — une case de congé/télétravail validé se glisse-dépose vers un autre jour du même salarié pour déplacer toute la période), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié — matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`,
+    body: `<p>4 vues : <strong>Semaine/Mois</strong> (qui est absent, par jour, groupé par service ; une case de congé/télétravail validé se glisse-dépose vers un autre jour du même salarié pour déplacer toute la période), <strong>Année</strong> (total de jours validés par salarié/mois) et <strong>Horaires</strong> (heures de travail réelles par salarié, matin/après-midi, modifiables sur la fiche salarié, cliquez une case pour ajuster un jour précis). Bascule <strong>Mon planning</strong> / <strong>Planning équipe</strong> en haut d'écran.</p>`,
     faq: [
-      { q: 'Pourquoi je ne peux pas glisser une case ?', r: 'Seule une case de congé/télétravail déjà VALIDÉ peut être déplacée — une demande en attente doit d\'abord être validée.' },
-      { q: 'Le glisser-déposer est refusé, pourquoi ?', r: 'Les mêmes règles qu\'à la création s\'appliquent (chevauchement, quota télétravail hebdomadaire, période contractuelle) — le message affiché indique la règle précise en cause.' }
+      { q: 'Pourquoi je ne peux pas glisser une case ?', r: 'Seule une case de congé/télétravail déjà VALIDÉ peut être déplacée : une demande en attente doit d\'abord être validée.' },
+      { q: 'Le glisser-déposer est refusé, pourquoi ?', r: 'Les mêmes règles qu\'à la création s\'appliquent (chevauchement, quota télétravail hebdomadaire, période contractuelle) : le message affiché indique la règle précise en cause.' }
     ],
     bonnesPratiques: ['Utilisez la vue Mois pour repérer un déséquilibre de service en un coup d\'œil, puis la vue Semaine pour ajuster au jour près.']
   },
@@ -3441,34 +3455,34 @@ const HELP_CONTENT = {
     title: 'Notes de frais',
     body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le workflow de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`,
     faq: [{ q: 'Comment fonctionne le calcul kilométrique ?', r: 'Indiquez la distance et la puissance fiscale du véhicule : le montant est calculé automatiquement selon le barème, vous n\'avez rien à saisir manuellement.' }],
-    bonnesPratiques: ['Joignez toujours le justificatif dès la création de la note — une note validée sans justificatif ressort comme anomalie avant l\'export de paie.']
+    bonnesPratiques: ['Joignez toujours le justificatif dès la création de la note : une note validée sans justificatif ressort comme anomalie avant l\'export de paie.']
   },
   'mes-documents': {
     title: 'Mes documents',
     body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service.</p>`,
-    faq: [{ q: 'Un document semble manquant ?', r: 'Seuls les documents que RH a explicitement partagés avec vous apparaissent ici — contactez RH s\'il en manque un.' }]
+    faq: [{ q: 'Un document semble manquant ?', r: 'Seuls les documents que RH a explicitement partagés avec vous apparaissent ici. Contactez RH s\'il en manque un.' }]
   },
   tickets: {
     title: 'Tickets restaurant',
     body: `<p>Calcul automatique du nombre de tickets par salarié selon ses jours travaillés du mois, déduction faite des congés/télétravail validés. Un ajustement manuel ponctuel reste possible par salarié si besoin.</p>`,
-    faq: [{ q: 'Pourquoi le nombre semble faux pour un salarié ?', r: 'Vérifiez ses jours travaillés (fiche salarié) et ses congés/télétravail validés du mois — le calcul se base uniquement sur ces deux éléments, pas sur une saisie manuelle.' }]
+    faq: [{ q: 'Pourquoi le nombre semble faux pour un salarié ?', r: 'Vérifiez ses jours travaillés (fiche salarié) et ses congés/télétravail validés du mois : le calcul se base uniquement sur ces deux éléments, pas sur une saisie manuelle.' }]
   },
   'export-paie': {
     title: 'Préparation de paie',
-    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié (Congés payés/RTT/Maladie/Télétravail/Notes de frais/<strong>Variables</strong>/Tickets restaurant — le bouton ✎ sur la colonne Variables permet de saisir une prime ou un autre élément ponctuel du mois).</p>
+    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié (Congés payés/RTT/Maladie/Télétravail/Notes de frais/<strong>Variables</strong>/Tickets restaurant) : le bouton ✎ sur la colonne Variables permet de saisir une prime ou un autre élément ponctuel du mois.</p>
            <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais, variables) au format de votre logiciel de paie.</p>`,
     faq: [
-      { q: 'Une anomalie "Bloquante" empêche-t-elle l\'export ?', r: 'Non, le bouton "Exporter CSV" reste actif volontairement (un blocage technique dur serait risqué un jour de paie) — mais une anomalie bloquante doit être corrigée avant de considérer l\'export fiable.' },
+      { q: 'Une anomalie "Bloquante" empêche-t-elle l\'export ?', r: 'Non, le bouton "Exporter CSV" reste actif volontairement (un blocage technique dur serait risqué un jour de paie), mais une anomalie bloquante doit être corrigée avant de considérer l\'export fiable.' },
       { q: 'Que signifie "comptabilisé dans les congés" pour un type ?', r: 'Défini sur le type dans Paramètres > Types d\'absences (case "Déduire du compteur RTT/CP") : les jours de ce type viennent en plus s\'imputer sur le compteur RTT ou congés payés du salarié.' },
-      { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) — saisissez le montant du mois via le bouton ✎ sur la colonne Variables du récapitulatif.' }
+      { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) : saisissez le montant du mois via le bouton ✎ sur la colonne Variables du récapitulatif.' }
     ],
-    bonnesPratiques: ['Ouvrez cet écran systématiquement avant l\'export, pas seulement quand une anomalie est suspectée — l\'onglet par défaut est volontairement "Préparation" et non "Export".']
+    bonnesPratiques: ['Ouvrez cet écran systématiquement avant l\'export, pas seulement quand une anomalie est suspectée : l\'onglet par défaut est volontairement "Préparation" et non "Export".']
   },
   parametres: {
     title: 'Paramètres',
-    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés — même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`,
-    faq: [{ q: 'Un salarié voit un type d\'absence que je viens de désactiver ?', r: 'La désactivation empêche les NOUVELLES demandes sur ce type mais préserve l\'historique des demandes déjà créées — normal, ce n\'est pas un bug.' }],
-    bonnesPratiques: ['Désactivez un type plutôt que de le supprimer si des demandes existantes s\'y réfèrent encore — la suppression est destinée aux types jamais utilisés.']
+    body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés, même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`,
+    faq: [{ q: 'Un salarié voit un type d\'absence que je viens de désactiver ?', r: 'La désactivation empêche les NOUVELLES demandes sur ce type mais préserve l\'historique des demandes déjà créées. C\'est normal, ce n\'est pas un bug.' }],
+    bonnesPratiques: ['Désactivez un type plutôt que de le supprimer si des demandes existantes s\'y réfèrent encore : la suppression est destinée aux types jamais utilisés.']
   }
 };
 
@@ -6097,7 +6111,7 @@ function buildImportPreviewRows(dataRows, mapping) {
     } else if (!EMAIL_FORMAT_REGEX.test(record.email)) {
       status = 'error'; message = 'Email invalide.';
     } else if (existingEmails.has(emailKey) || seenInFile.has(emailKey)) {
-      status = 'duplicate'; message = 'Email déjà utilisé — ligne ignorée.';
+      status = 'duplicate'; message = 'Email déjà utilisé, ligne ignorée.';
     }
     if (status !== 'error' && emailKey) seenInFile.add(emailKey);
     return { rowIndex: i + 2, record, status, message }; // +2 : ligne 1 = en-têtes, humains comptent depuis 1
@@ -6217,7 +6231,7 @@ function openImportSoldesInitiauxModal() {
           .map(row => row.map(cell => (cell == null ? '' : String(cell))))
           .filter(row => row.some(cell => cell !== ''));
       } catch (err) {
-        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible — vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
         return;
       }
       if (rows.length < 2) {
@@ -6341,7 +6355,7 @@ function openImportSalariesModal() {
           }))
           .filter(row => row.some(cell => cell !== ''));
       } catch (err) {
-        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible — vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
         return;
       }
       if (rows.length < 2) {
@@ -6366,7 +6380,7 @@ function openImportSalariesModal() {
     const mappedIndexes = new Set(Object.values(mapping));
     const unmapped = headerRow.filter((h, i) => !mappedIndexes.has(i));
     document.getElementById('import-preview-zone').innerHTML = `
-      ${unmapped.length ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')} — ces colonnes seront ignorées.</p>` : ''}
+      ${unmapped.length ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Colonnes non reconnues dans le fichier : ${unmapped.map(f => escapeHtml(f)).join(', ')}. Ces colonnes seront ignorées.</p>` : ''}
       <p><span class="badge badge-success">${okCount} à créer</span> <span class="badge badge-warning">${dupCount} doublon${dupCount > 1 ? 's' : ''} ignoré${dupCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
@@ -7000,7 +7014,7 @@ function openSupportTicketModal() {
       pieceJointe: state.pendingAttachment
     });
     closeModal();
-    showToast('Ticket envoyé — vous pouvez suivre sa réponse dans « Mes tickets ».');
+    showToast('Ticket envoyé. Vous pouvez suivre sa réponse dans « Mes tickets ».');
     if (state.view === 'mes-tickets') render();
   });
 }
@@ -7089,7 +7103,10 @@ function renderTicketHistoryTimeline(historique) {
 
 /** Suggestion IA (§sprint analyse automatique) — encart visuellement distinct, jamais confondu avec
  * les données saisies par le salarié : ne modifie jamais categorie/priorite tout seul. Le bouton
- * "Appliquer" (BERTOLIS uniquement, showApplyButton) reste une action manuelle explicite. */
+ * "Appliquer" (BERTOLIS uniquement, showApplyButton) reste une action manuelle explicite.
+ * §correctif audit du 23/08/2026 (§6.8) : le brouillon de réponse (reponseSuggeree) suit le même
+ * principe — "Préremplir la réponse" ne fait que copier le texte dans le champ de réponse existant,
+ * jamais un envoi direct : BERTOLIS relit/modifie avant de cliquer sur "Envoyer" comme d'habitude. */
 function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
   if (!aiAnalysis) return '';
   return `
@@ -7099,6 +7116,11 @@ function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
       ${aiAnalysis.resume ? `<p style="margin:6px 0;">${escapeHtml(aiAnalysis.resume)}</p>` : ''}
       ${Array.isArray(aiAnalysis.pointsCles) && aiAnalysis.pointsCles.length ? `<ul style="margin:6px 0;">${aiAnalysis.pointsCles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
       ${showApplyButton ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ticket-apply-ai">Appliquer la suggestion</button>` : ''}
+      ${showApplyButton && aiAnalysis.reponseSuggeree ? `
+        <p style="margin:10px 0 4px;"><strong>Brouillon de réponse :</strong></p>
+        <p class="text-muted" style="white-space:pre-wrap;">${escapeHtml(aiAnalysis.reponseSuggeree)}</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-ticket-prefill-ai-reply">Préremplir la réponse</button>
+      ` : ''}
     </div>
   `;
 }
@@ -7165,6 +7187,7 @@ function renderTicketDetail(id) {
       <div id="ticket-thread" class="ticket-thread">
         ${comments.length === 0 ? '<p class="text-muted">Aucune réponse pour le moment.</p>' : comments.map(c => renderTicketComment(c)).join('')}
       </div>
+      ${ticket.statut === 'ferme' ? '<p class="text-muted">Ce ticket est fermé. Envoyer un message ci-dessous le rouvre automatiquement.</p>' : ''}
       <form id="ticket-comment-form" class="ticket-comment-form">
         <textarea class="input" id="f-ticket-comment" rows="2" placeholder="Répondre..." required></textarea>
         <button type="submit" class="btn btn-primary">Envoyer</button>
@@ -7532,7 +7555,7 @@ function openProposeIdeeModal() {
     const user = authRepository.getCurrentUser();
     ideeRepository.create({ employeeId: user.id, titre, description: document.getElementById('f-idee-description').value.trim() });
     closeModal();
-    showToast('Idée proposée — merci !');
+    showToast('Idée proposée, merci !');
     if (state.view === 'idees') render();
   });
 }
@@ -8886,7 +8909,7 @@ function openCertificatTravailModal(id) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de fin de contrat renseignée sur cette fiche — ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
+        ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de fin de contrat renseignée sur cette fiche : ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
         <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
           <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
@@ -9343,7 +9366,7 @@ function buildRequestTimeline(request) {
     ...(request.historique || []).map(h => ({ date: h.date, label: h.action })),
     ...(request.regularisations || []).map(r => ({
       date: r.date,
-      label: `Rectifiée : ${r.ancienType} du ${formatDate(r.ancienneDateDebut)}${r.ancienneDateDebut !== r.ancienneDateFin ? ' au ' + formatDate(r.ancienneDateFin) : ''}${r.motif ? ' — ' + r.motif : ''}`
+      label: `Rectifiée : ${r.ancienType} du ${formatDate(r.ancienneDateDebut)}${r.ancienneDateDebut !== r.ancienneDateFin ? ' au ' + formatDate(r.ancienneDateFin) : ''}${r.motif ? ' : ' + r.motif : ''}`
     }))
   ];
   return entries.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -9745,7 +9768,7 @@ function handleRefuseRequest(id) {
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
     onConfirm: (motif) => {
       leaveRepository.update(id, refuseRequest(request, motif));
-      auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} : ${motif}`);
       const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
       notifyRequesterEmail(request.employeeId, 'refusee', type ? type.nom : 'Congé', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
@@ -10058,7 +10081,7 @@ function handleAttachmentChange(e) {
   const file = e.target.files[0];
   if (!file) { state.pendingAttachment = null; state.pendingAttachmentFile = null; return; }
   if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    showToast(`Fichier trop volumineux (${formatNumberFR(file.size / (1024 * 1024), 1)} Mo) — 2 Mo maximum.`, 'error');
+    showToast(`Fichier trop volumineux (${formatNumberFR(file.size / (1024 * 1024), 1)} Mo) : 2 Mo maximum.`, 'error');
     e.target.value = '';
     state.pendingAttachment = null;
     state.pendingAttachmentFile = null;
@@ -10320,7 +10343,7 @@ function submitLeaveRequestForm(evt) {
   // demande) ; RH/Direction devra intervenir manuellement, mieux vaut le dire tout de suite plutôt
   // que de laisser une demande dormir sans personne pour la remarquer.
   if (createdRequest.workflowEscalated) {
-    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande : un RH ou un membre de la Direction devra la valider manuellement.', 'error');
   }
   closeModal();
   // Ouverte depuis un clic sur le calendrier (§sprint calendrier interactif) : on y retourne au lieu
@@ -11622,7 +11645,7 @@ function openQuotaSimultaneModal(existing) {
     const scopeValue = scopeValueSelect.value;
     const maxSimultane = Number(document.getElementById('f-quota-max').value);
     if (!scopeValue) {
-      showToast(`Aucun${scope === 'equipe' ? 'e équipe' : ' service'} disponible — renseignez-en un(e) d'abord.`, 'error');
+      showToast(`Aucun${scope === 'equipe' ? 'e équipe' : ' service'} disponible : renseignez-en un(e) d'abord.`, 'error');
       return;
     }
     if (!Number.isFinite(maxSimultane) || maxSimultane < 0) {
@@ -11960,7 +11983,7 @@ function renderAbonnementLegacyActif(abo, statutBadge) {
     </div>
     <div class="card">
       <h2>Passer à la formule à la carte</h2>
-      <p class="text-muted">Nexus RH propose désormais une tarification à la carte, module par module. Pour basculer votre abonnement existant sans double facturation, contactez-nous — nous nous occupons du changement.</p>
+      <p class="text-muted">Nexus RH propose désormais une tarification à la carte, module par module. Pour basculer votre abonnement existant sans double facturation, contactez-nous : nous nous occupons du changement.</p>
     </div>
   `;
 }
@@ -11972,9 +11995,9 @@ function renderAbonnementAlaCarteComposer(nbSalaries, options) {
     <div class="card">
       <h2>${editing ? 'Modifier mes modules' : 'Composez votre abonnement'}</h2>
       <p class="text-muted">${editing
-        ? 'Ajoutez, retirez un module ou changez de périodicité — le changement s\'applique immédiatement, avec un prorata sur la facture en cours.'
-        : 'Choisissez uniquement les modules dont vous avez besoin — le prix s\'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.'}</p>
-      <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} — la quantité facturée par module suit automatiquement votre effectif réel (sauf Notes de frais, voir ci-dessous).</p>
+        ? 'Ajoutez, retirez un module ou changez de périodicité : le changement s\'applique immédiatement, avec un prorata sur la facture en cours.'
+        : 'Choisissez uniquement les modules dont vous avez besoin, le prix s\'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.'}</p>
+      <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} : la quantité facturée par module suit automatiquement votre effectif réel (sauf Notes de frais, voir ci-dessous).</p>
       <div class="tabs" style="margin: 12px 0;">
         <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
         <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-abonnement-periodicite="annuel">Annuel (2 mois offerts)</button>
@@ -12001,7 +12024,7 @@ function renderAbonnementAlaCarteComposer(nbSalaries, options) {
           <span class="alacarte-total-label">${periodicite === 'annuel' ? 'Coût annuel estimé' : 'Coût mensuel estimé'}</span>
           <strong id="abo-alacarte-total">—</strong>
           <p class="alacarte-discount-note" id="abo-alacarte-discount-note"></p>
-          <p class="landing-simulator-note">${editing ? 'Estimation — le montant exact (prorata) est confirmé par Stripe.' : 'Estimation — le montant exact est confirmé par Stripe avant tout paiement.'}</p>
+          <p class="landing-simulator-note">${editing ? 'Estimation : le montant exact (prorata) est confirmé par Stripe.' : 'Estimation : le montant exact est confirmé par Stripe avant tout paiement.'}</p>
           <button type="button" class="btn btn-primary" style="width: 100%; margin-top: 8px;" id="${editing ? 'btn-enregistrer-modules-alacarte' : 'btn-souscrire-alacarte'}">${editing ? 'Enregistrer les modifications' : 'Souscrire'}</button>
           ${editing ? `<button type="button" class="btn btn-secondary" style="width: 100%; margin-top: 8px;" id="btn-annuler-modification-modules">Annuler</button>` : ''}
         </div>
@@ -12155,7 +12178,7 @@ function bindParametresAbonnementEvents() {
       }
     });
     if (!modules.length) {
-      showToast('Sélectionnez au moins un module — pour tout annuler, utilisez "Gérer mon abonnement".', 'error');
+      showToast('Sélectionnez au moins un module. Pour tout annuler, utilisez "Gérer mon abonnement".', 'error');
       return;
     }
     enregistrerModulesBtn.disabled = true;
@@ -14279,7 +14302,7 @@ function handleRefuseTelework(id) {
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
       teleworkRepository.update(id, refuseRequest(request, motif));
-      auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} : ${motif}`);
       notifyRequesterEmail(request.employeeId, 'refusee', 'Télétravail', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
       render();
@@ -14554,7 +14577,7 @@ function submitTeleworkRequestForm(evt) {
   showToast('Demande de télétravail envoyée.');
   // §correctif audit du 23/08/2026 (2.3), même mécanisme que openLeaveRequestModal.
   if (createdRequest.workflowEscalated) {
-    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande : un RH ou un membre de la Direction devra la valider manuellement.', 'error');
   }
   closeModal();
   // Ouverte depuis un clic sur le calendrier : on y retourne (même logique que openLeaveRequestModal).
@@ -14863,7 +14886,7 @@ function handleRefuseExpense(id) {
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
       expenseRepository.update(id, refuseRequest(expense, motif));
-      auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} — ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} : ${motif}`);
       notifyRequesterEmail(expense.employeeId, 'refusee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date), motif);
       showToast('Note de frais refusée.');
       render();
@@ -15053,7 +15076,7 @@ function submitExpenseForm(evt) {
   showToast('Note de frais envoyée.');
   // §correctif audit du 23/08/2026 (2.3), même mécanisme que openLeaveRequestModal.
   if (createdExpense.workflowEscalated) {
-    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande : un RH ou un membre de la Direction devra la valider manuellement.', 'error');
   }
   closeModal();
   navigateTo('frais');
@@ -16292,7 +16315,7 @@ function bindEmbaucheEvents() {
       await navigator.clipboard.writeText(link);
       showToast('Lien copié.');
     } catch {
-      showToast('Impossible de partager automatiquement — copiez le lien manuellement.', 'error');
+      showToast('Impossible de partager automatiquement, copiez le lien manuellement.', 'error');
     }
   });
   bindPostesOuvertsEvents();
@@ -16702,7 +16725,7 @@ function submitEmployeeForm(evt, id, candidatureId) {
   const emailTaken = employeeRepository.getAll().some(e =>
     e.id !== id && (e.email || '').toLowerCase().trim() === (patch.email || '').toLowerCase().trim());
   if (emailTaken) {
-    showToast('Cet email est déjà utilisé par un autre salarié — la connexion serait ambiguë.', 'error');
+    showToast('Cet email est déjà utilisé par un autre salarié : la connexion serait ambiguë.', 'error');
     return;
   }
 

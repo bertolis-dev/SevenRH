@@ -2412,7 +2412,7 @@ const DB = {
     const switchResult = await window.SupabaseSync.switchToSession(target.session);
     if (!switchResult.success) {
       this.removeSavedAccount(accountId);
-      return { success: false, error: 'Cette session a expiré — reconnectez ce compte avec son mot de passe.' };
+      return { success: false, error: 'Cette session a expiré. Reconnectez ce compte avec son mot de passe.' };
     }
     const company = await window.SupabaseSync.hydrateCurrentCompany();
     if (!company) {
@@ -2558,7 +2558,7 @@ const DB = {
       this.logAudit('Création', 'Types de congé', `${leaveTypes.length} types créés (jeu par défaut)`);
       this.saveSchoolHolidays(seedSchoolHolidays());
     }
-    this.logAudit('Création', 'Entreprise', `${employee.prenom} ${employee.nom} — ${company.raisonSociale || ''}`);
+    this.logAudit('Création', 'Entreprise', `${employee.prenom} ${employee.nom} · ${company.raisonSociale || ''}`);
     return { success: true, employee };
   },
 
@@ -4156,7 +4156,7 @@ function seedLeaveTypes() {
       // Créé mais INACTIF par défaut : aucune règle légale unique n'existe pour les RTT (contrairement
       // aux congés payés) — à activer et ajuster une fois la convention/l'accord d'entreprise connu.
       type.actif = false;
-      type.description = 'Inactif par défaut : pas de règle légale unique. Ordres de grandeur usuels : environ 23 jours/an pour un forfait 39h hebdo, 10 à 12 jours/an pour un forfait 218 jours. Concerne en général les salariés au forfait ou au-delà de 35h/semaine — à activer et ajuster une fois votre accord d\'entreprise confirmé.';
+      type.description = 'Inactif par défaut : pas de règle légale unique. Ordres de grandeur usuels : environ 23 jours/an pour un forfait 39h hebdo, 10 à 12 jours/an pour un forfait 218 jours. Concerne en général les salariés au forfait ou au-delà de 35h/semaine. À activer et ajuster une fois votre accord d\'entreprise confirmé.';
     }
     if (nom === 'Ancienneté') {
       // §7.18 : paliers dans CE seul type plutôt que 4 types distincts — barème standard communiqué
@@ -4176,7 +4176,7 @@ function seedLeaveTypes() {
       // aujourd'hui — l'ajouter serait un nouveau modèle de données, hors périmètre d'un simple jeu
       // de règles par défaut. Le cas échéant, un RH ajuste manuellement via DB.ajusterCompteurConge
       // (déjà existant) ; documenté ici plutôt que silencieusement absent.
-      type.description = '3 jours par an, non rémunéré (valeur supplétive légale). Porté à 5 jours si l\'enfant a moins d\'un an ou si le salarié a 3 enfants de moins de 16 ans — cette bonification n\'est pas automatisée (l\'application ne suit pas les enfants des salariés) : ajustez manuellement le compteur au cas par cas.';
+      type.description = '3 jours par an, non rémunéré (valeur supplétive légale). Porté à 5 jours si l\'enfant a moins d\'un an ou si le salarié a 3 enfants de moins de 16 ans. Cette bonification n\'est pas automatisée (l\'application ne suit pas les enfants des salariés) : ajustez manuellement le compteur au cas par cas.';
     }
     return type;
   });

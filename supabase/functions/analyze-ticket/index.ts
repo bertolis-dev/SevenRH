@@ -13,6 +13,12 @@
 // à part (data.aiAnalysis, via update_ticket_ai_analysis) et affichée distinctement côté app.js. Le
 // seul chemin pour l'appliquer aux vrais champs est un clic explicite côté BERTOLIS (action
 // applyAiSuggestion de bertolis-tickets/index.ts).
+//
+// §correctif audit du 23/08/2026 (§6.8) : ajoute un brouillon de réponse (reponseSuggeree) à la
+// même analyse — même principe que categorieSuggeree/prioriteSuggeree : un texte prêt à relire,
+// jamais envoyé seul. Côté app.js, un clic BERTOLIS le prérempli dans le champ de réponse (jamais
+// un envoi automatique) avant l'action addComment de bertolis-tickets/index.ts, qui reste, elle,
+// la seule à réellement notifier le salarié.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -88,7 +94,7 @@ Deno.serve(async (req) => {
         max_tokens: 512,
         messages: [{
           role: "user",
-          content: `Voici un ticket support envoyé par un salarié à l'éditeur d'un logiciel RH.\n\nTitre : ${ticket.titre}\nDescription : ${ticket.description || "(aucune description)"}\nCatégorie choisie par le salarié : ${ticket.categorie || "(non précisée)"}\nPriorité choisie par le salarié : ${ticket.priorite}\n\nAnalyse ce ticket pour aider le support à le trier.`,
+          content: `Voici un ticket support envoyé par un salarié à l'éditeur d'un logiciel RH.\n\nTitre : ${ticket.titre}\nDescription : ${ticket.description || "(aucune description)"}\nCatégorie choisie par le salarié : ${ticket.categorie || "(non précisée)"}\nPriorité choisie par le salarié : ${ticket.priorite}\n\nAnalyse ce ticket pour aider le support à le trier, et rédige un brouillon de réponse.`,
         }],
         tools: [{
           name: "analyser_ticket",
@@ -100,8 +106,9 @@ Deno.serve(async (req) => {
               prioriteSuggeree: { type: "string", enum: PRIORITES, description: "Niveau de priorité suggéré au vu du contenu." },
               resume: { type: "string", description: "Résumé court (1-2 phrases) de la demande, en français." },
               pointsCles: { type: "array", items: { type: "string" }, description: "2 à 4 informations importantes extraites du ticket (identifiants, étapes de reproduction, urgence...)." },
+              reponseSuggeree: { type: "string", description: "Brouillon de réponse au salarié, en français, ton simple et direct (pas commercial). Si la demande manque d'informations pour répondre utilement (bug non reproductible, contexte insuffisant), le brouillon doit se limiter à demander les précisions nécessaires plutôt qu'inventer une solution." },
             },
-            required: ["categorieSuggeree", "prioriteSuggeree", "resume"],
+            required: ["categorieSuggeree", "prioriteSuggeree", "resume", "reponseSuggeree"],
           },
         }],
         tool_choice: { type: "tool", name: "analyser_ticket" },
@@ -126,6 +133,7 @@ Deno.serve(async (req) => {
       prioriteSuggeree: toolUse.input.prioriteSuggeree,
       resume: toolUse.input.resume,
       pointsCles: Array.isArray(toolUse.input.pointsCles) ? toolUse.input.pointsCles : [],
+      reponseSuggeree: typeof toolUse.input.reponseSuggeree === "string" ? toolUse.input.reponseSuggeree : "",
       genereLe: new Date().toISOString(),
     };
 
