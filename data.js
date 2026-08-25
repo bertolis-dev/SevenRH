@@ -3306,7 +3306,11 @@ function makeEmptyLeaveRequest() {
     typeId: null,
     dateDebut: '',
     dateFin: '',
-    demiJournee: null, // null | 'matin' | 'apres-midi'
+    demiJournee: null, // null | 'matin' | 'apres-midi' — seulement si dateDebut === dateFin
+    // §correctif audit du 23/08/2026 (§7.12) : demi-journée sur une période de plusieurs jours
+    // (voir computeWorkingDays) — jamais renseignés en même temps que demiJournee ci-dessus.
+    demiJourneeDebut: null, // null | 'apres-midi'
+    demiJourneeFin: null, // null | 'matin'
     nbJours: 0,
     commentaire: '',
     justificatif: null, // { nom, dataUrl } | null
@@ -3628,8 +3632,14 @@ function cancelRequest(request) {
  * OUVRABLES (tous les jours sauf le dimanche, une notion calendaire), alors que la plupart des
  * conventions comptent en jours OUVRÉS (le rythme RÉEL du salarié, employee.joursTravailles). Seul
  * un congé (leaveType.uniteDecompte) peut valoir 'ouvrables' — télétravail/notes de frais restent
- * toujours en jours ouvrés, cette distinction n'a de sens légal que pour les congés. */
-function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings, unite = 'ouvres') {
+ * toujours en jours ouvrés, cette distinction n'a de sens légal que pour les congés.
+ *
+ * §correctif audit du 23/08/2026 (§7.12) : `demiJourneeDebut`('apres-midi'|falsy) et
+ * `demiJourneeFin` ('matin'|falsy) — permettent une demi-journée sur une période de PLUSIEURS
+ * jours (ex. vendredi après-midi au mercredi matin), là où `demiJournee` seul n'agit que si
+ * dateDebut === dateFin. Ignorés si la période est mono-jour (demiJournee ci-dessus s'applique
+ * alors seul) — les deux mécanismes ne se cumulent jamais sur le même jour. */
+function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings, unite = 'ouvres', demiJourneeDebut, demiJourneeFin) {
   if (!dateDebut || !dateFin) return 0;
   const start = parseISODateLocal(dateDebut);
   const end = parseISODateLocal(dateFin);
@@ -3651,8 +3661,16 @@ function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings,
 
   if (demiJournee && start.getTime() === end.getTime() && count === 1) {
     count = 0.5;
+  } else if (start.getTime() !== end.getTime()) {
+    // Ne retranche que si ce jour précis a effectivement été compté ci-dessus (jour travaillé, ni
+    // férié ni fermeture) — sinon une demi-journée demandée un jour déjà non compté retrancherait
+    // 0,5 en trop.
+    const startCounted = workedDays.includes(dayLabels[start.getDay()]) && isJourTravaillePourSalarie(dateDebut, employee, settings);
+    const endCounted = workedDays.includes(dayLabels[end.getDay()]) && isJourTravaillePourSalarie(dateFin, employee, settings);
+    if (demiJourneeDebut === 'apres-midi' && startCounted) count -= 0.5;
+    if (demiJourneeFin === 'matin' && endCounted) count -= 0.5;
   }
-  return count;
+  return Math.max(0, count);
 }
 
 /**

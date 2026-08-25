@@ -4106,6 +4106,45 @@ function getVisibleNotificationsForCurrentUser() {
 }
 
 /** Détecte les événements notifiables actuels et crée les notifications manquantes (idempotent). */
+// §correctif audit du 23/08/2026 (§7.13) : "rien ne relance une demande qui dort. Une relance au
+// bout de quelques jours, puis une remontée au niveau supérieur." Sans cron côté serveur, ce
+// contrôle se fait ici : à chaque syncNotifications() (donc à chaque connexion d'un salarié, pas
+// seulement RH/Propriétaire — n'importe quelle session ouverte suffit à détecter une demande qui
+// dort). "Remontée" = notifier EN PLUS RH/Propriétaire (qui peuvent déjà agir sur n'importe quelle
+// étape, voir hasEligibleValidatorForStep) sans jamais muter la demande elle-même — on ne veut
+// pas faire disparaître silencieusement l'étape réellement due au validateur d'origine.
+const RELANCE_APRES_JOURS = 4;
+const ESCALADE_APRES_JOURS = 8;
+
+function pushRelanceNotificationsForRequest(candidates, request, domain, nav, navParams, typeLabel) {
+  const historique = request.historique || [];
+  const derniereAction = historique.length ? historique[historique.length - 1].date : request.dateCreation;
+  if (!derniereAction) return;
+  const joursEnAttente = Math.floor((new Date() - new Date(derniereAction)) / 86400000);
+  if (joursEnAttente < RELANCE_APRES_JOURS) return;
+
+  const employee = employeeRepository.getById(request.employeeId);
+  if (!employee) return;
+  const role = request.workflow[request.etapeIndex];
+  const periode = domain === 'frais' ? formatDate(request.date) : requestPeriodeLabel(request);
+  const validatorIds = resolveValidatorEmployeeIdsForStep(request.employeeId, role);
+
+  candidates.push(makeNotification(`relance-${request.id}`, ICONS.clock, 'Demande en attente depuis plusieurs jours',
+    `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
+  if (!notificationRepository.getNotifications().some(n => n.sourceKey === `relance-${request.id}`)) {
+    window.SupabaseSync.notifyRequestEmail(validatorIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+  }
+
+  if (joursEnAttente < ESCALADE_APRES_JOURS) return;
+  const bypassIds = employeeRepository.getAll().filter(e => !e.archive && e.id !== request.employeeId
+    && (hasPermission(e, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(e, PERMISSIONS.VALIDER_NOTE_FRAIS))).map(e => e.id);
+  candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente — remontée',
+    `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
+  if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && bypassIds.length) {
+    window.SupabaseSync.notifyRequestEmail(bypassIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+  }
+}
+
 function syncNotifications() {
   const candidates = [];
 
@@ -4117,15 +4156,19 @@ function syncNotifications() {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
+    const navParams = { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' };
     candidates.push(makeNotification(`leave-${r.id}`, ICONS.sun, 'Demande de congé en attente',
-      `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' }, employee.id));
+      `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', navParams, employee.id));
+    pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, type.nom);
   });
 
   if (hasModule('planning')) teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
+    const navParams = { absencesHubTab: 'teletravail', teletravailTab: 'demandes' };
     candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
-      `${employee.prenom} ${employee.nom}`, 'absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }, employee.id));
+      `${employee.prenom} ${employee.nom}`, 'absences', navParams, employee.id));
+    pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, 'Télétravail');
   });
 
   if (hasModule('frais')) expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
@@ -4133,7 +4176,35 @@ function syncNotifications() {
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
+    pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', {}, n.libelle || n.categorie || 'Note de frais');
   });
+
+  // §correctif audit du 23/08/2026 (§7.10) : "avec une clôture au 31 mai et un report nul, les
+  // jours non pris sont perdus. Un rappel deux mois avant, au salarié et à son manager." — une
+  // seule notification par (salarié, type), employeeId suffit à la rendre visible aux deux (le
+  // manager voit déjà les notifications de son équipe, voir getVisibleNotificationsForCurrentUser).
+  // Solde PROJETÉ à la date de clôture elle-même (même mécanisme que §7.11), pas le solde du jour
+  // — sinon on sous-estimerait ce qui sera réellement perdu (l'acquisition continue jusque-là).
+  if (hasModule('conges')) {
+    const today = new Date();
+    const allRequests = leaveRepository.getAll();
+    leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.dateClotureCompteur).forEach(type => {
+      const current = getCompteurPeriodBounds(type.dateClotureCompteur, today);
+      const joursAvantCloture = Math.round((current.periodEnd - today) / 86400000);
+      if (joursAvantCloture < 0 || joursAvantCloture > 60) return;
+      employeeRepository.getAll().filter(e => !e.archive).forEach(employee => {
+        const balanceAtCloture = getLeaveBalance(employee, type, allRequests, null, toISODate(current.periodEnd));
+        if (balanceAtCloture.disponible === Infinity || balanceAtCloture.disponible <= 0) return;
+        let perdu = 0;
+        if (type.reportCompteur === 'aucun') perdu = balanceAtCloture.disponible;
+        else if (type.reportCompteur === 'limite') perdu = Math.max(0, round2(balanceAtCloture.disponible - (Number(type.reportLimiteJours) || 0)));
+        if (perdu <= 0) return;
+        candidates.push(makeNotification(`cloture-perte-${type.id}-${employee.id}-${toISODate(current.periodEnd)}`, ICONS.warningTriangle, 'Congés à perdre avant la clôture',
+          `${employee.prenom} ${employee.nom} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`,
+          'absences', { absencesHubTab: 'conges' }, employee.id));
+      });
+    });
+  }
 
   // Sans ce bloc, le salarié qui a envoyé un ticket n'était jamais prévenu de sa résolution — il
   // devait aller vérifier manuellement dans "Mes tickets". dateModification (pas juste l'id+statut)
@@ -9105,7 +9176,9 @@ function renderLeaveRequestRow(r, selection) {
 
   const periode = r.dateDebut === r.dateFin
     ? formatDate(r.dateDebut) + (r.demiJournee ? ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : '')
-    : `${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}`;
+    // §7.12 : précise la demi-journée de début/fin quand elle s'applique, plutôt que de laisser
+    // deviner à partir du seul nombre de jours (souvent non entier, ex. 4,5).
+    : `${formatDate(r.dateDebut)}${r.demiJourneeDebut === 'apres-midi' ? ' après-midi' : ''} → ${formatDate(r.dateFin)}${r.demiJourneeFin === 'matin' ? ' matin' : ''}`;
   const selectable = selection && r.statut === 'En attente' && canActOnRequestFor(r);
 
   return `
@@ -9897,6 +9970,27 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
               <option value="apres-midi" ${champs.demiJournee === 'apres-midi' ? 'selected' : ''}>Après-midi</option>
             </select>
           </div>
+          <!-- §correctif audit du 23/08/2026 (§7.12) : computeWorkingDays n'acceptait une demi-
+               journée que si dateDebut === dateFin — impossible de poser du vendredi après-midi au
+               mercredi matin sans découper en trois demandes. Deux champs distincts (début/fin),
+               visibles seulement sur une période de PLUSIEURS jours (le champ ci-dessus couvre déjà
+               le cas mono-jour). -->
+          <div class="form-grid" id="field-demi-journee-multi" style="margin-top:14px; display:none;">
+            <div class="form-field">
+              <label for="f-demiJourneeDebut">Premier jour</label>
+              <select class="input" id="f-demiJourneeDebut" name="demiJourneeDebut">
+                <option value="" ${!champs.demiJourneeDebut ? 'selected' : ''}>Journée complète</option>
+                <option value="apres-midi" ${champs.demiJourneeDebut === 'apres-midi' ? 'selected' : ''}>Après-midi seulement</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-demiJourneeFin">Dernier jour</label>
+              <select class="input" id="f-demiJourneeFin" name="demiJourneeFin">
+                <option value="" ${!champs.demiJourneeFin ? 'selected' : ''}>Journée complète</option>
+                <option value="matin" ${champs.demiJourneeFin === 'matin' ? 'selected' : ''}>Matin seulement</option>
+              </select>
+            </div>
+          </div>
           <div class="form-field" style="margin-top:14px;">
             <label for="f-commentaire">Commentaire</label>
             <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
@@ -9989,10 +10083,16 @@ function updateLeaveRequestHints() {
   const dateDebut = document.getElementById('f-dateDebut').value;
   const dateFin = document.getElementById('f-dateFin').value;
   const demiField = document.getElementById('field-demi-journee');
+  const demiFieldMulti = document.getElementById('field-demi-journee-multi');
   const hint = document.getElementById('leave-balance-hint');
 
   const type = typeId ? leaveTypeRepository.getLeaveTypeById(typeId) : null;
-  demiField.style.display = type && type.autoriserDemiJournee && dateDebut && dateDebut === dateFin ? 'block' : 'none';
+  const monoJour = Boolean(dateDebut && dateDebut === dateFin);
+  const multiJours = Boolean(dateDebut && dateFin && dateDebut !== dateFin);
+  demiField.style.display = type && type.autoriserDemiJournee && monoJour ? 'block' : 'none';
+  // §7.12 : le champ mono-jour ci-dessus et les deux champs début/fin ci-dessous sont mutuellement
+  // exclusifs (une période ne peut pas être à la fois "un seul jour" et "plusieurs jours").
+  demiFieldMulti.style.display = type && type.autoriserDemiJournee && multiJours ? 'grid' : 'none';
 
   if (!type || !employeeId) { hint.textContent = ''; return; }
   const employee = employeeRepository.getById(employeeId);
@@ -10015,7 +10115,9 @@ function updateLeaveRequestHints() {
   let nbJoursLabel = '';
   if (dateDebut && dateFin) {
     const demiJournee = demiField.style.display === 'block' ? document.getElementById('f-demiJournee').value : '';
-    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte);
+    const demiJourneeDebut = demiFieldMulti.style.display === 'grid' ? document.getElementById('f-demiJourneeDebut').value : '';
+    const demiJourneeFin = demiFieldMulti.style.display === 'grid' ? document.getElementById('f-demiJourneeFin').value : '';
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte, demiJourneeDebut, demiJourneeFin);
     nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
@@ -10065,6 +10167,9 @@ function submitLeaveRequestForm(evt) {
   const dateDebut = formData.get('dateDebut');
   const dateFin = formData.get('dateFin');
   const demiJournee = document.getElementById('field-demi-journee').style.display === 'block' ? (formData.get('demiJournee') || null) : null;
+  const demiJourneeMultiActive = document.getElementById('field-demi-journee-multi').style.display === 'grid';
+  const demiJourneeDebut = demiJourneeMultiActive ? (formData.get('demiJourneeDebut') || null) : null;
+  const demiJourneeFin = demiJourneeMultiActive ? (formData.get('demiJourneeFin') || null) : null;
 
   if (!employeeId || !typeId) {
     showToast('Sélectionnez un salarié et un type de congé.', 'error');
@@ -10135,7 +10240,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte);
+  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte, demiJourneeDebut, demiJourneeFin);
 
   if (nbJours <= 0) {
     showToast('La période sélectionnée ne comporte aucun jour travaillé.', 'error');
@@ -10179,7 +10284,7 @@ function submitLeaveRequestForm(evt) {
   }
 
   const createdRequest = leaveRepository.create({
-    employeeId, typeId, dateDebut, dateFin, demiJournee, nbJours,
+    employeeId, typeId, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, nbJours,
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
   });
