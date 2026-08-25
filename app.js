@@ -3842,10 +3842,14 @@ const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Établissements', tab: 'etablissements', keywords: ['site', 'agence', 'adresse'] },
   { label: 'Services & équipes', tab: 'services', keywords: ['service', 'équipe', 'organisation'] },
   { label: "Types d'absences", tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés'] },
-  { label: 'Listes de référence', tab: 'listes', keywords: ['catégories de frais', 'postes'] },
+  { label: 'Référentiels', tab: 'listes', keywords: ['catégories de frais', 'postes', 'catégories de salariés', 'conventions collectives', 'listes de référence'] },
   { label: 'Vacances scolaires', tab: 'vacances', keywords: ['zone', 'scolaire'] },
   { label: 'Jours fériés', tab: 'feries', keywords: ['férié', 'jour chômé'] },
-  { label: "Journal d'audit", tab: 'audit', keywords: ['audit', 'historique', 'log'], permission: PERMISSIONS.VOIR_JOURNAL_AUDIT }
+  // §correctif audit du 23/08/2026 (§6.4) : Qualité des données + Journal d'audit fusionnés en un
+  // seul onglet "Audit" (2 sous-onglets, voir renderParametresAuditHub) — pas de `permission` ici,
+  // "Contrôle des dossiers" reste ouvert sans VOIR_JOURNAL_AUDIT ; le hub gère lui-même l'accès au
+  // sous-onglet "Journal des actions".
+  { label: 'Audit', tab: 'audit', keywords: ['audit', 'historique', 'log', 'qualité des données', 'journal d\'audit', 'contrôle des dossiers'] }
 ];
 
 function performGlobalSearch(term) {
@@ -4907,6 +4911,15 @@ function renderDashboardActionCenter(employees, employeeIds) {
     if (contractEnds.length) items.push({ icon: ICONS.document, label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
   }
 
+  // §correctif audit du 23/08/2026 (§6.6) : "Comptes salariés" n'est plus un onglet Paramètres
+  // séparé — la gestion se fait déjà depuis la fiche du salarié (carte "Compte",
+  // openCreerCompteConnexionModal). Ce repère remplace l'ancien onglet pour ne pas perdre la vue
+  // d'ensemble "qui n'a pas encore de compte" — même rôle-gate (GERER_UTILISATEURS) que l'ancien onglet.
+  if (hasPermission(user, PERMISSIONS.GERER_UTILISATEURS)) {
+    const sansCompte = (employeeIds ? employees.filter(e => employeeIds.includes(e.id)) : employees).filter(e => !e.authUserId);
+    if (sansCompte.length) items.push({ icon: ICONS.personPlus, label: `${sansCompte.length} salarié${sansCompte.length > 1 ? 's' : ''} sans compte de connexion`, nav: 'employees', navParams: {} });
+  }
+
   if (hasModule('frais')) {
     const fraisEnAttente = pendingFor(expenseRepository);
     if (fraisEnAttente.length) items.push({ icon: ICONS.receipt, label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
@@ -5319,8 +5332,13 @@ function getDataQualityIssues() {
   const sansNaissance = employees.filter(e => !e.dateNaissance);
   if (sansNaissance.length) issues.push({ severity: 'info', label: 'Sans date de naissance', employees: sansNaissance });
 
-  const sansNumSecu = employees.filter(e => !e.numeroSecu);
-  if (sansNumSecu.length) issues.push({ severity: 'info', label: 'Sans numéro de sécurité sociale', employees: sansNumSecu });
+  // §correctif audit du 23/08/2026 (§6.4) : "le numéro de sécurité sociale n'a pas à être signalé
+  // comme manquant chez un client qui n'a que le module Congés" — pertinent seulement pour la
+  // paie/le module RH, jamais pour une offre à la carte qui ne l'a pas souscrit.
+  if (hasModule('rh')) {
+    const sansNumSecu = employees.filter(e => !e.numeroSecu);
+    if (sansNumSecu.length) issues.push({ severity: 'info', label: 'Sans numéro de sécurité sociale', employees: sansNumSecu });
+  }
 
   return issues;
 }
@@ -7668,7 +7686,7 @@ function bindChecklistEvents(employeeId) {
   const startOffboardingBtn = document.getElementById('btn-demarrer-offboarding');
   if (startOffboardingBtn) startOffboardingBtn.addEventListener('click', () => {
     const template = settingsRepository.getSettings().offboardingChecklistTemplate || [];
-    if (!template.length) { showToast('Ajoutez d\'abord des étapes dans Paramètres → Listes de référence.', 'error'); return; }
+    if (!template.length) { showToast('Ajoutez d\'abord des étapes dans Paramètres → Référentiels.', 'error'); return; }
     employeeRepository.update(employeeId, { offboardingChecklist: template.map(label => ({ label, fait: false, dateFait: '' })) });
     showToast('Checklist de départ démarrée.');
     render();
@@ -11349,13 +11367,15 @@ function openCalendarDayModal(dateStr) {
 // Vue : Paramètres (listes de référence, vacances scolaires, jours fériés)
 // ---------------------------------------------------------------------------
 
-const SETTINGS_LISTS = [
+// §correctif audit du 23/08/2026 (§6.3) : categoriesFrais retirée d'ici — rendue séparément, sous
+// son propre thème "module frais" dans renderParametresListes, pas dans le bloc "rh" toujours
+// affiché. Renommée _RH (pas juste SETTINGS_LISTS) pour rendre ce périmètre explicite.
+const SETTINGS_LISTS_RH = [
   { key: 'postes', label: 'Postes' },
   { key: 'conventionsCollectives', label: 'Conventions collectives' },
   { key: 'statutsPro', label: 'Statuts professionnels' },
   { key: 'typesContrat', label: 'Types de contrat' },
   { key: 'forfaits', label: 'Forfaits' },
-  { key: 'categoriesFrais', label: 'Catégories de notes de frais' },
   { key: 'categoriesDocuments', label: 'Catégories de documents' },
   // Modèles de checklist (demande du 18/08/2026) : l'ordre d'ajout fait l'ordre d'affichage sur la
   // fiche salarié (renderChecklistCard) — pas de ré-ordonnancement, une liste courte suffit à
@@ -11378,16 +11398,24 @@ const SETTINGS_LIST_USAGE_CHECK = {
 };
 
 function renderParametres() {
-  const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
   const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
-  const canGererUtilisateurs = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS);
-  if (state.parametresTab === 'audit' && !canSeeAudit) state.parametresTab = 'listes';
   if (state.parametresTab === 'abonnement' && !canGererAbonnement) state.parametresTab = 'listes';
-  if (state.parametresTab === 'comptes' && !canGererUtilisateurs) state.parametresTab = 'listes';
+  // §correctif audit du 23/08/2026 (§6.3) : l'onglet "Catégories de salariés" est retiré, replié
+  // dans "Référentiels" (state.parametresTab reste 'listes' en interne, seul le libellé change) —
+  // un lien profond vers l'ancien onglet retombe donc sur Référentiels plutôt qu'un écran vide.
+  if (state.parametresTab === 'categories-salarie') state.parametresTab = 'listes';
+  // §correctif audit du 23/08/2026 (§6.4) : "Qualité des données" et "Journal d'audit" fusionnent
+  // en un seul onglet "audit" (sous-onglets internes, voir renderParametresAuditHub) — un lien
+  // profond vers l'ancien onglet "qualite" retombe sur "audit", sous-onglet Contrôle des dossiers.
+  if (state.parametresTab === 'qualite') { state.parametresTab = 'audit'; state.parametresAuditSousTab = 'controle'; }
+  // §correctif audit du 23/08/2026 (§6.6) : "Comptes salariés" n'est plus un onglet séparé — la
+  // gestion se fait depuis la fiche du salarié (carte "Compte"), avec un repère dans le Centre
+  // d'action du tableau de bord à la place (voir renderDashboardActionCenter).
+  if (state.parametresTab === 'comptes') state.parametresTab = 'listes';
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
-      <p class="view-subtitle">Entreprise, types d'absences, listes de référence, vacances scolaires, jours fériés et journal d'audit</p>
+      <p class="view-subtitle">Entreprise, types d'absences, référentiels, vacances scolaires, jours fériés et journal d'audit</p>
     </div>
     <div class="tabs parametres-tabs-desktop">
       <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
@@ -11395,15 +11423,12 @@ function renderParametres() {
       <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
       <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
       <button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>
-      <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Listes de référence</button>
+      <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Référentiels</button>
       <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
       <button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>
-      <button class="tab ${state.parametresTab === 'categories-salarie' ? 'active' : ''}" data-parametres-tab="categories-salarie">Catégories de salariés</button>
-      ${canGererUtilisateurs ? `<button class="tab ${state.parametresTab === 'comptes' ? 'active' : ''}" data-parametres-tab="comptes">Comptes salariés</button>` : ''}
-      <button class="tab ${state.parametresTab === 'qualite' ? 'active' : ''}" data-parametres-tab="qualite">Qualité des données</button>
       <button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>
-      ${canSeeAudit ? `<button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Journal d'audit</button>` : ''}
+      <button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Audit</button>
     </div>
     <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
          mobile ("un tas de bouton au même endroit") — un menu déroulant remplace la rangée
@@ -11414,15 +11439,12 @@ function renderParametres() {
       <option value="etablissements" ${state.parametresTab === 'etablissements' ? 'selected' : ''}>Établissements</option>
       <option value="services" ${state.parametresTab === 'services' ? 'selected' : ''}>Services &amp; équipes</option>
       <option value="types-absences" ${state.parametresTab === 'types-absences' ? 'selected' : ''}>Types d'absences</option>
-      <option value="listes" ${state.parametresTab === 'listes' ? 'selected' : ''}>Listes de référence</option>
+      <option value="listes" ${state.parametresTab === 'listes' ? 'selected' : ''}>Référentiels</option>
       <option value="vacances" ${state.parametresTab === 'vacances' ? 'selected' : ''}>Vacances scolaires</option>
       <option value="feries" ${state.parametresTab === 'feries' ? 'selected' : ''}>Jours fériés</option>
       <option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>
-      <option value="categories-salarie" ${state.parametresTab === 'categories-salarie' ? 'selected' : ''}>Catégories de salariés</option>
-      ${canGererUtilisateurs ? `<option value="comptes" ${state.parametresTab === 'comptes' ? 'selected' : ''}>Comptes salariés</option>` : ''}
-      <option value="qualite" ${state.parametresTab === 'qualite' ? 'selected' : ''}>Qualité des données</option>
       <option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>
-      ${canSeeAudit ? `<option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Journal d'audit</option>` : ''}
+      <option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Audit</option>
     </select>
     <div id="parametres-tab-content">
       ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
@@ -11433,11 +11455,8 @@ function renderParametres() {
         : state.parametresTab === 'vacances' ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
         : state.parametresTab === 'fermetures' ? renderParametresFermetures()
-        : state.parametresTab === 'categories-salarie' ? renderParametresCategoriesSalarie()
-        : state.parametresTab === 'comptes' && canGererUtilisateurs ? renderParametresComptes()
-        : state.parametresTab === 'qualite' ? renderParametresQualite()
         : state.parametresTab === 'integrations' ? renderParametresIntegrations()
-        : state.parametresTab === 'audit' && canSeeAudit ? renderParametresAudit()
+        : state.parametresTab === 'audit' ? renderParametresAuditHub()
         : renderParametresListes()}
     </div>
   `;
@@ -11651,23 +11670,33 @@ function getQuotasForEmployee(employee, settings) {
 /** Contrairement aux autres onglets Paramètres (données déjà dans le cache local), le webhook Slack
  * n'est jamais rapatrié à l'hydratation (secret protégé par RLS, voir integrationsRepository) — un
  * état de chargement bref est donc assumé ici, unique onglet de cet écran à en avoir besoin. */
+// §correctif audit du 23/08/2026 (§6.9) : "Ajouter Microsoft Teams et Google Chat aux
+// intégrations. Même principe que le webhook Slack existant." — même carte/formulaire répétée
+// pour les 3 plateformes plutôt qu'une fonction par plateforme, un seul endroit à faire évoluer
+// si une 4ᵉ s'ajoute un jour.
+const CHAT_INTEGRATIONS = [
+  { key: 'slack', field: 'slackWebhookUrl', label: 'Slack', placeholder: 'https://hooks.slack.com/services/...', hint: 'Créez un webhook entrant depuis les paramètres de votre espace Slack (Apps → Incoming Webhooks), puis collez son URL ici. Laissez vide pour désactiver.' },
+  { key: 'teams', field: 'teamsWebhookUrl', label: 'Microsoft Teams', placeholder: 'https://.../workflows/...', hint: 'Dans le canal Teams visé : Workflows → "Recevoir un webhook quand un message est publié" → collez l\'URL générée ici. Laissez vide pour désactiver.' },
+  { key: 'googlechat', field: 'googleChatWebhookUrl', label: 'Google Chat', placeholder: 'https://chat.googleapis.com/v1/spaces/...', hint: 'Dans l\'espace Google Chat visé : icône de l\'espace → Applications et intégrations → Ajouter un webhook → collez l\'URL ici. Laissez vide pour désactiver.' }
+];
+
 function renderParametresIntegrations() {
   if (state.integrationsCache === undefined) return '<p class="text-muted">Chargement...</p>';
   if (state.integrationsCache === null) return '<p class="text-muted">Impossible de charger les intégrations pour le moment.</p>';
-  return `
+  return CHAT_INTEGRATIONS.map(integ => `
     <div class="card" style="max-width: 560px;">
-      <h3 style="margin-top:0;">Slack</h3>
-      <p class="text-muted">Reçoit une notification dans un canal Slack à chaque nouvelle demande de congé, de télétravail ou de note de frais nécessitant une validation.</p>
-      <form id="integrations-slack-form">
+      <h3 style="margin-top:0;">${escapeHtml(integ.label)}</h3>
+      <p class="text-muted">Reçoit une notification dans ${integ.label === 'Slack' ? 'un canal Slack' : integ.label === 'Microsoft Teams' ? 'un canal Teams' : 'un espace Google Chat'} à chaque nouvelle demande de congé, de télétravail ou de note de frais nécessitant une validation.</p>
+      <form class="integrations-webhook-form" data-integration-key="${integ.key}">
         <div class="form-field">
-          <label for="f-slack-webhook">URL du webhook entrant Slack</label>
-          <input class="input" type="url" id="f-slack-webhook" placeholder="https://hooks.slack.com/services/..." value="${escapeHtml(state.integrationsCache.slackWebhookUrl)}">
-          <p class="form-hint">Créez un webhook entrant depuis les paramètres de votre espace Slack (Apps → Incoming Webhooks), puis collez son URL ici. Laissez vide pour désactiver.</p>
+          <label for="f-webhook-${integ.key}">URL du webhook entrant</label>
+          <input class="input" type="url" id="f-webhook-${integ.key}" placeholder="${escapeHtml(integ.placeholder)}" value="${escapeHtml(state.integrationsCache[integ.field] || '')}">
+          <p class="form-hint">${integ.hint}</p>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top:12px;">Enregistrer</button>
       </form>
     </div>
-  `;
+  `).join('');
 }
 
 function bindParametresIntegrationsEvents() {
@@ -11677,23 +11706,24 @@ function bindParametresIntegrationsEvents() {
       .catch(() => { state.integrationsCache = null; render(); });
     return;
   }
-  const form = document.getElementById('integrations-slack-form');
-  if (form) {
+  document.querySelectorAll('.integrations-webhook-form').forEach(form => {
     form.addEventListener('submit', async (evt) => {
       evt.preventDefault();
-      const slackWebhookUrl = document.getElementById('f-slack-webhook').value.trim();
+      const integ = CHAT_INTEGRATIONS.find(i => i.key === form.dataset.integrationKey);
+      const value = document.getElementById(`f-webhook-${integ.key}`).value.trim();
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        await integrationsRepository.save({ slackWebhookUrl });
-        state.integrationsCache = { slackWebhookUrl };
+        const updated = { ...state.integrationsCache, [integ.field]: value };
+        await integrationsRepository.save(updated);
+        state.integrationsCache = updated;
         showToast('Intégrations enregistrées.');
       } catch (err) {
         showToast('Erreur lors de l\'enregistrement.', 'error');
       }
       submitBtn.disabled = false;
     });
-  }
+  });
 }
 
 function bindParametresEvents() {
@@ -11715,10 +11745,7 @@ function bindParametresEvents() {
   else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
   else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
   else if (state.parametresTab === 'fermetures') bindParametresFermeturesEvents();
-  else if (state.parametresTab === 'categories-salarie') bindParametresCategoriesSalarieEvents();
-  else if (state.parametresTab === 'comptes') bindParametresComptesEvents();
-  else if (state.parametresTab === 'qualite') bindParametresQualiteEvents();
-  else if (state.parametresTab === 'audit') bindParametresAuditEvents();
+  else if (state.parametresTab === 'audit') bindParametresAuditHubEvents();
   else bindParametresListesEvents();
 }
 
@@ -12524,18 +12551,25 @@ function openEquipeManagersModal(serviceId, equipeId) {
   });
 }
 
-// ---- Sous-vue : Listes de référence ----
+// ---- Sous-vue : Référentiels (renommée depuis "Listes de référence", §correctif audit du
+// 23/08/2026 §6.3) ----
 
+/** §6.3 : "un regroupement par thème, l'affichage des seuls blocs correspondant aux modules
+ * souscrits, et l'intégration des catégories de salariés dans ce même écran. L'onglet actuel
+ * mélange les réglages d'au moins cinq modules." Chaque thème ci-dessous ne s'affiche que si son
+ * module est souscrit (hasModule) — pour un abonnement classique (essai/essentiel/professionnel/
+ * premium), hasModule() renvoie toujours vrai, donc tout reste visible comme avant ; seule une
+ * offre à la carte voit vraiment ces blocs disparaître selon ce qui est souscrit. */
 function renderParametresListes() {
   const settings = settingsRepository.getSettings();
+  const categories = categorieSalarieRepository.getAll();
+  const anyWorkflowModule = hasModule('conges') || hasModule('planning') || hasModule('frais');
+
   return `
+    ${hasModule('rh') ? `
     <div class="card">
-      <h2>Règles générales</h2>
+      <h2>Salariés</h2>
       <div class="form-grid" style="max-width: 700px;">
-        <div class="form-field">
-          <label for="f-teletravail-quota">Quota de télétravail (jours / semaine)</label>
-          <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
-        </div>
         <div class="form-field">
           <label for="f-visite-medicale-periodicite">Périodicité des visites médicales (mois)</label>
           <input class="input" type="number" min="1" id="f-visite-medicale-periodicite" value="${escapeHtml(settings.visiteMedicalePerioditeMois)}">
@@ -12543,17 +12577,6 @@ function renderParametresListes() {
         <div class="form-field">
           <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
-        </div>
-        <div class="form-field">
-          <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
-          <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
-        </div>
-        <div class="form-field">
-          <label for="f-tickets-part">Part employeur (%)</label>
-          <input class="input" type="number" step="any" min="0" max="100" id="f-tickets-part" value="${escapeHtml(settings.ticketsPartEmployeurPct)}">
-        </div>
-        <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
-          <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
         </div>
       </div>
     </div>
@@ -12572,114 +12595,190 @@ function renderParametresListes() {
         </div>
       </div>
     </div>
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Catégories de salariés</h2>
+          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise — utilisable dans les règles de congés, jours fériés et fermetures.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
+      </div>
+      <table class="table">
+        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
+        <tbody>
+          ${categories.map(c => `
+            <tr>
+              <td>${escapeHtml(c.nom)}</td>
+              <td>${escapeHtml(c.description || '—')}</td>
+              <td>
+                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
+                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="settings-lists-grid">
+      ${SETTINGS_LISTS_RH.map(l => renderSettingsListCard(l, settings[l.key] || [],
+        l.key === 'conventionsCollectives' ? new Set(['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)]) : null)).join('')}
+    </div>
+    ` : ''}
+
+    ${hasModule('frais') ? `
+    <div class="settings-lists-grid">
+      ${renderSettingsListCard({ key: 'categoriesFrais', label: 'Catégories de notes de frais' }, settings.categoriesFrais || [])}
+    </div>
+    ` : ''}
+
+    ${hasModule('planning') ? `
+    <div class="card">
+      <h2>Télétravail</h2>
+      <div class="form-grid" style="max-width: 700px;">
+        <div class="form-field">
+          <label for="f-teletravail-quota">Quota de télétravail (jours / semaine)</label>
+          <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${hasModule('tickets') ? `
+    <div class="card">
+      <h2>Tickets restaurant</h2>
+      <div class="form-grid" style="max-width: 700px;">
+        <div class="form-field">
+          <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
+          <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
+        </div>
+        <div class="form-field">
+          <label for="f-tickets-part">Part employeur (%)</label>
+          <input class="input" type="number" step="any" min="0" max="100" id="f-tickets-part" value="${escapeHtml(settings.ticketsPartEmployeurPct)}">
+        </div>
+        <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
+          <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${anyWorkflowModule ? `
     <div class="card">
       <h2>Chaînes de validation</h2>
       <p class="text-muted">Modèle par défaut pour un nouveau type de congé (chaque type garde ensuite sa propre chaîne, modifiable dans Congés → Types), et chaîne appliquée au télétravail et aux notes de frais.</p>
       <div class="form-grid" style="max-width: 700px;">
-        ${workflowSelectField('workflow-conges-default', 'Congés (modèle par défaut)', WORKFLOW_PRESETS_CONGES, settings.workflowCongesDefault)}
-        ${workflowSelectField('workflow-teletravail', 'Télétravail', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail)}
-        ${workflowSelectField('workflow-frais', 'Notes de frais', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais)}
+        ${hasModule('conges') ? workflowSelectField('workflow-conges-default', 'Congés (modèle par défaut)', WORKFLOW_PRESETS_CONGES, settings.workflowCongesDefault) : ''}
+        ${hasModule('planning') ? workflowSelectField('workflow-teletravail', 'Télétravail', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail) : ''}
+        ${hasModule('frais') ? workflowSelectField('workflow-frais', 'Notes de frais', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais) : ''}
       </div>
     </div>
-    <div class="settings-lists-grid">
-      ${SETTINGS_LISTS.map(l => renderSettingsListCard(l, settings[l.key] || [])).join('')}
-    </div>
+    ` : ''}
   `;
 }
 
-function renderSettingsListCard(listDef, items) {
+/** §correctif audit du 23/08/2026 (§6.2) : "Elles [les conventions collectives] figurent à la
+ * fois dans Entreprise et dans les listes de référence. On garde l'entrée dans les listes
+ * uniquement pour ajouter une convention absente de la liste officielle." — les entrées ISSUES du
+ * catalogue officiel (IDCC_CONVENTIONS, data.js) ne sont plus retirables une par une via ce
+ * mécanisme générique (ni depuis un doigt trop rapide sur le bouton, ni depuis un doublon
+ * accidentel) : seules les entrées ajoutées À LA MAIN (une convention manquante de ce catalogue)
+ * restent supprimables. Sans effet sur les autres listes (readOnlyValues absent → comportement
+ * strictement inchangé). */
+function renderSettingsListCard(listDef, items, readOnlyValues) {
   return `
     <div class="card">
       <h2>${escapeHtml(listDef.label)}</h2>
+      ${readOnlyValues ? `<p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici — ajoutez seulement une convention qui en serait absente.</p>` : ''}
       <div class="chip-list">
-        ${items.map((item, i) => `
+        ${items.map((item, i) => {
+          const readOnly = readOnlyValues && readOnlyValues.has(item);
+          return `
           <span class="chip">
             ${escapeHtml(item)}
-            <button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
+            ${readOnly ? '' : `<button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>`}
           </span>
-        `).join('')}
+        `; }).join('')}
       </div>
       <form class="chip-add-form" data-list-key="${listDef.key}">
-        <input type="text" class="input" placeholder="Ajouter un élément..." required>
+        <input type="text" class="input" placeholder="${readOnlyValues ? 'Ajouter une convention absente de la liste...' : 'Ajouter un élément...'}" required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
       </form>
     </div>
   `;
 }
 
+// §correctif audit du 23/08/2026 (§6.3) : chaque champ n'est plus systématiquement présent dans le
+// DOM (module non souscrit = bloc non rendu, voir renderParametresListes) — chaque binding est
+// désormais gardé par `if (el)`, jamais un getElementById direct qui lancerait une exception sur
+// un salarié dont l'entreprise n'a pas souscrit ce module.
 function bindParametresListesEvents() {
-  document.getElementById('f-teletravail-quota').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.teletravailQuotaSemaine = Number(e.target.value) || 0;
-    settingsRepository.saveSettings(settings);
-    showToast('Quota mis à jour.');
-  });
-  document.getElementById('f-visite-medicale-periodicite').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.visiteMedicalePerioditeMois = Number(e.target.value) || 60;
-    settingsRepository.saveSettings(settings);
-    showToast('Périodicité mise à jour.');
-  });
-  document.getElementById('f-contingent-heures-sup').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.contingentAnnuelHeuresSup = Number(e.target.value) || 220;
-    settingsRepository.saveSettings(settings);
-    showToast('Contingent mis à jour.');
-  });
-  document.getElementById('f-tickets-valeur').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.ticketsValeurFaciale = Number(e.target.value) || 0;
-    settingsRepository.saveSettings(settings);
-    showToast('Valeur faciale mise à jour.');
-  });
-  document.getElementById('f-tickets-part').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.ticketsPartEmployeurPct = Number(e.target.value) || 0;
-    settingsRepository.saveSettings(settings);
-    showToast('Part employeur mise à jour.');
-  });
-  document.getElementById('f-tickets-teletravail').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.ticketsInclureTeletravail = e.target.checked;
-    settingsRepository.saveSettings(settings);
-    showToast('Règle mise à jour.');
-  });
-  document.getElementById('f-masse-salariale').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.masseSalarialeActivee = e.target.checked;
-    settingsRepository.saveSettings(settings);
-    showToast('Réglage mis à jour.');
-  });
-  document.getElementById('f-suivi-genre').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.suiviGenreActive = e.target.checked;
-    settingsRepository.saveSettings(settings);
-    showToast('Réglage mis à jour.');
-  });
-  document.getElementById('f-suivi-age').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.suiviAgeActive = e.target.checked;
-    settingsRepository.saveSettings(settings);
-    showToast('Réglage mis à jour.');
-  });
-  document.getElementById('f-workflow-conges-default').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.workflowCongesDefault = JSON.parse(e.target.value);
-    settingsRepository.saveSettings(settings);
-    showToast('Modèle de validation des congés mis à jour.');
-  });
-  document.getElementById('f-workflow-teletravail').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.workflowTeletravail = JSON.parse(e.target.value);
-    settingsRepository.saveSettings(settings);
-    showToast('Chaîne de validation du télétravail mise à jour.');
-  });
-  document.getElementById('f-workflow-frais').addEventListener('change', (e) => {
-    const settings = settingsRepository.getSettings();
-    settings.workflowFrais = JSON.parse(e.target.value);
-    settingsRepository.saveSettings(settings);
-    showToast('Chaîne de validation des notes de frais mise à jour.');
-  });
+  const bindNumberField = (id, settingKey, fallback, toastMsg) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', (e) => {
+      const settings = settingsRepository.getSettings();
+      settings[settingKey] = Number(e.target.value) || fallback;
+      settingsRepository.saveSettings(settings);
+      showToast(toastMsg);
+    });
+  };
+  const bindCheckboxField = (id, settingKey, toastMsg) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', (e) => {
+      const settings = settingsRepository.getSettings();
+      settings[settingKey] = e.target.checked;
+      settingsRepository.saveSettings(settings);
+      showToast(toastMsg);
+    });
+  };
+  const bindWorkflowField = (id, settingKey, toastMsg) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', (e) => {
+      const settings = settingsRepository.getSettings();
+      settings[settingKey] = JSON.parse(e.target.value);
+      settingsRepository.saveSettings(settings);
+      showToast(toastMsg);
+    });
+  };
+
+  bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
+  bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
+  bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
+  bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
+  bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
+  bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
+  bindCheckboxField('f-masse-salariale', 'masseSalarialeActivee', 'Réglage mis à jour.');
+  bindCheckboxField('f-suivi-genre', 'suiviGenreActive', 'Réglage mis à jour.');
+  bindCheckboxField('f-suivi-age', 'suiviAgeActive', 'Réglage mis à jour.');
+  bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
+  bindWorkflowField('f-workflow-teletravail', 'workflowTeletravail', 'Chaîne de validation du télétravail mise à jour.');
+  bindWorkflowField('f-workflow-frais', 'workflowFrais', 'Chaîne de validation des notes de frais mise à jour.');
+
+  // §6.3 : Catégories de salariés, repliée dans ce même écran (plus de tab séparé).
+  const btnAddCategorie = document.getElementById('btn-add-categorie-salarie');
+  if (btnAddCategorie) {
+    btnAddCategorie.addEventListener('click', () => openCategorieSalarieModal());
+    document.querySelectorAll('[data-edit-categorie-salarie]').forEach(btn => {
+      btn.addEventListener('click', () => openCategorieSalarieModal(btn.dataset.editCategorieSalarie));
+    });
+    document.querySelectorAll('[data-delete-categorie-salarie]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openConfirm({
+          title: 'Supprimer cette catégorie ?',
+          message: `«${btn.dataset.nom}» sera retirée de la fiche de tout salarié qui la porte actuellement.`,
+          confirmLabel: 'Supprimer',
+          danger: true,
+          onConfirm: () => {
+            categorieSalarieRepository.delete(btn.dataset.deleteCategorieSalarie);
+            showToast('Catégorie supprimée.');
+            render();
+          }
+        });
+      });
+    });
+  }
 
   bindChipListEvents();
 }
@@ -12694,6 +12793,12 @@ function bindChipListEvents() {
       const key = btn.dataset.listKey;
       const index = Number(btn.dataset.index);
       const value = settings[key][index];
+      // §6.2 : défense en profondeur — le bouton n'est déjà plus rendu pour une entrée officielle
+      // (voir renderSettingsListCard), mais revérifie ici comme le reste de cette fonction.
+      if (key === 'conventionsCollectives' && (value === 'Aucune' || IDCC_CONVENTIONS.some(c => formatConventionCollective(c) === value))) {
+        showToast('Cette convention fait partie de la liste officielle et ne peut pas être retirée ici.', 'error');
+        return;
+      }
       const checkUsage = SETTINGS_LIST_USAGE_CHECK[key];
       if (checkUsage && checkUsage(value)) {
         showToast(`« ${value} » est encore utilisé et ne peut pas être retiré de la liste.`, 'error');
@@ -12948,7 +13053,7 @@ function bindParametresFeriesEvents() {
  * fériés (§8) ET les fermetures (§9), mêmes exceptionsCategories : [{categorieSalarieId, travaillable}]. */
 function renderExceptionsCategoriesField(exceptions, categoriesSalarie) {
   const exceptionIds = new Set((exceptions || []).map(ex => ex.categorieSalarieId));
-  if (!categoriesSalarie.length) return '<p class="form-hint">Aucune catégorie de salarié paramétrée (Paramètres → Catégories de salariés).</p>';
+  if (!categoriesSalarie.length) return '<p class="form-hint">Aucune catégorie de salarié paramétrée (Paramètres → Référentiels).</p>';
   return `
     <select class="input" id="f-exceptions-categories" multiple style="min-height:80px;">
       ${categoriesSalarie.map(c => `<option value="${escapeHtml(c.id)}" ${exceptionIds.has(c.id) ? 'selected' : ''}>${escapeHtml(c.nom)}</option>`).join('')}
@@ -13208,62 +13313,10 @@ function openFermetureModal(existing) {
 
 // ---- Sous-vue : Catégories de salariés (§10 sprint amélioration) ----
 
-/** Remplace statutPro (texte libre, jamais lu par aucune règle) par une vraie liste paramétrable
- * référençable par id — utilisée par les règles d'éligibilité de congé, les exceptions jours
- * fériés/fermetures, etc. (voir getEffectiveCategorieSalarieId, data.js). Migrée automatiquement
- * depuis les statutPro déjà utilisés (DB.getSettings()) — jamais vide à l'affichage. */
-function renderParametresCategoriesSalarie() {
-  const categories = categorieSalarieRepository.getAll();
-  return `
-    <div class="card table-card">
-      <div class="view-header-row" style="padding: 20px 20px 0;">
-        <div>
-          <h2>Catégories de salariés</h2>
-          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise — utilisable dans les règles de congés, jours fériés et fermetures.</p>
-        </div>
-        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
-      </div>
-      <table class="table">
-        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
-        <tbody>
-          ${categories.map(c => `
-            <tr>
-              <td>${escapeHtml(c.nom)}</td>
-              <td>${escapeHtml(c.description || '—')}</td>
-              <td>
-                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
-                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-function bindParametresCategoriesSalarieEvents() {
-  document.getElementById('btn-add-categorie-salarie').addEventListener('click', () => openCategorieSalarieModal());
-  document.querySelectorAll('[data-edit-categorie-salarie]').forEach(btn => {
-    btn.addEventListener('click', () => openCategorieSalarieModal(btn.dataset.editCategorieSalarie));
-  });
-  document.querySelectorAll('[data-delete-categorie-salarie]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      openConfirm({
-        title: 'Supprimer cette catégorie ?',
-        message: `«${btn.dataset.nom}» sera retirée de la fiche de tout salarié qui la porte actuellement.`,
-        confirmLabel: 'Supprimer',
-        danger: true,
-        onConfirm: () => {
-          categorieSalarieRepository.delete(btn.dataset.deleteCategorieSalarie);
-          showToast('Catégorie supprimée.');
-          render();
-        }
-      });
-    });
-  });
-}
-
+// §correctif audit du 23/08/2026 (§6.3) : renderParametresCategoriesSalarie/
+// bindParametresCategoriesSalarieEvents repliées dans renderParametresListes/
+// bindParametresListesEvents ci-dessus (l'onglet séparé "Catégories de salariés" est retiré) —
+// openCategorieSalarieModal ci-dessous reste utilisé tel quel, aucune de ses règles ne change.
 function openCategorieSalarieModal(id) {
   const isEdit = Boolean(id);
   const categorie = isEdit ? categorieSalarieRepository.getById(id) : makeEmptyCategorieSalarie();
@@ -13330,35 +13383,39 @@ function getFilteredAuditLog() {
   return list;
 }
 
-/** § GERER_UTILISATEURS : vue d'ensemble pour créer les identifiants de connexion de plusieurs
- * salariés sans devoir ouvrir chaque fiche une par une (jusqu'ici uniquement possible via la carte
- * "Compte" de renderCompteCard, fiche salarié par fiche salarié) — réutilise exactement le même
- * modal/flux (openCreerCompteConnexionModal), aucune logique de création dupliquée ici. */
-function renderParametresComptes() {
-  const sansCompte = employeeRepository.getAll().filter(e => !e.archive && !e.authUserId);
-  const avecCompte = employeeRepository.getAll().filter(e => !e.archive && e.authUserId).length;
+// §correctif audit du 23/08/2026 (§6.6) : renderParametresComptes/bindParametresComptesEvents
+// retirées — "gérer l'accès d'un salarié depuis sa propre fiche plutôt que depuis un écran de
+// paramètres séparé" (déjà le cas via la carte "Compte" de renderCompteCard/
+// openCreerCompteConnexionModal) ; l'ancien onglet ne faisait qu'agréger cette même action pour
+// plusieurs salariés à la fois — remplacé par un repère dans le Centre d'action du tableau de
+// bord (renderDashboardActionCenter) pour ne pas perdre la vue d'ensemble.
+
+// §correctif audit du 23/08/2026 (§6.4) : "Fusionner Qualité des données et Journal d'audit en un
+// menu Audit. Deux sous-onglets : Contrôle des dossiers et Journal des actions." Fusion en un seul
+// onglet Paramètres avec ces deux sous-onglets, plutôt que deux onglets séparés qui répondaient à
+// la même question de fond ("est-ce que tout est en ordre ?"). Le sous-onglet "Journal des
+// actions" reste réservé à VOIR_JOURNAL_AUDIT (comme l'onglet "audit" avant la fusion) ; "Contrôle
+// des dossiers" reste ouvert à qui peut déjà voir Paramètres, comme "Qualité des données" avant.
+function renderParametresAuditHub() {
+  const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
+  const sousTab = (state.parametresAuditSousTab === 'journal' && canSeeAudit) ? 'journal' : 'controle';
   return `
-    <div class="card">
-      <h2>Comptes salariés</h2>
-      <p class="text-muted">Un salarié créé n'a pas de compte de connexion par défaut — créez ses identifiants ici, ou depuis sa fiche (carte "Compte"). ${avecCompte} salarié${avecCompte > 1 ? 's' : ''} déjà connecté${avecCompte > 1 ? 's' : ''}.</p>
-      ${sansCompte.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.checkCircle}</div><p>Tous les salariés actifs ont déjà un compte.</p></div>` : `
-        <div class="mini-list" style="margin-top: 12px;">
-          ${sansCompte.map(e => `
-            <div class="mini-list-item">
-              <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <span class="text-muted">· ${escapeHtml(ROLE_LABELS[e.role] || e.role)}</span></span>
-              <button type="button" class="btn btn-secondary btn-sm" data-creer-compte-employee="${escapeHtml(e.id)}">Créer le compte</button>
-            </div>
-          `).join('')}
-        </div>
-      `}
+    <div class="tabs" style="margin-bottom: 14px;">
+      <button class="tab ${sousTab === 'controle' ? 'active' : ''}" data-parametres-audit-sous-tab="controle">Contrôle des dossiers</button>
+      ${canSeeAudit ? `<button class="tab ${sousTab === 'journal' ? 'active' : ''}" data-parametres-audit-sous-tab="journal">Journal des actions</button>` : ''}
     </div>
+    ${sousTab === 'controle' ? renderParametresQualite() : renderParametresAudit()}
   `;
 }
 
-function bindParametresComptesEvents() {
-  document.querySelectorAll('[data-creer-compte-employee]').forEach(btn => {
-    btn.addEventListener('click', () => openCreerCompteConnexionModal(btn.dataset.creerCompteEmployee));
+function bindParametresAuditHubEvents() {
+  const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
+  const sousTab = (state.parametresAuditSousTab === 'journal' && canSeeAudit) ? 'journal' : 'controle';
+  document.querySelectorAll('[data-parametres-audit-sous-tab]').forEach(btn => {
+    btn.addEventListener('click', () => { state.parametresAuditSousTab = btn.dataset.parametresAuditSousTab; render(); });
   });
+  if (sousTab === 'controle') bindParametresQualiteEvents();
+  else bindParametresAuditEvents();
 }
 
 function renderParametresQualite() {

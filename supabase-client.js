@@ -1024,10 +1024,17 @@ async function appendTicketComment(ticketId, auteur, texte) {
 async function getCompanyIntegrations(companyId) {
   const { data, error } = await supabase.from('company_integrations').select('*').eq('company_id', companyId).maybeSingle();
   if (error) throw error;
-  return data ? { slackWebhookUrl: data.slack_webhook_url || '' } : { slackWebhookUrl: '' };
+  return data
+    ? { slackWebhookUrl: data.slack_webhook_url || '', teamsWebhookUrl: data.teams_webhook_url || '', googleChatWebhookUrl: data.google_chat_webhook_url || '' }
+    : { slackWebhookUrl: '', teamsWebhookUrl: '', googleChatWebhookUrl: '' };
 }
-async function saveCompanyIntegrations(companyId, { slackWebhookUrl }) {
-  const { error } = await supabase.from('company_integrations').upsert({ company_id: companyId, slack_webhook_url: slackWebhookUrl || null });
+async function saveCompanyIntegrations(companyId, { slackWebhookUrl, teamsWebhookUrl, googleChatWebhookUrl }) {
+  const { error } = await supabase.from('company_integrations').upsert({
+    company_id: companyId,
+    slack_webhook_url: slackWebhookUrl || null,
+    teams_webhook_url: teamsWebhookUrl || null,
+    google_chat_webhook_url: googleChatWebhookUrl || null
+  });
   if (error) throw error;
 }
 
