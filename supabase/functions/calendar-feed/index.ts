@@ -42,6 +42,14 @@ function toIcsDate(isoDate: string): string {
   return isoDate.replace(/-/g, "");
 }
 
+/** Format iCal "basic" UTC (YYYYMMDDTHHMMSSZ) pour DTSTAMP — Date.toISOString() garantit toujours
+ * un suffixe "Z" (jamais un décalage "+00:00", contrairement au format que PostgREST peut renvoyer
+ * pour un timestamptz) : on repasse systématiquement par un objet Date plutôt que de manipuler la
+ * chaîne d'origine directement, pour ne jamais dépendre du format exact renvoyé par la requête. */
+function toIcsTimestamp(dateInput: string | Date): string {
+  return new Date(dateInput).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+}
+
 /** DTEND d'un événement "journée entière" est EXCLUSIF en iCalendar (RFC 5545) — le lendemain du
  * dernier jour réellement absent, sinon la plupart des clients affichent un jour de trop. */
 function nextDay(isoDate: string): string {
@@ -130,14 +138,14 @@ Deno.serve(async (req) => {
   const { data: leaveTypes } = await supabaseAdmin.from("leave_types").select("id, nom").eq("company_id", owner.company_id);
   const typeById = new Map((leaveTypes || []).map((t: { id: string; nom: string }) => [t.id, t.nom]));
 
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const stamp = toIcsTimestamp(new Date());
   const events = (leaveRequests || []).map((r: { id: string; employee_id: string; type_id: string; date_debut: string; date_fin: string; updated_at: string }) => {
     const emp = employeeById.get(r.employee_id);
     const typeNom = typeById.get(r.type_id) || "Absence";
     const label = scope === "equipe" && employeeIds.length > 1 && emp
       ? `${emp.prenom} ${emp.nom} — ${typeNom}`
       : typeNom;
-    return buildEvent(`nexus-leave-${r.id}@nexus-rh.com`, r.date_debut, r.date_fin, label, `Généré automatiquement par Nexus RH — ${typeNom}`, r.updated_at ? r.updated_at.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z") : stamp);
+    return buildEvent(`nexus-leave-${r.id}@nexus-rh.com`, r.date_debut, r.date_fin, label, `Généré automatiquement par Nexus RH — ${typeNom}`, r.updated_at ? toIcsTimestamp(r.updated_at) : stamp);
   });
 
   return textResponse(buildCalendar(calname, events), 200, "text/calendar; charset=utf-8");

@@ -3091,6 +3091,10 @@ function renderUserMenuPanel() {
   // actuel lui-même (seul habilité côté serveur, transfer_proprietaire) — jamais sur la fiche de
   // quelqu'un d'autre, voir renderCompteCard/openChangeRoleModal qui n'offrent plus ce rôle du tout.
   const isProprietaire = user.role === ROLES.PROPRIETAIRE;
+  // §correctif audit du 23/08/2026 (§7.19) : lien "équipe" seulement pour les rôles qui ont
+  // effectivement une équipe/entreprise à montrer — même liste que calendar-feed (fonction Edge)
+  // revérifie côté serveur, ici juste pour ne pas proposer un lien qui reviendrait toujours vide.
+  const hasTeamScope = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
   const currentCompany = DB.getCurrentCompany();
 
   // Comptes gardés en parallèle (bascule multi-entreprise façon Gmail, demande du 21/08/2026) — un
@@ -3125,6 +3129,8 @@ function renderUserMenuPanel() {
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
+    <button type="button" class="user-menu-item" id="btn-ical-perso">${icon(ICONS.calendar, 14)} Abonnement calendrier (moi)</button>
+    ${hasTeamScope ? `<button type="button" class="user-menu-item" id="btn-ical-equipe">${icon(ICONS.calendar, 14)} Abonnement calendrier (équipe)</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
@@ -3178,6 +3184,16 @@ function renderUserMenuPanel() {
     document.getElementById('btn-user-menu-transfer-proprietaire').addEventListener('click', () => {
       document.getElementById('user-menu-panel').classList.remove('open');
       openTransferProprietaireModal();
+    });
+  }
+  document.getElementById('btn-ical-perso').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    copyIcalSubscriptionLink('perso');
+  });
+  if (hasTeamScope) {
+    document.getElementById('btn-ical-equipe').addEventListener('click', () => {
+      document.getElementById('user-menu-panel').classList.remove('open');
+      copyIcalSubscriptionLink('equipe');
     });
   }
   document.getElementById('btn-user-menu-support').addEventListener('click', () => {
@@ -3247,6 +3263,49 @@ function exportMyDataRGPD() {
 
   auditLogRepository.logAudit('Export', 'Données personnelles (RGPD)', `${employee.prenom} ${employee.nom} (auto-export)`);
   showToast('Vos données ont été téléchargées.');
+}
+
+/** §correctif audit du 23/08/2026 (§7.19) : lien d'abonnement calendrier (Outlook/Google Agenda) —
+ * copié dans le presse-papiers plutôt qu'affiché en clair par défaut (c'est un secret : quiconque
+ * l'obtient peut lire ce calendrier sans jamais se connecter). navigator.clipboard peut échouer
+ * (contexte non sécurisé, permission refusée) — repli sur une petite modale à copier à la main
+ * plutôt qu'un échec silencieux qui laisserait l'utilisateur sans lien du tout. */
+async function copyIcalSubscriptionLink(scope) {
+  showToast('Génération du lien...');
+  const result = await employeeRepository.getIcalToken(scope);
+  if (!result.success) {
+    showToast(result.error || 'Impossible de générer le lien pour le moment.', 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(result.url);
+    showToast(`Lien d'abonnement calendrier (${scope === 'equipe' ? 'équipe' : 'moi'}) copié — collez-le dans "S'abonner à un calendrier" (Outlook/Google Agenda).`);
+  } catch {
+    openIcalLinkFallbackModal(result.url);
+  }
+}
+
+function openIcalLinkFallbackModal(url) {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Lien d'abonnement calendrier</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">La copie automatique a échoué — sélectionnez et copiez ce lien manuellement. Ne le partagez qu'avec vous-même (votre logiciel de calendrier) : quiconque l'obtient peut lire ce calendrier.</p>
+        <input class="input" type="text" id="f-ical-link-fallback" readonly value="${escapeHtml(url)}">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('f-ical-link-fallback').addEventListener('click', (e) => e.target.select());
 }
 
 function openChangePasswordModal() {
@@ -9481,8 +9540,13 @@ function handleBulkApproveRequests(categorie) {
   selection.forEach(id => {
     const request = leaveRepository.getById(id);
     if (!request || !canActOnRequestFor(request)) { skipped++; return; }
-    leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
+    const patch = advanceWorkflow(request, 'Validé');
+    leaveRepository.update(id, patch);
     auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+    if (patch.statut !== 'En attente') {
+      const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
+      notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
+    }
     approved++;
   });
   selection.clear();
@@ -9550,6 +9614,20 @@ function auditLabelForEmployee(employeeId) {
   return employee ? `${employee.prenom} ${employee.nom}` : '—';
 }
 
+/** §correctif audit du 23/08/2026 (§7.4) : notifie le SALARIÉ par email seulement à l'issue finale
+ * (validé/refusé) — jamais à chaque étape intermédiaire d'une chaîne à plusieurs niveaux, qui
+ * reste "En attente" (voir advanceWorkflow, data.js : etapeIndex repasse à -1 seulement à la
+ * toute dernière étape). Fire-and-forget, comme toutes les notifications de ce fichier. */
+function notifyRequesterEmail(employeeId, template, typeLabel, periode, motif) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) return;
+  window.SupabaseSync.notifyRequestEmail([employeeId], template, `${employee.prenom} ${employee.nom}`, typeLabel, periode, motif).catch(() => {});
+}
+
+function requestPeriodeLabel(request) {
+  return request.dateDebut === request.dateFin ? formatDate(request.dateDebut) : `${formatDate(request.dateDebut)} → ${formatDate(request.dateFin)}`;
+}
+
 function handleApproveRequest(id) {
   const request = leaveRepository.getById(id);
   // Défense en profondeur : le bouton n'est déjà rendu que si canActOnRequestFor(request) est vrai,
@@ -9557,8 +9635,13 @@ function handleApproveRequest(id) {
   // barrière est de toute façon côté serveur (policies RLS Supabase), mais éviter une mise à jour
   // optimiste locale trompeuse (que Supabase rejetterait silencieusement) reste plus honnête pour l'UI.
   if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
+  const patch = advanceWorkflow(request, 'Validé');
+  leaveRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+  if (patch.statut !== 'En attente') {
+    const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
+    notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
+  }
   showToast('Demande validée.');
   render();
 }
@@ -9572,6 +9655,8 @@ function handleRefuseRequest(id) {
     onConfirm: (motif) => {
       leaveRepository.update(id, refuseRequest(request, motif));
       auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
+      const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
+      notifyRequesterEmail(request.employeeId, 'refusee', type ? type.nom : 'Congé', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
       render();
     }
@@ -14014,8 +14099,12 @@ function bindTeletravailDemandesEvents() {
 function handleApproveTelework(id) {
   const request = teleworkRepository.getById(id);
   if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  teleworkRepository.update(id, advanceWorkflow(request, 'Validé'));
+  const patch = advanceWorkflow(request, 'Validé');
+  teleworkRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+  if (patch.statut !== 'En attente') {
+    notifyRequesterEmail(request.employeeId, 'validee', 'Télétravail', requestPeriodeLabel(request));
+  }
   showToast('Télétravail validé.');
   render();
 }
@@ -14029,6 +14118,7 @@ function handleRefuseTelework(id) {
     onConfirm: (motif) => {
       teleworkRepository.update(id, refuseRequest(request, motif));
       auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
+      notifyRequesterEmail(request.employeeId, 'refusee', 'Télétravail', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
       render();
     }
@@ -14596,6 +14686,9 @@ function handleApproveExpense(id) {
   const patch = advanceWorkflow(expense, 'Remboursé');
   expenseRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+  if (patch.statut !== 'En attente') {
+    notifyRequesterEmail(expense.employeeId, 'validee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date));
+  }
   showToast(patch.statut === 'Remboursé' ? 'Note de frais remboursée.' : 'Étape de validation suivante en attente.');
   render();
 }
@@ -14609,6 +14702,7 @@ function handleRefuseExpense(id) {
     onConfirm: (motif) => {
       expenseRepository.update(id, refuseRequest(expense, motif));
       auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} — ${motif}`);
+      notifyRequesterEmail(expense.employeeId, 'refusee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date), motif);
       showToast('Note de frais refusée.');
       render();
     }
@@ -15306,6 +15400,13 @@ function getPaieAnomalies(year, month) {
 
     if (e.dateDepart && e.dateDepart >= monthStart && e.dateDepart <= monthEnd) {
       anomalies.push({ severity: 'information', type: 'contrat_termine', employee: e, message: `Contrat terminé le ${formatDate(e.dateDepart)} — dernier mois de paie` });
+      // §correctif audit du 23/08/2026 (§7.20) : signale l'indemnité compensatrice ESTIMÉE ici aussi
+      // (pas seulement dans la fiche salarié) — la Préparation de paie est l'écran où ce montant a
+      // le plus de chances d'être effectivement vu au bon moment, le mois du départ.
+      const { montant, joursRestants } = calculateIndemniteCompensatrice(e, e.dateDepart);
+      if (joursRestants > 0) {
+        anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris) — à valider avec votre expert-comptable` });
+      }
     }
   });
 
@@ -16285,6 +16386,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
               ${selectField('statut', 'Statut', ['Actif', 'Inactif'], employee.statut)}
               ${textField('dateDepart', 'Date de départ', employee.dateDepart, false, 'date')}
             </div>
+            <p class="text-muted" id="indemnite-compensatrice-hint" style="margin-top: 8px;"></p>
           </fieldset>
 
           ${renderConfidentialEmployeeFieldset(employee, settings)}
@@ -16305,6 +16407,21 @@ function openEmployeeModal(id, prefill, candidatureId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
+
+  // §correctif audit du 23/08/2026 (§7.20) : "rien ne calcule ce montant ni ne le signale au moment
+  // où l'on renseigne une date de départ" — mis à jour dès la saisie, pas seulement après
+  // enregistrement, pour que ce soit visible AU MOMENT de la décision plutôt qu'une surprise ensuite.
+  const dateDepartInput = document.getElementById('f-dateDepart');
+  const updateIndemniteHint = () => {
+    const hint = document.getElementById('indemnite-compensatrice-hint');
+    if (!dateDepartInput.value || !isEdit || !settings.masseSalarialeActivee || !employee.salaireBrutMensuel) { hint.textContent = ''; return; }
+    const { montant, joursRestants } = calculateIndemniteCompensatrice(employee, dateDepartInput.value);
+    hint.textContent = joursRestants > 0
+      ? `Estimation indemnité compensatrice de congés payés non pris à cette date : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)}) — à valider avec votre expert-comptable avant tout virement.`
+      : '';
+  };
+  dateDepartInput.addEventListener('change', updateIndemniteHint);
+  updateIndemniteHint();
 }
 
 /** Champ "Adresse" avec suggestions en direct (API Adresse gouv.fr, gratuite/sans clé) — remplace

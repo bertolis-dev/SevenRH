@@ -550,6 +550,29 @@ async function transferProprietaire(newProprietaireId, nouveauRoleAncien) {
   return { success: true };
 }
 
+/** §correctif audit du 23/08/2026 (§7.19) : jeton d'abonnement calendrier iCal — jamais stocké
+ * sur `employees` (voir migration 0034, ical_tokens) pour ne pas fuiter dans le select('*') déjà
+ * fait partout ailleurs sur cette table. get_or_create_ical_token() ne renvoie QUE le jeton de
+ * l'appelant, jamais celui d'un tiers. L'URL complète est construite ICI (pas dans app.js, qui n'a
+ * pas accès à SUPABASE_URL — ce fichier est chargé en module ES, ses `const` ne sont pas globales). */
+function icalFeedUrl(token, scope) {
+  return `${SUPABASE_URL}/functions/v1/calendar-feed?token=${token}&scope=${scope}`;
+}
+
+async function getOrCreateIcalToken(scope) {
+  const { data, error } = await supabase.rpc('get_or_create_ical_token');
+  if (error) return { success: false, error: error.message };
+  return { success: true, url: icalFeedUrl(data, scope) };
+}
+
+/** Révoque le jeton actuel (ex. copié dans un message envoyé au mauvais endroit) et en génère un
+ * nouveau — toute application déjà abonnée avec l'ancien lien devra se réabonner. */
+async function regenerateIcalToken(scope) {
+  const { data, error } = await supabase.rpc('regenerate_ical_token');
+  if (error) return { success: false, error: error.message };
+  return { success: true, url: icalFeedUrl(data, scope) };
+}
+
 /** Renvoie l'email de confirmation pour une inscription déjà faite mais pas encore confirmée —
  * signUp() ne renvoie pas systématiquement un nouvel email pour une adresse déjà en attente (pour
  * éviter le spam), donc un simple nouveau clic sur "Créer mon compte" ne suffit pas si le premier
@@ -1018,6 +1041,16 @@ async function notifySlack(icon, title, message) {
   if (error) throw error;
 }
 
+/** §correctif audit du 23/08/2026 (§7.4) : notification par email sur le cycle de vie d'une
+ * demande (a_valider/validee/refusee/relance) — même principe fire-and-forget que notifySlack,
+ * l'appelant (data.js) attrape déjà l'erreur avec .catch(() => {}), jamais de blocage ici. */
+async function notifyRequestEmail(recipientEmployeeIds, template, employeeName, typeLabel, periode, motif) {
+  const { error } = await supabase.functions.invoke('notify-request-email', {
+    body: { recipientEmployeeIds, template, employeeName, typeLabel, periode, motif }
+  });
+  if (error) throw error;
+}
+
 /** Notifie BERTOLIS par email (Edge Function notify-bertolis-ticket) juste après la création d'un
  * ticket — voir DB.addSupportTicket (data.js). Un échec ici ne doit jamais remonter comme une
  * erreur de "synchronisation" au salarié (son ticket est bien créé) : l'appelant se contente de
@@ -1087,7 +1120,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, getOrCreateIcalToken, regenerateIcalToken, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
@@ -1096,7 +1129,7 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
-  getCompanyIntegrations, saveCompanyIntegrations, notifySlack,
+  getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,

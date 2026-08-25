@@ -1368,6 +1368,8 @@ const DB = {
     // .catch(()=>{}) silencieux — l'utilisateur n'a même pas besoin de savoir que Slack existe.
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${leaveType ? leaveType.nom : '—'}`).catch(() => {});
+      const periodeLabel = request.dateDebut === request.dateFin ? formatDate(request.dateDebut) : `${formatDate(request.dateDebut)} → ${formatDate(request.dateFin)}`;
+      notifyValidatorsByEmailForNewRequest(employee, workflow, leaveType ? leaveType.nom : 'Congé', periodeLabel);
     }
     // §correctif audit du 23/08/2026 (2.3) : `workflowEscalated` n'est JAMAIS mis sur `request`
     // lui-même (donc jamais sauvegardé/poussé vers Supabase, uniquement sur la copie retournée ici)
@@ -1684,6 +1686,17 @@ const DB = {
     return { success: true };
   },
 
+  /** §correctif audit du 23/08/2026 (§7.19) : jeton de MON PROPRE abonnement calendrier — jamais
+   * mis en cache localement (contrairement au reste de DB._companiesCache), toujours redemandé au
+   * serveur : c'est un secret, pas une donnée d'affichage habituelle. */
+  async getIcalToken(scope) {
+    return window.SupabaseSync.getOrCreateIcalToken(scope);
+  },
+
+  async regenerateIcalToken(scope) {
+    return window.SupabaseSync.regenerateIcalToken(scope);
+  },
+
   // ---- Demandes de télétravail ----
 
   getTeleworkRequests() {
@@ -1734,6 +1747,8 @@ const DB = {
     this.logAudit('Création', 'Demande de télétravail', employee ? `${employee.prenom} ${employee.nom}` : '—');
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('💻', 'Nouvelle demande de télétravail', `${employee.prenom} ${employee.nom}`).catch(() => {});
+      const periodeLabel = request.dateDebut === request.dateFin ? formatDate(request.dateDebut) : `${formatDate(request.dateDebut)} → ${formatDate(request.dateFin)}`;
+      notifyValidatorsByEmailForNewRequest(employee, workflow, 'Télétravail', periodeLabel);
     }
     // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
     if (escalated) return Object.assign({}, request, { workflowEscalated: true });
@@ -1798,6 +1813,7 @@ const DB = {
     this.logAudit('Création', 'Note de frais', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${expense.categorie}`);
     if (expense.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🧾', 'Nouvelle note de frais', `${employee.prenom} ${employee.nom} · ${expense.libelle || expense.categorie}`).catch(() => {});
+      notifyValidatorsByEmailForNewRequest(employee, workflow, expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date));
     }
     // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
     if (escalated) return Object.assign({}, expense, { workflowEscalated: true });
@@ -2678,7 +2694,9 @@ const employeeRepository = {
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
   creerCompteConnexion: (employeeId) => DB.creerCompteConnexion(employeeId),
   changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId),
-  transferProprietaire: (newProprietaireId, nouveauRoleAncien) => DB.transferProprietaire(newProprietaireId, nouveauRoleAncien)
+  transferProprietaire: (newProprietaireId, nouveauRoleAncien) => DB.transferProprietaire(newProprietaireId, nouveauRoleAncien),
+  getIcalToken: (scope) => DB.getIcalToken(scope),
+  regenerateIcalToken: (scope) => DB.regenerateIcalToken(scope)
 };
 
 const leaveRepository = {
@@ -3515,6 +3533,35 @@ function hasEligibleValidatorForStep(employeeId, role, domain) {
   return employees.some(e => e.role === role);
 }
 
+/** §correctif audit du 23/08/2026 (§7.4) : mêmes salariés que hasEligibleValidatorForStep
+ * considérerait comme éligibles à AGIR sur l'étape en cours — mais retourne leurs ids (pour
+ * notifier par email) plutôt qu'un simple booléen. Toujours inclure RH/Propriétaire (bypass
+ * permanent, voir hasEligibleValidatorForStep) en plus du rôle exact de l'étape : ce sont eux qui
+ * peuvent agir même si l'étape affichée dit "manager". */
+function resolveValidatorEmployeeIdsForStep(employeeId, role) {
+  const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
+  const bypass = employees.filter(e => hasPermission(e, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(e, PERMISSIONS.VALIDER_NOTE_FRAIS));
+  if (role === ROLES.MANAGER) {
+    const requester = DB.getEmployeeById(employeeId);
+    const managers = requester ? employees.filter(e => (requester.managerIds || []).includes(e.id)) : [];
+    return Array.from(new Set([...managers, ...bypass].map(e => e.id)));
+  }
+  const roleMatches = employees.filter(e => e.role === role);
+  return Array.from(new Set([...roleMatches, ...bypass].map(e => e.id)));
+}
+
+/** §correctif audit du 23/08/2026 (§7.4) : notifie par email les validateurs de la PREMIÈRE étape
+ * d'une demande qui vient d'être créée — factorisé ici, appelé depuis addLeaveRequest/
+ * addTeleworkRequest/addExpense, plutôt que de tripler la même logique. Fire-and-forget comme
+ * notifySlack juste au-dessus de chaque appelant : un échec email ne doit jamais remonter à
+ * l'auteur de la demande, déjà bien créée à ce stade. */
+function notifyValidatorsByEmailForNewRequest(employee, workflow, typeLabel, periode) {
+  if (!workflow || !workflow.length) return;
+  const validatorIds = resolveValidatorEmployeeIdsForStep(employee.id, workflow[0]);
+  if (!validatorIds.length) return;
+  window.SupabaseSync.notifyRequestEmail(validatorIds, 'a_valider', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+}
+
 /** Construit la chaîne effective d'une demande : retire les étapes qu'AUCUN salarié actuel ne peut
  * jamais franchir ("remontée automatique" demandée par l'audit — N+1 si le manager manque, puis RH,
  * puis Propriétaire), et signale le cas via `escalated` pour que l'appelant (app.js) prévienne
@@ -3930,6 +3977,32 @@ function resolveDeadlineInPeriod(mmjj, periodStart, periodEnd) {
   let deadline = new Date(periodStart.getFullYear(), month - 1, day);
   if (deadline < periodStart) deadline = new Date(periodStart.getFullYear() + 1, month - 1, day);
   return deadline > periodEnd ? periodEnd : deadline;
+}
+
+// §correctif audit du 23/08/2026 (§7.20) : indemnité compensatrice de congés payés au départ —
+// "au solde de tout compte, les jours acquis non pris se paient. Rien ne calcule ce montant ni ne
+// le signale au moment où l'on renseigne une date de départ." ESTIMATION, pas un calcul légal figé
+// (comme calculateAcquisition plus haut) : la vraie règle française retient le plus favorable entre
+// le maintien de salaire (ce qu'on approxime ici) et la règle du dixième (nécessite l'historique
+// complet des rémunérations sur la période de référence, hors périmètre ici) — à valider par
+// l'expert-comptable du client avant tout virement réel, exactement comme les autres valeurs
+// supplétives de ce fichier. Diviseur 26 pour un type en jours ouvrables, 22 en jours ouvrés —
+// équivalences usuelles (mois moyen), pas une valeur légale unique.
+function calculateIndemniteCompensatrice(employee, refDate) {
+  if (!employee.salaireBrutMensuel) return { montant: 0, joursRestants: 0 };
+  const types = DB.getLeaveTypes().filter(t => t.categorie === 'conge' && t.paye && t.actif);
+  const requests = DB.getLeaveRequests();
+  const allTypes = DB.getLeaveTypes();
+  let joursRestants = 0;
+  let montant = 0;
+  types.forEach(t => {
+    const balance = getLeaveBalance(employee, t, requests, allTypes, refDate);
+    if (balance.disponible === Infinity || balance.disponible <= 0) return;
+    const diviseur = t.uniteDecompte === 'ouvrables' ? 26 : 22;
+    joursRestants = round2(joursRestants + balance.disponible);
+    montant = round2(montant + balance.disponible * (employee.salaireBrutMensuel / diviseur));
+  });
+  return { montant, joursRestants };
 }
 
 // ---- Indicateurs du tableau de bord Propriétaire ----
