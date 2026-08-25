@@ -377,7 +377,13 @@ const NAV_ITEMS = [
   // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
   // voir isNavItemActive) plutôt qu'un nouvel écran.
   { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER },
-  { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'rh' },
+  // §correctif audit du 23/08/2026 (2.1) : PAS de module ici — le registre des salariés (liste,
+  // création, fiche de base) est le socle commun de tous les modules, pas une fonctionnalité RH
+  // parmi d'autres. Sans ce retrait, une entreprise n'ayant souscrit qu'au module congés ne pouvait
+  // voir ni créer aucun salarié — donc jamais poser aucune demande de congé non plus, ce qui rendait
+  // le module congés invendable seul. Le module 'rh' reste sur organigramme/export-paie/mes-documents
+  // (coffre-fort, préparation de paie), qui restent des fonctionnalités RH à part entière.
+  { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
@@ -4348,7 +4354,10 @@ function renderSidebar() {
  * même du module de leur écran parent, sinon un lien direct (dashboard, notification, recherche...)
  * pourrait contourner un module non souscrit que navigateTo() bloque déjà pour les entrées de menu. */
 const DETAIL_VIEW_MODULE = {
-  'employee-detail': 'rh',
+  // §correctif audit du 23/08/2026 (2.1) : employee-detail n'hérite plus du module 'rh' — la fiche
+  // de base d'un salarié fait partie du socle commun (voir NAV_ITEMS 'employees'). Sans ce retrait,
+  // la liste redevenait accessible mais cliquer sur une fiche rebondissait silencieusement vers
+  // l'accueil pour une entreprise n'ayant pas souscrit au module RH.
   'entretien-detail': 'entretiens',
   'candidature-detail': 'rh'
 };
@@ -9619,6 +9628,13 @@ function submitLeaveRequestForm(evt) {
 
   finalizeDraftEdit();
   showToast('Demande envoyée.');
+  // §correctif audit du 23/08/2026 (2.3) : la chaîne de validation a dû être réajustée (aucun
+  // validateur "naturel" — ex. un autre manager désigné comme son supérieur — n'existe pour cette
+  // demande) ; RH/Direction devra intervenir manuellement, mieux vaut le dire tout de suite plutôt
+  // que de laisser une demande dormir sans personne pour la remarquer.
+  if (createdRequest.workflowEscalated) {
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+  }
   closeModal();
   // Ouverte depuis un clic sur le calendrier (§sprint calendrier interactif) : on y retourne au lieu
   // de filer vers la liste des demandes, pour que l'utilisateur voie tout de suite son jour rempli.
@@ -13466,10 +13482,14 @@ function submitTeleworkRequestForm(evt) {
     return;
   }
 
-  teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
+  const createdRequest = teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
   finalizeDraftEdit();
   showToast('Demande de télétravail envoyée.');
+  // §correctif audit du 23/08/2026 (2.3), même mécanisme que openLeaveRequestModal.
+  if (createdRequest.workflowEscalated) {
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+  }
   closeModal();
   // Ouverte depuis un clic sur le calendrier : on y retourne (même logique que openLeaveRequestModal).
   if (state._leaveRequestReturnToCalendar) {
@@ -13963,6 +13983,10 @@ function submitExpenseForm(evt) {
 
   finalizeDraftEdit();
   showToast('Note de frais envoyée.');
+  // §correctif audit du 23/08/2026 (2.3), même mécanisme que openLeaveRequestModal.
+  if (createdExpense.workflowEscalated) {
+    showToast('Aucun validateur direct n\'a été trouvé pour cette demande — un RH ou un membre de la Direction devra la valider manuellement.', 'error');
+  }
   closeModal();
   navigateTo('frais');
 }

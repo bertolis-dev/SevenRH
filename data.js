@@ -1336,7 +1336,8 @@ const DB = {
     const list = this.getLeaveRequests();
     const now = new Date().toISOString();
     const leaveType = this.getLeaveTypeById(data.typeId);
-    const workflow = (leaveType && leaveType.workflow) || [];
+    const rawWorkflow = (leaveType && leaveType.workflow) || [];
+    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
     const request = Object.assign(makeEmptyLeaveRequest(), data, {
       id: generateId('lr'),
       workflow,
@@ -1356,6 +1357,11 @@ const DB = {
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${leaveType ? leaveType.nom : '—'}`).catch(() => {});
     }
+    // §correctif audit du 23/08/2026 (2.3) : `workflowEscalated` n'est JAMAIS mis sur `request`
+    // lui-même (donc jamais sauvegardé/poussé vers Supabase, uniquement sur la copie retournée ici)
+    // — c'est un signal ponctuel pour que app.js prévienne l'auteur que la chaîne de validation a dû
+    // être réajustée (aucun validateur "naturel" trouvé pour une étape), pas un champ durable.
+    if (escalated) return Object.assign({}, request, { workflowEscalated: true });
     return request;
   },
 
@@ -1671,7 +1677,8 @@ const DB = {
   addTeleworkRequest(data) {
     const list = this.getTeleworkRequests();
     const now = new Date().toISOString();
-    const workflow = this.getSettings().workflowTeletravail || [];
+    const rawWorkflow = this.getSettings().workflowTeletravail || [];
+    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
     const request = Object.assign(makeEmptyTeleworkRequest(), data, {
       id: generateId('tt'),
       workflow,
@@ -1688,6 +1695,8 @@ const DB = {
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('💻', 'Nouvelle demande de télétravail', `${employee.prenom} ${employee.nom}`).catch(() => {});
     }
+    // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
+    if (escalated) return Object.assign({}, request, { workflowEscalated: true });
     return request;
   },
 
@@ -1732,7 +1741,8 @@ const DB = {
   addExpense(data) {
     const list = this.getExpenses();
     const now = new Date().toISOString();
-    const workflow = this.getSettings().workflowFrais || [];
+    const rawWorkflow = this.getSettings().workflowFrais || [];
+    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'frais');
     const expense = Object.assign(makeEmptyExpense(), data, {
       id: generateId('nf'),
       workflow,
@@ -1749,6 +1759,8 @@ const DB = {
     if (expense.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🧾', 'Nouvelle note de frais', `${employee.prenom} ${employee.nom} · ${expense.libelle || expense.categorie}`).catch(() => {});
     }
+    // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
+    if (escalated) return Object.assign({}, expense, { workflowEscalated: true });
     return expense;
   },
 
@@ -2478,7 +2490,16 @@ const DB = {
     const session = await window.SupabaseSync.getSession();
     this._upsertSavedAccount(session, employee, company);
     if (rpcResult.success) {
-      seedLeaveTypes().forEach(lt => this.addLeaveType(lt));
+      // §correctif audit du 23/08/2026 (2.2) : les 12 types par défaut doivent partir en UN SEUL
+      // saveLeaveTypes(), pas 12 appels addLeaveType() séparés. addLeaveType() déclenche à chaque
+      // fois un envoi en arrière-plan (_pushInBackground, jamais attendu) qui repousse TOUTE la
+      // liste vers Supabase (syncTable = upsert + suppression de ce qui n'y figure pas) — 12 envois
+      // partaient donc en parallèle avec des photos de longueurs différentes, et c'est la DERNIÈRE
+      // suppression arrivée côté serveur qui décidait de ce qui survivait. Résultat aléatoire,
+      // observé en pratique : une seule entreprise test s'est retrouvée avec "Congés payés" seul.
+      const leaveTypes = seedLeaveTypes().map((lt, index) => Object.assign(makeEmptyLeaveType(), lt, { id: generateId('lt'), ordre: index }));
+      this.saveLeaveTypes(leaveTypes);
+      this.logAudit('Création', 'Types de congé', `${leaveTypes.length} types créés (jeu par défaut)`);
       this.saveSchoolHolidays(seedSchoolHolidays());
     }
     this.logAudit('Création', 'Entreprise', `${employee.prenom} ${employee.nom} — ${company.raisonSociale || ''}`);
@@ -3395,6 +3416,46 @@ function computeInitialWorkflowStatus(workflow) {
 
 function computeInitialWorkflowStep(workflow) {
   return (workflow && workflow.length > 0) ? 0 : -1;
+}
+
+/** §correctif audit du 23/08/2026 (2.3) : une demande peut rester "En attente" indéfiniment si
+ * personne ne remplit jamais le rôle exigé par l'étape en cours — cas concret reproduit : un
+ * manager sans manager désigné au-dessus de lui dépose un congé dont la première étape exige le
+ * rôle "manager" (isCurrentWorkflowStepFor, app.js, exige alors un AUTRE manager explicitement
+ * inscrit comme son supérieur) ; s'il n'existe ni RH ni Directeur non plus (VALIDER_ABSENCE/
+ * VALIDER_NOTE_FRAIS, qui contournent normalement l'étape), personne ne peut jamais agir. Reproduit
+ * ici, SANS utilisateur connecté précis, la même logique que canActOnRequestFor/
+ * isCurrentWorkflowStepFor (app.js) — permet de savoir, dès la création d'une demande, si une étape
+ * donnée est franchissable par QUELQU'UN dans l'entreprise, pas seulement par la personne connectée. */
+function hasEligibleValidatorForStep(employeeId, role, domain) {
+  const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
+  const validatePermission = domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE;
+  if (employees.some(e => hasPermission(e, validatePermission))) return true;
+  if (role === ROLES.MANAGER) {
+    const requester = DB.getEmployeeById(employeeId);
+    return Boolean(requester && (requester.managerIds || []).some(mid => {
+      const manager = employees.find(e => e.id === mid);
+      return manager && manager.role === ROLES.MANAGER;
+    }));
+  }
+  return employees.some(e => e.role === role);
+}
+
+/** Construit la chaîne effective d'une demande : retire les étapes qu'AUCUN salarié actuel ne peut
+ * jamais franchir ("remontée automatique" demandée par l'audit — N+1 si le manager manque, puis RH,
+ * puis Direction), et signale le cas via `escalated` pour que l'appelant (app.js) prévienne
+ * l'auteur de la demande. Si la chaîne entière se retrouve vide, retombe explicitely sur RH puis
+ * Direction (le premier qui existe) plutôt que de laisser une demande sans aucune étape. */
+function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
+  const workflow = (rawWorkflow || []).filter(role => hasEligibleValidatorForStep(employeeId, role, domain));
+  let escalated = workflow.length !== (rawWorkflow || []).length;
+  if (workflow.length === 0 && (rawWorkflow || []).length > 0) {
+    const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
+    if (employees.some(e => e.role === ROLES.RH)) workflow.push(ROLES.RH);
+    else if (employees.some(e => e.role === ROLES.DIRECTEUR)) workflow.push(ROLES.DIRECTEUR);
+    escalated = true;
+  }
+  return { workflow, escalated };
 }
 
 /** Fait avancer une demande d'une étape ; `finalStatut` est le statut de fin de circuit propre au module. */
