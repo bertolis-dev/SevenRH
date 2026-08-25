@@ -47,12 +47,17 @@ const BERTOLIS_TICKETS_SECRET = '9cedfffcd52b0afa010476d1bd528473a6eb267925ab861
  * ouvrant les outils de développement peut lire/modifier localStorage directement.
  * Utile pour valider les écrans et le workflow, pas pour un déploiement multi-utilisateurs réel.
  */
+// §correctif audit du 23/08/2026 (§5) : "directeur" renommé "proprietaire" — ce rôle cumulait
+// toutes les permissions, la gestion de l'abonnement et une dérogation de self-service sans
+// rapport avec un titre de "directeur" (beaucoup d'entreprises ont plusieurs directeurs — comm,
+// commercial... — qui n'ont aucune raison de porter ce rôle). Unique par entreprise (contrainte
+// SQL, voir migration 0033), transférable (voir DB.transferProprietaire / transfer_proprietaire).
 const ROLES = {
   SALARIE: 'salarie',
   MANAGER: 'manager',
   RH: 'rh',
   COMPTABILITE: 'comptabilite',
-  DIRECTEUR: 'directeur'
+  PROPRIETAIRE: 'proprietaire'
 };
 
 const ROLE_LABELS = {
@@ -60,7 +65,7 @@ const ROLE_LABELS = {
   manager: 'Manager',
   rh: 'RH',
   comptabilite: 'Comptabilité',
-  directeur: 'Directeur'
+  proprietaire: 'Propriétaire'
 };
 
 /**
@@ -146,10 +151,10 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.CREER_DEMANDE_ABSENCE, PERMISSIONS.CREER_NOTE_FRAIS, PERMISSIONS.VOIR_CALENDRIER_GENERAL,
     PERMISSIONS.CONTROLER_NOTE_FRAIS, PERMISSIONS.MARQUER_NOTE_REMBOURSEE,
     // Sans CORRIGER_TICKETS_RESTAURANT : la Comptabilité consulte/exporte les tickets restaurant mais
-    // ne corrige pas manuellement le calcul (réservé à RH/Directeur, cf. les compteurs de congés).
+    // ne corrige pas manuellement le calcul (réservé à RH/Propriétaire, cf. les compteurs de congés).
     PERMISSIONS.CALCULER_TICKETS_RESTAURANT
   ],
-  directeur: Object.values(PERMISSIONS)
+  proprietaire: Object.values(PERMISSIONS)
 };
 
 /** Vérifie une permission individuelle : une surcharge explicite sur le salarié (true ou false)
@@ -466,7 +471,7 @@ const DEFAULT_SETTINGS = {
   fermetures: [],
   // §10 sprint amélioration — voir makeEmptyCategorieSalarie()/deriveCategoriesSalarieFromStatutPro().
   categoriesSalarie: [],
-  // Indicateurs sensibles du tableau de bord Directeur, désactivés par défaut (opt-in) :
+  // Indicateurs sensibles du tableau de bord Propriétaire, désactivés par défaut (opt-in) :
   // la masse salariale, le genre et la pyramide des âges restent des données que l'entreprise
   // choisit de suivre ou non (cf. l'avertissement affiché juste au-dessus de ces cases à cocher).
   masseSalarialeActivee: false,
@@ -1372,6 +1377,27 @@ const DB = {
     return request;
   },
 
+  /** §correctif audit du 23/08/2026 (§7.5) : demande générée par une fermeture imposée (jamais
+   * saisie par le salarié) — toujours Validé, aucune chaîne de validation (contrairement à
+   * addLeaveRequest ci-dessus, qui reprend systématiquement le workflow configuré sur le type :
+   * une fermeture décidée par l'entreprise n'a pas à repasser par une validation manager/RH). */
+  addFermetureLeaveRequest(data) {
+    const list = this.getLeaveRequests();
+    const now = new Date().toISOString();
+    const request = Object.assign(makeEmptyLeaveRequest(), data, {
+      id: generateId('lr'),
+      workflow: [],
+      etapeIndex: -1,
+      statut: 'Validé',
+      historique: [{ date: now, action: 'Fermeture imposée (générée automatiquement)' }],
+      dateCreation: now,
+      dateModification: now
+    });
+    list.push(request);
+    this.saveLeaveRequests(list);
+    return request;
+  },
+
   updateLeaveRequest(id, patch) {
     const list = this.getLeaveRequests();
     const index = list.findIndex(r => r.id === id);
@@ -1470,7 +1496,7 @@ const DB = {
       return { success: false, error: 'Ces nouvelles dates chevauchent une demande de télétravail active de ce salarié.' };
     }
 
-    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee, this.getSettings());
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demi), employee, this.getSettings(), type.uniteDecompte);
     if (nbJours <= 0) {
       return { success: false, error: 'Ces nouvelles dates ne couvrent aucun jour travaillé pour ce salarié.' };
     }
@@ -1600,7 +1626,7 @@ const DB = {
     return { success: true, password: result.password };
   },
 
-  /** § GERER_UTILISATEURS : un RH/Directeur impose un nouveau mot de passe sans connaître l'ancien
+  /** § GERER_UTILISATEURS : un RH/Propriétaire impose un nouveau mot de passe sans connaître l'ancien
    * (contrairement à changePassword, en libre-service) — appelle réellement Supabase Auth (voir
    * manage-employee-account/index.ts), contrairement à l'ancienne version qui n'écrivait que dans un
    * champ local (`motDePasse`) devenu sans effet depuis la migration vers Supabase Auth. */
@@ -1618,36 +1644,43 @@ const DB = {
     return { success: true };
   },
 
-  /** § GERER_UTILISATEURS : change le rôle d'un salarié existant (Salarié/Manager/RH/Comptabilité/
-   * Directeur) — jamais sur sa propre fiche (séparation des tâches, même principe que partout
-   * ailleurs dans l'app : on ne s'accorde pas soi-même un droit). Deux garde-fous supplémentaires
-   * réservés au rôle Directeur lui-même, plus sensible que les autres : (1) seul un Directeur peut
-   * attribuer OU retirer ce rôle — sinon un RH avec gererUtilisateurs pourrait se créer un compte
-   * Directeur ou en démettre un ; (2) impossible de retirer le rôle du DERNIER Directeur de
-   * l'entreprise, qui se retrouverait sans personne pour gérer les cas que seul ce rôle couvre
-   * (accorder GERER_ABONNEMENTS, modifier sa propre fiche, etc.). */
+  /** § GERER_UTILISATEURS : change le rôle d'un salarié existant (Salarié/Manager/RH/Comptabilité)
+   * — jamais sur sa propre fiche (séparation des tâches, même principe que partout ailleurs dans
+   * l'app : on ne s'accorde pas soi-même un droit).
+   *
+   * §correctif audit du 23/08/2026 (§5) : le rôle Propriétaire (ex-Directeur) ne se touche plus du
+   * tout par ce chemin générique, ni pour l'attribuer ni pour le retirer — la policy serveur
+   * (guard_employee_role_change, migration 0033) le refuse désormais dans tous les cas hors
+   * transfert explicite. Voir DB.transferProprietaire ci-dessous, seul chemin valide. */
   changerRoleSalarie(employeeId, newRole, actingUserId) {
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
     if (employeeId === actingUserId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle.' };
     if (!Object.values(ROLES).includes(newRole)) return { success: false, error: 'Rôle invalide.' };
     if (newRole === employee.role) return { success: false, error: 'Ce salarié a déjà ce rôle.' };
-
-    const actingUser = this.getEmployeeById(actingUserId);
-    const toucheDirecteur = newRole === ROLES.DIRECTEUR || employee.role === ROLES.DIRECTEUR;
-    if (toucheDirecteur && (!actingUser || actingUser.role !== ROLES.DIRECTEUR)) {
-      return { success: false, error: 'Seul un Directeur peut attribuer ou retirer le rôle Directeur.' };
-    }
-    if (employee.role === ROLES.DIRECTEUR && newRole !== ROLES.DIRECTEUR) {
-      const nbDirecteurs = this.getEmployees().filter(e => !e.archive && e.role === ROLES.DIRECTEUR).length;
-      if (nbDirecteurs <= 1) {
-        return { success: false, error: 'Impossible : ce salarié est le dernier Directeur de l\'entreprise.' };
-      }
+    if (newRole === ROLES.PROPRIETAIRE || employee.role === ROLES.PROPRIETAIRE) {
+      return { success: false, error: 'Le rôle Propriétaire se transfère depuis "Transférer la propriété", pas depuis ce formulaire.' };
     }
 
     const ancienRole = employee.role;
     this.updateEmployee(employeeId, { role: newRole });
     this.logAudit('Modification', 'Rôle', `${employee.prenom} ${employee.nom} : ${ROLE_LABELS[ancienRole]} → ${ROLE_LABELS[newRole]}`);
+    return { success: true };
+  },
+
+  /** Transfert de propriété (§5) : seul le Propriétaire actuel peut l'appeler. nouveauRoleAncien
+   * est le rôle que L'ACTUEL Propriétaire prendra une fois le transfert effectué (jamais un rôle
+   * "Directeur" décoratif implicite — il choisit explicitement). Toute la logique de garde
+   * (unicité, self-service, dernier Propriétaire) vit côté serveur (transfer_proprietaire,
+   * migration 0033) : ce wrapper ne fait qu'appeler la vraie fonction et rafraîchir le cache local. */
+  async transferProprietaire(newProprietaireId, nouveauRoleAncien) {
+    const result = await window.SupabaseSync.transferProprietaire(newProprietaireId, nouveauRoleAncien);
+    if (!result.success) return result;
+    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    if (company) {
+      this._companiesCache = [company];
+      this._currentEmployeeId = company._currentEmployeeId || this._currentEmployeeId;
+    }
     return { success: true };
   },
 
@@ -1897,7 +1930,7 @@ const DB = {
   },
 
   /** Visibles par un salarié donné : ses propres tickets, ou tous ceux de l'entreprise s'il a
-   * gererTickets (RH/Directeur) — cohérent avec la policy RLS support_tickets_select. */
+   * gererTickets (RH/Propriétaire) — cohérent avec la policy RLS support_tickets_select. */
   getSupportTicketsVisibleTo(employee) {
     const all = this.getSupportTickets().sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
     if (hasPermission(employee, PERMISSIONS.GERER_TICKETS)) return all;
@@ -2012,7 +2045,7 @@ const DB = {
 
   /** Visibles par un salarié donné : les siens, ceux de son équipe s'il est manager (managerIds sur
    * le salarié CIBLE, même relation que getVisibleEmployeeIdsForCurrentUser côté app.js), ou tous
-   * s'il a gererEntretiens (RH/Directeur) — reflète entretiens_select (0020_entretiens.sql). */
+   * s'il a gererEntretiens (RH/Propriétaire) — reflète entretiens_select (0020_entretiens.sql). */
   getEntretiensVisibleTo(employee) {
     const all = this.getEntretiens().sort((a, b) => new Date(b.datePrevue) - new Date(a.datePrevue));
     if (hasPermission(employee, PERMISSIONS.GERER_ENTRETIENS)) return all;
@@ -2023,7 +2056,7 @@ const DB = {
     });
   },
 
-  /** Planification : réservée à RH/Directeur (voir entretiens_insert) — le salarié ne crée jamais sa
+  /** Planification : réservée à RH/Propriétaire (voir entretiens_insert) — le salarié ne crée jamais sa
    * propre convocation. */
   addEntretien(data) {
     const now = new Date().toISOString();
@@ -2084,7 +2117,7 @@ const DB = {
     return entretien;
   },
 
-  /** Clôture par RH/Directeur (gererEntretiens) — fige la date de réalisation si elle n'était pas
+  /** Clôture par RH/Propriétaire (gererEntretiens) — fige la date de réalisation si elle n'était pas
    * déjà renseignée (coalesce local, comme dateLivraison pour les tickets support). */
   clotureEntretien(id) {
     const company = this.getCurrentCompany();
@@ -2226,7 +2259,7 @@ const DB = {
 
   // ---- Notifications ----
 
-  /** Lu/archivé sont personnels à chaque utilisateur (luPar/archivePar, par id de salarié) : une même notification peut être lue par la RH et non lue par le Directeur. */
+  /** Lu/archivé sont personnels à chaque utilisateur (luPar/archivePar, par id de salarié) : une même notification peut être lue par la RH et non lue par le Propriétaire. */
   getNotifications() {
     const user = this.getCurrentUser();
     const userId = user ? user.id : null;
@@ -2602,7 +2635,7 @@ const DB = {
     return { success: true };
   },
 
-  /** Après une première connexion avec un mot de passe temporaire (créé par un Directeur/RH via
+  /** Après une première connexion avec un mot de passe temporaire (créé par un Propriétaire/RH via
    * creerCompteConnexion, ou réinitialisé via forcerNouveauMotDePasse) — pas besoin de l'ancien mot
    * de passe, la session en cours suffit (même principe que resetPasswordWithToken ci-dessus). Lève
    * ensuite le drapeau data.mustChangePassword (écriture normale, autorisée sur sa propre fiche). */
@@ -2644,7 +2677,8 @@ const employeeRepository = {
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
   creerCompteConnexion: (employeeId) => DB.creerCompteConnexion(employeeId),
-  changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId)
+  changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId),
+  transferProprietaire: (newProprietaireId, nouveauRoleAncien) => DB.transferProprietaire(newProprietaireId, nouveauRoleAncien)
 };
 
 const leaveRepository = {
@@ -2654,7 +2688,8 @@ const leaveRepository = {
   create: (data) => DB.addLeaveRequest(data),
   update: (id, patch) => DB.updateLeaveRequest(id, patch),
   prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif),
-  regulariser: (id, patch) => DB.regulariserDemande(id, patch)
+  regulariser: (id, patch) => DB.regulariserDemande(id, patch),
+  applyFermetureDecompte: (fermeture) => applyFermetureDecompte(fermeture)
 };
 
 const teleworkRepository = {
@@ -2928,7 +2963,7 @@ function makeEmptyEmployee() {
     dateDepart: '',
     archive: false,
 
-    // Champs sensibles, réservés au Directeur, affichés uniquement si le réglage correspondant est activé
+    // Champs sensibles, réservés au Propriétaire, affichés uniquement si le réglage correspondant est activé
     salaireBrutMensuel: 0,
     genre: '',
 
@@ -3157,7 +3192,7 @@ function makeEmptyLeaveType() {
     acquisition: 'Annuelle', // 'Mensuelle' | 'Annuelle' | 'Illimitée'
     paye: true,
     justificatifObligatoire: false,
-    // Chaîne de validation ordonnée, ex. ['manager','rh'] ou ['rh'] ou ['manager','directeur'] ou [] (aucune validation).
+    // Chaîne de validation ordonnée, ex. ['manager','rh'] ou ['rh'] ou ['manager','proprietaire'] ou [] (aucune validation).
     // Paramétrable par type de congé ; DEFAULT_SETTINGS.workflowCongesDefault sert de modèle pour un nouveau type.
     workflow: ['manager'],
     saisiParSalarie: true, // §15 : "saisi par le salarié" vs "saisi uniquement par les RH" (ex. arrêts maladie, §24)
@@ -3180,6 +3215,33 @@ function makeEmptyLeaveType() {
     dateClotureCompteur: null,
     reportCompteur: 'aucun', // 'aucun' | 'limite' | 'illimite'
     reportLimiteJours: null,
+    // §correctif audit du 23/08/2026 (§7.15) : même format MM-JJ que dateClotureCompteur — date
+    // limite, DANS la nouvelle période, avant laquelle le report doit être consommé. null = pas
+    // d'échéance (comportement actuel, le report reste disponible toute la période). Voir la
+    // section "report" de getLeaveBalance (data.js) pour le calcul de la part perdue.
+    dateLimiteReportMMJJ: null,
+    // §correctif audit du 23/08/2026 (§7.8) : délai de prévenance — nombre minimum de jours entre
+    // la saisie et la date de départ. null/0 = pas de délai (comportement actuel). 'alerte' informe
+    // sans empêcher l'envoi, 'blocage' empêche la soumission (voir submitLeaveRequestForm, app.js).
+    delaiPrevenanceJours: null,
+    delaiPrevenanceMode: 'alerte', // 'alerte' | 'blocage'
+    // §correctif audit du 23/08/2026 (§7.9) : 'ouvres' (défaut, comportement historique — le rythme
+    // réel du salarié) ou 'ouvrables' (tous les jours sauf dimanche, notion légale utilisée pour
+    // les congés payés — 30 jours ouvrables = 25 jours ouvrés). Voir computeWorkingDays (data.js).
+    uniteDecompte: 'ouvres', // 'ouvres' | 'ouvrables'
+    // §correctif audit du 23/08/2026 (§7.18) : paliers d'ancienneté dans UN SEUL type plutôt que 4
+    // types distincts avec 4 règles d'éligibilité (lourd à paramétrer, illisible pour le salarié —
+    // 4 lignes de compteur pour une seule réalité). [] = pas de palier, nombreAnnuel s'applique tel
+    // quel (comportement actuel). Non vide : le palier le plus haut ATTEINT REMPLACE nombreAnnuel
+    // (ce n'est pas cumulatif — "+2 jours à 10 ans" veut dire 2 jours au total, pas 1+2). Voir
+    // resolveAncienneteAcquisAnnuel plus bas.
+    paliersAnciennete: [], // [{ ancienneteMin: 5, jours: 1 }, ...] triés croissants par ancienneteMin
+    // §correctif audit du 23/08/2026 (§7.17) : jours de fractionnement — règle supplétive française
+    // (L3141-23) : +1 jour si 3 à 5 jours du congé principal sont pris hors du 1er mai-31 octobre,
+    // +2 jours si 6 ou plus. Beaucoup d'accords l'écartent — interrupteur explicite, faux par défaut.
+    // N'a d'effet que si dateClotureCompteur est renseigné (voir la section "report" de
+    // getLeaveBalance, data.js, où le calcul est fait — même dépendance que le report lui-même).
+    fractionnementActif: false,
     exportPaie: true
   };
 }
@@ -3234,6 +3296,11 @@ function makeEmptyLeaveRequest() {
     workflow: [], // copie de la chaîne du type au moment de la demande (les changements ultérieurs du type ne l'affectent pas)
     etapeIndex: -1, // index dans workflow ; -1 = terminé
     historique: [],
+    // §correctif audit du 23/08/2026 (§7.5) : non-null seulement pour une demande générée
+    // automatiquement par une fermeture d'entreprise imposée (voir applyFermetureDecompte) — permet
+    // de la retrouver/l'annuler si la fermeture est ensuite modifiée ou supprimée, sans jamais
+    // confondre une fermeture avec un congé posé normalement par le salarié.
+    fermetureId: null,
     dateCreation: null,
     dateModification: null
   };
@@ -3412,7 +3479,7 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
 
 /**
  * Moteur de workflow générique : une "chaîne de validation" est un simple tableau ordonné
- * de rôles (ex. ['manager','rh'], ['rh'], ['manager','directeur'], ou [] pour une validation
+ * de rôles (ex. ['manager','rh'], ['rh'], ['manager','proprietaire'], ou [] pour une validation
  * automatique). Utilisé identiquement par les congés, le télétravail et les notes de frais —
  * chaque entreprise choisit sa chaîne dans Paramètres (ou par type pour les congés), sans
  * qu'aucun rôle ni ordre ne soit codé en dur dans le moteur lui-même.
@@ -3429,7 +3496,7 @@ function computeInitialWorkflowStep(workflow) {
  * personne ne remplit jamais le rôle exigé par l'étape en cours — cas concret reproduit : un
  * manager sans manager désigné au-dessus de lui dépose un congé dont la première étape exige le
  * rôle "manager" (isCurrentWorkflowStepFor, app.js, exige alors un AUTRE manager explicitement
- * inscrit comme son supérieur) ; s'il n'existe ni RH ni Directeur non plus (VALIDER_ABSENCE/
+ * inscrit comme son supérieur) ; s'il n'existe ni RH ni Propriétaire non plus (VALIDER_ABSENCE/
  * VALIDER_NOTE_FRAIS, qui contournent normalement l'étape), personne ne peut jamais agir. Reproduit
  * ici, SANS utilisateur connecté précis, la même logique que canActOnRequestFor/
  * isCurrentWorkflowStepFor (app.js) — permet de savoir, dès la création d'une demande, si une étape
@@ -3450,16 +3517,16 @@ function hasEligibleValidatorForStep(employeeId, role, domain) {
 
 /** Construit la chaîne effective d'une demande : retire les étapes qu'AUCUN salarié actuel ne peut
  * jamais franchir ("remontée automatique" demandée par l'audit — N+1 si le manager manque, puis RH,
- * puis Direction), et signale le cas via `escalated` pour que l'appelant (app.js) prévienne
- * l'auteur de la demande. Si la chaîne entière se retrouve vide, retombe explicitely sur RH puis
- * Direction (le premier qui existe) plutôt que de laisser une demande sans aucune étape. */
+ * puis Propriétaire), et signale le cas via `escalated` pour que l'appelant (app.js) prévienne
+ * l'auteur de la demande. Si la chaîne entière se retrouve vide, retombe explicitement sur RH puis
+ * Propriétaire (le premier qui existe) plutôt que de laisser une demande sans aucune étape. */
 function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
   const workflow = (rawWorkflow || []).filter(role => hasEligibleValidatorForStep(employeeId, role, domain));
   let escalated = workflow.length !== (rawWorkflow || []).length;
   if (workflow.length === 0 && (rawWorkflow || []).length > 0) {
     const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
     if (employees.some(e => e.role === ROLES.RH)) workflow.push(ROLES.RH);
-    else if (employees.some(e => e.role === ROLES.DIRECTEUR)) workflow.push(ROLES.DIRECTEUR);
+    else if (employees.some(e => e.role === ROLES.PROPRIETAIRE)) workflow.push(ROLES.PROPRIETAIRE);
     escalated = true;
   }
   return { workflow, escalated };
@@ -3488,10 +3555,14 @@ function advanceWorkflow(request, finalStatut) {
 }
 
 /** Refus/annulation génériques, communs aux congés et au télétravail (même forme de demande). */
-function refuseRequest(request) {
+/** §correctif audit du 23/08/2026 (§7.7) : un refus était jusqu'ici muet — le salarié voyait sa
+ * demande refusée sans explication, et rien n'en gardait la trace. motif est désormais obligatoire
+ * côté UI (openRefuseModal, app.js) ; stocké deux fois par commodité — motifRefus pour l'affichage
+ * direct au salarié, et dans historique pour rester cohérent avec les autres actions déjà tracées là. */
+function refuseRequest(request, motif) {
   const historique = (request.historique || []).slice();
-  historique.push({ date: new Date().toISOString(), action: 'Refusé' });
-  return { statut: 'Refusé', historique };
+  historique.push({ date: new Date().toISOString(), action: 'Refusé', motif });
+  return { statut: 'Refusé', motifRefus: motif, historique };
 }
 
 function cancelRequest(request) {
@@ -3500,18 +3571,27 @@ function cancelRequest(request) {
   return { statut: 'Annulé', historique };
 }
 
-/** Nombre de jours ouvrés décomptés pour une période, selon les jours travaillés du salarié —
- * ET les jours fériés/fermetures (settings), via isJourTravaillePourSalarie (data.js:3145),
- * déjà construite pour les tickets restaurant : un jour férié ou une fermeture ne doit pas être
- * décompté comme un jour d'absence, exactement comme il n'aurait pas été travaillé de toute façon. */
-function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings) {
+/** Nombre de jours décomptés pour une période, selon les jours travaillés du salarié — ET les
+ * jours fériés/fermetures (settings), via isJourTravaillePourSalarie (data.js:3145), déjà
+ * construite pour les tickets restaurant : un jour férié ou une fermeture ne doit pas être
+ * décompté comme un jour d'absence, exactement comme il n'aurait pas été travaillé de toute façon.
+ *
+ * §correctif audit du 23/08/2026 (§7.9) : `unite` ('ouvres' par défaut, comportement inchangé pour
+ * tout appelant qui ne le précise pas) — le Code du travail exprime les congés payés en jours
+ * OUVRABLES (tous les jours sauf le dimanche, une notion calendaire), alors que la plupart des
+ * conventions comptent en jours OUVRÉS (le rythme RÉEL du salarié, employee.joursTravailles). Seul
+ * un congé (leaveType.uniteDecompte) peut valoir 'ouvrables' — télétravail/notes de frais restent
+ * toujours en jours ouvrés, cette distinction n'a de sens légal que pour les congés. */
+function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings, unite = 'ouvres') {
   if (!dateDebut || !dateFin) return 0;
   const start = parseISODateLocal(dateDebut);
   const end = parseISODateLocal(dateFin);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
 
   const joursTravailles = employee && employee.joursTravailles;
-  const workedDays = joursTravailles && joursTravailles.length ? joursTravailles : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
+  const workedDays = unite === 'ouvrables'
+    ? ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+    : (joursTravailles && joursTravailles.length ? joursTravailles : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven']);
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
   let count = 0;
@@ -3533,7 +3613,7 @@ function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings)
  * en découpant la période aux bornes du mois. Réutilise computeWorkingDays plutôt que
  * de dupliquer la boucle de comptage — utilisé par l'export paie.
  */
-function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings) {
+function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings, unite = 'ouvres') {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
   const start = parseISODateLocal(dateDebut);
@@ -3543,7 +3623,7 @@ function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, e
   if (clippedStart > clippedEnd) return 0;
 
   const fullyWithinMonth = start >= monthStart && end <= monthEnd;
-  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, employee, settings);
+  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, employee, settings, unite);
 }
 
 function daysBetween(a, b) {
@@ -3585,6 +3665,26 @@ function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
   return { periodStart: new Date(now.getFullYear(), month - 1, day + 1), periodEnd: new Date(now.getFullYear() + 1, month - 1, day) };
 }
 
+/** Ancienneté en années (nombres décimaux) à une date de référence — même convention que le
+ * critère d'éligibilité 'anciennete' (isLeaveTypeEligibleForEmployee), pour rester cohérent : une
+ * ancienneté qui rend éligible à un type doit être calculée de la même façon que celle qui
+ * détermine SON palier. */
+function calculateAncienneteYears(employee, refDate) {
+  if (!employee.dateEmbauche) return 0;
+  const now = toRefDate(refDate);
+  return Math.max(0, (now - parseISODateLocal(employee.dateEmbauche)) / (365.25 * 86400000));
+}
+
+/** §7.18 : nombreAnnuel effectif, remplacé par le palier d'ancienneté le plus haut ATTEINT si le
+ * type en définit (voir makeEmptyLeaveType) — sinon nombreAnnuel s'applique tel quel. */
+function resolveAncienneteAcquisAnnuel(leaveType, employee, refDate) {
+  const paliers = leaveType.paliersAnciennete || [];
+  if (!paliers.length) return Number(leaveType.nombreAnnuel) || 0;
+  const years = calculateAncienneteYears(employee, refDate);
+  const atteints = paliers.filter(p => years >= Number(p.ancienneteMin)).sort((a, b) => b.ancienneteMin - a.ancienneteMin);
+  return atteints.length ? Number(atteints[0].jours) || 0 : 0;
+}
+
 /** periodOverride ({periodStart, periodEnd}) : borne le calcul à une période de clôture personnalisée
  * (§5) au lieu de l'année civile par défaut — utilisé uniquement quand leaveType.dateClotureCompteur
  * est renseigné (voir getLeaveBalance), sinon comportement strictement inchangé. */
@@ -3607,7 +3707,7 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
   if (periodStart > periodEnd) return 0;
 
   const activityRatio = (Number(employee.pourcentageActivite) || 100) / 100;
-  const annualAmount = Number(leaveType.nombreAnnuel) || 0;
+  const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now);
 
   if (leaveType.acquisition === 'Mensuelle') {
     let monthsElapsed = (periodEnd.getFullYear() - periodStart.getFullYear()) * 12 + (periodEnd.getMonth() - periodStart.getMonth());
@@ -3724,7 +3824,10 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     // demiJournee non applicable ici : une demande à cheval sur une découpe est nécessairement
     // multi-jours (une demi-journée est toujours mono-jour, donc toujours "fullyWithinPeriod" si
     // elle chevauche du tout — voir ci-dessus).
-    return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), false, employee, settings);
+    // §7.9 : le type réel de la demande r (pas forcément leaveType — cf. compteurPartageAvecId
+    // ci-dessus, une demande d'un AUTRE type peut s'imputer sur ce compteur) fixe l'unité.
+    const reqType = types.find(t => t.id === r.typeId) || leaveType;
+    return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), false, employee, settings, reqType.uniteDecompte);
   };
 
   const requestsFor = (start, end) => allRequests.filter(r =>
@@ -3761,12 +3864,75 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     report = leaveType.reportCompteur === 'limite' ? Math.min(soldeResiduel, Number(leaveType.reportLimiteJours) || 0) : soldeResiduel;
   }
 
-  const acquis = acquisPeriode === Infinity ? Infinity : round2(acquisPeriode + report);
+  // §correctif audit du 23/08/2026 (§7.15) : le report plafonnait déjà le NOMBRE de jours reportés
+  // (reportLimiteJours ci-dessus) mais ne portait aucune échéance de consommation — beaucoup de
+  // conventions collectives imposent que le reliquat reporté soit pris avant une date donnée, sous
+  // peine d'être perdu. On considère que les jours pris DANS LA NOUVELLE PÉRIODE avant l'échéance
+  // consomment le report EN PRIORITÉ (c'est lui qui expire, pas l'acquisition normale de la
+  // période) ; une fois l'échéance passée, la part du report encore inutilisée est retirée de
+  // l'acquis — jamais avant, pour ne pas pénaliser un salarié qui a simplement posé ses congés plus
+  // tard dans le mois sans que l'échéance soit encore dépassée.
+  let reportPerdu = 0;
+  if (report > 0 && leaveType.dateLimiteReportMMJJ) {
+    const echeance = resolveDeadlineInPeriod(leaveType.dateLimiteReportMMJJ, current.periodStart, current.periodEnd);
+    const ref = toRefDate(refDate);
+    if (ref > echeance) {
+      const prisAvantEcheance = requestsCurrent.filter(r => r.statut === 'Validé')
+        .reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, echeance), 0);
+      reportPerdu = Math.max(0, round2(report - prisAvantEcheance));
+    }
+  }
+
+  // §correctif audit du 23/08/2026 (§7.17) : jours de fractionnement — calculés sur la période
+  // PRÉCÉDENTE (comme le report ci-dessus, réutilise d'ailleurs son previous/requestsPrecedent) :
+  // c'est en fin de période qu'on sait combien de jours de congé principal ont été pris hors de la
+  // fenêtre légale du 1er mai au 31 octobre. Crédité sur la période EN COURS, comme un report.
+  let fractionnement = 0;
+  if (leaveType.fractionnementActif) {
+    const previousRefDate2 = new Date(current.periodStart.getTime() - 86400000);
+    const previous2 = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate2);
+    const joursHorsFenetre = requestsFor(previous2.periodStart, previous2.periodEnd)
+      .filter(r => r.statut === 'Validé')
+      .reduce((sum, r) => sum + countJoursHorsFenetreFractionnement(r, employee, settings, leaveType.uniteDecompte), 0);
+    fractionnement = joursHorsFenetre >= 6 ? 2 : joursHorsFenetre >= 3 ? 1 : 0;
+  }
+
+  const acquis = acquisPeriode === Infinity ? Infinity : round2(acquisPeriode + report - reportPerdu + fractionnement);
   const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
-  return { acquis, pris, enAttente, disponible, ajustement, report };
+  return { acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement };
 }
 
-// ---- Indicateurs du tableau de bord Directeur ----
+/** Jours d'une demande VALIDÉE qui tombent hors de la fenêtre légale du 1er mai au 31 octobre de
+ * l'année de sa date de début — §7.17. Reconstruit via computeWorkingDays sur les sous-segments
+ * avant le 1er mai / après le 31 octobre plutôt que de proratiser r.nbJours (qui ne dit rien de
+ * QUELS jours précis sont concernés). */
+function countJoursHorsFenetreFractionnement(request, employee, settings, unite) {
+  const year = Number(request.dateDebut.slice(0, 4));
+  const mai1 = `${year}-05-01`;
+  const oct31 = `${year}-10-31`;
+  let total = 0;
+  if (request.dateDebut < mai1) {
+    const finAvant = request.dateFin < mai1 ? request.dateFin : toISODate(addDays(parseISODateLocal(mai1), -1));
+    total += computeWorkingDays(request.dateDebut, finAvant, false, employee, settings, unite);
+  }
+  if (request.dateFin > oct31) {
+    const debutApres = request.dateDebut > oct31 ? request.dateDebut : toISODate(addDays(parseISODateLocal(oct31), 1));
+    total += computeWorkingDays(debutApres, request.dateFin, false, employee, settings, unite);
+  }
+  return total;
+}
+
+/** Date d'échéance MM-JJ (ex. '03-31') résolue dans [periodStart, periodEnd] — §7.15. Prend
+ * l'année de periodStart ; bascule à l'année suivante si ça tomberait avant periodStart (période
+ * traversant le nouvel an civil, ex. période 01/06→31/05 avec échéance en mars). */
+function resolveDeadlineInPeriod(mmjj, periodStart, periodEnd) {
+  const [month, day] = mmjj.split('-').map(Number);
+  let deadline = new Date(periodStart.getFullYear(), month - 1, day);
+  if (deadline < periodStart) deadline = new Date(periodStart.getFullYear() + 1, month - 1, day);
+  return deadline > periodEnd ? periodEnd : deadline;
+}
+
+// ---- Indicateurs du tableau de bord Propriétaire ----
 
 const JOURS_OUVRES_PAR_AN = 218; // moyenne France (jours ouvrés hors fériés/congés), utilisée comme base de taux
 
@@ -3853,12 +4019,19 @@ function getGenderBreakdown(employees) {
   return rows;
 }
 
-/** Types de congés fournis par défaut (paramétrables ensuite via l'écran Congés). */
+/** Types de congés fournis par défaut (paramétrables ensuite via l'écran Congés).
+ * §correctif audit du 23/08/2026 (§7.1) : jeu de règles standard confirmé par le client — Congés
+ * payés/RTT/Ancienneté/Enfant malade ci-dessous suivent les valeurs qu'il nous a communiquées.
+ * Les événements familiaux restent volontairement absents de ce seed : leurs durées sont en
+ * attente de confirmation par son expert-comptable (voir les "trois réserves" de l'audit) — le
+ * type sera ajouté une fois ces valeurs connues, pas avant. Toutes ces valeurs sont SUPPLÉTIVES :
+ * la convention collective d'un client peut les relever, jamais les abaisser (à afficher dans
+ * l'interface, voir renderParametresTypesAbsences). */
 function seedLeaveTypes() {
   const rows = [
-    ['Congés payés', '🏖️', '#2563eb', 25, 'Mensuelle', true, false, ['manager'], 'conge'],
+    ['Congés payés', '🏖️', '#2563eb', 30, 'Mensuelle', true, false, ['manager'], 'conge'],
     ['RTT', '⏱️', '#7c3aed', 12, 'Mensuelle', true, false, ['manager'], 'conge'],
-    ['Ancienneté', '🎖️', '#0891b2', 2, 'Annuelle', true, false, ['manager'], 'autre'],
+    ['Ancienneté', '🎖️', '#0891b2', 0, 'Annuelle', true, false, ['manager'], 'autre'],
     ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh'], 'autre'],
     ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
     ['Décès', '🕊️', '#4b5563', 5, 'Annuelle', true, true, ['rh'], 'autre'],
@@ -3866,19 +4039,55 @@ function seedLeaveTypes() {
     ['Formation', '📚', '#059669', 5, 'Annuelle', true, false, ['manager', 'rh'], 'autre'],
     ['Naissance / adoption', '👶', '#ec4899', 3, 'Annuelle', true, true, ['rh'], 'autre'],
     ['Proche aidant', '🤝', '#8b5cf6', 0, 'Illimitée', false, true, ['rh'], 'autre'],
-    ['Sans solde', '🚫', '#6b7280', 0, 'Illimitée', false, false, ['manager', 'directeur'], 'autre'],
+    ['Sans solde', '🚫', '#6b7280', 0, 'Illimitée', false, false, ['manager', 'proprietaire'], 'autre'],
     ['Exceptionnel', '⭐', '#d97706', 3, 'Annuelle', true, false, ['rh'], 'autre']
   ];
 
   return rows.map((row, i) => {
     const [nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow, categorie] = row;
-    return Object.assign(makeEmptyLeaveType(), {
+    const type = Object.assign(makeEmptyLeaveType(), {
       id: generateId('lt'),
       ordre: i,
       nom, icone, couleur, nombreAnnuel, acquisition, paye, justificatifObligatoire, workflow, categorie,
       saisiParSalarie: nom.toLowerCase() !== 'maladie', // §24 : arrêts maladie saisis uniquement par les RH
       illimite: acquisition === 'Illimitée'
     });
+
+    if (nom === 'Congés payés') {
+      // 2,5 jours ouvrables/mois = 30 jours ouvrables/an (valeur par défaut ci-dessus), période de
+      // référence légale du 1er juin au 31 mai, report nul par défaut (reportCompteur: 'aucun',
+      // déjà la valeur par défaut de makeEmptyLeaveType — pas besoin de le répéter ici).
+      type.uniteDecompte = 'ouvrables';
+      type.dateClotureCompteur = '05-31';
+      type.description = 'Règle légale par défaut, supplétive : 2,5 jours ouvrables par mois travaillé (30 j/an), période du 1er juin au 31 mai. Votre convention collective peut la relever, jamais l\'abaisser.';
+    }
+    if (nom === 'RTT') {
+      // Créé mais INACTIF par défaut : aucune règle légale unique n'existe pour les RTT (contrairement
+      // aux congés payés) — à activer et ajuster une fois la convention/l'accord d'entreprise connu.
+      type.actif = false;
+      type.description = 'Inactif par défaut : pas de règle légale unique. Ordres de grandeur usuels : environ 23 jours/an pour un forfait 39h hebdo, 10 à 12 jours/an pour un forfait 218 jours. Concerne en général les salariés au forfait ou au-delà de 35h/semaine — à activer et ajuster une fois votre accord d\'entreprise confirmé.';
+    }
+    if (nom === 'Ancienneté') {
+      // §7.18 : paliers dans CE seul type plutôt que 4 types distincts — barème standard communiqué
+      // par le client (+1j à 5 ans, +2 à 10, +3 à 15, +4 à 20 ; non cumulatif, voir
+      // resolveAncienneteAcquisAnnuel). nombreAnnuel reste à 0, ignoré tant que des paliers existent.
+      type.paliersAnciennete = [
+        { ancienneteMin: 5, jours: 1 },
+        { ancienneteMin: 10, jours: 2 },
+        { ancienneteMin: 15, jours: 3 },
+        { ancienneteMin: 20, jours: 4 }
+      ];
+      type.description = 'Barème standard, supplétif : +1 jour à 5 ans d\'ancienneté, +2 à 10 ans, +3 à 15 ans, +4 à 20 ans (non cumulatif). Votre convention collective peut le relever, jamais l\'abaisser.';
+    }
+    if (nom === 'Enfant malade') {
+      // La bonification à 5 jours (enfant de moins d'1 an, ou salarié ayant 3 enfants de moins de
+      // 16 ans) dépend de données sur les ENFANTS du salarié, qu'aucun champ de ce SIRH ne capture
+      // aujourd'hui — l'ajouter serait un nouveau modèle de données, hors périmètre d'un simple jeu
+      // de règles par défaut. Le cas échéant, un RH ajuste manuellement via DB.ajusterCompteurConge
+      // (déjà existant) ; documenté ici plutôt que silencieusement absent.
+      type.description = '3 jours par an, non rémunéré (valeur supplétive légale). Porté à 5 jours si l\'enfant a moins d\'un an ou si le salarié a 3 enfants de moins de 16 ans — cette bonification n\'est pas automatisée (l\'application ne suit pas les enfants des salariés) : ajustez manuellement le compteur au cas par cas.';
+    }
+    return type;
   });
 }
 
@@ -4015,6 +4224,74 @@ function isJourTravaillePourSalarie(dateStr, employee, settings, categoriesSalar
   return true;
 }
 
+/** §correctif audit du 23/08/2026 (§7.5) : nombre de jours décomptés pour UN salarié sur la durée
+ * d'une fermeture imposée. Ne peut PAS réutiliser computeWorkingDays tel quel : celui-ci s'appuie
+ * sur isJourTravaillePourSalarie, qui exclut justement les jours de CETTE fermeture (c'est ce qui
+ * la rend gratuite par défaut) — on retomberait systématiquement sur 0. On réévalue donc chaque
+ * jour avec les MÊMES règles (jours travaillés du salarié, jours fériés et exceptions par
+ * catégorie, AUTRES fermetures) en ignorant explicitement cette fermeture précise. */
+function countFermetureDecompteDays(fermeture, employee, settings) {
+  const settingsSansCetteFermeture = { ...settings, fermetures: (settings.fermetures || []).filter(f => f.id !== fermeture.id) };
+  const start = parseISODateLocal(fermeture.dateDebut);
+  const end = parseISODateLocal(fermeture.dateFin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  const joursTravailles = employee.joursTravailles && employee.joursTravailles.length ? employee.joursTravailles : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
+  const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  let count = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const dateStr = toISODate(cursor);
+    if (joursTravailles.includes(dayLabels[cursor.getDay()]) && isJourTravaillePourSalarie(dateStr, employee, settingsSansCetteFermeture)) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+/** §correctif audit du 23/08/2026 (§7.5) : matérialise (ou retire) le décompte d'une fermeture
+ * imposée en vraies demandes de congé Validé — getLeaveBalance() (plus bas) ne lit de "pris" que
+ * dans de vraies demandes, il n'existe aucune comptabilité parallèle possible ici sans dupliquer
+ * cette logique. Idempotent et rejouable à chaque enregistrement de la fermeture (dates, type
+ * décompté ou salariés concernés modifiés) : repart des demandes déjà générées pour CETTE
+ * fermeture (fermetureId), les annule, puis regénère au besoin — jamais de recalcul incrémental
+ * fragile. N'annule jamais une demande qu'un humain a modifiée depuis (statut déjà différent de
+ * Validé, ex. déjà annulée manuellement) : elle sort simplement du mécanisme automatique. */
+async function applyFermetureDecompte(fermeture) {
+  const dejaGenerees = DB.getLeaveRequests().filter(r => r.fermetureId === fermeture.id);
+  for (const r of dejaGenerees) {
+    if (r.statut === 'Validé') {
+      DB.updateLeaveRequest(r.id, { statut: 'Annulé', fermetureId: null });
+    }
+  }
+
+  if (!fermeture.decompteTypeId) return { genere: 0 };
+
+  const settings = DB.getSettings();
+  const categories = DB.getCategoriesSalarie();
+  const employees = DB.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+  let genere = 0;
+  for (const employee of employees) {
+    const empCategorieId = getEffectiveCategorieSalarieId(employee, categories);
+    const exception = (fermeture.exceptionsCategories || []).find(ex => ex.categorieSalarieId === empCategorieId);
+    if (exception && exception.travaillable) continue; // travaille malgré la fermeture : rien à décompter
+
+    const nbJours = countFermetureDecompteDays(fermeture, employee, settings);
+    if (nbJours <= 0) continue;
+
+    DB.addFermetureLeaveRequest({
+      employeeId: employee.id,
+      typeId: fermeture.decompteTypeId,
+      dateDebut: fermeture.dateDebut,
+      dateFin: fermeture.dateFin,
+      demiJournee: null,
+      nbJours,
+      commentaire: `Fermeture imposée : ${fermeture.nom}`,
+      fermetureId: fermeture.id
+    });
+    genere += 1;
+  }
+  return { genere };
+}
+
 /** Retourne la période de vacances scolaires en cours pour une date et une zone, s'il y en a une. */
 function findSchoolHolidayPeriod(dateStr, zone, schoolHolidays) {
   return schoolHolidays.periodes.find(p => p.zones.includes(zone) && dateStr >= p.debut && dateStr <= p.fin) || null;
@@ -4057,7 +4334,7 @@ function seedSchoolHolidays() {
 /** Données de démonstration chargées au premier lancement. */
 function seedEmployees() {
   const base = [
-    ['M.', 'Julien', 'Moreau', 'Direction', 'Direction générale', 'Directeur général', 'Cadre', 'CDI', '2015-03-02', 'Temps plein', 100, 39, 'Forfait jours', 'directeur'],
+    ['M.', 'Julien', 'Moreau', 'Direction', 'Direction générale', 'Directeur général', 'Cadre', 'CDI', '2015-03-02', 'Temps plein', 100, 39, 'Forfait jours', 'proprietaire'],
     ['Mme', 'Camille', 'Lefèvre', 'RH', 'Ressources humaines', 'Responsable RH', 'Cadre', 'CDI', '2018-09-10', 'Temps plein', 100, 37, 'Aucun', 'rh'],
     ['M.', 'Nicolas', 'Girard', 'IT', 'Développement', 'Responsable technique', 'Cadre', 'CDI', '2021-01-11', 'Temps plein', 100, 39, 'Aucun', 'manager'],
     ['Mme', 'Sarah', 'Benali', 'Commercial', 'Commerce', 'Commerciale', 'Non cadre', 'CDD', '2024-06-01', 'Temps plein', 100, 35, 'Aucun', 'salarie'],
@@ -4090,9 +4367,9 @@ function seedEmployees() {
     });
   });
 
-  // Structure hiérarchique de démonstration : Julien (directeur) encadre Camille, Nicolas
+  // Structure hiérarchique de démonstration : Julien (proprietaire) encadre Camille, Nicolas
   // et Thomas ; Nicolas (manager) encadre Sarah et Léa — de quoi tester un vrai cas
-  // "manager avec équipe" plutôt qu'un rattachement uniforme au directeur.
+  // "manager avec équipe" plutôt qu'un rattachement uniforme au propriétaire.
   const [julien, camille, nicolas, sarah, thomas, lea] = employees;
   camille.managerIds = [julien.id];
   nicolas.managerIds = [julien.id];

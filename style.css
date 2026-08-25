@@ -169,7 +169,7 @@ p { margin: 0; line-height: 1.5; }
   gap: 2px;
   padding: 8px;
   /* #sidebar est en position:fixed (hauteur = 100vh) : sans ça, un compte avec beaucoup d'entrées
-     de menu (Directeur...) sur un écran court (téléphone) poussait les derniers éléments sous le
+     de menu (Propriétaire...) sur un écran court (téléphone) poussait les derniers éléments sous le
      bas de l'écran, purement inatteignables (rien ne défilait). */
   flex: 1;
   min-height: 0;
@@ -1268,6 +1268,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .calendar-tag-holiday { background: var(--color-danger); color: white; }
+/* §correctif audit du 23/08/2026 (§7.6) : même traitement visuel que .calendar-tag-holiday (alerte
+   = rouge, cohérent avec le reste de l'app) mais sa propre classe — sémantiquement un quota
+   d'absences simultanées n'est pas un jour férié, éviter de les confondre au premier coup d'œil
+   dans le CSS pour qui reprendrait ce code plus tard. */
+.calendar-tag-quota { background: var(--color-danger); color: white; }
 
 .calendar-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 
@@ -2885,7 +2890,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   #main-column { margin-left: 0; }
   #view-root { padding: 16px; }
   /* Demande du 21/08/2026 : 2 colonnes plutôt qu'une seule pleine largeur, pour moins défiler sur
-     une grille de nombreuses cartes KPI (jusqu'à 15 sur le tableau de bord RH/Directeur) — forcé en
+     une grille de nombreuses cartes KPI (jusqu'à 15 sur le tableau de bord RH/Propriétaire) — forcé en
      dur plutôt que de compter sur auto-fit/minmax, qui retombait sur une seule colonne à cette
      largeur malgré la place suffisante mesurée. */
   .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }

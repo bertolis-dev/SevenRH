@@ -537,6 +537,19 @@ async function createCompanySelfService() {
   return { success: true, companyId: data };
 }
 
+/** §correctif audit du 23/08/2026 (§5) : appelle la RPC transfer_proprietaire (migration 0033) —
+ * toute la logique de garde (appelant bien Propriétaire, cible valide et déjà pourvue d'un compte
+ * de connexion, dernier Propriétaire...) vit côté serveur ; ce wrapper ne fait que relayer l'erreur
+ * telle quelle si la RPC refuse. */
+async function transferProprietaire(newProprietaireId, nouveauRoleAncien) {
+  const { error } = await supabase.rpc('transfer_proprietaire', {
+    new_proprietaire_id: newProprietaireId,
+    role_ancien_proprietaire: nouveauRoleAncien
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /** Renvoie l'email de confirmation pour une inscription déjà faite mais pas encore confirmée —
  * signUp() ne renvoie pas systématiquement un nouvel email pour une adresse déjà en attente (pour
  * éviter le spam), donc un simple nouveau clic sur "Créer mon compte" ne suffit pas si le premier
@@ -637,7 +650,7 @@ async function hydrateCurrentCompany() {
   const company = companyRes.data;
 
   // Fusionne la table complète (ce que RLS autorise pour ce rôle : soi-même/son équipe/tout si
-  // RH-Directeur) avec la vue calendrier redactée (tout le monde, champs minimaux) — sans écraser
+  // RH-Propriétaire) avec la vue calendrier redactée (tout le monde, champs minimaux) — sans écraser
   // une entrée déjà présente en version complète.
   function mergeCalendar(fullRows, calendarRows, fullMapper, calendarMapper) {
     const byId = new Map(fullRows.map(r => [r.id, fullMapper(r)]));
@@ -696,7 +709,7 @@ async function invokeBilling(action, payload) {
   return { success: true, ...data };
 }
 
-/** Appelle la fonction serveur "manage-employee-account" — un Directeur/RH crée ("create") ou
+/** Appelle la fonction serveur "manage-employee-account" — un Propriétaire/RH crée ("create") ou
  * réinitialise ("reset") directement le compte de connexion d'un salarié de son entreprise (voir
  * supabase/functions/manage-employee-account/index.ts). Renvoie le mot de passe (généré côté
  * serveur pour "create", ou celui passé/généré pour "reset") — à afficher une seule fois, jamais
@@ -943,7 +956,7 @@ const pushDocuments = (rows, companyId) => syncTable('documents', rows, document
 const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
 
 /** Un entretien n'est jamais créé par le salarié (voir entretiens_insert, 0020_entretiens.sql) —
- * pushEntretiens ne sert qu'à RH/Directeur planifiant une convocation. updateEntretien couvre les 3
+ * pushEntretiens ne sert qu'à RH/Propriétaire planifiant une convocation. updateEntretien couvre les 3
  * écritures suivantes (auto-évaluation salarié, retour manager, clôture RH) : une simple mise à jour
  * complète de ligne suffit ici (pas de fonction SQL atomique comme append_ticket_comment) — chaque
  * étape est écrite par un seul acteur à la fois, jamais en concurrence comme un fil de commentaires. */
@@ -1074,7 +1087,7 @@ async function pushClearAuditLog(companyId) {
 }
 
 window.SupabaseSync = {
-  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,

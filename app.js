@@ -331,14 +331,14 @@ function escapeIcon(value) {
  * voir renderSidebar()/navigateTo() pour la résolution. `group` est purement un indice d'affichage
  * (regroupement visuel) — n'affecte jamais qui voit quoi, ça reste `roles`/`permissions` seuls. */
 const NAV_ITEMS = [
-  { key: 'dashboard', label: 'Accueil', icon: ICONS.chart, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'] },
+  { key: 'dashboard', label: 'Accueil', icon: ICONS.chart, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'] },
 
   // ---- Personnel ----
   // `module` (voir LANDING_ALACARTE_MODULES/hasModule) : sans effet pour un abonnement classique
   // (essai/essentiel/professionnel/premium, toujours tout inclus) — ne restreint que les
   // entreprises passées à la carte, selon les modules réellement souscrits.
-  { key: 'planning', label: 'Planning', icon: ICONS.schedule, roles: ['manager', 'rh', 'directeur'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
-  { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
+  { key: 'planning', label: 'Planning', icon: ICONS.schedule, roles: ['manager', 'rh', 'proprietaire'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
+  { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
   // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
   // logique de regroupement que Planning/Calendrier ci-dessus, appliquée cette fois à 3 écrans
@@ -353,21 +353,21 @@ const NAV_ITEMS = [
   // attente" (Object.assign(state, {}) ne réinitialise rien) — cette entrée restait donc filtrée sur
   // les demandes en attente au lieu de revenir à la vue personnelle par défaut. Remet explicitement
   // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
-  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '' } } },
-  { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'frais' },
+  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '' } } },
+  { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'frais' },
   { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: ['salarie'], group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
-  { key: 'mes-tickets', label: 'Mes tickets', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'mes-tickets', label: 'Mes tickets', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
   // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
   // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
   // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
-  { key: 'entretiens', label: 'Entretiens', icon: ICONS.notepad, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'entretiens' },
+  { key: 'entretiens', label: 'Entretiens', icon: ICONS.notepad, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'entretiens' },
   // Contrairement aux autres entrées "personnel" (données propres au salarié), la boîte à idées est
   // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
   // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
   // individuel (proposer/voter), pas un outil de pilotage d'équipe.
-  { key: 'idees', label: "Boîte à idées", icon: ICONS.lightbulb, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel' },
+  { key: 'idees', label: "Boîte à idées", icon: ICONS.lightbulb, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
 
   // ---- Équipe ----
   // §retour du 21/08/2026 : entrée dédiée "Congés à valider" (même écran "absences" que la version
@@ -376,15 +376,15 @@ const NAV_ITEMS = [
   // n'a jamais aucun menu "Équipe", donc jamais les étiquettes Personnel/Équipe (voir showGroups,
   // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
   // voir isNavItemActive) plutôt qu'un nouvel écran.
-  { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER },
+  { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER },
   // §correctif audit du 23/08/2026 (2.1) : PAS de module ici — le registre des salariés (liste,
   // création, fiche de base) est le socle commun de tous les modules, pas une fonctionnalité RH
   // parmi d'autres. Sans ce retrait, une entreprise n'ayant souscrit qu'au module congés ne pouvait
   // voir ni créer aucun salarié — donc jamais poser aucune demande de congé non plus, ce qui rendait
   // le module congés invendable seul. Le module 'rh' reste sur organigramme/export-paie/mes-documents
   // (coffre-fort, préparation de paie), qui restent des fonctionnalités RH à part entière.
-  { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'directeur'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
-  { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'directeur'], group: 'equipe', module: 'rh' },
+  { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
+  { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
   // vers exactement la même vue que leur pendant "Personnel", juste avec des navParams différents.
@@ -393,31 +393,31 @@ const NAV_ITEMS = [
   // valider" dans leur propre vue (voir renderConges/renderTeletravail/renderFrais) plutôt qu'une
   // entrée de menu séparée pour un simple préréglage de filtre.
   // §sprint refonte UX §10 : ouvert à tous désormais (vue personnelle par défaut) — RH/Comptabilité/
-  // Directeur gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2 entrées
-  // de menu distinctes pour un même écran.
-  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'directeur'], group: 'personnel', module: 'tickets' },
-  { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
+  // Propriétaire gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2
+  // entrées de menu distinctes pour un même écran.
+  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'tickets' },
+  { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
   // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
   // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
-  // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Directeur
+  // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Propriétaire
   // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
-  { key: 'remuneration', label: 'Rémunération', icon: ICONS.coin, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
+  { key: 'remuneration', label: 'Rémunération', icon: ICONS.coin, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
   // Demande du 17/08/2026 : dépôt de candidature via QR code, périmètre volontairement minimal
   // (upload + liste + conversion en salarié) — le recrutement/ATS complet reste par ailleurs hors
   // scope de Nexus RH. Rattaché au module "rh" (pas de nouvelle ligne tarifaire) : qui paie déjà
   // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
-  { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
+  { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
 
   // §retour du 21/08/2026 : retirées de la barre latérale (mobile ET desktop) — restent accessibles
   // uniquement via le menu utilisateur en haut à droite (renderUserMenuPanel), qui les propose déjà
   // toutes les deux. navItemsForRole() les garde côté permissions (navigateTo() doit toujours
   // pouvoir y aller depuis ce menu) ; seul renderSidebar() filtre leur AFFICHAGE dans la barre.
-  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'directeur'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
+  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
   // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
   // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
-  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['directeur'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
+  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['proprietaire'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
 ];
 
 /** true si l'entreprise a accès à ce module (voir LANDING_ALACARTE_MODULES) — toujours vrai pour un
@@ -429,6 +429,16 @@ function hasModule(moduleKey) {
   const abo = company && company.abonnement;
   if (!abo || abo.offre !== 'a_la_carte') return true;
   return (abo.modules || []).some(m => m.key === moduleKey);
+}
+
+/** §correctif audit du 23/08/2026 (§4, brique 2) : hasModule() n'était appelé qu'à 4 endroits avant
+ * cet audit — tout raccourci/bouton/carte qui pointe vers un module non souscrit (offre à la
+ * carte) restait affiché normalement, menant vers un écran bloqué seulement une fois cliqué
+ * (isViewBlockedForCurrentUser, §2.9). ifModule() encapsule le garde pour un fragment HTML inline
+ * (raccourcis de tableau de bord, cartes KPI ponctuelles...) sans dupliquer le if/else à chaque
+ * appel — retourne '' si le module n'est pas souscrit, le HTML sinon. */
+function ifModule(moduleKey, html) {
+  return hasModule(moduleKey) ? html : '';
 }
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
@@ -1154,7 +1164,7 @@ const ABOUT_CATEGORIES = [
     items: [
       "Tickets support intégrés, avec suivi de statut et date de livraison",
       "Analyse automatique des tickets pour accélérer leur traitement",
-      "Tableaux de bord adaptés à chaque rôle (salarié, manager, RH, comptabilité, directeur)",
+      "Tableaux de bord adaptés à chaque rôle (salarié, manager, RH, comptabilité, propriétaire)",
       "Recherche globale instantanée (Ctrl+K)",
       "Notifications en temps réel"
     ]
@@ -1225,7 +1235,7 @@ const LEGAL_CONTENT = {
       <p><strong>Abonnement et facturation</strong><br>
       L'abonnement (offre Essentiel, Professionnel ou Premium, facturation mensuelle ou annuelle) est géré via Stripe. Il est résiliable à tout moment depuis Paramètres → Abonnement, sans préavis ; la résiliation prend effet à la fin de la période déjà payée.</p>
       <p><strong>Comptes et accès</strong><br>
-      Un compte est créé par entreprise cliente. L'accès de chaque utilisateur (salarié, manager, RH, comptabilité, directeur) est déterminé par son rôle et ses permissions au sein de cette entreprise.</p>
+      Un compte est créé par entreprise cliente. L'accès de chaque utilisateur (salarié, manager, RH, comptabilité, propriétaire) est déterminé par son rôle et ses permissions au sein de cette entreprise.</p>
       <p><strong>Propriété des données</strong><br>
       Les données saisies par une entreprise cliente lui appartiennent. Elles ne sont pas utilisées à d'autres fins que la fourniture du service.</p>
       <p><strong>Support</strong><br>
@@ -2264,7 +2274,7 @@ function openForcedPasswordChangeModal() {
 }
 
 /** Bandeau persistant app-wide pour les entreprises créées via "Créer mon entreprise" (migration
- * 0012) qui n'ont pas encore souscrit d'offre — pas de blocage total (le Directeur fondateur peut
+ * 0012) qui n'ont pas encore souscrit d'offre — pas de blocage total (le Propriétaire fondateur peut
  * explorer l'app normalement), seul l'ajout d'un 2ᵉ salarié est bloqué par le plafond existant. */
 /** D3 (audit fiabilité du 19/08/2026) : bannière PERSISTANTE (contrairement à un toast qui
  * disparaît seul) tant qu'au moins une écriture n'a pas réussi à joindre le serveur — voir
@@ -2661,7 +2671,7 @@ function renderLoginView() {
 /** Crée une toute nouvelle entreprise dans Seven RH — voir DB.signUpNewCompany() / migration 0012.
  * Seul point d'entrée d'inscription libre-service (l'ancien "Créer un compte", qui rejoignait une
  * entreprise existante par correspondance de domaine d'email, a été retiré : chaque compte de
- * connexion est désormais créé explicitement par un Directeur/RH depuis la fiche du salarié, voir
+ * connexion est désormais créé explicitement par un Propriétaire/RH depuis la fiche du salarié, voir
  * renderCompteCard/openCreerCompteConnexionModal).
  * L'entreprise démarre en accès restreint (statut "non_souscrit", 1 seul salarié) jusqu'à
  * souscription d'une offre depuis Paramètres → Abonnement. */
@@ -3076,7 +3086,11 @@ function renderUserMenuPanel() {
   // SaaS (Stripe lui-même, GitHub, Notion, Slack...) placent la facturation : toujours visible en
   // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
   const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
-  const canGererParametres = ['rh', 'directeur'].includes(user.role) && hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
+  const canGererParametres = ['rh', 'proprietaire'].includes(user.role) && hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
+  // §correctif audit du 23/08/2026 (§5) : le transfert de propriété n'est proposé qu'au Propriétaire
+  // actuel lui-même (seul habilité côté serveur, transfer_proprietaire) — jamais sur la fiche de
+  // quelqu'un d'autre, voir renderCompteCard/openChangeRoleModal qui n'offrent plus ce rôle du tout.
+  const isProprietaire = user.role === ROLES.PROPRIETAIRE;
   const currentCompany = DB.getCurrentCompany();
 
   // Comptes gardés en parallèle (bascule multi-entreprise façon Gmail, demande du 21/08/2026) — un
@@ -3110,6 +3124,7 @@ function renderUserMenuPanel() {
     <div class="user-menu-divider"></div>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
+    ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
@@ -3157,6 +3172,12 @@ function renderUserMenuPanel() {
       document.getElementById('user-menu-panel').classList.remove('open');
       state.parametresTab = 'abonnement';
       navigateTo('parametres');
+    });
+  }
+  if (isProprietaire) {
+    document.getElementById('btn-user-menu-transfer-proprietaire').addEventListener('click', () => {
+      document.getElementById('user-menu-panel').classList.remove('open');
+      openTransferProprietaireModal();
     });
   }
   document.getElementById('btn-user-menu-support').addEventListener('click', () => {
@@ -3312,17 +3333,17 @@ function openChangePasswordModal() {
 const HELP_CONTENT = {
   dashboard: {
     title: 'Accueil',
-    body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Directeur voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
+    body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Propriétaire voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance — cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
            <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas — le réglage est propre à votre compte.</p>`,
     faq: [
       { q: 'Un bloc masqué est-il perdu ?', r: 'Non, "Personnaliser" ne fait que le masquer sur votre compte — aucune donnée n\'est supprimée, et vous pouvez le réafficher à tout moment.' },
-      { q: 'Pourquoi je ne vois pas le Centre d\'action ?', r: 'Il n\'apparaît que pour les rôles Manager/RH/Directeur, et seulement s\'il y a au moins un élément à signaler (aucun bruit si tout est à jour).' }
+      { q: 'Pourquoi je ne vois pas le Centre d\'action ?', r: 'Il n\'apparaît que pour les rôles Manager/RH/Propriétaire, et seulement s\'il y a au moins un élément à signaler (aucun bruit si tout est à jour).' }
     ],
     bonnesPratiques: ['Passez par le Centre d\'action plutôt que par la recherche pour traiter vos demandes en attente — les filtres sont déjà appliqués.', 'Consultez la Préparation de paie depuis son raccourci ici avant chaque export, pas seulement le jour de la paie.']
   },
   employees: {
     title: 'Salariés',
-    body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Directeur, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`,
+    body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Propriétaire, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`,
     faq: [{ q: 'Pourquoi certains salariés n\'apparaissent pas ?', r: 'Un manager ne voit que son équipe. Un salarié archivé n\'apparaît plus par défaut — utilisez le filtre de statut pour le retrouver.' }],
     bonnesPratiques: ['Utilisez les filtres établissement/service avant de chercher un nom : la liste peut être longue sur une grande entreprise.']
   },
@@ -3336,7 +3357,7 @@ const HELP_CONTENT = {
     body: `<p>3 onglets : <strong>Congés</strong> (congés payés, RTT, ancienneté...), <strong>Absences</strong> (maladie, événements familiaux, et tout autre type paramétrable), <strong>Télétravail</strong> (demandes + planning hebdomadaire). Dans Congés/Absences, créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
            <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...) — règles d'acquisition, workflow de validation, justificatif obligatoire — se fait désormais uniquement dans Paramètres > Types d'absences.</p>`,
     faq: [
-      { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée — seuls Manager/RH/Directeur le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
+      { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée — seuls Manager/RH/Propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
       { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer — l\'historique garde la trace de la correction et le motif.' },
       { q: 'Un salarié ne voit pas un type dans son formulaire ?', r: 'Vérifiez l\'onglet "Types d\'absences" de sa fiche — un type peut être désactivé individuellement même s\'il est actif pour l\'entreprise.' },
       { q: 'Le quota de télétravail semble faux ?', r: 'Il se recalcule par semaine ISO (lundi à dimanche) en cumulant toutes les demandes Validées/En attente de cette semaine, pas seulement la demande en cours de saisie.' }
@@ -3789,7 +3810,12 @@ function performGlobalSearch(term) {
     }
   });
 
-  leaveRepository.getAll().forEach(r => {
+  // §correctif audit du 23/08/2026 (§4, brique 3) : sans ce garde-fou, la recherche globale faisait
+  // remonter (icône, libellé, statut) de congés/télétravail/notes de frais même pour une entreprise
+  // à la carte n'ayant PAS souscrit le module correspondant — une fuite d'aperçu même si la
+  // destination (isViewBlockedForCurrentUser) bloquait déjà le clic. hasModule() est déjà bon marché
+  // (toujours vrai hors offre à la carte), pas besoin de le sortir de la boucle.
+  if (hasModule('conges')) leaveRepository.getAll().forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type || !isVisible(employee.id)) return;
@@ -3805,7 +3831,7 @@ function performGlobalSearch(term) {
     }
   });
 
-  teleworkRepository.getAll().forEach(r => {
+  if (hasModule('planning')) teleworkRepository.getAll().forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee || !isVisible(employee.id)) return;
     if (normalizeForSearch(`${employee.prenom} ${employee.nom} télétravail`).includes(q)) {
@@ -3819,7 +3845,7 @@ function performGlobalSearch(term) {
     }
   });
 
-  expenseRepository.getAll().forEach(n => {
+  if (hasModule('frais')) expenseRepository.getAll().forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee || !isVisible(employee.id)) return;
     const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`);
@@ -3835,9 +3861,9 @@ function performGlobalSearch(term) {
   });
 
   // Sprint SIRH premium §8 : services/équipes/paramètres — mêmes écrans que la navigation normale
-  // (Organigramme réservé manager/RH/directeur, Paramètres réservé GERER_PARAMETRES), pour ne
+  // (Organigramme réservé manager/RH/propriétaire, Paramètres réservé GERER_PARAMETRES), pour ne
   // jamais faire remonter un résultat de recherche vers un écran que l'utilisateur ne peut pas ouvrir.
-  if ([ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role)) {
+  if ([ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role) && hasModule('rh')) {
     serviceRepository.getAll().forEach(s => {
       if (normalizeForSearch(s.nom).includes(q)) {
         results.push({
@@ -4024,7 +4050,11 @@ function getVisibleNotificationsForCurrentUser() {
 function syncNotifications() {
   const candidates = [];
 
-  leaveRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+  // §correctif audit du 23/08/2026 (§4, brique 3) : sans ces gardes, une entreprise à la carte
+  // n'ayant pas souscrit congés/planning/frais recevait quand même des notifications persistées
+  // (notificationRepository) et un badge non-zéro pour ces modules — une fuite qui survit même à
+  // isViewBlockedForCurrentUser puisqu'elle ne dépend d'aucune navigation.
+  if (hasModule('conges')) leaveRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
@@ -4032,14 +4062,14 @@ function syncNotifications() {
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' }, employee.id));
   });
 
-  teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+  if (hasModule('planning')) teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
       `${employee.prenom} ${employee.nom}`, 'absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }, employee.id));
   });
 
-  expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
+  if (hasModule('frais')) expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
@@ -4062,7 +4092,7 @@ function syncNotifications() {
   // sourceKey basé sur dateCreation (pas juste l'id) pour la même raison que les tickets ci-dessus :
   // un entretien n'est jamais recréé avec le même id, donc en pratique ceci ne notifie qu'une fois,
   // mais reste cohérent avec la convention du reste de ce bloc.
-  entretienRepository.getAll().filter(e => e.statut === 'a_planifier').forEach(e => {
+  if (hasModule('entretiens')) entretienRepository.getAll().filter(e => e.statut === 'a_planifier').forEach(e => {
     const employee = employeeRepository.getById(e.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, ICONS.notepad, 'Entretien planifié',
@@ -4106,7 +4136,7 @@ function syncNotifications() {
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
+  if (hasModule('rh')) documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
     // Comparer au même format des deux côtés (date-only, via toISODate) plutôt qu'à l'instant
     // courant — sinon la fraction de journée déjà écoulée décale daysUntil d'un jour selon l'heure
     // qu'il est (même bug que celui corrigé sur getUpcomingBirthdays cette session).
@@ -4521,15 +4551,15 @@ function render() {
  * visible, lu défensivement partout (même principe que typesAbsenceDesactives, §1 — pas de
  * migration nécessaire). */
 const DASHBOARD_WIDGETS = {
-  actionCenter: { label: "Centre d'action", roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
-  kpis: { label: 'Indicateurs clés (KPI)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
-  charts: { label: 'Graphiques (services, contrats, congés, tickets)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
-  echeances: { label: 'Anniversaires & fins de contrat', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
-  presence: { label: 'Présence du jour', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR] },
-  indicateursDirection: { label: 'Indicateurs Direction (avancé)', roles: [ROLES.DIRECTEUR] },
+  actionCenter: { label: "Centre d'action", roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE] },
+  kpis: { label: 'Indicateurs clés (KPI)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE] },
+  charts: { label: 'Graphiques (services, contrats, congés, tickets)', roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE] },
+  echeances: { label: 'Anniversaires & fins de contrat', roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE] },
+  presence: { label: 'Présence du jour', roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE] },
+  indicateursDirection: { label: 'Indicateurs Direction (avancé)', roles: [ROLES.PROPRIETAIRE] },
   soldes: { label: 'Mes soldes de congés', roles: [ROLES.SALARIE] },
   mesDemandes: { label: 'Mes demandes (en attente / à venir)', roles: [ROLES.SALARIE] },
-  shortcuts: { label: 'Raccourcis', roles: [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR, ROLES.SALARIE] }
+  shortcuts: { label: 'Raccourcis', roles: [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE, ROLES.SALARIE] }
 };
 
 function isDashboardWidgetVisible(user, widgetId) {
@@ -4546,7 +4576,7 @@ function renderDashboardCustomizeButton() {
 
 /** Bandeau d'accueil du tableau de bord (§retour "de vraies couleurs, marine + or" du 21/08/2026) —
  * remplace le simple <h1>/<p class="view-subtitle"> par un vrai bloc marine en dégradé avec une
- * touche or lumineuse en coin, partagé par les 4 variantes de dashboard (RH/Manager/Directeur/
+ * touche or lumineuse en coin, partagé par les 4 variantes de dashboard (RH/Manager/Propriétaire/
  * Salarié). Volontairement TOUJOURS sombre, quel que soit le thème clair/sombre choisi (même
  * principe que .landing-hero) : mélanger un fond fixe avec du texte thème-aware a déjà cassé le
  * contraste une fois cette session (voir le correctif du 21/08 sur la landing) — ici tout le
@@ -4611,25 +4641,28 @@ function openDashboardCustomizeModal() {
   });
 }
 
-/** Le tableau de bord est différent par rôle : vue personnelle (Salarié), vue équipe (Manager), vue entreprise (RH/Comptabilité), vue entreprise + indicateurs avancés (Directeur). */
+/** Le tableau de bord est différent par rôle : vue personnelle (Salarié), vue équipe (Manager), vue entreprise (RH/Comptabilité), vue entreprise + indicateurs avancés (Propriétaire). */
 function renderDashboard() {
   const user = authRepository.getCurrentUser();
   if (!user) return '';
   if (user.role === ROLES.SALARIE) return renderDashboardSalarie(user);
   if (user.role === ROLES.MANAGER) return renderDashboardManager();
-  if (user.role === ROLES.DIRECTEUR) return renderDashboardDirecteur();
+  if (user.role === ROLES.PROPRIETAIRE) return renderDashboardProprietaire();
   return renderDashboardRH();
 }
 
-/** Bloc KPI + graphiques + naissances/fins de contrat + présence, partagé par les vues RH/Manager/Directeur. `employeeIds` = null pour l'entreprise entière, sinon liste restreinte (équipe d'un manager). */
+/** Bloc KPI + graphiques + naissances/fins de contrat + présence, partagé par les vues RH/Manager/Propriétaire. `employeeIds` = null pour l'entreprise entière, sinon liste restreinte (équipe d'un manager). */
 function renderOperationalDashboardBody(employees, employeeIds) {
   const actifs = employees.filter(e => e.statut === 'Actif');
   const cdi = actifs.filter(e => e.typeContrat === 'CDI').length;
   const cdd = actifs.filter(e => e.typeContrat === 'CDD').length;
   const services = new Set(actifs.map(e => e.service).filter(Boolean)).size;
-  let demandesEnAttente = leaveRepository.getAll().filter(r => r.statut === 'En attente');
-  let notesEnAttente = expenseRepository.getAll().filter(n => n.statut === 'En attente');
-  let teletravailAujourdhui = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  // §correctif audit du 23/08/2026 (§4, brique 2) : chaque bloc ci-dessous ne calcule/affiche plus
+  // rien pour un module non souscrit (offre à la carte) — avant, le tableau de bord (premier écran
+  // vu par tout le monde) affichait ces chiffres sans condition, un aperçu du module même non payé.
+  let demandesEnAttente = hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente') : [];
+  let notesEnAttente = hasModule('frais') ? expenseRepository.getAll().filter(n => n.statut === 'En attente') : [];
+  let teletravailAujourdhui = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'Validé') : [];
   if (employeeIds) {
     demandesEnAttente = demandesEnAttente.filter(r => employeeIds.includes(r.employeeId));
     notesEnAttente = notesEnAttente.filter(n => employeeIds.includes(n.employeeId));
@@ -4641,13 +4674,13 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const settings = settingsRepository.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
-  const ticketsCeMois = actifs
-    .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
+  const ticketsCeMois = hasModule('tickets') ? actifs
+    .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0) : 0;
 
   const serviceBreakdown = getServiceBreakdown(actifs);
   const contratBreakdown = getContratBreakdown(actifs);
-  const congesParType = getCongesParType(employeeIds);
-  const ticketsCostTrend = getTicketsCostTrend(actifs);
+  const congesParType = hasModule('conges') ? getCongesParType(employeeIds) : [];
+  const ticketsCostTrend = hasModule('tickets') ? getTicketsCostTrend(actifs) : [];
   const birthdays = getUpcomingBirthdays(60, employees);
   const contractEnds = getUpcomingContractEnds(60, employees);
   const probationEnds = getUpcomingProbationEnds(60, employees);
@@ -4658,7 +4691,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const contingentHeuresSup = getEmployeesNearingContingentHeuresSup(employees);
 
   const user = authRepository.getCurrentUser();
-  const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
+  const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
   const isVisible = (widgetId) => isDashboardWidgetVisible(user, widgetId);
 
   return `
@@ -4668,10 +4701,10 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${kpiCard('Contrats CDI', cdi, ICONS.document)}
       ${kpiCard('Contrats CDD', cdd, ICONS.calendar)}
       ${kpiCard('Services', services, ICONS.building)}
-      ${kpiCard('Demandes de congé en attente', demandesEnAttente.length, ICONS.sun)}
-      ${kpiCard('En télétravail aujourd\'hui', teletravailAujourdhui.length, ICONS.laptop)}
-      ${kpiCard('Notes de frais en attente', notesEnAttente.length, ICONS.receipt)}
-      ${kpiCard('Tickets restaurant ce mois', ticketsCeMois, ICONS.utensils)}
+      ${ifModule('conges', kpiCard('Demandes de congé en attente', demandesEnAttente.length, ICONS.sun))}
+      ${ifModule('planning', kpiCard('En télétravail aujourd\'hui', teletravailAujourdhui.length, ICONS.laptop))}
+      ${ifModule('frais', kpiCard('Notes de frais en attente', notesEnAttente.length, ICONS.receipt))}
+      ${ifModule('tickets', kpiCard('Tickets restaurant ce mois', ticketsCeMois, ICONS.utensils))}
     </div>
     ` : ''}
 
@@ -4683,10 +4716,10 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${chartCard('Répartition par type de contrat', contratBreakdown.length === 0
         ? emptyChartMessage()
         : renderDonutChartSVG(contratBreakdown) + chartLegend(contratBreakdown))}
-      ${chartCard('Congés pris par type', `Année ${new Date().getFullYear()} · jours validés`, congesParType.length === 0
+      ${ifModule('conges', chartCard('Congés pris par type', `Année ${new Date().getFullYear()} · jours validés`, congesParType.length === 0
         ? emptyChartMessage()
-        : renderBarChartSVG(congesParType))}
-      ${chartCard('Coût tickets restaurant', 'Part employeur, 6 derniers mois', renderLineChartSVG(ticketsCostTrend))}
+        : renderBarChartSVG(congesParType)))}
+      ${ifModule('tickets', chartCard('Coût tickets restaurant', 'Part employeur, 6 derniers mois', renderLineChartSVG(ticketsCostTrend)))}
     </div>
     ` : ''}
 
@@ -4708,17 +4741,17 @@ function renderOperationalDashboardBody(employees, employeeIds) {
 
 /** Sprint SIRH premium §7 : centre d'action cliquable du tableau de bord — chaque ligne pointe vers
  * l'écran concerné avec le filtre "En attente" déjà présélectionné (mêmes navParams que les
- * raccourcis sidebar équipe, §5, pour rester cohérent). `employeeIds` = null (RH/Directeur, toute
+ * raccourcis sidebar équipe, §5, pour rester cohérent). `employeeIds` = null (RH/Propriétaire, toute
  * l'entreprise) ou liste restreinte (équipe d'un manager) — même convention que
  * renderOperationalDashboardBody. Une ligne n'apparaît que si elle a effectivement quelque chose à
  * signaler (liste vide = pas de bruit), sauf "Préparation de paie" qui reste visible même à 0
  * anomalie pour confirmer explicitement que la paie est prête. */
 function renderDashboardActionCenter(employees, employeeIds) {
   const user = authRepository.getCurrentUser();
-  // Congés/télétravail/contrats : seuls manager/RH/directeur valident ou gèrent des contrats — la
+  // Congés/télétravail/contrats : seuls manager/RH/propriétaire valident ou gèrent des contrats — la
   // comptabilité (qui tombe aussi sur renderDashboardRH) n'a ni ces écrans ni ces entrées sidebar
   // (§5), un item cliquable ici la ramènerait juste vers le dashboard sans rien ouvrir.
-  const managesEquipe = [ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role);
+  const managesEquipe = [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role);
   // "En attente", éventuellement restreint à l'équipe visible (employeeIds) — même filtre répété
   // pour congés/télétravail/frais, factorisé une seule fois ici.
   const pendingFor = (repo) => {
@@ -4729,18 +4762,27 @@ function renderDashboardActionCenter(employees, employeeIds) {
   const items = [];
 
   if (managesEquipe) {
-    const congesEnAttente = pendingFor(leaveRepository);
-    const teletravailEnAttente = pendingFor(teleworkRepository);
+    // §correctif audit du 23/08/2026 (§4, brique 2) : chaque item du centre d'action pointe vers un
+    // écran potentiellement bloqué par module (offre à la carte) — ne le fait apparaître (et ne
+    // compte les demandes en attente) que si le module correspondant est souscrit.
+    if (hasModule('conges')) {
+      const congesEnAttente = pendingFor(leaveRepository);
+      if (congesEnAttente.length) items.push({ icon: ICONS.sun, label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'absences', navParams: NAVPARAMS_CONGES_A_VALIDER });
+    }
+    if (hasModule('planning')) {
+      const teletravailEnAttente = pendingFor(teleworkRepository);
+      if (teletravailEnAttente.length) items.push({ icon: ICONS.laptop, label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
+    }
     const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
-    if (congesEnAttente.length) items.push({ icon: ICONS.sun, label: `${congesEnAttente.length} demande${congesEnAttente.length > 1 ? 's' : ''} de congé à valider`, nav: 'absences', navParams: NAVPARAMS_CONGES_A_VALIDER });
-    if (teletravailEnAttente.length) items.push({ icon: ICONS.laptop, label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     if (contractEnds.length) items.push({ icon: ICONS.document, label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
   }
 
-  const fraisEnAttente = pendingFor(expenseRepository);
-  if (fraisEnAttente.length) items.push({ icon: ICONS.receipt, label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
+  if (hasModule('frais')) {
+    const fraisEnAttente = pendingFor(expenseRepository);
+    if (fraisEnAttente.length) items.push({ icon: ICONS.receipt, label: `${fraisEnAttente.length} note${fraisEnAttente.length > 1 ? 's' : ''} de frais à valider`, nav: 'frais', navParams: NAVPARAMS_FRAIS_A_VALIDER });
+  }
 
-  if (hasPermission(user, PERMISSIONS.EXPORTER_PAIE)) {
+  if (hasModule('rh') && hasPermission(user, PERMISSIONS.EXPORTER_PAIE)) {
     const now = new Date();
     const bloquantes = getPaieAnomalies(now.getFullYear(), now.getMonth()).filter(a => a.severity === 'bloquante');
     items.push(bloquantes.length
@@ -4748,7 +4790,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
       : { icon: ICONS.upload, label: `Préparation de paie : aucune anomalie ce mois-ci`, nav: 'export-paie', navParams: { paieTab: 'preparation' } });
   }
 
-  if (hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT)) {
+  if (hasModule('tickets') && hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT)) {
     const now = new Date();
     // Récupérés une seule fois avant la boucle : sinon chaque salarié actif re-fetch/re-trie
     // l'intégralité des congés/télétravail de l'entreprise pour rien (calculateTicketsRestaurant
@@ -4785,10 +4827,10 @@ function renderDashboardShortcuts() {
       <h2>Raccourcis</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
         <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
-        <button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>
-        <button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Gérer le télétravail</button>
-        <button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>
-        <button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>
+        ${ifModule('conges', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>`)}
+        ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Gérer le télétravail</button>`)}
+        ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>`)}
+        ${ifModule('tickets', `<button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>`)}
       </div>
     </div>
   `;
@@ -4883,16 +4925,16 @@ function renderDashboardSalarie(user) {
     ${isDashboardWidgetVisible(user, 'shortcuts') ? `
     <div class="card">
       <h2>Raccourcis</h2>
-      <button class="btn btn-primary" data-nav="conges">Demander un congé</button>
-      <button class="btn btn-secondary" data-nav="teletravail">Déclarer du télétravail</button>
-      <button class="btn btn-secondary" data-nav="frais">Déposer une note de frais</button>
-      <button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>
+      ${ifModule('conges', `<button class="btn btn-primary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Demander un congé</button>`)}
+      ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Déclarer du télétravail</button>`)}
+      ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Déposer une note de frais</button>`)}
+      ${ifModule('rh', `<button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>`)}
     </div>
     ` : ''}
   `;
 }
 
-function renderDashboardDirecteur() {
+function renderDashboardProprietaire() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const settings = settingsRepository.getSettings();
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
@@ -5605,7 +5647,7 @@ function kpiCard(label, value, icon) {
 
 /**
  * Portée des salariés visibles par l'utilisateur courant selon son rôle :
- * null = aucune restriction (RH/Directeur/Comptabilité voient tout le monde),
+ * null = aucune restriction (RH/Propriétaire/Comptabilité voient tout le monde),
  * sinon la liste exacte des ids autorisés (soi-même, + son équipe pour un manager).
  */
 /** Salariés à proposer dans un filtre/sélecteur, restreints au périmètre de l'utilisateur courant. */
@@ -5618,7 +5660,7 @@ function getScopedEmployeesForFilters() {
 function getVisibleEmployeeIdsForCurrentUser() {
   const user = authRepository.getCurrentUser();
   if (!user) return [];
-  if ([ROLES.RH, ROLES.DIRECTEUR, ROLES.COMPTABILITE].includes(user.role)) return null;
+  if ([ROLES.RH, ROLES.PROPRIETAIRE, ROLES.COMPTABILITE].includes(user.role)) return null;
   if (user.role === ROLES.MANAGER) {
     const team = employeeRepository.getAll().filter(e => (e.managerIds || []).includes(user.id)).map(e => e.id);
     return [user.id, ...team];
@@ -5661,6 +5703,7 @@ function renderEmployeesList() {
   const user = authRepository.getCurrentUser();
   const isManager = user.role === ROLES.MANAGER;
   const canCreate = hasPermission(user, PERMISSIONS.CREER_SALARIE);
+  const canImportSoldes = hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS);
   // Le registre unique du personnel est un document légal de l'entreprise entière (voir
   // openRegistreUniquePersonnelModal) — il ne doit être accessible qu'aux rôles qui ont déjà une
   // visibilité entreprise entière sans restriction (getVisibleEmployeeIdsForCurrentUser() === null),
@@ -5694,6 +5737,7 @@ function renderEmployeesList() {
         ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
         ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer Excel</button>' : ''}
+        ${canImportSoldes ? '<button class="btn btn-secondary" id="btn-import-soldes">Importer les soldes initiaux</button>' : ''}
         ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
       </div>
     </div>
@@ -5921,6 +5965,165 @@ function importEmployeesRows(previewRows) {
   results.skipped = previewRows.filter(r => r.status === 'duplicate').length;
   results.errors = previewRows.filter(r => r.status === 'error').length;
   return results;
+}
+
+/** §correctif audit du 23/08/2026 (§7.3) : réutilise le même mécanisme (Excel → aperçu → import)
+ * que l'import de salariés ci-dessous, mais pour régler en masse les soldes INITIAUX de compteurs
+ * de congés — jusqu'ici une saisie manuelle un par un (DB.ajusterCompteurConge), le premier
+ * obstacle cité par le client pour la mise en service d'une entreprise qui arrive en cours
+ * d'année. Colonne d'identification (Matricule ou Email) + une colonne par type de congé, chaque
+ * en-tête reconnu par le NOM du type (comme guessEmployeeColumnMapping reconnaît les champs
+ * salarié) — aucune nouvelle colonne technique à inventer, RH nomme juste ses colonnes comme ses
+ * types de congés existants. */
+function guessSoldesColumnMapping(headers, leaveTypes) {
+  const mapping = { identifiant: undefined, typeColumns: [] };
+  headers.forEach((h, i) => {
+    const norm = normalizeForSearch(h);
+    if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].includes(norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
+    if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].includes(norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
+    const type = leaveTypes.find(t => normalizeForSearch(t.nom) === norm);
+    if (type) mapping.typeColumns.push({ typeId: type.id, typeNom: type.nom, index: i });
+  });
+  return mapping;
+}
+
+function buildSoldesPreviewRows(dataRows, mapping) {
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const findEmployee = (value) => {
+    if (!value) return null;
+    const norm = normalizeForSearch(value);
+    return employees.find(e => normalizeForSearch(mapping.identifiant.field === 'matricule' ? (e.matricule || '') : (e.email || '')) === norm) || null;
+  };
+  return dataRows.map((cells, i) => {
+    const idValue = (cells[mapping.identifiant.index] || '').trim();
+    const employee = findEmployee(idValue);
+    const soldes = mapping.typeColumns
+      .map(c => ({ typeId: c.typeId, typeNom: c.typeNom, valeur: (cells[c.index] || '').trim() }))
+      .filter(s => s.valeur !== '');
+    let status = 'ok', message = '';
+    if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
+    else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
+    else if (!soldes.length) { status = 'error'; message = 'Aucun solde renseigné sur cette ligne.'; }
+    else if (soldes.some(s => !Number.isFinite(Number(s.valeur)))) { status = 'error'; message = 'Un des soldes n\'est pas un nombre.'; }
+    return { rowIndex: i + 2, idValue, employee, soldes, status, message };
+  });
+}
+
+function importSoldesRows(previewRows) {
+  const results = { employes: 0, soldes: 0, errors: 0 };
+  previewRows.filter(r => r.status === 'ok').forEach(r => {
+    r.soldes.forEach(s => {
+      employeeRepository.ajusterCompteur(r.employee.id, s.typeId, Number(s.valeur), 'Import solde initial');
+      results.soldes++;
+    });
+    results.employes++;
+  });
+  results.errors = previewRows.filter(r => r.status === 'error').length;
+  return results;
+}
+
+function openImportSoldesInitiauxModal() {
+  loadXLSXLibrary().catch(() => {});
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Importer les soldes initiaux</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Fichier Excel (.xlsx). Une colonne d'identification (Matricule ou Email) + une colonne par type de congé, nommée exactement comme le type (ex. « Congés payés », « RTT »). Remplace l'ajustement manuel actuel du compteur pour ce type, comme depuis la fiche du salarié.</p>
+        <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
+        <div id="import-preview-zone" style="margin-top: 16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-import" style="display: none;">Importer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  let currentPreview = [];
+
+  document.getElementById('f-import-file').addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await loadXLSXLibrary();
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      let rows;
+      try {
+        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+          .map(row => row.map(cell => (cell == null ? '' : String(cell))))
+          .filter(row => row.some(cell => cell !== ''));
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible — vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
+        return;
+      }
+      if (rows.length < 2) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier vide ou illisible (au moins une ligne d'en-têtes + une ligne de données attendues).</p>`;
+        return;
+      }
+      const [headerRow, ...dataRows] = rows;
+      const mapping = guessSoldesColumnMapping(headerRow, leaveTypes);
+      if (!mapping.identifiant) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne d'identification reconnue (attendu : « Matricule » ou « Email »).</p>`;
+        return;
+      }
+      if (!mapping.typeColumns.length) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne reconnue comme un type de congé existant (${leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ')}).</p>`;
+        return;
+      }
+      currentPreview = buildSoldesPreviewRows(dataRows, mapping);
+      renderSoldesPreview(currentPreview, mapping);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function renderSoldesPreview(preview, mapping) {
+    const okCount = preview.filter(r => r.status === 'ok').length;
+    const errCount = preview.filter(r => r.status === 'error').length;
+    document.getElementById('import-preview-zone').innerHTML = `
+      <p class="text-muted">Colonnes de solde reconnues : ${mapping.typeColumns.map(c => escapeHtml(c.typeNom)).join(', ')}</p>
+      <p><span class="badge badge-success">${okCount} ligne${okCount > 1 ? 's' : ''} prête${okCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>Ligne</th><th>Identifiant</th><th>Salarié</th><th>Soldes</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${preview.map(r => `
+              <tr>
+                <td>${r.rowIndex}</td>
+                <td>${escapeHtml(r.idValue)}</td>
+                <td>${r.employee ? escapeHtml(r.employee.prenom) + ' ' + escapeHtml(r.employee.nom) : '—'}</td>
+                <td>${r.soldes.map(s => `${escapeHtml(s.typeNom)} : ${escapeHtml(s.valeur)}`).join(', ')}</td>
+                <td>${r.status === 'ok' ? '<span class="badge badge-success">Prêt</span>' : `<span class="badge badge-danger" title="${escapeHtml(r.message)}">${escapeHtml(r.message)}</span>`}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    const confirmBtn = document.getElementById('btn-confirm-import');
+    confirmBtn.style.display = okCount > 0 ? '' : 'none';
+    confirmBtn.onclick = () => {
+      const results = importSoldesRows(currentPreview);
+      closeModal();
+      showToast(`${results.employes} salarié${results.employes > 1 ? 's' : ''} mis à jour (${results.soldes} solde${results.soldes > 1 ? 's' : ''}).`);
+      render();
+    };
+  }
 }
 
 function openImportSalariesModal() {
@@ -6159,6 +6362,8 @@ function bindEmployeesListEvents() {
   if (newEmployeeBtn) newEmployeeBtn.addEventListener('click', () => openEmployeeModal(null));
   const importEmployeesBtn = document.getElementById('btn-import-employees');
   if (importEmployeesBtn) importEmployeesBtn.addEventListener('click', openImportSalariesModal);
+  const importSoldesBtn = document.getElementById('btn-import-soldes');
+  if (importSoldesBtn) importSoldesBtn.addEventListener('click', openImportSoldesInitiauxModal);
 
   document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesExcel);
   const registreBtn = document.getElementById('btn-registre-personnel');
@@ -6362,10 +6567,10 @@ function bindOrganigrammeEvents() {
 // Coffre-fort documents RH — partagé entre la fiche salarié et "Mes documents"
 // ---------------------------------------------------------------------------
 
-/** Upload/suppression réservés à RH et Directeur ; la consultation suit l'accès normal à la fiche. */
+/** Upload/suppression réservés à RH et Propriétaire ; la consultation suit l'accès normal à la fiche. */
 function canManageDocumentsFor() {
   const user = authRepository.getCurrentUser();
-  return Boolean(user && (user.role === ROLES.RH || user.role === ROLES.DIRECTEUR));
+  return Boolean(user && (user.role === ROLES.RH || user.role === ROLES.PROPRIETAIRE));
 }
 
 function documentExpirationInfo(dateExpiration) {
@@ -6904,11 +7109,11 @@ function bindEntretiensEvents() {
   });
 }
 
-/** Réservé à RH/Directeur (gererEntretiens) — le salarié ne planifie jamais sa propre convocation
+/** Réservé à RH/Propriétaire (gererEntretiens) — le salarié ne planifie jamais sa propre convocation
  * (voir entretiens_insert, 0020_entretiens.sql). Liste de salariés = tous ceux visibles par
  * l'utilisateur courant côté "Salariés" (getFilteredSortedEmployees serait trop restrictif ici, on
  * veut toute l'entreprise) — employeeRepository.getAll() convient puisque ce bouton n'est même
- * affiché qu'avec gererEntretiens, déjà un rôle company-wide (RH/Directeur). */
+ * affiché qu'avec gererEntretiens, déjà un rôle company-wide (RH/Propriétaire). */
 function openPlanEntretienModal() {
   const employees = employeeRepository.getAll().filter(e => !e.archive).sort((a, b) => a.prenom.localeCompare(b.prenom));
   const html = `
@@ -7249,12 +7454,12 @@ function bindIdeeDetailEvents() {
 // Vue : Fiche salarié (détail)
 // ---------------------------------------------------------------------------
 
-/** Un RH ne peut pas modifier sa propre fiche sensible ; seul le Directeur le peut. */
+/** Un RH ne peut pas modifier sa propre fiche sensible ; seul le Propriétaire le peut. */
 function canEditEmployeeRecord(employee) {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) {
-    if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false; // §9.3 : seul le Directeur modifie sa propre fiche
+    if (user.role !== ROLES.PROPRIETAIRE && user.id === employee.id) return false; // §9.3 : seul le Propriétaire modifie sa propre fiche
     return true;
   }
   if (user.role === ROLES.MANAGER) return (employee.managerIds || []).includes(user.id);
@@ -7266,7 +7471,7 @@ function canArchiveEmployeeRecord(employee) {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (hasPermission(user, PERMISSIONS.ARCHIVER_SALARIE)) {
-    if (user.role !== ROLES.DIRECTEUR && user.id === employee.id) return false;
+    if (user.role !== ROLES.PROPRIETAIRE && user.id === employee.id) return false;
     return true;
   }
   return false;
@@ -7463,7 +7668,7 @@ function renderEmployeeDetail(id) {
           ${renderStatutBadge(e.statut)}
           ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
         </div>
-        ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Directeur peut modifier votre propre fiche.</p>' : ''}
+        ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Propriétaire peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> Favori` : icon(ICONS.star, 13) + ' Favori'}</button>
@@ -7639,24 +7844,23 @@ function renderCompteCard(e, user) {
         ${e.authUserId
           ? '<button class="btn btn-secondary btn-sm" id="btn-forcer-mot-de-passe">Réinitialiser le mot de passe</button>'
           : '<button class="btn btn-primary btn-sm" id="btn-creer-compte-connexion">Créer les identifiants de connexion</button>'}
-        <button class="btn btn-secondary btn-sm" id="btn-changer-role">Changer le rôle</button>
+        ${e.role !== ROLES.PROPRIETAIRE ? '<button class="btn btn-secondary btn-sm" id="btn-changer-role">Changer le rôle</button>' : ''}
       </div>
+      ${e.role === ROLES.PROPRIETAIRE ? '<p class="text-muted" style="margin-top: 10px;">Le rôle Propriétaire se transfère depuis le menu du Propriétaire lui-même (haut à droite), pas depuis cette fiche.</p>' : ''}
     </div>
   `;
 }
 
-/** Le rôle Directeur est traité à part (option désactivée dans le select + message explicite)
- * plutôt que de laisser l'utilisateur découvrir le refus seulement après avoir soumis — les
- * vraies règles (un seul Directeur peut toucher ce rôle, jamais retirer le dernier) restent
- * appliquées côté serveur (DB.changerRoleSalarie + trigger Postgres, migration 0011), ceci n'est
- * qu'un confort d'affichage. */
+/** Le rôle Propriétaire n'apparaît jamais dans les options : il ne se change jamais par une
+ * simple mise à jour de rôle (le trigger Postgres guard_employee_role_change, migration 0033,
+ * refuse toute tentative hors du flux dédié transfer_proprietaire — voir "Transférer la
+ * propriété" dans le menu du Propriétaire). Ce bouton n'est de toute façon jamais proposé sur
+ * la fiche du Propriétaire lui-même (renderCompteCard). */
 function openChangeRoleModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
   if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const actingUser = authRepository.getCurrentUser();
-  const actingIsDirecteur = actingUser.role === ROLES.DIRECTEUR;
-  const directeurBloque = !actingIsDirecteur;
-  const roleOptions = Object.values(ROLES).filter(r => r !== employee.role);
+  const roleOptions = Object.values(ROLES).filter(r => r !== employee.role && r !== ROLES.PROPRIETAIRE);
 
   const html = `
     <div class="modal modal-small">
@@ -7671,14 +7875,13 @@ function openChangeRoleModal(employeeId) {
             <label for="f-nouveau-role">Nouveau rôle *</label>
             <select class="input" id="f-nouveau-role" name="nouveauRole" required>
               <option value="">—</option>
-              ${roleOptions.map(r => `<option value="${r}" ${r === ROLES.DIRECTEUR && directeurBloque ? 'disabled' : ''}>${escapeHtml(ROLE_LABELS[r])}${r === ROLES.DIRECTEUR && directeurBloque ? ' (réservé à un Directeur)' : ''}</option>`).join('')}
+              ${roleOptions.map(r => `<option value="${r}">${escapeHtml(ROLE_LABELS[r])}</option>`).join('')}
             </select>
           </div>
-          ${employee.role === ROLES.DIRECTEUR && directeurBloque ? `<p class="login-error" role="alert">Seul un Directeur peut retirer le rôle Directeur à quelqu'un.</p>` : ''}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-          <button type="submit" class="btn btn-primary" ${employee.role === ROLES.DIRECTEUR && directeurBloque ? 'disabled' : ''}>Changer le rôle</button>
+          <button type="submit" class="btn btn-primary">Changer le rôle</button>
         </div>
       </form>
     </div>
@@ -7699,6 +7902,82 @@ function openChangeRoleModal(employeeId) {
     closeModal();
     render();
   });
+}
+
+/** Transfert de propriété (§5 de l'audit) : réservé au Propriétaire actuel, sur lui-même — jamais
+ * depuis la fiche de quelqu'un d'autre (voir renderUserMenuPanel, seul point d'entrée). La liste
+ * ne propose que des salariés actifs AVEC déjà un compte de connexion réel (authUserId) : on ne
+ * transfère jamais la propriété à quelqu'un qui ne pourrait pas se connecter pour l'exercer. Le
+ * Propriétaire actuel choisit explicitement son propre rôle de repli — jamais un "Directeur"
+ * décoratif implicite (écarté par le client). Toute la vraie logique de garde (unicité, dernier
+ * Propriétaire, self-service) vit côté serveur (transfer_proprietaire, migration 0033) : cette
+ * modale ne fait qu'aider à ne pas soumettre un choix évidemment invalide. */
+function openTransferProprietaireModal() {
+  const user = authRepository.getCurrentUser();
+  const candidats = employeeRepository.getAll().filter(e => !e.archive && e.id !== user.id && e.authUserId);
+  const rolesRepli = [ROLES.RH, ROLES.MANAGER, ROLES.COMPTABILITE, ROLES.SALARIE];
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Transférer la propriété</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="transfer-proprietaire-form">
+        <div class="modal-body">
+          <p class="text-muted">Vous êtes actuellement le Propriétaire de ${escapeHtml((DB.getCurrentCompany() || {}).raisonSociale || 'votre entreprise')}. Ce transfert est immédiat et irréversible depuis cet écran (le nouveau Propriétaire pourra vous transférer la propriété en retour s'il le souhaite).</p>
+          ${!candidats.length ? `<p class="login-error" role="alert">Aucun salarié éligible : la personne visée doit déjà avoir un compte de connexion actif (voir sa fiche → "Créer les identifiants de connexion").</p>` : `
+            <div class="form-field">
+              <label for="f-nouveau-proprietaire">Nouveau Propriétaire *</label>
+              <select class="input" id="f-nouveau-proprietaire" name="nouveauProprietaire" required>
+                <option value="">—</option>
+                ${candidats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.prenom)} ${escapeHtml(c.nom)} (${escapeHtml(ROLE_LABELS[c.role] || c.role)})</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field" style="margin-top: 12px;">
+              <label for="f-nouveau-role-perso">Votre nouveau rôle après transfert *</label>
+              <select class="input" id="f-nouveau-role-perso" name="nouveauRolePerso" required>
+                <option value="">—</option>
+                ${rolesRepli.map(r => `<option value="${r}">${escapeHtml(ROLE_LABELS[r])}</option>`).join('')}
+              </select>
+            </div>
+          `}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          ${candidats.length ? '<button type="submit" class="btn btn-primary">Transférer la propriété</button>' : ''}
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const form = document.getElementById('transfer-proprietaire-form');
+  if (form && candidats.length) {
+    form.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const newProprietaireId = document.getElementById('f-nouveau-proprietaire').value;
+      const nouveauRolePerso = document.getElementById('f-nouveau-role-perso').value;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Transfert en cours...';
+      const result = await employeeRepository.transferProprietaire(newProprietaireId, nouveauRolePerso);
+      if (!result.success) {
+        showToast(result.error, 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Transférer la propriété';
+        return;
+      }
+      showToast('Propriété transférée.');
+      closeModal();
+      render();
+    });
+  }
 }
 
 function openForcerMotDePasseModal(employeeId) {
@@ -7820,7 +8099,7 @@ function showGeneratedPasswordModal(employee, password) {
 }
 
 /** Surcharges individuelles (§8) pour les permissions déjà réellement câblées dans l'app — voir
- * hasPermission() dans data.js. Réservé à qui a la permission GERER_PERMISSIONS (Directeur par
+ * hasPermission() dans data.js. Réservé à qui a la permission GERER_PERMISSIONS (Propriétaire par
  * défaut, §9.3) ; personne ne modifie ses propres permissions, pour éviter un auto-verrouillage. */
 function renderPermissionsCard(e, user) {
   if (!hasPermission(user, PERMISSIONS.GERER_PERMISSIONS)) return '';
@@ -7842,7 +8121,7 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.VALIDER_ABSENCE, label: 'Valider une absence' },
     { key: PERMISSIONS.REFUSER_ABSENCE, label: 'Refuser une absence (congé ou télétravail)' },
     { key: PERMISSIONS.ANNULER_ABSENCE, label: 'Annuler une absence' },
-    { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Directeur)' },
+    { key: PERMISSIONS.VALIDER_NOTE_FRAIS, label: 'Valider une note de frais (RH/Propriétaire)' },
     { key: PERMISSIONS.CONTROLER_NOTE_FRAIS, label: 'Contrôler une note de frais (étape non finale du circuit)' },
     { key: PERMISSIONS.MARQUER_NOTE_REMBOURSEE, label: 'Marquer une note de frais remboursée (étape finale du circuit)' },
     { key: PERMISSIONS.VOIR_INFOS_FINANCIERES, label: 'Voir les informations financières (salaire)' },
@@ -7951,7 +8230,7 @@ function bindMenusAutorisesCardEvents(employeeId) {
   });
 }
 
-/** Salaire/genre : données sensibles, réservées au Directeur, et seulement si l'entreprise a activé le suivi correspondant. */
+/** Salaire/genre : données sensibles, réservées au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant. */
 function renderConfidentialEmployeeCard(e, user) {
   if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
   const settings = settingsRepository.getSettings();
@@ -7985,6 +8264,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
             <div class="balance-name">${escapeHtml(t.nom)}</div>
             <div class="balance-value">${disponibleLabel}</div>
             <div class="balance-sub">disponible${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}${balance.ajustement ? ` · ajustement ${balance.ajustement >= 0 ? '+' : ''}${formatDurationFR(balance.ajustement)}` : ''}</div>
+            ${balance.reportPerdu ? `<div class="balance-sub text-danger">${formatDurationFR(balance.reportPerdu)} de report perdu (échéance dépassée)</div>` : ''}
           </div>
         `;
       }).join('')}
@@ -8596,7 +8876,7 @@ function bindEmployeeDetailEvents() {
  * (pas un doublon : le Planning hebdomadaire n'existe pas pour Congés/Absences). */
 function renderAbsencesHub() {
   const user = authRepository.getCurrentUser();
-  const canValider = ['manager', 'rh', 'directeur'].includes(user.role);
+  const canValider = ['manager', 'rh', 'proprietaire'].includes(user.role);
   const TABS = {
     conges: { label: 'Congés', subtitle: 'Demandes de congés payés, RTT, ancienneté...', btnId: 'btn-conges-a-valider' },
     autres: { label: 'Absences', subtitle: 'Maladie, événements familiaux et autres absences paramétrables', btnId: 'btn-autres-absences-a-valider' },
@@ -8682,6 +8962,11 @@ function getFilteredLeaveRequests(categorie = 'conge') {
   return list;
 }
 
+// §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
+// (congés / autres absences partagent la même fonction de rendu mais jamais la même sélection —
+// cocher une ligne "congé" ne doit rien présélectionner en revenant sur l'onglet "autres absences").
+const bulkSelection = { conge: new Set(), autre: new Set() };
+
 function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
@@ -8689,6 +8974,12 @@ function renderCongesDemandes(categorie = 'conge') {
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const requests = getFilteredLeaveRequests(categorie);
   const { pageItems, totalPages, page, pageStart } = paginate(requests, pageKey);
+  const selection = bulkSelection[categorie];
+  // Seules les demandes EN ATTENTE que l'utilisateur courant peut effectivement valider comptent
+  // pour la case "tout sélectionner" — cocher des lignes qu'aucun bouton "Valider" n'accompagne
+  // déjà (statut différent, ou hors de portée de canActOnRequestFor) n'aurait aucun effet au clic.
+  const selectablePageItems = pageItems.filter(r => r.statut === 'En attente' && canActOnRequestFor(r));
+  const selectedCount = selection.size;
 
   return `
     <div class="view-header-row">
@@ -8716,11 +9007,20 @@ function renderCongesDemandes(categorie = 'conge') {
       </select>
     </div>
 
+    ${selectedCount > 0 ? `
+      <div class="toolbar card" style="align-items:center;">
+        <span>${selectedCount} demande${selectedCount > 1 ? 's' : ''} sélectionnée${selectedCount > 1 ? 's' : ''}</span>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-bulk-approve">Valider la sélection</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-bulk-clear">Annuler la sélection</button>
+      </div>
+    ` : ''}
+
     <div class="card table-card">
       ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>Aucune demande ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead>
             <tr>
+              <th>${selectablePageItems.length ? `<input type="checkbox" id="conges-select-all" ${selectablePageItems.every(r => selection.has(r.id)) ? 'checked' : ''} aria-label="Tout sélectionner">` : ''}</th>
               <th>Salarié</th>
               <th>Type</th>
               <th>Période</th>
@@ -8730,7 +9030,7 @@ function renderCongesDemandes(categorie = 'conge') {
             </tr>
           </thead>
           <tbody>
-            ${pageItems.map(renderLeaveRequestRow).join('')}
+            ${pageItems.map(r => renderLeaveRequestRow(r, selection)).join('')}
           </tbody>
         </table>
         ${renderPaginationControls(page, totalPages, pageStart, pageItems.length, requests.length)}
@@ -8739,7 +9039,7 @@ function renderCongesDemandes(categorie = 'conge') {
   `;
 }
 
-function renderLeaveRequestRow(r) {
+function renderLeaveRequestRow(r, selection) {
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   if (!employee || !type) return '';
@@ -8747,9 +9047,11 @@ function renderLeaveRequestRow(r) {
   const periode = r.dateDebut === r.dateFin
     ? formatDate(r.dateDebut) + (r.demiJournee ? ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : '')
     : `${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}`;
+  const selectable = selection && r.statut === 'En attente' && canActOnRequestFor(r);
 
   return `
     <tr data-request-id="${r.id}">
+      <td>${selectable ? `<input type="checkbox" class="conges-select-row" data-select-request="${r.id}" ${selection.has(r.id) ? 'checked' : ''} aria-label="Sélectionner cette demande">` : ''}</td>
       <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
       <td><span class="badge badge-muted"><span class="type-swatch" style="background:${escapeHtml(type.couleur)}"></span>${escapeHtml(type.icone)} ${escapeHtml(type.nom)}</span></td>
       <td>${periode}</td>
@@ -8760,27 +9062,32 @@ function renderLeaveRequestRow(r) {
   `;
 }
 
-/** Badge de statut générique, réutilisé par Congés, Télétravail et Notes de frais (même moteur de workflow). */
+/** Badge de statut générique, réutilisé par Congés, Télétravail et Notes de frais (même moteur de workflow).
+ * §correctif audit du 23/08/2026 (§7.7) : le motif de refus (désormais obligatoire à la saisie,
+ * voir openRefuseModal) s'affiche directement sous le badge plutôt que de forcer à rouvrir
+ * l'historique — c'est l'information que le salarié cherche en premier sur un refus. */
 function renderRequestStatutBadge(r) {
   const map = { 'En attente': 'warning', 'Validé': 'success', 'Remboursé': 'success', 'Refusé': 'muted', 'Annulé': 'muted' };
   const currentRole = r.statut === 'En attente' && r.workflow && r.workflow[r.etapeIndex];
   const suffix = currentRole ? ` (${ROLE_LABELS[currentRole] || currentRole})` : '';
-  return `<span class="badge badge-${map[r.statut] || 'muted'}">${escapeHtml(r.statut)}${suffix}</span>`;
+  const motif = r.statut === 'Refusé' && r.motifRefus
+    ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">${escapeHtml(r.motifRefus)}</div>` : '';
+  return `<span class="badge badge-${map[r.statut] || 'muted'}">${escapeHtml(r.statut)}${suffix}</span>${motif}`;
 }
 
 /**
  * Un salarié ne peut jamais valider de demande. Un manager ne peut agir que sur
- * les demandes de membres de son équipe. RH et Directeur peuvent toujours agir.
+ * les demandes de membres de son équipe. RH et Propriétaire peuvent toujours agir.
  * `allowComptabilite` ouvre l'action à la Comptabilité (utilisé pour les notes de frais).
  */
 /**
  * Un utilisateur ne peut valider une demande que si c'est actuellement le tour de son rôle
  * dans la chaîne de validation de la demande (`request.workflow[request.etapeIndex]`).
- * RH et Directeur peuvent toujours agir (accès complet) ; un manager uniquement sur son équipe.
+ * RH et Propriétaire peuvent toujours agir (accès complet) ; un manager uniquement sur son équipe.
  *
  * domain: 'absence' (congés/télétravail, défaut) consulte hasPermission(VALIDER_ABSENCE) ;
  * 'frais' (notes de frais) consulte hasPermission(VALIDER_NOTE_FRAIS) — dans les deux cas
- * surchargeable individuellement (§8). Le bypass ne concerne que RH/Directeur par défaut :
+ * surchargeable individuellement (§8). Le bypass ne concerne que RH/Propriétaire par défaut :
  * Comptabilité n'a pas VALIDER_NOTE_FRAIS et continue de ne passer qu'à son étage du workflow
  * (`requiredRole === 'comptabilite'`), exactement comme avant.
  *
@@ -8809,30 +9116,30 @@ function isCurrentWorkflowStepFor(request, user, domain) {
   return true;
 }
 
-/** Le Directeur n'a personne au-dessus de lui dans la hiérarchie pour valider ses propres congés —
+/** Le Propriétaire n'a personne au-dessus de lui dans la hiérarchie pour valider ses propres congés —
  * seul cas où la séparation des tâches est levée, et seulement pour les congés/absences/télétravail
  * (domain 'absence'), jamais pour les notes de frais : le circuit financier reste séparé même pour lui. */
-function canSelfServiceAsDirecteur(user, domain) {
-  return domain === 'absence' && user.role === ROLES.DIRECTEUR;
+function canSelfServiceAsProprietaire(user, domain) {
+  return domain === 'absence' && user.role === ROLES.PROPRIETAIRE;
 }
 
 function canActOnRequestFor(request, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
-  // séparation des tâches : personne ne valide sa propre demande, même RH — sauf le Directeur (§ci-dessus).
-  if (request.employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
+  // séparation des tâches : personne ne valide sa propre demande, même RH — sauf le Propriétaire (§ci-dessus).
+  if (request.employeeId === user.id && !canSelfServiceAsProprietaire(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE)) return true;
   return isCurrentWorkflowStepFor(request, user, domain);
 }
 
 /** Refuser une demande (§8) : REFUSER_ABSENCE est une permission distincte de VALIDER_ABSENCE pour
- * congés/télétravail — un Directeur peut ainsi accorder (ou retirer) le droit de refuser
+ * congés/télétravail — un Propriétaire peut ainsi accorder (ou retirer) le droit de refuser
  * indépendamment de celui de valider. Pas de permission "refuser une note de frais" distincte au
  * catalogue : même règle que Valider pour le domaine 'frais'. */
 function canRefuserRequestFor(request, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user || !request.workflow || request.etapeIndex < 0 || request.etapeIndex >= request.workflow.length) return false;
-  if (request.employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
+  if (request.employeeId === user.id && !canSelfServiceAsProprietaire(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.REFUSER_ABSENCE)) return true;
   return isCurrentWorkflowStepFor(request, user, domain);
 }
@@ -8842,8 +9149,8 @@ function canRefuserRequestFor(request, domain = 'absence') {
 function canManageRequestFor(employeeId, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
-  // séparation des tâches : personne ne gère sa propre demande, même RH — sauf le Directeur (congés/absences).
-  if (employeeId === user.id && !canSelfServiceAsDirecteur(user, domain)) return false;
+  // séparation des tâches : personne ne gère sa propre demande, même RH — sauf le Propriétaire (congés/absences).
+  if (employeeId === user.id && !canSelfServiceAsProprietaire(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
   if (user.role === ROLES.MANAGER) {
     const emp = employeeRepository.getById(employeeId);
@@ -9141,6 +9448,46 @@ function bindCongesDemandesEvents(categorie = 'conge') {
     btn.addEventListener('click', () => openRegulariserModal(btn.dataset.regulariser));
   });
   bindHistoryButtons(leaveRepository);
+
+  // §correctif audit du 23/08/2026 (§7.14) : validation en masse — même moteur (advanceWorkflow)
+  // que la validation ligne par ligne (handleApproveRequest), juste répété sur toute la sélection
+  // avec UN SEUL toast/rendu à la fin plutôt que vingt.
+  const selection = bulkSelection[categorie];
+  const selectAll = document.getElementById('conges-select-all');
+  if (selectAll) {
+    selectAll.addEventListener('change', () => {
+      document.querySelectorAll('.conges-select-row').forEach(cb => {
+        const id = cb.dataset.selectRequest;
+        if (selectAll.checked) selection.add(id); else selection.delete(id);
+      });
+      render();
+    });
+  }
+  document.querySelectorAll('[data-select-request]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) selection.add(cb.dataset.selectRequest); else selection.delete(cb.dataset.selectRequest);
+      render();
+    });
+  });
+  const bulkApproveBtn = document.getElementById('btn-bulk-approve');
+  if (bulkApproveBtn) bulkApproveBtn.addEventListener('click', () => handleBulkApproveRequests(categorie));
+  const bulkClearBtn = document.getElementById('btn-bulk-clear');
+  if (bulkClearBtn) bulkClearBtn.addEventListener('click', () => { selection.clear(); render(); });
+}
+
+function handleBulkApproveRequests(categorie) {
+  const selection = bulkSelection[categorie];
+  let approved = 0, skipped = 0;
+  selection.forEach(id => {
+    const request = leaveRepository.getById(id);
+    if (!request || !canActOnRequestFor(request)) { skipped++; return; }
+    leaveRepository.update(id, advanceWorkflow(request, 'Validé'));
+    auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+    approved++;
+  });
+  selection.clear();
+  showToast(`${approved} demande${approved > 1 ? 's' : ''} validée${approved > 1 ? 's' : ''}${skipped ? ` (${skipped} ignorée${skipped > 1 ? 's' : ''}, plus à jour)` : ''}.`);
+  render();
 }
 
 // ---- Modale : Attestation de congé (imprimable / export PDF) ----
@@ -9219,14 +9566,12 @@ function handleApproveRequest(id) {
 function handleRefuseRequest(id) {
   const request = leaveRepository.getById(id);
   if (!request || !canRefuserRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  openConfirm({
+  openRefuseModal({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
-    confirmLabel: 'Refuser',
-    danger: true,
-    onConfirm: () => {
-      leaveRepository.update(id, refuseRequest(request));
-      auditLogRepository.logAudit('Refus', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+    onConfirm: (motif) => {
+      leaveRepository.update(id, refuseRequest(request, motif));
+      auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
       showToast('Demande refusée.');
       render();
     }
@@ -9569,14 +9914,61 @@ function updateLeaveRequestHints() {
   const balance = getLeaveBalance(employee, type, leaveRepository.getAll());
   const disponibleLabel = balance.disponible === Infinity ? 'illimité' : formatDurationFR(balance.disponible);
 
+  // §correctif audit du 23/08/2026 (§7.11) : l'aide à la saisie n'affichait que le solde DU JOUR,
+  // alors que l'acquisition continue jusqu'à la date de départ demandée — un salarié qui pose un
+  // congé dans 2 mois voit un solde qui sous-estime ce qu'il aura RÉELLEMENT ce jour-là. Affiché
+  // seulement si la date de début est dans le futur (sinon identique au solde du jour, aucune
+  // valeur ajoutée à le répéter).
+  let projeteLabel = '';
+  if (dateDebut && dateDebut > toISODate(new Date()) && balance.disponible !== Infinity) {
+    const balanceProjetee = getLeaveBalance(employee, type, leaveRepository.getAll(), null, dateDebut);
+    if (balanceProjetee.disponible !== balance.disponible) {
+      projeteLabel = ` (${formatDurationFR(balanceProjetee.disponible)} projeté au ${formatDate(dateDebut)})`;
+    }
+  }
+
   let nbJoursLabel = '';
   if (dateDebut && dateFin) {
     const demiJournee = demiField.style.display === 'block' ? document.getElementById('f-demiJournee').value : '';
-    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings());
+    const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte);
     nbJoursLabel = ` · ${formatDurationFR(nbJours)} décomptés pour cette demande`;
   }
 
-  hint.textContent = `Solde disponible : ${disponibleLabel}${nbJoursLabel}${type.justificatifObligatoire ? ' · Justificatif obligatoire pour ce type' : ''}`;
+  // §correctif audit du 23/08/2026 (§7.8) : délai de prévenance — avertit systématiquement dans
+  // l'aide à la saisie (utile même en mode "alerte", pas seulement "blocage") dès que la date de
+  // début est connue et insuffisamment éloignée d'aujourd'hui.
+  let delaiWarning = '';
+  if (dateDebut && type.delaiPrevenanceJours) {
+    const joursRestants = Math.round((parseISODateLocal(dateDebut) - parseISODateLocal(toISODate(new Date()))) / 86400000);
+    if (joursRestants < type.delaiPrevenanceJours) {
+      delaiWarning = ` · ⚠ Délai de prévenance de ${type.delaiPrevenanceJours} jour${type.delaiPrevenanceJours > 1 ? 's' : ''} non respecté${type.delaiPrevenanceMode === 'blocage' ? ' (bloquant pour ce type)' : ''}`;
+    }
+  }
+
+  // §correctif audit du 23/08/2026 (§7.6) : quota d'absences simultanées — avertit (jamais ne
+  // bloque, l'audit ne le demande pas ici) si accepter cette demande porterait le nombre de
+  // salariés absents un jour donné du même périmètre à ou au-delà du maximum configuré. Une seule
+  // journée suffit à déclencher l'alerte, pas la peine de lister tous les jours en conflit.
+  let quotaWarning = '';
+  if (dateDebut && dateFin) {
+    const settings = settingsRepository.getSettings();
+    const quotas = getQuotasForEmployee(employee, settings);
+    for (const quota of quotas) {
+      const cursor = parseISODateLocal(dateDebut);
+      const end = parseISODateLocal(dateFin);
+      while (cursor <= end) {
+        const dateStr = toISODate(cursor);
+        if (countAbsentsForQuota(quota, dateStr, employee.id) + 1 >= quota.maxSimultane) {
+          quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''})`;
+          break;
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      if (quotaWarning) break;
+    }
+  }
+
+  hint.textContent = `Solde disponible : ${disponibleLabel}${projeteLabel}${nbJoursLabel}${type.justificatifObligatoire ? ' · Justificatif obligatoire pour ce type' : ''}${delaiWarning}${quotaWarning}`;
 }
 
 function submitLeaveRequestForm(evt) {
@@ -9599,7 +9991,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  // Sprint SIRH premium §1 : "Seuls RH/Manager/Directeur peuvent créer une absence dans le passé
+  // Sprint SIRH premium §1 : "Seuls RH/Manager/Propriétaire peuvent créer une absence dans le passé
   // [...] Les salariés ne peuvent jamais modifier une période antérieure à aujourd'hui." — la
   // création couvre aussi la saisie initiale, pas seulement la modification d'une demande existante
   // (déjà couverte par canManageRequestFor, qui exclut systématiquement le demandeur lui-même).
@@ -9610,6 +10002,17 @@ function submitLeaveRequestForm(evt) {
 
   const employee = employeeRepository.getById(employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(typeId);
+
+  // §correctif audit du 23/08/2026 (§7.8) : délai de prévenance en mode "blocage" — en mode
+  // "alerte", updateLeaveRequestHints a déjà prévenu au moment de la saisie, la demande part quand
+  // même (c'est tout le sens de la distinction entre les deux modes).
+  if (dateDebut && type.delaiPrevenanceJours && type.delaiPrevenanceMode === 'blocage') {
+    const joursRestants = Math.round((parseISODateLocal(dateDebut) - parseISODateLocal(toISODate(new Date()))) / 86400000);
+    if (joursRestants < type.delaiPrevenanceJours) {
+      showToast(`Ce type de congé exige un délai de prévenance de ${type.delaiPrevenanceJours} jour${type.delaiPrevenanceJours > 1 ? 's' : ''} minimum.`, 'error');
+      return;
+    }
+  }
 
   // §15/§24 : ne fait pas confiance au seul filtrage du menu déroulant (contournable en modifiant
   // le DOM) — revérifie ici que l'utilisateur courant a le droit de saisir ce type restreint.
@@ -9647,7 +10050,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings());
+  const nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settingsRepository.getSettings(), type.uniteDecompte);
 
   if (nbJours <= 0) {
     showToast('La période sélectionnée ne comporte aucun jour travaillé.', 'error');
@@ -9767,8 +10170,8 @@ const WORKFLOW_PRESETS_CONGES = [
   { value: '["manager"]', label: 'Manager uniquement' },
   { value: '["rh"]', label: 'RH uniquement' },
   { value: '["manager","rh"]', label: 'Manager puis RH' },
-  { value: '["manager","directeur"]', label: 'Manager puis Directeur' },
-  { value: '["directeur"]', label: 'Directeur uniquement' }
+  { value: '["manager","proprietaire"]', label: 'Manager puis Propriétaire' },
+  { value: '["proprietaire"]', label: 'Propriétaire uniquement' }
 ];
 
 const WORKFLOW_PRESETS_FRAIS = [
@@ -9776,7 +10179,7 @@ const WORKFLOW_PRESETS_FRAIS = [
   { value: '["manager"]', label: 'Manager uniquement' },
   { value: '["comptabilite"]', label: 'Comptabilité uniquement' },
   { value: '["manager","comptabilite"]', label: 'Manager puis Comptabilité' },
-  { value: '["manager","directeur"]', label: 'Manager puis Directeur' }
+  { value: '["manager","proprietaire"]', label: 'Manager puis Propriétaire' }
 ];
 
 function workflowSelectField(name, label, presets, currentWorkflow) {
@@ -9873,7 +10276,9 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   // (ajout/suppression de ligne) — re-rendu seulement dans son propre conteneur (#regles-rows), pas
   // toute la modale, pour ne jamais perdre les autres champs déjà saisis par l'utilisateur.
   let currentRegles = (type.regles || []).map(r => ({ ...r }));
+  let currentPaliers = (type.paliersAnciennete || []).map(p => ({ ...p }));
   const [clotureMoisInit, clotureJourInit] = (type.dateClotureCompteur || '').split('-').map(Number);
+  const [limiteReportMoisInit, limiteReportJourInit] = (type.dateLimiteReportMMJJ || '').split('-').map(Number);
 
   const html = `
     <div class="modal modal-large">
@@ -9911,6 +10316,20 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                 <label for="f-nombreAnnuel" id="label-nombre-annuel">Nombre de jours par an</label>
                 <input class="input" type="number" step="any" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
               </div>
+              <div class="form-field">
+                <label for="f-uniteDecompte">Unité de décompte</label>
+                <select class="input" id="f-uniteDecompte" name="uniteDecompte">
+                  <option value="ouvres" ${type.uniteDecompte !== 'ouvrables' ? 'selected' : ''}>Jours ouvrés (rythme réel du salarié)</option>
+                  <option value="ouvrables" ${type.uniteDecompte === 'ouvrables' ? 'selected' : ''}>Jours ouvrables (tous les jours sauf dimanche)</option>
+                </select>
+                <p class="form-hint">Le Code du travail exprime les congés payés en jours ouvrables (30) ; la plupart des conventions comptent en jours ouvrés (25).</p>
+              </div>
+            </div>
+            <div class="form-field" style="margin-top:14px;">
+              <label>Paliers d'ancienneté (optionnel)</label>
+              <p class="form-hint">Remplace "Nombre de jours par an" ci-dessus par le palier le plus haut atteint (non cumulatif) — évite de créer un type par tranche d'ancienneté.</p>
+              <div id="paliers-anciennete-rows"></div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-palier" style="margin-top:8px;">+ Ajouter un palier</button>
             </div>
             <div class="form-grid" style="margin-top:14px;">
               <div class="form-field">
@@ -9936,6 +10355,24 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                 <label for="f-reportLimiteJours">Plafond de report (jours)</label>
                 <input class="input" type="number" step="any" min="0" id="f-reportLimiteJours" name="reportLimiteJours" value="${escapeHtml(type.reportLimiteJours || '')}">
               </div>
+              <div class="form-field" id="field-report-echeance" style="display:${type.reportCompteur !== 'aucun' ? 'flex' : 'none'};">
+                <label>Date limite pour consommer le report (optionnel)</label>
+                <div style="display:flex; gap:8px;">
+                  <select class="input" id="f-limite-report-mois" style="flex:1;">
+                    <option value="">Aucune échéance (report utilisable toute la période)</option>
+                    ${MONTH_NAMES.map((m, i) => `<option value="${i + 1}" ${limiteReportMoisInit === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}
+                  </select>
+                  <input class="input" type="number" id="f-limite-report-jour" min="1" max="31" placeholder="Jour" value="${limiteReportJourInit || ''}" style="flex:0 0 80px;">
+                </div>
+                <p class="form-hint">Passé cette date, la part du report pas encore consommée est perdue.</p>
+              </div>
+              <div class="form-field" id="field-fractionnement" style="display:${type.dateClotureCompteur ? 'flex' : 'none'};">
+                <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+                  <input type="checkbox" id="f-fractionnementActif" ${type.fractionnementActif ? 'checked' : ''}>
+                  Jours de fractionnement
+                </label>
+                <p class="form-hint">Règle supplétive française : +1 jour si 3 à 5 jours de congé sont pris hors du 1er mai-31 octobre (période précédente), +2 jours si 6 ou plus. Beaucoup d'accords l'écartent — désactivé par défaut.</p>
+              </div>
             </div>
           </fieldset>
 
@@ -9943,6 +10380,23 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             <legend>Chaîne de validation</legend>
             <div class="form-grid">
               ${workflowSelectField('workflow', 'Validation requise', WORKFLOW_PRESETS_CONGES, type.workflow)}
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>Délai de prévenance (optionnel)</legend>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="f-delaiPrevenanceJours">Nombre de jours minimum avant le départ</label>
+                <input class="input" type="number" step="1" min="0" id="f-delaiPrevenanceJours" name="delaiPrevenanceJours" value="${escapeHtml(type.delaiPrevenanceJours || '')}" placeholder="Aucun délai">
+              </div>
+              <div class="form-field" id="field-delai-prevenance-mode" style="display:${type.delaiPrevenanceJours ? 'flex' : 'none'};">
+                <label for="f-delaiPrevenanceMode">Si le délai n'est pas respecté</label>
+                <select class="input" id="f-delaiPrevenanceMode" name="delaiPrevenanceMode">
+                  <option value="alerte" ${type.delaiPrevenanceMode === 'alerte' ? 'selected' : ''}>Avertir, mais laisser envoyer</option>
+                  <option value="blocage" ${type.delaiPrevenanceMode === 'blocage' ? 'selected' : ''}>Empêcher l'envoi</option>
+                </select>
+              </div>
             </div>
           </fieldset>
 
@@ -9997,7 +10451,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
     const mode = document.getElementById('f-acquisition').value;
     const field = document.getElementById('field-nombre-annuel');
     const label = document.getElementById('label-nombre-annuel');
-    if (mode === 'Illimitée') {
+    if (mode === 'Illimitée' || currentPaliers.length) {
       field.style.display = 'none';
     } else {
       field.style.display = '';
@@ -10007,15 +10461,53 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   document.getElementById('f-acquisition').addEventListener('change', updateAcquisitionUI);
   updateAcquisitionUI();
 
+  // §7.18 : mêmes principes que le constructeur de règles (#3 plus bas) — état local re-rendu dans
+  // son propre conteneur, jamais toute la modale.
+  function renderPaliersRows() {
+    document.getElementById('paliers-anciennete-rows').innerHTML = currentPaliers.map((p, index) => `
+      <div class="form-grid" style="grid-template-columns: 1fr 1fr auto; align-items:start; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input class="input" type="number" min="0" step="any" data-palier-min="${index}" value="${escapeHtml(p.ancienneteMin ?? 0)}" placeholder="Ancienneté (ans)">
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input class="input" type="number" min="0" step="any" data-palier-jours="${index}" value="${escapeHtml(p.jours ?? 0)}" placeholder="Jours accordés">
+        </div>
+        <button type="button" class="btn-icon" data-remove-palier="${index}" aria-label="Retirer" title="Retirer">${icon(ICONS.close, 12)}</button>
+      </div>
+    `).join('');
+    document.querySelectorAll('[data-palier-min]').forEach(el => el.addEventListener('change', (e) => {
+      currentPaliers[Number(e.target.dataset.palierMin)].ancienneteMin = Number(e.target.value) || 0;
+    }));
+    document.querySelectorAll('[data-palier-jours]').forEach(el => el.addEventListener('change', (e) => {
+      currentPaliers[Number(e.target.dataset.palierJours)].jours = Number(e.target.value) || 0;
+    }));
+    document.querySelectorAll('[data-remove-palier]').forEach(btn => btn.addEventListener('click', () => {
+      currentPaliers.splice(Number(btn.dataset.removePalier), 1);
+      renderPaliersRows();
+      updateAcquisitionUI();
+    }));
+  }
+  document.getElementById('btn-add-palier').addEventListener('click', () => {
+    currentPaliers.push({ ancienneteMin: 0, jours: 0 });
+    renderPaliersRows();
+    updateAcquisitionUI();
+  });
+  renderPaliersRows();
+
   // #5 : le champ de report n'a de sens que si une clôture est définie ; le plafond n'a de sens que
   // si le report est "limite".
   const updateClotureUI = () => {
     const hasCloture = Boolean(document.getElementById('f-cloture-mois').value);
     document.getElementById('field-report').style.display = hasCloture ? 'flex' : 'none';
+    document.getElementById('field-fractionnement').style.display = hasCloture ? 'flex' : 'none';
   };
   document.getElementById('f-cloture-mois').addEventListener('change', updateClotureUI);
   document.getElementById('f-reportCompteur').addEventListener('change', (e) => {
     document.getElementById('field-report-limite').style.display = e.target.value === 'limite' ? 'flex' : 'none';
+    document.getElementById('field-report-echeance').style.display = e.target.value !== 'aucun' ? 'flex' : 'none';
+  });
+  document.getElementById('f-delaiPrevenanceJours').addEventListener('input', (e) => {
+    document.getElementById('field-delai-prevenance-mode').style.display = e.target.value ? 'flex' : 'none';
   });
 
   // #3 : constructeur de règles générique — un critère du catalogue RULE_CRITERIA par ligne, avec
@@ -10083,7 +10575,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   });
   renderReglesRows();
 
-  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie, currentRegles));
+  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie, currentRegles, currentPaliers));
 }
 
 function checkboxField(name, label, checked) {
@@ -10097,17 +10589,19 @@ function checkboxField(name, label, checked) {
   `;
 }
 
-function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = []) {
+function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersAnciennete = []) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
   const checkboxNames = ['paye', 'justificatifObligatoire', 'visibleSalarie', 'visibleRH', 'saisiParSalarie', 'autoriserDemiJournee', 'autoriserPlusieursDemandes', 'exportPaie', 'actif'];
 
   const acquisition = formData.get('acquisition');
+  const paliersConfigures = paliersAnciennete.some(p => p.ancienneteMin || p.jours);
   // #4 : Illimitée masque le champ mais un <input> masqué reste dans FormData — on force explicitement
   // à 0 plutôt que de conserver une valeur périmée qui n'a plus aucun effet sur le calcul mais
-  // resterait trompeuse dans les exports/imports.
-  const nombreAnnuel = acquisition === 'Illimitée' ? 0 : Number(formData.get('nombreAnnuel')) || 0;
+  // resterait trompeuse dans les exports/imports. §7.18 : même principe si des paliers d'ancienneté
+  // remplacent nombreAnnuel.
+  const nombreAnnuel = (acquisition === 'Illimitée' || paliersConfigures) ? 0 : Number(formData.get('nombreAnnuel')) || 0;
   if (nombreAnnuel < 0) {
     showToast('Le nombre de jours ne peut pas être négatif.', 'error');
     return;
@@ -10119,6 +10613,15 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = []) {
   const dateClotureCompteur = clotureMois && clotureJour ? `${String(clotureMois).padStart(2, '0')}-${String(clotureJour).padStart(2, '0')}` : null;
   const reportCompteur = dateClotureCompteur ? formData.get('reportCompteur') : 'aucun';
   const reportLimiteJours = reportCompteur === 'limite' ? Number(formData.get('reportLimiteJours')) || 0 : null;
+  // §correctif audit du 23/08/2026 (§7.15) : même principe que dateClotureCompteur ci-dessus —
+  // n'a de sens que si un report est effectivement possible.
+  const limiteReportMois = document.getElementById('f-limite-report-mois').value;
+  const limiteReportJour = document.getElementById('f-limite-report-jour').value;
+  const dateLimiteReportMMJJ = reportCompteur !== 'aucun' && limiteReportMois && limiteReportJour
+    ? `${String(limiteReportMois).padStart(2, '0')}-${String(limiteReportJour).padStart(2, '0')}` : null;
+  // §correctif audit du 23/08/2026 (§7.8) : délai de prévenance optionnel par type.
+  const delaiPrevenanceJours = Number(formData.get('delaiPrevenanceJours')) || null;
+  const delaiPrevenanceMode = delaiPrevenanceJours ? (formData.get('delaiPrevenanceMode') || 'alerte') : 'alerte';
 
   const patch = {
     nom: formData.get('nom'),
@@ -10130,9 +10633,15 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = []) {
     workflow: JSON.parse(formData.get('workflow') || '[]'),
     compteurPartageAvecId: formData.get('compteurPartageAvecId') || null,
     regles: regles.filter(r => r.critere), // ligne ajoutée puis jamais configurée = ignorée plutôt que sauvegardée à moitié
+    paliersAnciennete: paliersAnciennete.filter(p => p.ancienneteMin || p.jours).sort((a, b) => a.ancienneteMin - b.ancienneteMin),
     dateClotureCompteur,
     reportCompteur,
-    reportLimiteJours
+    reportLimiteJours,
+    dateLimiteReportMMJJ,
+    delaiPrevenanceJours,
+    delaiPrevenanceMode,
+    uniteDecompte: formData.get('uniteDecompte') === 'ouvrables' ? 'ouvrables' : 'ouvres',
+    fractionnementActif: dateClotureCompteur ? document.getElementById('f-fractionnementActif').checked : false
   };
   patch.illimite = patch.acquisition === 'Illimitée';
   checkboxNames.forEach(name => { patch[name] = form.querySelector(`#f-${name}`).checked; });
@@ -10160,13 +10669,13 @@ const MONTH_NAMES = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Jui
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 /** Sprint SIRH premium §2 : "Calendrier des valideurs / Créer un calendrier spécifique pour RH/
- * Managers/Directeur. Ce calendrier affiche : leurs propres congés ; leurs événements personnels ;
+ * Managers/Propriétaire. Ce calendrier affiche : leurs propres congés ; leurs événements personnels ;
  * leurs validations." — "Mon calendrier" couvre déjà les 2 premiers points pour tout le monde ;
  * cette carte ajoute le 3e (validations en attente), visible uniquement pour les rôles concernés en
  * vue personnelle. Mêmes navParams que le Centre d'action (§7)/les raccourcis sidebar (§5) — un seul
  * endroit où ces filtres sont définis (NAVPARAMS_*). */
 function renderCalendrierValidationsCard(user) {
-  if (![ROLES.MANAGER, ROLES.RH, ROLES.DIRECTEUR].includes(user.role)) return '';
+  if (![ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role)) return '';
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const pendingFor = (repo) => {
     const list = repo.getAll().filter(r => r.statut === 'En attente');
@@ -10203,11 +10712,11 @@ function renderCalendrierValidationsCard(user) {
 function buildCalendarSharedData(cells) {
   const settings = settingsRepository.getSettings();
   const user = authRepository.getCurrentUser();
-  // Sprint SIRH premium §2 : "Créer un calendrier spécifique pour RH/Managers/Directeur [...] leurs
+  // Sprint SIRH premium §2 : "Créer un calendrier spécifique pour RH/Managers/Propriétaire [...] leurs
   // propres congés, leurs événements personnels, leurs validations" — un salarié voit déjà
   // uniquement son propre calendrier par défaut (getVisibleEmployeeIdsForCurrentUser), donc le
   // bascule n'a de sens que pour les rôles qui voient plus large (équipe pour un manager, toute
-  // l'entreprise pour RH/Directeur/Comptabilité).
+  // l'entreprise pour RH/Propriétaire/Comptabilité).
   const hasWiderView = user.role !== ROLES.SALARIE;
   const vuePersonnelle = hasWiderView && state.calendrierVue === 'personnel';
 
@@ -10235,7 +10744,7 @@ function buildCalendarSharedData(cells) {
 // restaurant utilisaient chacun leur propre bascule dupliquée ; un seul composant maintenant, même
 // style/comportement partout. `stateKey` est le nom de la clé d'état ('calendrierVue',
 // 'planningVue', 'ticketsRestaurantVue'), `teamValue`/`teamLabel` restent propres à chaque écran
-// (ex. "Calendrier équipe" pour un manager, "Calendrier entreprise" pour RH/Directeur) pour ne pas
+// (ex. "Calendrier équipe" pour un manager, "Calendrier entreprise" pour RH/Propriétaire) pour ne pas
 // avoir à renommer les valeurs d'état déjà lues ailleurs dans le code (buildCalendarSharedData...).
 // ---------------------------------------------------------------------------
 
@@ -10547,11 +11056,19 @@ function renderCalendarCell(cell, sharedData) {
     info.departs.length && filters.depart !== false ? calendarBadge('depart', ICONS.exitDoor, info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
   ].join('');
 
+  // §correctif audit du 23/08/2026 (§7.6) : "repère visible dans le calendrier" — uniquement en vue
+  // équipe/entreprise (un quota compare plusieurs salariés entre eux, ça n'a pas de sens sur un
+  // calendrier personnel d'un seul salarié). Un jour où un quota est ATTEINT (pas juste approché)
+  // affiche un repère, sans nommer les salariés concernés ici (déjà visibles via les badges congé
+  // ci-dessus) — juste le signal qu'un service/équipe est au maximum ce jour-là.
+  const quotaAlerte = !sharedData.vuePersonnelle && (settingsRepository.getSettings().quotasSimultanes || [])
+    .some(q => countAbsentsForQuota(q, dateStr, null) >= q.maxSimultane);
+
   // §4 (reprise) : le survol des badges (.calendar-tooltip) reste utile sur desktop mais est
   // inutilisable au tactile et cache vite plusieurs infos à la fois sur un jour chargé — une case
   // avec du contenu est en plus rendue cliquable (clavier/tactile inclus, cf. le gestionnaire
   // role="button" générique déjà en place) pour ouvrir le détail complet du jour dans une modale.
-  const hasContent = Boolean(badges || info.ferie || info.vacances);
+  const hasContent = Boolean(badges || info.ferie || info.vacances || quotaAlerte);
   const hasAbsence = Boolean(congesValides.length || congesEnAttente.length || teletravailValide.length || teletravailEnAttente.length);
 
   // §sprint calendrier interactif : un jour sans absence, en vue personnelle (jamais en vue
@@ -10567,6 +11084,7 @@ function renderCalendarCell(cell, sharedData) {
         <span class="calendar-day-number">${cell.date.getDate()}</span>
       </div>
       ${ferieVisible ? `<div class="calendar-tag calendar-tag-holiday">${escapeHtml(info.ferie.label)}</div>` : ''}
+      ${quotaAlerte ? `<div class="calendar-tag calendar-tag-quota" title="Un quota d'absences simultanées est atteint ce jour-là">${icon(ICONS.warningTriangle, 11)} Quota atteint</div>` : ''}
       <div class="calendar-badges">${badges}</div>
     </div>
   `;
@@ -10747,8 +11265,9 @@ function renderParametresTypesAbsences() {
     <div class="tabs" style="margin-bottom: 14px;">
       <button class="tab ${categorie === 'conge' ? 'active' : ''}" data-parametres-types-categorie="conge">Congés payés / RTT</button>
       <button class="tab ${categorie === 'autre' ? 'active' : ''}" data-parametres-types-categorie="autre">Autres absences</button>
+      <button class="tab ${categorie === 'quotas' ? 'active' : ''}" data-parametres-types-categorie="quotas">Quotas simultanés</button>
     </div>
-    ${renderCongesTypes(categorie)}
+    ${categorie === 'quotas' ? renderParametresQuotasSimultanes() : renderCongesTypes(categorie)}
   `;
 }
 
@@ -10757,7 +11276,186 @@ function bindParametresTypesAbsencesEvents() {
   document.querySelectorAll('[data-parametres-types-categorie]').forEach(btn => {
     btn.addEventListener('click', () => { state.parametresTypesCategorie = btn.dataset.parametresTypesCategorie; render(); });
   });
-  bindCongesTypesEvents(categorie);
+  if (categorie === 'quotas') bindParametresQuotasSimultanesEvents();
+  else bindCongesTypesEvents(categorie);
+}
+
+// ---- Sous-vue : Quotas d'absences simultanées (§7.6) ----
+
+/** §correctif audit du 23/08/2026 (§7.6) : "un maximum par service ou par équipe, avec alerte à la
+ * saisie et repère visible dans le calendrier. Sans lui, un manager découvre le conflit par
+ * hasard." — pas de blocage (l'audit ne le demande pas ici, contrairement à §7.8) : une alerte
+ * dans l'aide à la saisie (updateLeaveRequestHints) et une pastille dans le calendrier équipe
+ * (renderCalendrier) suffisent à rendre le conflit visible AVANT qu'il ne surprenne un manager. */
+function renderParametresQuotasSimultanes() {
+  const settings = settingsRepository.getSettings();
+  const quotas = settings.quotasSimultanes || [];
+  return `
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Quotas d'absences simultanées</h2>
+          <p class="text-muted">Nombre maximum de salariés d'un même service ou d'une même équipe absents en même temps — alerte à la saisie d'une demande, sans jamais bloquer.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-quota">+ Ajouter un quota</button>
+      </div>
+      ${quotas.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.people}</div><p>Aucun quota configuré.</p></div>` : `
+        <table class="table">
+          <thead><tr><th>Nom</th><th>Périmètre</th><th>Maximum simultané</th><th></th></tr></thead>
+          <tbody>
+            ${quotas.map(q => `
+              <tr>
+                <td>${escapeHtml(q.nom)}</td>
+                <td>${q.scope === 'equipe' ? 'Équipe' : 'Service'} · ${escapeHtml(q.scopeValue)}</td>
+                <td>${escapeHtml(q.maxSimultane)}</td>
+                <td>
+                  <button type="button" class="btn-link" data-edit-quota="${escapeHtml(q.id)}">Modifier</button>
+                  <button type="button" class="btn-link" data-delete-quota="${escapeHtml(q.id)}" data-nom="${escapeHtml(q.nom)}">Supprimer</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+function bindParametresQuotasSimultanesEvents() {
+  document.getElementById('btn-add-quota').addEventListener('click', () => openQuotaSimultaneModal());
+  document.querySelectorAll('[data-edit-quota]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = settingsRepository.getSettings();
+      const quota = (settings.quotasSimultanes || []).find(q => q.id === btn.dataset.editQuota);
+      openQuotaSimultaneModal(quota);
+    });
+  });
+  document.querySelectorAll('[data-delete-quota]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Supprimer ce quota ?',
+        message: `«${btn.dataset.nom}» ne sera plus pris en compte.`,
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          const settings = settingsRepository.getSettings();
+          settings.quotasSimultanes = (settings.quotasSimultanes || []).filter(q => q.id !== btn.dataset.deleteQuota);
+          settingsRepository.saveSettings(settings);
+          showToast('Quota supprimé.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+function openQuotaSimultaneModal(existing) {
+  const isEdit = Boolean(existing);
+  const services = Array.from(new Set(employeeRepository.getAll().filter(e => !e.archive && e.service).map(e => e.service))).sort();
+  const equipes = Array.from(new Set(employeeRepository.getAll().filter(e => !e.archive && e.equipe).map(e => e.equipe))).sort();
+  const scopeInit = existing?.scope || 'service';
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier le quota' : 'Nouveau quota'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="quota-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-quota-nom">Nom *</label>
+            <input class="input" type="text" id="f-quota-nom" value="${escapeHtml(existing?.nom || '')}" placeholder="Ex. Équipe support toujours couverte" required>
+          </div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field">
+              <label for="f-quota-scope">Périmètre</label>
+              <select class="input" id="f-quota-scope">
+                <option value="service" ${scopeInit === 'service' ? 'selected' : ''}>Service</option>
+                <option value="equipe" ${scopeInit === 'equipe' ? 'selected' : ''}>Équipe</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-quota-scope-value">Valeur *</label>
+              <select class="input" id="f-quota-scope-value" required></select>
+            </div>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-quota-max">Maximum de salariés absents simultanément *</label>
+            <input class="input" type="number" min="0" step="1" id="f-quota-max" value="${escapeHtml(existing?.maxSimultane ?? '')}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  const scopeValueSelect = document.getElementById('f-quota-scope-value');
+  const populateScopeValues = () => {
+    const scope = document.getElementById('f-quota-scope').value;
+    const options = scope === 'equipe' ? equipes : services;
+    scopeValueSelect.innerHTML = options.map(v => `<option value="${escapeHtml(v)}" ${existing?.scopeValue === v ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  };
+  document.getElementById('f-quota-scope').addEventListener('change', populateScopeValues);
+  populateScopeValues();
+
+  document.getElementById('quota-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-quota-nom').value.trim();
+    const scope = document.getElementById('f-quota-scope').value;
+    const scopeValue = scopeValueSelect.value;
+    const maxSimultane = Number(document.getElementById('f-quota-max').value);
+    if (!scopeValue) {
+      showToast(`Aucun${scope === 'equipe' ? 'e équipe' : ' service'} disponible — renseignez-en un(e) d'abord.`, 'error');
+      return;
+    }
+    if (!Number.isFinite(maxSimultane) || maxSimultane < 0) {
+      showToast('Le maximum doit être un nombre positif.', 'error');
+      return;
+    }
+    const settings = settingsRepository.getSettings();
+    const quota = isEdit ? { ...existing, nom, scope, scopeValue, maxSimultane } : { id: generateId('quota'), nom, scope, scopeValue, maxSimultane };
+    settings.quotasSimultanes = isEdit
+      ? (settings.quotasSimultanes || []).map(q => q.id === existing.id ? quota : q)
+      : [...(settings.quotasSimultanes || []), quota];
+    settingsRepository.saveSettings(settings);
+    closeModal();
+    showToast(isEdit ? 'Quota mis à jour.' : 'Quota créé.');
+    render();
+  });
+}
+
+/** Salariés (actifs) déjà absents (congé/télétravail Validé ou En attente) sur dateStr et
+ * appartenant au même périmètre qu'un quota — utilisé à la fois par l'alerte de saisie et par le
+ * repère calendrier, jamais dupliqué entre les deux. `excludeEmployeeId` : ignore le salarié qui
+ * dépose LUI-MÊME la demande (déjà compté par définition, ne doit pas se compter deux fois si son
+ * propre calendrier affiche le repère du jour concerné). */
+function countAbsentsForQuota(quota, dateStr, excludeEmployeeId) {
+  const employees = employeeRepository.getAll().filter(e => !e.archive
+    && (quota.scope === 'equipe' ? e.equipe === quota.scopeValue : e.service === quota.scopeValue)
+    && e.id !== excludeEmployeeId);
+  if (!employees.length) return 0;
+  const employeeIds = new Set(employees.map(e => e.id));
+  const isActive = (r) => r.statut === 'Validé' || r.statut === 'En attente';
+  const overlaps = (r) => r.dateDebut <= dateStr && r.dateFin >= dateStr;
+  // Télétravail délibérément exclu : ce n'est pas une absence physique, hors périmètre du quota.
+  const absentIds = new Set();
+  leaveRepository.getAll().forEach(r => { if (employeeIds.has(r.employeeId) && isActive(r) && overlaps(r)) absentIds.add(r.employeeId); });
+  return absentIds.size;
+}
+
+/** Quotas dont le périmètre couvre ce salarié — un salarié peut apparaître dans un quota "service"
+ * ET un quota "équipe" à la fois, les deux s'appliquent indépendamment. */
+function getQuotasForEmployee(employee, settings) {
+  return (settings.quotasSimultanes || []).filter(q =>
+    q.scope === 'equipe' ? q.scopeValue === employee.equipe : q.scopeValue === employee.service);
 }
 
 /** Contrairement aux autres onglets Paramètres (données déjà dans le cache local), le webhook Slack
@@ -12160,19 +12858,20 @@ function renderParametresFermetures() {
       </div>
       ${fermetures.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.building}</div><p>Aucune fermeture programmée.</p></div>` : `
         <table class="table">
-          <thead><tr><th>Nom</th><th>Du</th><th>Au</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Du</th><th>Au</th><th>Décompte</th><th></th></tr></thead>
           <tbody>
-            ${fermetures.map(f => `
+            ${fermetures.map(f => { const type = f.decompteTypeId ? leaveTypeRepository.getLeaveTypeById(f.decompteTypeId) : null; return `
               <tr>
                 <td>${escapeHtml(f.nom)}</td>
                 <td>${formatDate(f.dateDebut)}</td>
                 <td>${formatDate(f.dateFin)}</td>
+                <td>${type ? `<span class="badge badge-warning">${escapeHtml(type.nom)}</span>` : `<span class="badge badge-muted">Aucun</span>`}</td>
                 <td>
                   <button type="button" class="btn-link" data-edit-fermeture="${escapeHtml(f.id)}">Modifier</button>
                   <button type="button" class="btn-link" data-delete-fermeture="${escapeHtml(f.id)}" data-nom="${escapeHtml(f.nom)}">Supprimer</button>
                 </td>
               </tr>
-            `).join('')}
+            `; }).join('')}
           </tbody>
         </table>
       `}
@@ -12193,12 +12892,17 @@ function bindParametresFermeturesEvents() {
     btn.addEventListener('click', () => {
       openConfirm({
         title: 'Supprimer cette fermeture ?',
-        message: `«${btn.dataset.nom}» ne sera plus prise en compte.`,
+        message: `«${btn.dataset.nom}» ne sera plus prise en compte. Les congés éventuellement décomptés pour cette fermeture seront annulés.`,
         confirmLabel: 'Supprimer',
         danger: true,
-        onConfirm: () => {
+        onConfirm: async () => {
+          const fermetureId = btn.dataset.deleteFermeture;
+          // §correctif audit du 23/08/2026 (§7.5) : annule d'abord les demandes générées pour cette
+          // fermeture (decompteTypeId: null la fait interpréter comme "plus de décompte" par
+          // applyFermetureDecompte) avant de retirer la fermeture elle-même des settings.
+          await leaveRepository.applyFermetureDecompte({ id: fermetureId, decompteTypeId: null });
           const settings = settingsRepository.getSettings();
-          settings.fermetures = (settings.fermetures || []).filter(f => f.id !== btn.dataset.deleteFermeture);
+          settings.fermetures = (settings.fermetures || []).filter(f => f.id !== fermetureId);
           settingsRepository.saveSettings(settings);
           showToast('Fermeture supprimée.');
           render();
@@ -12211,6 +12915,11 @@ function bindParametresFermeturesEvents() {
 function openFermetureModal(existing) {
   const isEdit = Boolean(existing);
   const categoriesSalarie = categorieSalarieRepository.getAll();
+  // §correctif audit du 23/08/2026 (§7.5) : une fermeture est gratuite par défaut (comme un jour
+  // férié) — mais une fermeture ANNUELLE imposée est normalement un congé décompté. Types "congé"
+  // seulement (jamais "autre absence", qui n'a pas vocation à représenter un congé imposé).
+  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === 'conge');
+  const decompteActif = Boolean(existing?.decompteTypeId);
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
@@ -12237,6 +12946,21 @@ function openFermetureModal(existing) {
             <label>Catégories qui travaillent malgré tout pendant cette fermeture</label>
             ${renderExceptionsCategoriesField(existing?.exceptionsCategories, categoriesSalarie)}
           </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-fermeture-decompte">Cette fermeture décompte-t-elle un congé ?</label>
+            <select class="input" id="f-fermeture-decompte">
+              <option value="" ${!decompteActif ? 'selected' : ''}>Non — jour offert, comme un jour férié</option>
+              <option value="oui" ${decompteActif ? 'selected' : ''}>Oui — congé imposé, décompté d'un type</option>
+            </select>
+          </div>
+          <div class="form-field" id="f-fermeture-decompte-type-wrap" style="margin-top:12px; ${decompteActif ? '' : 'display:none;'}">
+            <label for="f-fermeture-decompte-type">Type de congé décompté *</label>
+            <select class="input" id="f-fermeture-decompte-type">
+              <option value="">—</option>
+              ${leaveTypes.map(t => `<option value="${escapeHtml(t.id)}" ${existing?.decompteTypeId === t.id ? 'selected' : ''}>${escapeHtml(t.nom)}</option>`).join('')}
+            </select>
+            <p class="text-muted" style="margin-top: 6px; font-size: 12px;">Une demande de congé Validé est générée automatiquement pour chaque salarié concerné (sauf catégories exemptées ci-dessus).</p>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
@@ -12250,7 +12974,10 @@ function openFermetureModal(existing) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('fermeture-form').addEventListener('submit', (evt) => {
+  document.getElementById('f-fermeture-decompte').addEventListener('change', (e) => {
+    document.getElementById('f-fermeture-decompte-type-wrap').style.display = e.target.value === 'oui' ? '' : 'none';
+  });
+  document.getElementById('fermeture-form').addEventListener('submit', async (evt) => {
     evt.preventDefault();
     const nom = document.getElementById('f-fermeture-nom').value.trim();
     const dateDebut = document.getElementById('f-fermeture-debut').value;
@@ -12259,18 +12986,30 @@ function openFermetureModal(existing) {
       showToast('La date de fin ne peut pas être avant la date de début.', 'error');
       return;
     }
+    const decompteChoisi = document.getElementById('f-fermeture-decompte').value === 'oui';
+    const decompteTypeId = decompteChoisi ? document.getElementById('f-fermeture-decompte-type').value : null;
+    if (decompteChoisi && !decompteTypeId) {
+      showToast('Choisissez le type de congé à décompter, ou revenez sur "Non".', 'error');
+      return;
+    }
     const exceptionsSelect = document.getElementById('f-exceptions-categories');
     const exceptionsCategories = exceptionsSelect
       ? Array.from(exceptionsSelect.selectedOptions).map(o => ({ categorieSalarieId: o.value, travaillable: true }))
       : [];
 
     const settings = settingsRepository.getSettings();
-    if (isEdit) {
-      settings.fermetures = (settings.fermetures || []).map(f => f.id === existing.id ? { ...f, nom, dateDebut, dateFin, exceptionsCategories } : f);
-    } else {
-      settings.fermetures = [...(settings.fermetures || []), { id: generateId('ferm'), nom, dateDebut, dateFin, exceptionsCategories }];
-    }
+    const fermeture = isEdit
+      ? { ...existing, nom, dateDebut, dateFin, exceptionsCategories, decompteTypeId }
+      : { id: generateId('ferm'), nom, dateDebut, dateFin, exceptionsCategories, decompteTypeId };
+    settings.fermetures = isEdit
+      ? (settings.fermetures || []).map(f => f.id === existing.id ? fermeture : f)
+      : [...(settings.fermetures || []), fermeture];
     settingsRepository.saveSettings(settings);
+
+    const submitBtn = evt.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    await leaveRepository.applyFermetureDecompte(fermeture);
+
     closeModal();
     showToast(isEdit ? 'Fermeture mise à jour.' : 'Fermeture créée.');
     render();
@@ -12743,6 +13482,7 @@ function renderPlanningAnnee() {
   const employees = getPlanningEmployees(`${year}-01-01`, `${year}-12-31`);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const settings = settingsRepository.getSettings();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
 
   return `
     <div class="view-header-row">
@@ -12761,7 +13501,7 @@ function renderPlanningAnnee() {
               const monthCounts = MONTH_NAMES.map((_, monthIndex) =>
                 leaveRequests
                   .filter(r => r.employeeId === e.id)
-                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e, settings), 0)
+                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte), 0)
               );
               const total = monthCounts.reduce((a, b) => a + b, 0);
               return `
@@ -13283,14 +14023,12 @@ function handleApproveTelework(id) {
 function handleRefuseTelework(id) {
   const request = teleworkRepository.getById(id);
   if (!request || !canRefuserRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  openConfirm({
+  openRefuseModal({
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus.',
-    confirmLabel: 'Refuser',
-    danger: true,
-    onConfirm: () => {
-      teleworkRepository.update(id, refuseRequest(request));
-      auditLogRepository.logAudit('Refus', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+    onConfirm: (motif) => {
+      teleworkRepository.update(id, refuseRequest(request, motif));
+      auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} — ${motif}`);
       showToast('Demande refusée.');
       render();
     }
@@ -13739,7 +14477,7 @@ function renderFrais() {
   const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
   const { pageItems, totalPages, page, pageStart } = paginate(expenses, 'fraisPage');
   const user = authRepository.getCurrentUser();
-  const canValider = ['manager', 'rh', 'directeur', 'comptabilite'].includes(user.role);
+  const canValider = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
 
   return `
     <div class="view-header view-header-row">
@@ -13865,14 +14603,12 @@ function handleApproveExpense(id) {
 function handleRefuseExpense(id) {
   const expense = expenseRepository.getById(id);
   if (!expense || !canRefuserRequestFor(expense, 'frais')) { showToast('Action non autorisée.', 'error'); return; }
-  openConfirm({
+  openRefuseModal({
     title: 'Refuser cette note de frais ?',
     message: 'Le salarié sera informé du refus.',
-    confirmLabel: 'Refuser',
-    danger: true,
-    onConfirm: () => {
-      expenseRepository.update(id, refuseRequest(expense));
-      auditLogRepository.logAudit('Refus', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+    onConfirm: (motif) => {
+      expenseRepository.update(id, refuseRequest(expense, motif));
+      auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} — ${motif}`);
       showToast('Note de frais refusée.');
       render();
     }
@@ -14141,7 +14877,7 @@ async function renderJustificatifPreview(containerId, justificatif) {
 // Vue : Tickets restaurant (calcul automatique, aucune saisie)
 // ---------------------------------------------------------------------------
 
-/** §sprint refonte UX §9-10 : point d'entrée unique du nav "tickets" — RH/Comptabilité/Directeur
+/** §sprint refonte UX §9-10 : point d'entrée unique du nav "tickets" — RH/Comptabilité/Propriétaire
  * gardent la vue équipe historique via la bascule Moi/Équipe partagée ; tous les autres (et ces
  * mêmes rôles en "Moi") tombent sur la nouvelle vue personnelle ci-dessous. Avant ce sprint, un
  * salarié sans la permission CALCULER_TICKETS_RESTAURANT n'avait accès à AUCUNE vue de ses tickets. */
@@ -14302,7 +15038,7 @@ function getTicketsRows() {
 }
 
 /** §sprint refonte UX §9-10 : vue équipe historique de Tickets restaurant (RH/Comptabilité/
- * Directeur), désormais atteinte via la bascule Moi/Équipe (renderTicketsHub) plutôt qu'une entrée
+ * Propriétaire), désormais atteinte via la bascule Moi/Équipe (renderTicketsHub) plutôt qu'une entrée
  * de menu séparée. Corps inchangé. */
 function renderTicketsEquipe() {
   const settings = settingsRepository.getSettings();
@@ -14476,9 +15212,12 @@ function getPaieRows(year, month) {
   const settings = settingsRepository.getSettings();
 
   return employees.map(e => {
+    // §7.9 : chaque demande recompte selon l'unité DE SON PROPRE TYPE (pas forcément la même pour
+    // toutes les typeIds passées ici, ex. congesPayesTypeIds pourrait couvrir plusieurs types du
+    // même nom avec des réglages différents).
     const sumTypeIdsInMonth = (typeIds) => leaveRequests
       .filter(r => r.employeeId === e.id && typeIds.includes(r.typeId))
-      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e, settings), 0);
+      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte), 0);
 
     const congesParType = leaveTypesExportables.map(t => sumTypeIdsInMonth([t.id]));
 
@@ -15084,10 +15823,10 @@ function updateEquipeOptionsForSelectedService() {
     options.map(nom => `<option value="${escapeHtml(nom)}" ${nom === previousValue ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('');
 }
 
-/** Salaire/genre : édition réservée au Directeur, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
+/** Salaire/genre : édition réservée au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
 function renderConfidentialEmployeeFieldset(employee, settings) {
   const user = authRepository.getCurrentUser();
-  if (!user || user.role !== ROLES.DIRECTEUR) return '';
+  if (!user || user.role !== ROLES.PROPRIETAIRE) return '';
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
     <fieldset class="form-section">
@@ -15790,6 +16529,43 @@ function openConfirm({ title, message, confirmLabel, onConfirm, danger }) {
   document.getElementById('btn-confirm-ok').addEventListener('click', () => {
     closeModal();
     onConfirm();
+  });
+}
+
+/** §correctif audit du 23/08/2026 (§7.7) : variante d'openConfirm pour un refus — le motif est
+ * obligatoire (bouton désactivé tant que le champ est vide), onConfirm reçoit le texte saisi.
+ * Modale dédiée plutôt qu'un paramètre optionnel sur openConfirm : celui-ci reste utilisé pour des
+ * confirmations sans motif (annulation...), pas la peine d'y ajouter une branche conditionnelle. */
+function openRefuseModal({ title, message, onConfirm }) {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${escapeHtml(title)}</h2>
+      </div>
+      <div class="modal-body">
+        <p>${escapeHtml(message)}</p>
+        <div class="form-field" style="margin-top: 12px;">
+          <label for="f-motif-refus">Motif du refus *</label>
+          <textarea class="input" id="f-motif-refus" rows="3" required placeholder="Communiqué au salarié"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-confirm-cancel">Annuler</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-ok" disabled>Refuser</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  const textarea = document.getElementById('f-motif-refus');
+  const okBtn = document.getElementById('btn-confirm-ok');
+  textarea.addEventListener('input', () => { okBtn.disabled = !textarea.value.trim(); });
+  document.getElementById('btn-confirm-cancel').addEventListener('click', closeModal);
+  okBtn.addEventListener('click', () => {
+    const motif = textarea.value.trim();
+    if (!motif) return;
+    closeModal();
+    onConfirm(motif);
   });
 }
 
