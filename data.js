@@ -602,6 +602,49 @@ function migrateLeaveTypeCategories(company) {
   return changed;
 }
 
+/** §correctif retour QA du 26/08/2026 (point 2) : les migrations client ci-dessous
+ * (migrateAncienneteVersAutresAbsences etc.) ne s'appliquent qu'aux données déjà en cache
+ * localStorage au moment de DB.init() — jamais à une entreprise hydratée depuis Supabase après une
+ * VRAIE connexion (login/restoreSession/switchToSession/transferProprietaire/manageEmployeeAccount,
+ * tous les appelants ci-dessous), qui remplacent directement _companiesCache sans jamais repasser
+ * par DB.init(). C'est précisément pourquoi une entreprise réelle créée avant l'ajout du jeu de
+ * types par défaut complet (ex. Seven Sept, retour du 26/08/2026) ne les a jamais vus apparaître :
+ * aucune migration ne s'exécute jamais sur ses données réelles. Centralise donc l'appel à
+ * hydrateCurrentCompany() ici, un seul endroit, plutôt que de dupliquer un appel de complément à
+ * chacun des 7 emplacements où il était fait — risque d'en oublier un sinon.
+ *
+ * Les AUTRES migrations client (migrateCompanyAbonnement, migrateLeaveTypeSaisiParSalarie,
+ * migrateAncienneteVersAutresAbsences) restent, elles, seulement dans DB.init() pour l'instant —
+ * même limitation potentielle pour une entreprise réelle, non traitée ici volontairement (hors du
+ * point signalé), à évaluer séparément. */
+async function hydrateCurrentCompanyWithMigrations() {
+  const company = await window.SupabaseSync.hydrateCurrentCompany();
+  if (company) await ensureDefaultLeaveTypesBackfilled(company);
+  return company;
+}
+
+/** Ajoute les types d'absence par défaut manquants (seedLeaveTypes) à une entreprise déjà créée
+ * avant leur ajout au jeu par défaut complet — SANS jamais toucher à un type déjà présent, qu'il
+ * soit actif ou non, ou déjà modifié par le client. Comparaison par nom (insensible à la casse),
+ * seule clé stable disponible ici (les types par défaut n'ont pas d'identifiant fixe entre
+ * entreprises). Idempotent : une fois tous les types par défaut présents, ne fait plus rien. */
+async function ensureDefaultLeaveTypesBackfilled(company) {
+  const existingNames = new Set((company.leaveTypes || []).map(t => t.nom.trim().toLowerCase()));
+  const manquants = seedLeaveTypes().filter(t => !existingNames.has(t.nom.trim().toLowerCase()));
+  if (!manquants.length) return;
+  const ordreDepart = (company.leaveTypes || []).reduce((max, t) => Math.max(max, t.ordre || 0), -1) + 1;
+  manquants.forEach((t, i) => { t.ordre = ordreDepart + i; });
+  company.leaveTypes = [...(company.leaveTypes || []), ...manquants];
+  try {
+    await window.SupabaseSync.pushLeaveTypes(company.leaveTypes, company.id);
+  } catch (err) {
+    // Échec silencieux volontaire (ex. hors ligne) : company.leaveTypes reste correct EN MÉMOIRE
+    // pour cette session, et la synchronisation sera retentée à la prochaine connexion (cette
+    // fonction est idempotente, donc sans risque de doublon si elle se déclenche plusieurs fois).
+    console.error('ensureDefaultLeaveTypesBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
 /** Évolution Sprint SIRH premium (§1) : le menu "Congés" ne doit plus contenir QUE congés payés/RTT
  * — "Ancienneté" bascule dans "Autres absences", pour les entreprises déjà créées avant ce
  * changement (la nouvelle valeur par défaut de seedLeaveTypes() couvre les nouvelles entreprises).
@@ -1622,7 +1665,7 @@ const DB = {
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
     const result = await window.SupabaseSync.manageEmployeeAccount('create', employeeId);
     if (!result.success) return result;
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (company) this._companiesCache = [company];
     this.logAudit('Création', 'Compte de connexion', `${employee.prenom} ${employee.nom}`);
     return { success: true, password: result.password };
@@ -1640,7 +1683,7 @@ const DB = {
     }
     const result = await window.SupabaseSync.manageEmployeeAccount('reset', employeeId, newPassword);
     if (!result.success) return result;
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (company) this._companiesCache = [company];
     this.logAudit('Modification', 'Mot de passe', `${employee.prenom} ${employee.nom} (réinitialisé par un administrateur)`);
     return { success: true };
@@ -1678,7 +1721,7 @@ const DB = {
   async transferProprietaire(newProprietaireId, nouveauRoleAncien) {
     const result = await window.SupabaseSync.transferProprietaire(newProprietaireId, nouveauRoleAncien);
     if (!result.success) return result;
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (company) {
       this._companiesCache = [company];
       this._currentEmployeeId = company._currentEmployeeId || this._currentEmployeeId;
@@ -2414,7 +2457,7 @@ const DB = {
       this.removeSavedAccount(accountId);
       return { success: false, error: 'Cette session a expiré. Reconnectez ce compte avec son mot de passe.' };
     }
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (!company) {
       this.removeSavedAccount(accountId);
       return { success: false, error: 'Aucun salarié associé à ce compte.' };
@@ -2473,7 +2516,7 @@ const DB = {
     if (!authResult.success) {
       return { success: false, error: 'Email ou mot de passe incorrect.' };
     }
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (!company) {
       await window.SupabaseSync.signOut();
       this._purgeLocalCompanyCache();
@@ -2535,7 +2578,7 @@ const DB = {
     if (!rpcResult.success && !/déjà associé/i.test(rpcResult.error || '')) {
       return { success: false, error: rpcResult.error };
     }
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (!company) {
       return { success: false, error: 'Compte créé, mais la création de l\'entreprise a échoué. Reconnectez-vous pour réessayer.' };
     }
@@ -2576,7 +2619,7 @@ const DB = {
   async restoreSession() {
     const session = await window.SupabaseSync.getSession();
     if (!session) return false;
-    const company = await window.SupabaseSync.hydrateCurrentCompany();
+    const company = await hydrateCurrentCompanyWithMigrations();
     if (company) {
       this._currentEmployeeId = company._currentEmployeeId;
       this._companiesCache = [company];
