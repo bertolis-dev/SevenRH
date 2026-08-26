@@ -9751,9 +9751,9 @@ function handleBulkApproveRequests(categorie) {
   selection.forEach(id => {
     const request = leaveRepository.getById(id);
     if (!request || !canActOnRequestFor(request)) { skipped++; return; }
-    const patch = advanceWorkflow(request, 'Validé');
+    const patch = advanceWorkflow(request, 'Validé', currentActorRoleLabel());
     leaveRepository.update(id, patch);
-    auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+    auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
     if (patch.statut !== 'En attente') {
       const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
       notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
@@ -9825,6 +9825,22 @@ function auditLabelForEmployee(employeeId) {
   return employee ? `${employee.prenom} ${employee.nom}` : '—';
 }
 
+/** §correctif QA du 26/08/2026 : jusqu'ici, valider/refuser une demande de congé/télétravail/note
+ * de frais ne journalisait QUE le salarié concerné (cible), jamais qui avait réellement cliqué —
+ * aucune trace de l'auteur d'une validation/refus dans le journal d'audit. Réutilisé comme 4e
+ * paramètre `details` de logAudit à ces 4 endroits, et comme rôle réel passé à advanceWorkflow
+ * (qui l'utilise pour l'historique affiché au salarié, à la place du rôle programmé de l'étape). */
+function currentActorRoleLabel() {
+  const user = authRepository.getCurrentUser();
+  return user ? (ROLE_LABELS[user.role] || user.role) : '—';
+}
+
+function auditDetailsForActor() {
+  const user = authRepository.getCurrentUser();
+  if (!user) return '';
+  return `Par ${user.prenom} ${user.nom} (${currentActorRoleLabel()})`;
+}
+
 /** §correctif audit du 23/08/2026 (§7.4) : notifie le SALARIÉ par email seulement à l'issue finale
  * (validé/refusé) — jamais à chaque étape intermédiaire d'une chaîne à plusieurs niveaux, qui
  * reste "En attente" (voir advanceWorkflow, data.js : etapeIndex repasse à -1 seulement à la
@@ -9846,9 +9862,9 @@ function handleApproveRequest(id) {
   // barrière est de toute façon côté serveur (policies RLS Supabase), mais éviter une mise à jour
   // optimiste locale trompeuse (que Supabase rejetterait silencieusement) reste plus honnête pour l'UI.
   if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  const patch = advanceWorkflow(request, 'Validé');
+  const patch = advanceWorkflow(request, 'Validé', currentActorRoleLabel());
   leaveRepository.update(id, patch);
-  auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+  auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
     const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
     notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
@@ -9865,7 +9881,7 @@ function handleRefuseRequest(id) {
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
     onConfirm: (motif) => {
       leaveRepository.update(id, refuseRequest(request, motif));
-      auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} : ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
       const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
       notifyRequesterEmail(request.employeeId, 'refusee', type ? type.nom : 'Congé', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
@@ -9884,7 +9900,7 @@ function handleCancelRequest(id) {
     danger: true,
     onConfirm: () => {
       leaveRepository.update(id, cancelRequest(request));
-      auditLogRepository.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
       showToast('Demande annulée.');
       render();
     }
@@ -13595,7 +13611,7 @@ function renderParametresAudit() {
       </div>
       ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.cabinet}</div><p>Aucun événement ne correspond à ces filtres.</p></div>` : `
         <table class="table">
-          <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th></tr></thead>
+          <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th><th>Détails</th></tr></thead>
           <tbody>
             ${pageItems.map(entry => `
               <tr>
@@ -13603,6 +13619,7 @@ function renderParametresAudit() {
                 <td>${auditActionBadge(entry.action)}</td>
                 <td>${escapeHtml(entry.entite)}</td>
                 <td>${escapeHtml(entry.cible)}</td>
+                <td class="text-muted">${escapeHtml(entry.details || '—')}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -14561,9 +14578,9 @@ function bindTeletravailDemandesEvents() {
 function handleApproveTelework(id) {
   const request = teleworkRepository.getById(id);
   if (!request || !canActOnRequestFor(request)) { showToast('Action non autorisée.', 'error'); return; }
-  const patch = advanceWorkflow(request, 'Validé');
+  const patch = advanceWorkflow(request, 'Validé', currentActorRoleLabel());
   teleworkRepository.update(id, patch);
-  auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+  auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
     notifyRequesterEmail(request.employeeId, 'validee', 'Télétravail', requestPeriodeLabel(request));
   }
@@ -14579,7 +14596,7 @@ function handleRefuseTelework(id) {
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
       teleworkRepository.update(id, refuseRequest(request, motif));
-      auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} : ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
       notifyRequesterEmail(request.employeeId, 'refusee', 'Télétravail', requestPeriodeLabel(request), motif);
       showToast('Demande refusée.');
       render();
@@ -14597,7 +14614,7 @@ function handleCancelTelework(id) {
     danger: true,
     onConfirm: () => {
       teleworkRepository.update(id, cancelRequest(request));
-      auditLogRepository.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
       showToast('Demande annulée.');
       render();
     }
@@ -15145,9 +15162,9 @@ function bindFraisEvents() {
 function handleApproveExpense(id) {
   const expense = expenseRepository.getById(id);
   if (!expense || !canActOnRequestFor(expense, 'frais')) { showToast('Action non autorisée.', 'error'); return; }
-  const patch = advanceWorkflow(expense, 'Remboursé');
+  const patch = advanceWorkflow(expense, 'Remboursé', currentActorRoleLabel());
   expenseRepository.update(id, patch);
-  auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+  auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
     notifyRequesterEmail(expense.employeeId, 'validee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date));
   }
@@ -15163,7 +15180,7 @@ function handleRefuseExpense(id) {
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
       expenseRepository.update(id, refuseRequest(expense, motif));
-      auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} : ${motif}`);
+      auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} : ${motif}`, auditDetailsForActor());
       notifyRequesterEmail(expense.employeeId, 'refusee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date), motif);
       showToast('Note de frais refusée.');
       render();
@@ -15181,7 +15198,7 @@ function handleCancelExpense(id) {
     danger: true,
     onConfirm: () => {
       expenseRepository.update(id, cancelRequest(expense));
-      auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId));
+      auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
       showToast('Note de frais annulée.');
       render();
     }

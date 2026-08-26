@@ -3591,12 +3591,18 @@ function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
 }
 
 /** Fait avancer une demande d'une étape ; `finalStatut` est le statut de fin de circuit propre au module. */
-function advanceWorkflow(request, finalStatut) {
+/** §correctif QA du 26/08/2026 : `roleActuel` doit décrire qui a RÉELLEMENT validé, pas le rôle
+ * SCHEDULED pour cette étape — un RH/Propriétaire peut valider en bypass (canActOnRequestFor,
+ * app.js) sans que ce soit son tour dans le workflow, ce qui écrivait jusqu'ici "Validé par
+ * Manager" alors que Manager n'avait jamais agi. `acteurRoleLabel` (le rôle de l'utilisateur
+ * courant, fourni par l'appelant) prime donc sur le rôle programmé de l'étape ; à défaut, on
+ * retombe sur l'ancien comportement (rôle programmé) pour ne pas casser un appel qui l'omettrait. */
+function advanceWorkflow(request, finalStatut, acteurRoleLabel) {
   const historique = (request.historique || []).slice();
   const now = new Date().toISOString();
   const workflow = request.workflow || [];
   const nextIndex = request.etapeIndex + 1;
-  const roleActuel = ROLE_LABELS[workflow[request.etapeIndex]] || workflow[request.etapeIndex];
+  const roleActuel = acteurRoleLabel || ROLE_LABELS[workflow[request.etapeIndex]] || workflow[request.etapeIndex];
 
   if (nextIndex < workflow.length) {
     const roleSuivant = ROLE_LABELS[workflow[nextIndex]] || workflow[nextIndex];
