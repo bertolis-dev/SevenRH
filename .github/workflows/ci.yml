@@ -1,0 +1,24 @@
+name: CI
+
+# Seven RH — première pierre du socle technique demandé le 26/08/2026 (retour QA, section 3) :
+# "je te demande de me dire ce que tu es prêt à mettre en place et sous quel délai." Ceci tourne
+# sur chaque push et chaque pull request vers master : vérifie la syntaxe des fichiers JS servis
+# tels quels (aucun bundler dans ce projet) et lance les tests du moteur de congés/permissions.
+# Volontairement minimal — pas de couverture complète, juste ce qui protège le circuit de
+# validation et l'attribution des permissions, le cœur de ce qui est vendu.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm run ci

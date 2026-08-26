@@ -1,0 +1,10 @@
+{
+  "name": "seven-rh",
+  "private": true,
+  "description": "Seven RH — SIRH vanilla JS + Supabase. Pas de bundler ni de framework de test : les scripts ci-dessous n'utilisent que Node lui-même.",
+  "scripts": {
+    "check": "node --check app.js && node --check data.js && node --check supabase-client.js && node --check qrcode.js",
+    "test": "node tests/workflow-resolution.test.js",
+    "ci": "npm run check && npm run test"
+  }
+}

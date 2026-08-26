@@ -1,0 +1,47 @@
+/**
+ * Seven RH — chargeur minimal pour exécuter data.js (script navigateur classique, sans export) dans
+ * Node, afin de tester le moteur de congés/permissions sans navigateur ni backend réel. §retour QA
+ * du 26/08/2026 (section 3, "protéger le moteur de congés et le moteur de permissions").
+ *
+ * data.js déclare DB/generateId/etc. en `const`/`function` au niveau racine — invisibles depuis
+ * l'extérieur d'un script vm.runInContext (les `const`/`let` de premier niveau ne deviennent jamais
+ * des propriétés du contexte). On ajoute donc, à la fin du MÊME script exécuté, quelques lignes qui
+ * copient explicitement ce dont les tests ont besoin sur `globalThis` (qui correspond à l'objet
+ * sandbox fourni à vm.createContext) — sans jamais modifier data.js lui-même.
+ */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+function loadDataJs() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'data.js'), 'utf8');
+
+  const store = {};
+  const localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+
+  const sandbox = { console, localStorage };
+  sandbox.window = sandbox; // data.js référence `window.SupabaseSync` — même objet que le sandbox, pratique pour l'injecter depuis les tests.
+  vm.createContext(sandbox);
+
+  const expose = `
+;globalThis.__DB = DB;
+globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
+globalThis.__ROLES = ROLES;
+globalThis.__seedLeaveTypes = seedLeaveTypes;
+`;
+  vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
+
+  return {
+    sandbox,
+    DB: sandbox.__DB,
+    CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
+    ROLES: sandbox.__ROLES,
+    seedLeaveTypes: sandbox.__seedLeaveTypes,
+  };
+}
+
+module.exports = { loadDataJs };
