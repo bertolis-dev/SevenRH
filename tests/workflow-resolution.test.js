@@ -1,9 +1,21 @@
 /**
- * Seven RH — teste directement la régression signalée le 26/08/2026 : une demande de congé créée
- * par un salarié ou un manager ne doit JAMAIS s'auto-valider si la résolution serveur du circuit de
- * validation échoue (hors ligne, fonction pas encore déployée...) — le circuit d'ORIGINE doit être
- * conservé tel quel, jamais réduit à vide. Voir data.js:resolveWorkflowWithFallback et
- * 0037_workflow_resolution_serveur.sql.
+ * Seven RH — teste le REPLI de resolveWorkflowWithFallback, pas la régression d'origine elle-même.
+ *
+ * §précision QA du 26/08/2026 (point C.1, retour exact) : la régression d'origine venait de
+ * hasEligibleValidatorForStep qui lisait DB.getEmployees() — le cache local filtré par RLS de
+ * L'APPELANT — pour décider si un valideur existait. Dans ce bac à sable Node (pas de RLS, données
+ * de démo complètes), cette fonction aurait retourné le même résultat AVANT et APRÈS le correctif :
+ * ce test n'aurait donc PAS attrapé le bug d'origine s'il avait existé à l'époque. Ce n'est pas
+ * un défaut à corriger ici : hasEligibleValidatorForStep a été SUPPRIMÉE, la décision est maintenant
+ * entièrement côté serveur (0037_workflow_resolution_serveur.sql) — le client ne PEUT plus calculer
+ * cette éligibilité localement, donc la protection contre ce bug précis est désormais structurelle,
+ * pas une propriété qu'un test JS pourrait vérifier sans dupliquer la sémantique RLS de Postgres
+ * (ce qui dériverait silencieusement du vrai comportement serveur avec le temps).
+ *
+ * Ce que ce test protège réellement, et qui reste une vraie régression possible : si l'appel serveur
+ * échoue pour n'importe quelle raison (hors ligne, fonction non déployée, erreur réseau), le circuit
+ * de validation d'ORIGINE doit être conservé tel quel — jamais réduit à `[]` puis auto-validé/
+ * auto-remboursé. Voir data.js:resolveWorkflowWithFallback.
  */
 const assert = require('assert');
 const { loadDataJs } = require('./load-data-js');

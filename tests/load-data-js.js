@@ -32,6 +32,9 @@ function loadDataJs() {
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
 globalThis.__ROLES = ROLES;
 globalThis.__seedLeaveTypes = seedLeaveTypes;
+globalThis.__ensureDefaultLeaveTypesBackfilled = ensureDefaultLeaveTypesBackfilled;
+globalThis.__hasPermission = hasPermission;
+globalThis.__PERMISSIONS = PERMISSIONS;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -41,6 +44,9 @@ globalThis.__seedLeaveTypes = seedLeaveTypes;
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
     ROLES: sandbox.__ROLES,
     seedLeaveTypes: sandbox.__seedLeaveTypes,
+    ensureDefaultLeaveTypesBackfilled: sandbox.__ensureDefaultLeaveTypesBackfilled,
+    hasPermission: sandbox.__hasPermission,
+    PERMISSIONS: sandbox.__PERMISSIONS,
   };
 }
 
