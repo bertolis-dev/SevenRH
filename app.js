@@ -209,7 +209,12 @@ function getInitialViewState() {
     calendrierVue: 'entreprise', // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
     horairesView: 'semaine', // Sprint SIRH premium §3 : 'jour' | 'semaine' | 'mois'
     horairesDay: toISODate(new Date()),
-    planningVue: 'equipe' // Sprint SIRH premium §5 : 'equipe' | 'personnel' — même principe que calendrierVue
+    planningVue: 'equipe', // Sprint SIRH premium §5 : 'equipe' | 'personnel' — même principe que calendrierVue
+    // §retour QA du 26/08/2026 (point 7.2) : tableau des compteurs — état de filtre/pagination
+    // dédié, séparé de `filters` (partagé par renderEmployeesList) pour ne jamais interférer avec
+    // le filtre service de l'écran Salariés.
+    tableauCompteursFilters: { service: '' },
+    tableauCompteursPage: 1
   };
 }
 
@@ -384,6 +389,9 @@ const NAV_ITEMS = [
   // le module congés invendable seul. Le module 'rh' reste sur organigramme/export-paie/mes-documents
   // (coffre-fort, préparation de paie), qui restent des fonctionnalités RH à part entière.
   { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
+  // §retour QA du 26/08/2026 (point 7.2) : vue d'ensemble des soldes de congés, un manager ne voit
+  // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
+  { key: 'tableau-compteurs', label: 'Tableau des compteurs', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'conges' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
@@ -4743,6 +4751,10 @@ function renderInner() {
       root.innerHTML = renderEmployeesList();
       bindEmployeesListEvents();
       break;
+    case 'tableau-compteurs':
+      root.innerHTML = renderTableauCompteurs();
+      bindTableauCompteursEvents();
+      break;
     case 'organigramme':
       root.innerHTML = renderOrganigramme();
       bindOrganigrammeEvents();
@@ -6208,6 +6220,98 @@ function renderPaginationControls(page, totalPages, pageStart, pageCount, total)
       </div>
     </div>
   `;
+}
+
+/** §retour QA du 26/08/2026 (point 7.2) : "un tableau de bord des compteurs" — vue d'ensemble des
+ * soldes de congés par salarié × par type, réutilisant TEL QUEL getLeaveBalance() (déjà utilisé pour
+ * l'affichage individuel dans renderEmployeeBalances, et pour la détection d'anomalies de paie dans
+ * getPaieAnomalies) : aucun nouveau calcul de solde, uniquement de l'assemblage/affichage. Types
+ * limités à `categorie === 'conge'` (mêmes types qu'utilisés pour les anomalies de paie) — les types
+ * "autre" (maladie, maternité...) ne sont pas des compteurs à solde, les y ajouter n'aurait aucun
+ * sens (toujours "Illimité" ou une durée légale fixe, jamais un solde qui se consomme). */
+function getTableauCompteursData() {
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
+  if (state.tableauCompteursFilters.service) employees = employees.filter(e => e.service === state.tableauCompteursFilters.service);
+  employees.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`));
+
+  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.categorie === 'conge');
+  const allRequests = leaveRepository.getAll();
+  const rows = employees.map(e => ({
+    employee: e,
+    balances: leaveTypes.map(t => getLeaveBalance(e, t, allRequests, leaveTypes)),
+  }));
+
+  return { leaveTypes, rows };
+}
+
+function renderTableauCompteurs() {
+  const { leaveTypes, rows } = getTableauCompteursData();
+  const { pageItems, totalPages, page, pageStart } = paginate(rows, 'tableauCompteursPage');
+
+  return `
+    <div class="view-header">
+      <h1>Tableau des compteurs</h1>
+      <p class="view-subtitle">Solde disponible par salarié et par type de congé</p>
+    </div>
+    <div class="toolbar card">
+      <select id="filter-tableau-compteurs-service" class="input">
+        <option value="">Tous les services</option>
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.tableauCompteursFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+      </select>
+    </div>
+    ${leaveTypes.length === 0 ? `<div class="card"><p class="text-muted">Aucun type de congé actif à afficher.</p></div>` : `
+      <div class="card table-card">
+        ${rows.length === 0 ? renderEmptyState() : `
+          <div style="overflow-x: auto;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Salarié</th>
+                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;">${escapeHtml(t.nom)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${pageItems.map(row => `
+                  <tr>
+                    <td>${escapeHtml(row.employee.prenom)} ${escapeHtml(row.employee.nom)}</td>
+                    ${row.balances.map(b => `<td style="text-align: right;">${b.disponible === Infinity ? 'Illimité' : formatDurationFR(b.disponible)}</td>`).join('')}
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><strong>Total (tous les salariés filtrés, pas seulement cette page)</strong></td>
+                  ${leaveTypes.map((t, i) => {
+                    const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
+                    const hasIllimite = finiteValues.length < rows.length;
+                    const total = finiteValues.reduce((sum, v) => sum + v, 0);
+                    return `<td style="text-align: right;"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
+                  }).join('')}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          ${leaveTypes.some((t, i) => rows.some(r => r.balances[i].disponible === Infinity)) ? '<p class="text-muted" style="margin-top: 8px;">* au moins un salarié a un solde illimité pour ce type, exclu du total.</p>' : ''}
+        `}
+      </div>
+    `}
+    ${rows.length > 0 ? renderPaginationControls(page, totalPages, pageStart, pageItems.length, rows.length) : ''}
+  `;
+}
+
+function bindTableauCompteursEvents() {
+  const serviceFilter = document.getElementById('filter-tableau-compteurs-service');
+  if (serviceFilter) serviceFilter.addEventListener('change', () => {
+    state.tableauCompteursFilters.service = serviceFilter.value;
+    state.tableauCompteursPage = 1;
+    render();
+  });
+  const prevBtn = document.getElementById('btn-page-prev');
+  if (prevBtn) prevBtn.addEventListener('click', () => { state.tableauCompteursPage--; render(); });
+  const nextBtn = document.getElementById('btn-page-next');
+  if (nextBtn) nextBtn.addEventListener('click', () => { state.tableauCompteursPage++; render(); });
 }
 
 function renderEmployeeRow(e) {
