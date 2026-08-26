@@ -11,6 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 function stubElement() {
+  let html = '';
   return {
     addEventListener() {},
     removeEventListener() {},
@@ -23,6 +24,10 @@ function stubElement() {
     remove() {},
     querySelector() { return null; },
     querySelectorAll() { return []; },
+    get innerHTML() { return html; },
+    set innerHTML(v) { html = v; },
+    get textContent() { return html; },
+    set textContent(v) { html = v; },
   };
 }
 
@@ -37,10 +42,18 @@ function loadAppJs() {
     removeItem: (k) => { delete store[k]; },
   };
 
+  // Éléments persistants par id (pas une vraie arborescence DOM) : suffisant pour que
+  // document.getElementById('view-root').innerHTML = ... écrive quelque chose qu'un test peut
+  // ensuite relire, sans avoir à parser du HTML. querySelectorAll reste volontairement vide (les
+  // clics de boutons sont déjà couverts par les tests navigateur manuels, pas reproduits ici).
+  const elementsById = new Map();
   const document = {
     addEventListener() {},
     removeEventListener() {},
-    getElementById() { return null; },
+    getElementById(id) {
+      if (!elementsById.has(id)) elementsById.set(id, stubElement());
+      return elementsById.get(id);
+    },
     querySelector() { return null; },
     querySelectorAll() { return []; },
     createElement() { return stubElement(); },
@@ -66,6 +79,10 @@ globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
   const exposeAfterApp = `
 ;globalThis.__syncNotifications = syncNotifications;
 globalThis.__hasModule = hasModule;
+globalThis.__navigateTo = navigateTo;
+globalThis.__render = render;
+globalThis.__state = state;
+globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -75,6 +92,10 @@ globalThis.__hasModule = hasModule;
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
+    navigateTo: sandbox.__navigateTo,
+    render: sandbox.__render,
+    state: sandbox.__state,
+    PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
   };
 }
 

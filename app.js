@@ -11678,9 +11678,28 @@ const SETTINGS_LIST_USAGE_CHECK = {
   categoriesDocuments: (value) => documentRepository.getAll().some(d => d.categorie === value)
 };
 
+/** §refonte QA du 26/08/2026 (point E.2, pilote) : un onglet de Paramètres avait sa condition de
+ * module dupliquée à 4 endroits (bouton desktop, option mobile, content-switch, bindParametresEvents)
+ * — exactement pourquoi le point A.2 a d'abord laissé passer une fuite, puis (une fois le rendu
+ * corrigé) fait planter le dispatch d'évènements resté aiguillé sur un onglet devenu invisible. Un
+ * seul tableau, une seule vérité : ajouter/retirer un onglet ou changer son module requis se fait
+ * ICI et nulle part ailleurs. `isVisible` est un prédicat sans argument (comme hasModule()) — chaque
+ * onglet lit lui-même ce dont il a besoin plutôt que de le recevoir en paramètre. */
+const PARAMETRES_TABS = [
+  { key: 'entreprise', label: 'Entreprise', isVisible: () => true, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
+  { key: 'abonnement', label: 'Abonnement', isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
+  { key: 'etablissements', label: 'Établissements', isVisible: () => true, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
+  { key: 'services', label: 'Services &amp; équipes', isVisible: () => true, render: renderParametresServices, bind: bindParametresServicesEvents },
+  { key: 'types-absences', label: "Types d'absences", isVisible: () => hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
+  { key: 'listes', label: 'Référentiels', isVisible: () => true, render: renderParametresListes, bind: bindParametresListesEvents },
+  { key: 'vacances', label: 'Vacances scolaires', isVisible: () => hasModule('conges'), render: renderParametresVacances, bind: bindParametresVacancesEvents },
+  { key: 'feries', label: 'Jours fériés', isVisible: () => true, render: renderParametresFeries, bind: bindParametresFeriesEvents },
+  { key: 'fermetures', label: 'Fermetures', isVisible: () => hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
+  { key: 'integrations', label: 'Intégrations', isVisible: () => hasModule('conges') || hasModule('planning') || hasModule('frais'), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
+  { key: 'audit', label: 'Audit', isVisible: () => true, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
+];
+
 function renderParametres() {
-  const canGererAbonnement = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
-  if (state.parametresTab === 'abonnement' && !canGererAbonnement) state.parametresTab = 'listes';
   // §correctif audit du 23/08/2026 (§6.3) : l'onglet "Catégories de salariés" est retiré, replié
   // dans "Référentiels" (state.parametresTab reste 'listes' en interne, seul le libellé change) —
   // un lien profond vers l'ancien onglet retombe donc sur Référentiels plutôt qu'un écran vide.
@@ -11693,63 +11712,31 @@ function renderParametres() {
   // gestion se fait depuis la fiche du salarié (carte "Compte"), avec un repère dans le Centre
   // d'action du tableau de bord à la place (voir renderDashboardActionCenter).
   if (state.parametresTab === 'comptes') state.parametresTab = 'listes';
-  // §correctif QA du 26/08/2026 (point A.2, complément) : mêmes onglets masqués selon le module —
-  // sans cette normalisation, un état resté sur un onglet devenu inaccessible (ex. modules changés,
-  // ou lien profond vers un onglet non couvert par l'abonnement) affiche bien le repli "Référentiels"
-  // via le content-switch plus bas, mais bindParametresEvents() reste aiguillé sur l'ancien onglet et
-  // plante en cherchant des éléments DOM qui n'ont jamais été rendus.
-  if (['types-absences', 'vacances', 'fermetures'].includes(state.parametresTab) && !hasModule('conges')) state.parametresTab = 'listes';
-  if (state.parametresTab === 'integrations' && !hasModule('conges') && !hasModule('planning') && !hasModule('frais')) state.parametresTab = 'listes';
+  // §correctif QA du 26/08/2026 (point A.2, complément) : remplace les anciennes vérifications au
+  // cas par cas (abonnement, puis 4 onglets liés aux modules) par UNE seule règle générique, valable
+  // pour tout onglet présent dans PARAMETRES_TABS — un lien profond ou un changement de modules en
+  // cours de session ne laisse donc jamais l'état pointer vers un onglet devenu invisible.
+  if (!PARAMETRES_TABS.some(t => t.key === state.parametresTab && t.isVisible())) state.parametresTab = 'listes';
+
+  const visibleTabs = PARAMETRES_TABS.filter(t => t.isVisible());
+  const activeTab = PARAMETRES_TABS.find(t => t.key === state.parametresTab) || PARAMETRES_TABS.find(t => t.key === 'listes');
+
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
       <p class="view-subtitle">Entreprise, types d'absences, référentiels, vacances scolaires, jours fériés et journal d'audit</p>
     </div>
     <div class="tabs parametres-tabs-desktop">
-      <button class="tab ${state.parametresTab === 'entreprise' ? 'active' : ''}" data-parametres-tab="entreprise">Entreprise</button>
-      ${canGererAbonnement ? `<button class="tab ${state.parametresTab === 'abonnement' ? 'active' : ''}" data-parametres-tab="abonnement">Abonnement</button>` : ''}
-      <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
-      <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
-      <!-- §correctif retour QA du 26/08/2026 (point A.2) : ces 4 onglets relèvent de modules
-           souscrits (congés, ou congés/planning/frais pour Intégrations, qui sert les trois) et
-           s'affichaient pourtant pour tout le monde, quel que soit l'abonnement — même oubli que
-           les 7 sources de notifications corrigées juste au-dessus dans syncNotifications. -->
-      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>` : ''}
-      <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Référentiels</button>
-      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>` : ''}
-      <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
-      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>` : ''}
-      ${(hasModule('conges') || hasModule('planning') || hasModule('frais')) ? `<button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>` : ''}
-      <button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Audit</button>
+      ${visibleTabs.map(t => `<button class="tab ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">${t.label}</button>`).join('')}
     </div>
     <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
          mobile ("un tas de bouton au même endroit") — un menu déroulant remplace la rangée
          d'onglets uniquement sous 860px (voir style.css), même sélection (state.parametresTab). -->
     <select class="input parametres-tab-select" id="parametres-tab-select">
-      <option value="entreprise" ${state.parametresTab === 'entreprise' ? 'selected' : ''}>Entreprise</option>
-      ${canGererAbonnement ? `<option value="abonnement" ${state.parametresTab === 'abonnement' ? 'selected' : ''}>Abonnement</option>` : ''}
-      <option value="etablissements" ${state.parametresTab === 'etablissements' ? 'selected' : ''}>Établissements</option>
-      <option value="services" ${state.parametresTab === 'services' ? 'selected' : ''}>Services &amp; équipes</option>
-      ${hasModule('conges') ? `<option value="types-absences" ${state.parametresTab === 'types-absences' ? 'selected' : ''}>Types d'absences</option>` : ''}
-      <option value="listes" ${state.parametresTab === 'listes' ? 'selected' : ''}>Référentiels</option>
-      ${hasModule('conges') ? `<option value="vacances" ${state.parametresTab === 'vacances' ? 'selected' : ''}>Vacances scolaires</option>` : ''}
-      <option value="feries" ${state.parametresTab === 'feries' ? 'selected' : ''}>Jours fériés</option>
-      ${hasModule('conges') ? `<option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>` : ''}
-      ${(hasModule('conges') || hasModule('planning') || hasModule('frais')) ? `<option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>` : ''}
-      <option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Audit</option>
+      ${visibleTabs.map(t => `<option value="${t.key}" ${state.parametresTab === t.key ? 'selected' : ''}>${t.label}</option>`).join('')}
     </select>
     <div id="parametres-tab-content">
-      ${state.parametresTab === 'entreprise' ? renderParametresEntreprise()
-        : state.parametresTab === 'abonnement' && canGererAbonnement ? renderParametresAbonnement()
-        : state.parametresTab === 'etablissements' ? renderParametresEtablissements()
-        : state.parametresTab === 'services' ? renderParametresServices()
-        : state.parametresTab === 'types-absences' && hasModule('conges') ? renderParametresTypesAbsences()
-        : state.parametresTab === 'vacances' && hasModule('conges') ? renderParametresVacances()
-        : state.parametresTab === 'feries' ? renderParametresFeries()
-        : state.parametresTab === 'fermetures' && hasModule('conges') ? renderParametresFermetures()
-        : state.parametresTab === 'integrations' && (hasModule('conges') || hasModule('planning') || hasModule('frais')) ? renderParametresIntegrations()
-        : state.parametresTab === 'audit' ? renderParametresAuditHub()
-        : renderParametresListes()}
+      ${activeTab.render()}
     </div>
   `;
 }
@@ -12028,17 +12015,11 @@ function bindParametresEvents() {
     btn.addEventListener('click', () => { state.parametresTab = btn.dataset.parametresTab; render(); renderSidebar(); });
   });
 
-  if (state.parametresTab === 'entreprise') bindParametresEntrepriseEvents();
-  else if (state.parametresTab === 'abonnement') bindParametresAbonnementEvents();
-  else if (state.parametresTab === 'integrations') bindParametresIntegrationsEvents();
-  else if (state.parametresTab === 'etablissements') bindParametresEtablissementsEvents();
-  else if (state.parametresTab === 'services') bindParametresServicesEvents();
-  else if (state.parametresTab === 'types-absences') bindParametresTypesAbsencesEvents();
-  else if (state.parametresTab === 'vacances') bindParametresVacancesEvents();
-  else if (state.parametresTab === 'feries') bindParametresFeriesEvents();
-  else if (state.parametresTab === 'fermetures') bindParametresFermeturesEvents();
-  else if (state.parametresTab === 'audit') bindParametresAuditHubEvents();
-  else bindParametresListesEvents();
+  // §refonte QA du 26/08/2026 (point E.2, pilote) : dispatché depuis PARAMETRES_TABS — voir le
+  // commentaire au-dessus de ce tableau (renderParametres) sur pourquoi cette liste séparée d'ifs
+  // dupliquait exactement la même connaissance et a fini par diverger du content-switch.
+  const activeTab = PARAMETRES_TABS.find(t => t.key === state.parametresTab) || PARAMETRES_TABS.find(t => t.key === 'listes');
+  activeTab.bind();
 }
 
 // ---- Sous-vue : Entreprise (profil) ----
