@@ -11263,6 +11263,17 @@ function bindCalendarFilterToggles() {
       const key = btn.dataset.calendarFilter;
       filters[key] = filters[key] === false; // toggle : false -> true, sinon -> false
       render();
+      // §correctif QA du 26/08/2026 : render() redessine tout le calendrier, y compris un nouveau
+      // popover de filtres fermé par défaut — sans ça, cocher/décocher plusieurs catégories à la
+      // suite obligeait à rouvrir "Filtres" après chaque clic, alors que ce popover est justement
+      // pensé pour cocher plusieurs cases d'affilée (même patron de réouverture que le clic initial
+      // sur le bouton "Filtres", voir bindCalendrierEvents).
+      const panel = document.getElementById('calendar-filters-panel');
+      if (panel) {
+        panel.innerHTML = renderCalendarFiltersPanelContent(settingsRepository.getSettings());
+        bindCalendarFilterToggles();
+        panel.classList.add('open');
+      }
     });
   });
 }
