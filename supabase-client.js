@@ -1000,6 +1000,26 @@ async function setIdeeStatut(ideeId, statut, auteur) {
   return { success: true };
 }
 
+/** §correctif régression du 26/08/2026 (retour QA, point 1) : "existe-t-il un validateur pour
+ * cette étape" ne peut être répondu de façon fiable que côté serveur (0037_workflow_resolution_serveur.sql)
+ * — jamais depuis le cache local de l'appelant, qui ne voit que ce que la policy employees_select
+ * lui laisse voir. Voir DB.resolveWorkflowWithFallback (data.js) pour le repli si cet appel échoue. */
+async function resolveWorkflowWithFallback(employeeId, workflow, domain) {
+  const { data, error } = await supabase.rpc('resolve_workflow_with_fallback', {
+    p_employee_id: employeeId, p_workflow: workflow, p_domain: domain
+  });
+  if (error || !data || !Array.isArray(data.workflow)) return { success: false, error: error ? error.message : 'Réponse serveur invalide.' };
+  return { success: true, workflow: data.workflow, escalated: !!data.escalated };
+}
+
+/** Même correctif, pour le ciblage des emails de notification (§7.4) plutôt que pour le calcul du
+ * circuit lui-même — voir resolve_validator_employee_ids_for_step (0037). */
+async function resolveValidatorEmployeeIdsForStep(employeeId, role) {
+  const { data, error } = await supabase.rpc('resolve_validator_employee_ids_for_step', { p_employee_id: employeeId, p_role: role });
+  if (error || !Array.isArray(data)) return { success: false, error: error ? error.message : 'Réponse serveur invalide.', ids: [] };
+  return { success: true, ids: data };
+}
+
 /** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
  * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
  * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
@@ -1136,6 +1156,7 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
+  resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo,

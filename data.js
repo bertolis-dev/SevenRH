@@ -1344,12 +1344,12 @@ const DB = {
     return this.getLeaveRequests().filter(r => r.employeeId === employeeId);
   },
 
-  addLeaveRequest(data) {
+  async addLeaveRequest(data) {
     const list = this.getLeaveRequests();
     const now = new Date().toISOString();
     const leaveType = this.getLeaveTypeById(data.typeId);
     const rawWorkflow = (leaveType && leaveType.workflow) || [];
-    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
+    const { workflow, escalated } = await resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
     const request = Object.assign(makeEmptyLeaveRequest(), data, {
       id: generateId('lr'),
       workflow,
@@ -1727,11 +1727,11 @@ const DB = {
     return this.getTeleworkRequests().filter(r => r.employeeId === employeeId);
   },
 
-  addTeleworkRequest(data) {
+  async addTeleworkRequest(data) {
     const list = this.getTeleworkRequests();
     const now = new Date().toISOString();
     const rawWorkflow = this.getSettings().workflowTeletravail || [];
-    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
+    const { workflow, escalated } = await resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
     const request = Object.assign(makeEmptyTeleworkRequest(), data, {
       id: generateId('tt'),
       workflow,
@@ -1793,11 +1793,11 @@ const DB = {
     return this.getExpenses().filter(n => n.employeeId === employeeId);
   },
 
-  addExpense(data) {
+  async addExpense(data) {
     const list = this.getExpenses();
     const now = new Date().toISOString();
     const rawWorkflow = this.getSettings().workflowFrais || [];
-    const { workflow, escalated } = resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'frais');
+    const { workflow, escalated } = await resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'frais');
     const expense = Object.assign(makeEmptyExpense(), data, {
       id: generateId('nf'),
       workflow,
@@ -3521,73 +3521,66 @@ function computeInitialWorkflowStep(workflow) {
   return (workflow && workflow.length > 0) ? 0 : -1;
 }
 
-/** §correctif audit du 23/08/2026 (2.3) : une demande peut rester "En attente" indéfiniment si
- * personne ne remplit jamais le rôle exigé par l'étape en cours — cas concret reproduit : un
- * manager sans manager désigné au-dessus de lui dépose un congé dont la première étape exige le
- * rôle "manager" (isCurrentWorkflowStepFor, app.js, exige alors un AUTRE manager explicitement
- * inscrit comme son supérieur) ; s'il n'existe ni RH ni Propriétaire non plus (VALIDER_ABSENCE/
- * VALIDER_NOTE_FRAIS, qui contournent normalement l'étape), personne ne peut jamais agir. Reproduit
- * ici, SANS utilisateur connecté précis, la même logique que canActOnRequestFor/
- * isCurrentWorkflowStepFor (app.js) — permet de savoir, dès la création d'une demande, si une étape
- * donnée est franchissable par QUELQU'UN dans l'entreprise, pas seulement par la personne connectée. */
-function hasEligibleValidatorForStep(employeeId, role, domain) {
-  const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
-  const validatePermission = domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.VALIDER_ABSENCE;
-  if (employees.some(e => hasPermission(e, validatePermission))) return true;
-  if (role === ROLES.MANAGER) {
-    const requester = DB.getEmployeeById(employeeId);
-    return Boolean(requester && (requester.managerIds || []).some(mid => {
-      const manager = employees.find(e => e.id === mid);
-      return manager && manager.role === ROLES.MANAGER;
-    }));
+/** §correctif régression du 26/08/2026 (retour QA, point 1) — remplace l'ancienne version de
+ * resolveWorkflowWithFallback, qui décidait "existe-t-il un validateur pour cette étape" à partir
+ * de DB.getEmployees(), c'est-à-dire le CACHE LOCAL de l'auteur de la demande. Ce cache est
+ * lui-même filtré par la policy employees_select (0002_rls_policies.sql) : un salarié n'y voit que
+ * sa propre fiche, un manager que son équipe — RH et Propriétaire n'y apparaissent JAMAIS pour ces
+ * deux rôles. Conséquence réelle : pour toute demande créée par un salarié ou un manager, la
+ * chaîne de validation était vidée (aucun validateur "visible"), le repli sur RH puis Propriétaire
+ * échouait pour la même raison, et computeInitialWorkflowStatus(workflow) || 'Validé' (ou même
+ * 'Remboursé' pour les notes de frais) auto-validait la demande sans qu'aucun validateur ne soit
+ * jamais informé.
+ *
+ * Cette question ne peut être répondue de façon fiable QUE côté serveur (0037_workflow_resolution_
+ * serveur.sql, security definer, visibilité complète et indépendante de l'appelant). Si l'appel
+ * échoue ou est indisponible (hors ligne, mode démo sans Supabase), on NE retombe JAMAIS sur un
+ * circuit vide : on conserve le circuit d'ORIGINE tel que configuré sur le type, sans le réduire.
+ * Une demande qui reste "En attente" à tort est un désagrément ; une demande auto-validée à tort
+ * est une faute. */
+async function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
+  const workflow = rawWorkflow || [];
+  if (!workflow.length) return { workflow: [], escalated: false };
+  try {
+    const result = await window.SupabaseSync.resolveWorkflowWithFallback(employeeId, workflow, domain);
+    if (!result.success) throw new Error(result.error || 'Réponse serveur invalide.');
+    return { workflow: result.workflow, escalated: result.escalated };
+  } catch (err) {
+    console.error('resolveWorkflowWithFallback : résolution serveur indisponible, conservation du circuit d\'origine.', err);
+    return { workflow, escalated: false };
   }
-  return employees.some(e => e.role === role);
 }
 
-/** §correctif audit du 23/08/2026 (§7.4) : mêmes salariés que hasEligibleValidatorForStep
- * considérerait comme éligibles à AGIR sur l'étape en cours — mais retourne leurs ids (pour
- * notifier par email) plutôt qu'un simple booléen. Toujours inclure RH/Propriétaire (bypass
- * permanent, voir hasEligibleValidatorForStep) en plus du rôle exact de l'étape : ce sont eux qui
- * peuvent agir même si l'étape affichée dit "manager". */
-function resolveValidatorEmployeeIdsForStep(employeeId, role) {
-  const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
-  const bypass = employees.filter(e => hasPermission(e, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(e, PERMISSIONS.VALIDER_NOTE_FRAIS));
-  if (role === ROLES.MANAGER) {
-    const requester = DB.getEmployeeById(employeeId);
-    const managers = requester ? employees.filter(e => (requester.managerIds || []).includes(e.id)) : [];
-    return Array.from(new Set([...managers, ...bypass].map(e => e.id)));
+/** Même correctif que resolveWorkflowWithFallback ci-dessus, pour le ciblage des emails de
+ * notification (§7.4) plutôt que pour le calcul du circuit lui-même — resolve_validator_employee_
+ * ids_for_step (0037) tourne côté serveur avec une visibilité complète. Si l'appel échoue, on ne
+ * notifie personne plutôt que de deviner : mieux vaut une notification manquante (visible dans le
+ * "Centre d'action" du validateur de toute façon) qu'une notification envoyée au hasard. */
+async function resolveValidatorEmployeeIdsForStep(employeeId, role) {
+  try {
+    const result = await window.SupabaseSync.resolveValidatorEmployeeIdsForStep(employeeId, role);
+    if (!result.success) throw new Error(result.error || 'Réponse serveur invalide.');
+    return result.ids;
+  } catch (err) {
+    console.error('resolveValidatorEmployeeIdsForStep : résolution serveur indisponible.', err);
+    return [];
   }
-  const roleMatches = employees.filter(e => e.role === role);
-  return Array.from(new Set([...roleMatches, ...bypass].map(e => e.id)));
 }
 
 /** §correctif audit du 23/08/2026 (§7.4) : notifie par email les validateurs de la PREMIÈRE étape
  * d'une demande qui vient d'être créée — factorisé ici, appelé depuis addLeaveRequest/
  * addTeleworkRequest/addExpense, plutôt que de tripler la même logique. Fire-and-forget comme
  * notifySlack juste au-dessus de chaque appelant : un échec email ne doit jamais remonter à
- * l'auteur de la demande, déjà bien créée à ce stade. */
-function notifyValidatorsByEmailForNewRequest(employee, workflow, typeLabel, periode) {
+ * l'auteur de la demande, déjà bien créée à ce stade — d'où le .catch() silencieux malgré l'await. */
+async function notifyValidatorsByEmailForNewRequest(employee, workflow, typeLabel, periode) {
   if (!workflow || !workflow.length) return;
-  const validatorIds = resolveValidatorEmployeeIdsForStep(employee.id, workflow[0]);
-  if (!validatorIds.length) return;
-  window.SupabaseSync.notifyRequestEmail(validatorIds, 'a_valider', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
-}
-
-/** Construit la chaîne effective d'une demande : retire les étapes qu'AUCUN salarié actuel ne peut
- * jamais franchir ("remontée automatique" demandée par l'audit — N+1 si le manager manque, puis RH,
- * puis Propriétaire), et signale le cas via `escalated` pour que l'appelant (app.js) prévienne
- * l'auteur de la demande. Si la chaîne entière se retrouve vide, retombe explicitement sur RH puis
- * Propriétaire (le premier qui existe) plutôt que de laisser une demande sans aucune étape. */
-function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
-  const workflow = (rawWorkflow || []).filter(role => hasEligibleValidatorForStep(employeeId, role, domain));
-  let escalated = workflow.length !== (rawWorkflow || []).length;
-  if (workflow.length === 0 && (rawWorkflow || []).length > 0) {
-    const employees = DB.getEmployees().filter(e => !e.archive && e.id !== employeeId);
-    if (employees.some(e => e.role === ROLES.RH)) workflow.push(ROLES.RH);
-    else if (employees.some(e => e.role === ROLES.PROPRIETAIRE)) workflow.push(ROLES.PROPRIETAIRE);
-    escalated = true;
+  try {
+    const validatorIds = await resolveValidatorEmployeeIdsForStep(employee.id, workflow[0]);
+    if (!validatorIds.length) return;
+    await window.SupabaseSync.notifyRequestEmail(validatorIds, 'a_valider', `${employee.prenom} ${employee.nom}`, typeLabel, periode);
+  } catch (err) {
+    // volontairement silencieux, voir commentaire ci-dessus.
   }
-  return { workflow, escalated };
 }
 
 /** Fait avancer une demande d'une étape ; `finalStatut` est le statut de fin de circuit propre au module. */

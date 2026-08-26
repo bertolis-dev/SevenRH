@@ -4129,12 +4129,19 @@ function getVisibleNotificationsForCurrentUser() {
 // contrôle se fait ici : à chaque syncNotifications() (donc à chaque connexion d'un salarié, pas
 // seulement RH/Propriétaire — n'importe quelle session ouverte suffit à détecter une demande qui
 // dort). "Remontée" = notifier EN PLUS RH/Propriétaire (qui peuvent déjà agir sur n'importe quelle
-// étape, voir hasEligibleValidatorForStep) sans jamais muter la demande elle-même — on ne veut
-// pas faire disparaître silencieusement l'étape réellement due au validateur d'origine.
+// étape, voir resolveValidatorEmployeeIdsForStep) sans jamais muter la demande elle-même — on ne
+// veut pas faire disparaître silencieusement l'étape réellement due au validateur d'origine.
 const RELANCE_APRES_JOURS = 4;
 const ESCALADE_APRES_JOURS = 8;
 
-function pushRelanceNotificationsForRequest(candidates, request, domain, nav, navParams, typeLabel) {
+/** §correctif régression du 26/08/2026 : `bypassIds` se calculait jusqu'ici depuis
+ * employeeRepository.getAll(), le cache local de QUI QUE CE SOIT dont la session a déclenché ce
+ * contrôle (n'importe quelle session, voir commentaire ci-dessus) — donc potentiellement un
+ * salarié qui ne voit que sa propre fiche, RH/Propriétaire jamais inclus. resolveValidatorEmployeeIdsForStep
+ * (data.js, résolu côté serveur depuis le 0037) inclut déjà systématiquement RH/Propriétaire quel
+ * que soit le rôle demandé : une seule résolution serveur suffit donc pour la relance ET la
+ * remontée, pas besoin d'un second calcul (redondant, et bugué de la même façon que l'ancien). */
+async function pushRelanceNotificationsForRequest(candidates, request, domain, nav, navParams, typeLabel) {
   const historique = request.historique || [];
   const derniereAction = historique.length ? historique[historique.length - 1].date : request.dateCreation;
   if (!derniereAction) return;
@@ -4145,7 +4152,7 @@ function pushRelanceNotificationsForRequest(candidates, request, domain, nav, na
   if (!employee) return;
   const role = request.workflow[request.etapeIndex];
   const periode = domain === 'frais' ? formatDate(request.date) : requestPeriodeLabel(request);
-  const validatorIds = resolveValidatorEmployeeIdsForStep(request.employeeId, role);
+  const validatorIds = await resolveValidatorEmployeeIdsForStep(request.employeeId, role);
 
   candidates.push(makeNotification(`relance-${request.id}`, ICONS.clock, 'Demande en attente depuis plusieurs jours',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
@@ -4154,17 +4161,20 @@ function pushRelanceNotificationsForRequest(candidates, request, domain, nav, na
   }
 
   if (joursEnAttente < ESCALADE_APRES_JOURS) return;
-  const bypassIds = employeeRepository.getAll().filter(e => !e.archive && e.id !== request.employeeId
-    && (hasPermission(e, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(e, PERMISSIONS.VALIDER_NOTE_FRAIS))).map(e => e.id);
   candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente — remontée',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
-  if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && bypassIds.length) {
-    window.SupabaseSync.notifyRequestEmail(bypassIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+  if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && validatorIds.length) {
+    window.SupabaseSync.notifyRequestEmail(validatorIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
   }
 }
 
-function syncNotifications() {
+async function syncNotifications() {
   const candidates = [];
+  // pushRelanceNotificationsForRequest (résolution des validateurs côté serveur depuis le
+  // §correctif régression du 26/08/2026) est asynchrone — ses appels sont collectés ici puis
+  // attendus juste avant addNotificationsIfNew, pour ne jamais sauvegarder `candidates` avant
+  // que ces notifications de relance/remontée y aient bien été ajoutées.
+  const relancePromises = [];
 
   // §correctif audit du 23/08/2026 (§4, brique 3) : sans ces gardes, une entreprise à la carte
   // n'ayant pas souscrit congés/planning/frais recevait quand même des notifications persistées
@@ -4177,7 +4187,7 @@ function syncNotifications() {
     const navParams = { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' };
     candidates.push(makeNotification(`leave-${r.id}`, ICONS.sun, 'Demande de congé en attente',
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', navParams, employee.id));
-    pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, type.nom);
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, type.nom));
   });
 
   if (hasModule('planning')) teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
@@ -4186,7 +4196,7 @@ function syncNotifications() {
     const navParams = { absencesHubTab: 'teletravail', teletravailTab: 'demandes' };
     candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
       `${employee.prenom} ${employee.nom}`, 'absences', navParams, employee.id));
-    pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, 'Télétravail');
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, 'Télétravail'));
   });
 
   if (hasModule('frais')) expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
@@ -4194,7 +4204,7 @@ function syncNotifications() {
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
       `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
-    pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', {}, n.libelle || n.categorie || 'Note de frais');
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', {}, n.libelle || n.categorie || 'Note de frais'));
   });
 
   // §correctif audit du 23/08/2026 (§7.10) : "avec une clôture au 31 mai et un report nul, les
@@ -4298,11 +4308,18 @@ function syncNotifications() {
       'employee-detail', { currentEmployeeId: employee.id }, employee.id));
   });
 
+  await Promise.all(relancePromises);
   notificationRepository.addNotificationsIfNew(candidates);
+  updateNotifBadge();
 }
 
 function updateNotifBadge() {
   const badge = document.getElementById('notif-badge');
+  // §correctif régression du 26/08/2026 : syncNotifications() appelle désormais ceci après un
+  // aller-retour serveur asynchrone (résolution des validateurs) — l'utilisateur peut s'être
+  // déconnecté ou avoir changé d'écran d'ici là, d'où ce garde-fou qui n'existait pas nécessaire
+  // tant que cette fonction n'était appelée que de façon synchrone.
+  if (!badge) return;
   const count = getVisibleNotificationsForCurrentUser().filter(n => !n.archive && !n.lu).length;
   badge.textContent = count > 9 ? '9+' : String(count);
   badge.style.display = count > 0 ? 'flex' : 'none';
@@ -10312,7 +10329,7 @@ function updateLeaveRequestHints() {
   hint.textContent = `Solde disponible : ${disponibleLabel}${projeteLabel}${nbJoursLabel}${type.justificatifObligatoire ? ' · Justificatif obligatoire pour ce type' : ''}${delaiWarning}${quotaWarning}`;
 }
 
-function submitLeaveRequestForm(evt) {
+async function submitLeaveRequestForm(evt) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
@@ -10437,7 +10454,7 @@ function submitLeaveRequestForm(evt) {
     return;
   }
 
-  const createdRequest = leaveRepository.create({
+  const createdRequest = await leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, nbJours,
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
@@ -14834,7 +14851,7 @@ function moveTeleworkRequest(id, nouvelleDateDebut, nouvelleDateFin) {
   return { success: true };
 }
 
-function submitTeleworkRequestForm(evt) {
+async function submitTeleworkRequestForm(evt) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
@@ -14876,7 +14893,7 @@ function submitTeleworkRequestForm(evt) {
     return;
   }
 
-  const createdRequest = teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
+  const createdRequest = await teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
   finalizeDraftEdit();
   showToast('Demande de télétravail envoyée.');
@@ -15331,7 +15348,7 @@ function updateExpenseKmHint() {
   hint.textContent = `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(calculateIndemniteKilometrique(distanceKm, puissanceFiscale))}`;
 }
 
-function submitExpenseForm(evt) {
+async function submitExpenseForm(evt) {
   evt.preventDefault();
   const formData = new FormData(evt.target);
   const employeeId = formData.get('employeeId');
@@ -15363,7 +15380,7 @@ function submitExpenseForm(evt) {
     }
   }
 
-  const createdExpense = expenseRepository.create({
+  const createdExpense = await expenseRepository.create({
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
     date: formData.get('date'),
     libelle: formData.get('libelle'),
