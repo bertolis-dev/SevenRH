@@ -1071,9 +1071,13 @@ async function notifySlack(icon, title, message) {
 /** §correctif audit du 23/08/2026 (§7.4) : notification par email sur le cycle de vie d'une
  * demande (a_valider/validee/refusee/relance) — même principe fire-and-forget que notifySlack,
  * l'appelant (data.js) attrape déjà l'erreur avec .catch(() => {}), jamais de blocage ici. */
-async function notifyRequestEmail(recipientEmployeeIds, template, employeeName, typeLabel, periode, motif) {
+/** §correctif retour QA du 26/08/2026 (point 5.2) : l'appelant ne fournit plus le contenu de
+ * l'email (employeeName/typeLabel/periode) ni la liste des destinataires — seulement l'identité de
+ * la VRAIE demande (requestId + domain), que la fonction Edge relit elle-même depuis la base et
+ * vérifie que l'appelant y est bien concerné (auteur ou validateur éligible) avant tout envoi. */
+async function notifyRequestEmail(requestId, domain, template, motif) {
   const { error } = await supabase.functions.invoke('notify-request-email', {
-    body: { recipientEmployeeIds, template, employeeName, typeLabel, periode, motif }
+    body: { requestId, domain, template, motif }
   });
   if (error) throw error;
 }

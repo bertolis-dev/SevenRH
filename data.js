@@ -1411,8 +1411,7 @@ const DB = {
     // .catch(()=>{}) silencieux — l'utilisateur n'a même pas besoin de savoir que Slack existe.
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${leaveType ? leaveType.nom : '—'}`).catch(() => {});
-      const periodeLabel = request.dateDebut === request.dateFin ? formatDate(request.dateDebut) : `${formatDate(request.dateDebut)} → ${formatDate(request.dateFin)}`;
-      notifyValidatorsByEmailForNewRequest(employee, workflow, leaveType ? leaveType.nom : 'Congé', periodeLabel);
+      notifyValidatorsByEmailForNewRequest(request.id, 'conge');
     }
     // §correctif audit du 23/08/2026 (2.3) : `workflowEscalated` n'est JAMAIS mis sur `request`
     // lui-même (donc jamais sauvegardé/poussé vers Supabase, uniquement sur la copie retournée ici)
@@ -1790,8 +1789,7 @@ const DB = {
     this.logAudit('Création', 'Demande de télétravail', employee ? `${employee.prenom} ${employee.nom}` : '—');
     if (request.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('💻', 'Nouvelle demande de télétravail', `${employee.prenom} ${employee.nom}`).catch(() => {});
-      const periodeLabel = request.dateDebut === request.dateFin ? formatDate(request.dateDebut) : `${formatDate(request.dateDebut)} → ${formatDate(request.dateFin)}`;
-      notifyValidatorsByEmailForNewRequest(employee, workflow, 'Télétravail', periodeLabel);
+      notifyValidatorsByEmailForNewRequest(request.id, 'teletravail');
     }
     // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
     if (escalated) return Object.assign({}, request, { workflowEscalated: true });
@@ -1856,7 +1854,7 @@ const DB = {
     this.logAudit('Création', 'Note de frais', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${expense.categorie}`);
     if (expense.statut === 'En attente' && employee) {
       window.SupabaseSync.notifySlack('🧾', 'Nouvelle note de frais', `${employee.prenom} ${employee.nom} · ${expense.libelle || expense.categorie}`).catch(() => {});
-      notifyValidatorsByEmailForNewRequest(employee, workflow, expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date));
+      notifyValidatorsByEmailForNewRequest(expense.id, 'frais');
     }
     // §correctif audit du 23/08/2026 (2.3), même mécanisme que addLeaveRequest ci-dessus.
     if (escalated) return Object.assign({}, expense, { workflowEscalated: true });
@@ -3614,13 +3612,14 @@ async function resolveValidatorEmployeeIdsForStep(employeeId, role) {
  * d'une demande qui vient d'être créée — factorisé ici, appelé depuis addLeaveRequest/
  * addTeleworkRequest/addExpense, plutôt que de tripler la même logique. Fire-and-forget comme
  * notifySlack juste au-dessus de chaque appelant : un échec email ne doit jamais remonter à
- * l'auteur de la demande, déjà bien créée à ce stade — d'où le .catch() silencieux malgré l'await. */
-async function notifyValidatorsByEmailForNewRequest(employee, workflow, typeLabel, periode) {
-  if (!workflow || !workflow.length) return;
+ * l'auteur de la demande, déjà bien créée à ce stade — d'où le .catch() silencieux malgré l'await.
+ *
+ * §correctif retour QA du 26/08/2026 (point 5.2) : ne résout plus les destinataires ici — la
+ * fonction Edge notify-request-email relit désormais la VRAIE demande (requestId + domain) et en
+ * dérive elle-même destinataires et contenu, jamais fait confiance à ce que le client fournirait. */
+async function notifyValidatorsByEmailForNewRequest(requestId, domain) {
   try {
-    const validatorIds = await resolveValidatorEmployeeIdsForStep(employee.id, workflow[0]);
-    if (!validatorIds.length) return;
-    await window.SupabaseSync.notifyRequestEmail(validatorIds, 'a_valider', `${employee.prenom} ${employee.nom}`, typeLabel, periode);
+    await window.SupabaseSync.notifyRequestEmail(requestId, domain, 'a_valider');
   } catch (err) {
     // volontairement silencieux, voir commentaire ci-dessus.
   }
@@ -4162,11 +4161,17 @@ function getGenderBreakdown(employees) {
 /** Types de congés fournis par défaut (paramétrables ensuite via l'écran Congés).
  * §correctif audit du 23/08/2026 (§7.1) : jeu de règles standard confirmé par le client — Congés
  * payés/RTT/Ancienneté/Enfant malade ci-dessous suivent les valeurs qu'il nous a communiquées.
- * Les événements familiaux restent volontairement absents de ce seed : leurs durées sont en
- * attente de confirmation par son expert-comptable (voir les "trois réserves" de l'audit) — le
- * type sera ajouté une fois ces valeurs connues, pas avant. Toutes ces valeurs sont SUPPLÉTIVES :
- * la convention collective d'un client peut les relever, jamais les abaisser (à afficher dans
- * l'interface, voir renderParametresTypesAbsences). */
+ * Toutes ces valeurs sont SUPPLÉTIVES : la convention collective d'un client peut les relever,
+ * jamais les abaisser (à afficher dans l'interface, voir renderParametresTypesAbsences).
+ *
+ * §correctif retour QA du 26/08/2026 (point 5.1) : les 3 types "événements familiaux" (Mariage/
+ * PACS, Décès, Naissance/adoption) SONT bien présents ci-dessous — le commentaire précédent ici
+ * affirmait le contraire ("volontairement absents... en attente de l'expert-comptable"), ce qui
+ * était faux et risquait de rester non vérifié. Décision : on les GARDE (les retirer supprimerait
+ * une fonctionnalité déjà utilisable par des entreprises clientes existantes) mais on documente
+ * explicitement, dans la description de chaque type concerné, ce qui reste une simplification à
+ * vérifier au cas par cas — en particulier "Décès", où une durée unique masque une vraie
+ * différence légale selon le lien de parenté (voir sa description ci-dessous). */
 function seedLeaveTypes() {
   const rows = [
     ['Congés payés', '🏖️', '#2563eb', 30, 'Mensuelle', true, false, ['manager'], 'conge'],
@@ -4218,6 +4223,18 @@ function seedLeaveTypes() {
         { ancienneteMin: 20, jours: 4 }
       ];
       type.description = 'Barème standard, supplétif : +1 jour à 5 ans d\'ancienneté, +2 à 10 ans, +3 à 15 ans, +4 à 20 ans (non cumulatif). Votre convention collective peut le relever, jamais l\'abaisser.';
+    }
+    if (nom === 'Décès') {
+      // §correctif retour QA du 26/08/2026 (point 5.1) : une durée unique (5 jours) masque une
+      // vraie différence légale selon le lien de parenté — le Code du travail distingue le décès
+      // d'un enfant (durée relevée, et encore allongée par la loi du 8 juin 2023 pour certains cas)
+      // du décès du conjoint/partenaire de PACS/concubin/parent/beau-parent/frère/sœur (durée
+      // généralement moindre). Ne PAS inventer ici les seuils exacts : à faire confirmer avec
+      // l'expert-comptable avant d'ajuster, cas par cas selon le lien de parenté réel.
+      type.description = 'Valeur par défaut UNIQUE (5 jours), à vérifier : le Code du travail distingue plusieurs durées selon le lien de parenté (le décès d\'un enfant ouvre une durée plus longue, encore allongée par la loi du 8 juin 2023 pour certains cas). Ne pas appliquer 5 jours à toutes les situations sans vérifier avec votre expert-comptable ou votre convention collective.';
+    }
+    if (nom === 'Mariage / PACS' || nom === 'Naissance / adoption') {
+      type.description = 'Durée légale par défaut, supplétive. Votre convention collective peut la relever, jamais l\'abaisser — à vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
     }
     if (nom === 'Enfant malade') {
       // La bonification à 5 jours (enfant de moins d'1 an, ou salarié ayant 3 enfants de moins de

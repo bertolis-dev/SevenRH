@@ -4157,14 +4157,14 @@ async function pushRelanceNotificationsForRequest(candidates, request, domain, n
   candidates.push(makeNotification(`relance-${request.id}`, ICONS.clock, 'Demande en attente depuis plusieurs jours',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
   if (!notificationRepository.getNotifications().some(n => n.sourceKey === `relance-${request.id}`)) {
-    window.SupabaseSync.notifyRequestEmail(validatorIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+    window.SupabaseSync.notifyRequestEmail(request.id, domain, 'relance').catch(() => {});
   }
 
   if (joursEnAttente < ESCALADE_APRES_JOURS) return;
   candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente — remontée',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
   if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && validatorIds.length) {
-    window.SupabaseSync.notifyRequestEmail(validatorIds, 'relance', `${employee.prenom} ${employee.nom}`, typeLabel, periode).catch(() => {});
+    window.SupabaseSync.notifyRequestEmail(request.id, domain, 'relance').catch(() => {});
   }
 }
 
@@ -4187,7 +4187,7 @@ async function syncNotifications() {
     const navParams = { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' };
     candidates.push(makeNotification(`leave-${r.id}`, ICONS.sun, 'Demande de congé en attente',
       `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', navParams, employee.id));
-    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, type.nom));
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'conge', 'absences', navParams, type.nom));
   });
 
   if (hasModule('planning')) teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
@@ -4196,7 +4196,7 @@ async function syncNotifications() {
     const navParams = { absencesHubTab: 'teletravail', teletravailTab: 'demandes' };
     candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
       `${employee.prenom} ${employee.nom}`, 'absences', navParams, employee.id));
-    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'absence', 'absences', navParams, 'Télétravail'));
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'teletravail', 'absences', navParams, 'Télétravail'));
   });
 
   if (hasModule('frais')) expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
@@ -9772,8 +9772,7 @@ function handleBulkApproveRequests(categorie) {
     leaveRepository.update(id, patch);
     auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
     if (patch.statut !== 'En attente') {
-      const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
-      notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
+      notifyRequesterEmail(request.id, 'conge', 'validee');
     }
     approved++;
   });
@@ -9861,11 +9860,13 @@ function auditDetailsForActor() {
 /** §correctif audit du 23/08/2026 (§7.4) : notifie le SALARIÉ par email seulement à l'issue finale
  * (validé/refusé) — jamais à chaque étape intermédiaire d'une chaîne à plusieurs niveaux, qui
  * reste "En attente" (voir advanceWorkflow, data.js : etapeIndex repasse à -1 seulement à la
- * toute dernière étape). Fire-and-forget, comme toutes les notifications de ce fichier. */
-function notifyRequesterEmail(employeeId, template, typeLabel, periode, motif) {
-  const employee = employeeRepository.getById(employeeId);
-  if (!employee) return;
-  window.SupabaseSync.notifyRequestEmail([employeeId], template, `${employee.prenom} ${employee.nom}`, typeLabel, periode, motif).catch(() => {});
+ * toute dernière étape). Fire-and-forget, comme toutes les notifications de ce fichier.
+ *
+ * §correctif retour QA du 26/08/2026 (point 5.2) : ne fournit plus le contenu de l'email — la
+ * fonction Edge relit désormais la VRAIE demande (requestId + domain) et vérifie que l'appelant
+ * (qui vient de valider/refuser) est bien un validateur éligible avant tout envoi. */
+function notifyRequesterEmail(requestId, domain, template, motif) {
+  window.SupabaseSync.notifyRequestEmail(requestId, domain, template, motif).catch(() => {});
 }
 
 function requestPeriodeLabel(request) {
@@ -9883,8 +9884,7 @@ function handleApproveRequest(id) {
   leaveRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
-    const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
-    notifyRequesterEmail(request.employeeId, 'validee', type ? type.nom : 'Congé', requestPeriodeLabel(request));
+    notifyRequesterEmail(request.id, 'conge', 'validee');
   }
   showToast('Demande validée.');
   render();
@@ -9899,8 +9899,7 @@ function handleRefuseRequest(id) {
     onConfirm: (motif) => {
       leaveRepository.update(id, refuseRequest(request, motif));
       auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
-      const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
-      notifyRequesterEmail(request.employeeId, 'refusee', type ? type.nom : 'Congé', requestPeriodeLabel(request), motif);
+      notifyRequesterEmail(request.id, 'conge', 'refusee', motif);
       showToast('Demande refusée.');
       render();
     }
@@ -14610,7 +14609,7 @@ function handleApproveTelework(id) {
   teleworkRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
-    notifyRequesterEmail(request.employeeId, 'validee', 'Télétravail', requestPeriodeLabel(request));
+    notifyRequesterEmail(request.id, 'teletravail', 'validee');
   }
   showToast('Télétravail validé.');
   render();
@@ -14625,7 +14624,7 @@ function handleRefuseTelework(id) {
     onConfirm: (motif) => {
       teleworkRepository.update(id, refuseRequest(request, motif));
       auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
-      notifyRequesterEmail(request.employeeId, 'refusee', 'Télétravail', requestPeriodeLabel(request), motif);
+      notifyRequesterEmail(request.id, 'teletravail', 'refusee', motif);
       showToast('Demande refusée.');
       render();
     }
@@ -15194,7 +15193,7 @@ function handleApproveExpense(id) {
   expenseRepository.update(id, patch);
   auditLogRepository.logAudit('Validation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
   if (patch.statut !== 'En attente') {
-    notifyRequesterEmail(expense.employeeId, 'validee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date));
+    notifyRequesterEmail(expense.id, 'frais', 'validee');
   }
   showToast(patch.statut === 'Remboursé' ? 'Note de frais remboursée.' : 'Étape de validation suivante en attente.');
   render();
@@ -15209,7 +15208,7 @@ function handleRefuseExpense(id) {
     onConfirm: (motif) => {
       expenseRepository.update(id, refuseRequest(expense, motif));
       auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} : ${motif}`, auditDetailsForActor());
-      notifyRequesterEmail(expense.employeeId, 'refusee', expense.libelle || expense.categorie || 'Note de frais', formatDate(expense.date), motif);
+      notifyRequesterEmail(expense.id, 'frais', 'refusee', motif);
       showToast('Note de frais refusée.');
       render();
     }
