@@ -27,5 +27,13 @@ begin
 end;
 $$;
 
--- Appelée uniquement par candidature-submit (clé service-role, qui bypass déjà tous les grants) —
--- aucun grant à `authenticated`/`anon`, même raisonnement que set_candidature_statut.
+-- Appelée uniquement par candidature-submit via le client service-role.
+--
+-- §correctif de sécurité du 26/08/2026 (retour QA, point B.1) : le commentaire ci-dessus affirmait
+-- à tort que le service-role "bypass déjà tous les grants" — FAUX, BYPASSRLS ne concerne QUE les
+-- policies RLS sur les tables, jamais le privilège EXECUTE sur une fonction. Cette fonction n'avait
+-- donc AUCUN `revoke ... from public`, et PostgreSQL accorde EXECUTE à PUBLIC (donc à `anon`) par
+-- défaut à la création — n'importe qui disposant de la clé anon pouvait l'appeler directement, sans
+-- authentification, et épuiser/polluer la table de rate-limit. Corrigé rétroactivement par
+-- 0039_revoke_public_execute.sql (une nouvelle migration, pas une modification de celle-ci : cette
+-- dernière a déjà été exécutée en production).

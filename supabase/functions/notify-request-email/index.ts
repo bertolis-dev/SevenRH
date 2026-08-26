@@ -45,11 +45,16 @@ function escapeHtml(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// buildFromAddress filtrait déjà les guillemets, jamais les retours à la ligne — un salarié dont la
-// raison sociale contiendrait un saut de ligne pourrait injecter un en-tête dans l'email. Résiduel
-// faible (Resend reçoit du JSON, pas un en-tête brut), corrigé quand même à peu de frais.
+// §correctif QA du 26/08/2026 (point C.2) : filtrait déjà les guillemets/retours à la ligne pour le
+// "From", mais pas pour le "subject" construit plus bas avec la même raison sociale — même risque
+// résiduel (Resend reçoit du JSON, pas un en-tête brut, donc faible), corrigé aux deux endroits avec
+// le même helper plutôt que deux filtres divergents.
+function sanitizeHeaderValue(value: string): string {
+  return value.replace(/["\r\n]/g, "").trim();
+}
+
 function buildFromAddress(raisonSociale: string): string {
-  const safeName = raisonSociale.replace(/["\r\n]/g, "").trim() || "Nexus RH";
+  const safeName = sanitizeHeaderValue(raisonSociale) || "Nexus RH";
   return `"${safeName}" <notifications@nexus-rh.com>`;
 }
 
@@ -188,7 +193,7 @@ Deno.serve(async (req) => {
   if (!recipients || !recipients.length) return jsonResponse({ success: true, sent: 0 });
 
   const html = buildEmailHtml(template as Template, company.raison_sociale, company.data?.logo || null, employeeName, typeLabel, periode, motif ? String(motif).slice(0, 500) : undefined);
-  const subject = `${TEMPLATE_TITLES[template as Template]} : ${company.raison_sociale}`;
+  const subject = `${TEMPLATE_TITLES[template as Template]} : ${sanitizeHeaderValue(company.raison_sociale)}`;
 
   let sent = 0;
   for (const recipient of recipients) {

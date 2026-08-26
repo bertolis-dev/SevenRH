@@ -677,6 +677,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       evt.returnValue = '';
     }
   });
+
+  // §correctif retour QA du 26/08/2026 (point A.1/E.3) : "il n'y a ni window.onerror ni gestionnaire
+  // de promesse non traitée dans toute l'application" — une seule exception dans une fonction
+  // d'affichage laissait #view-root vide, silencieusement. render() lui-même est désormais protégé
+  // (voir sa définition), mais une exception dans un GESTIONNAIRE D'ÉVÉNEMENT (un clic, un .then()
+  // sans .catch()) ne passe jamais par render() — ces deux gestionnaires globaux sont le filet pour
+  // ces cas-là : jamais bloquants, juste une trace (console + journal d'audit).
+  window.addEventListener('error', (evt) => {
+    console.error('Erreur JS non interceptée :', evt.error || evt.message);
+    reportClientError(evt.error || new Error(String(evt.message)), 'window.onerror');
+  });
+  window.addEventListener('unhandledrejection', (evt) => {
+    console.error('Promesse rejetée non interceptée :', evt.reason);
+    reportClientError(evt.reason instanceof Error ? evt.reason : new Error(String(evt.reason)), 'unhandledrejection');
+  });
+
   DB.init();
   bindGlobalEvents();
   bindGlobalSearchEvents();
@@ -3108,6 +3124,11 @@ function renderUserMenuPanel() {
   // §correctif audit du 23/08/2026 (§7.19) : lien "équipe" seulement pour les rôles qui ont
   // effectivement une équipe/entreprise à montrer — même liste que calendar-feed (fonction Edge)
   // revérifie côté serveur, ici juste pour ne pas proposer un lien qui reviendrait toujours vide.
+  // §correctif QA du 26/08/2026 (point A.3) : "Abonnement" désigne désormais exclusivement
+  // l'abonnement payant (Stripe) — ce lien iCal n'a jamais été un abonnement au sens du produit,
+  // renommé pour ne plus créer 3 sens différents du même mot dans le même menu. Les deux entrées
+  // moi/équipe sont fusionnées en une seule (choix du périmètre fait DANS la modale, voir
+  // openCalendarSyncModal), et l'entrée entière est masquée si l'entreprise n'a pas le module congés.
   const hasTeamScope = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
   const currentCompany = DB.getCurrentCompany();
 
@@ -3143,8 +3164,7 @@ function renderUserMenuPanel() {
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
-    <button type="button" class="user-menu-item" id="btn-ical-perso">${icon(ICONS.calendar, 14)} Abonnement calendrier (moi)</button>
-    ${hasTeamScope ? `<button type="button" class="user-menu-item" id="btn-ical-equipe">${icon(ICONS.calendar, 14)} Abonnement calendrier (équipe)</button>` : ''}
+    ${hasModule('conges') ? `<button type="button" class="user-menu-item" id="btn-ical-sync">${icon(ICONS.calendar, 14)} Synchroniser mon calendrier</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
@@ -3200,14 +3220,11 @@ function renderUserMenuPanel() {
       openTransferProprietaireModal();
     });
   }
-  document.getElementById('btn-ical-perso').addEventListener('click', () => {
-    document.getElementById('user-menu-panel').classList.remove('open');
-    copyIcalSubscriptionLink('perso');
-  });
-  if (hasTeamScope) {
-    document.getElementById('btn-ical-equipe').addEventListener('click', () => {
+  const btnIcalSync = document.getElementById('btn-ical-sync');
+  if (btnIcalSync) {
+    btnIcalSync.addEventListener('click', () => {
       document.getElementById('user-menu-panel').classList.remove('open');
-      copyIcalSubscriptionLink('equipe');
+      openCalendarSyncModal(hasTeamScope);
     });
   }
   document.getElementById('btn-user-menu-support').addEventListener('click', () => {
@@ -3277,6 +3294,48 @@ function exportMyDataRGPD() {
 
   auditLogRepository.logAudit('Export', 'Données personnelles (RGPD)', `${employee.prenom} ${employee.nom} (auto-export)`);
   showToast('Vos données ont été téléchargées.');
+}
+
+/** §correctif QA du 26/08/2026 (point A.3) : point d'entrée unique du menu utilisateur — le choix
+ * du périmètre (moi/équipe) se fait DANS cette modale plutôt que par deux entrées de menu séparées.
+ * Un rôle sans équipe à montrer (salarié) n'a qu'un seul choix possible : on saute la modale et on
+ * lance directement la génération du lien personnel, pour ne pas imposer un clic sur un choix qui
+ * n'en est pas un. */
+function openCalendarSyncModal(hasTeamScope) {
+  if (!hasTeamScope) {
+    copyIcalSubscriptionLink('perso');
+    return;
+  }
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Synchroniser mon calendrier</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Choisissez ce que vous voulez voir dans votre logiciel de calendrier (Outlook, Google Agenda...).</p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" class="btn btn-secondary" style="width: 100%;" id="btn-cal-sync-perso">${icon(ICONS.calendar, 14)} Mon calendrier personnel</button>
+          <button type="button" class="btn btn-secondary" style="width: 100%;" id="btn-cal-sync-equipe">${icon(ICONS.calendar, 14)} Le calendrier de l'équipe</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btn-cancel-modal">Annuler</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cal-sync-perso').addEventListener('click', () => {
+    closeModal();
+    copyIcalSubscriptionLink('perso');
+  });
+  document.getElementById('btn-cal-sync-equipe').addEventListener('click', () => {
+    closeModal();
+    copyIcalSubscriptionLink('equipe');
+  });
 }
 
 /** §correctif audit du 23/08/2026 (§7.19) : lien d'abonnement calendrier (Outlook/Google Agenda) —
@@ -4268,37 +4327,42 @@ async function syncNotifications() {
 
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
   // widgets d'aperçu du tableau de bord) — sinon le 6e salarié et au-delà n'est simplement jamais notifié.
-  getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
+  // §correctif retour QA du 26/08/2026 (point A.2) : ces sept blocs ne passaient par AUCUN contrôle
+  // de module — une entreprise n'ayant souscrit qu'à Congés/Absences recevait quand même des
+  // notifications d'anniversaire, de visite médicale, etc., toutes des données RH (§4, brique 3,
+  // même raisonnement que document-expiry juste au-dessus, déjà correctement gardé par hasModule('rh')
+  // — celui-ci l'a simplement été, pas les sept ci-dessous).
+  if (hasModule('rh')) getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`birthday-${x.employee.id}-${x.next.getFullYear()}`, ICONS.cake, 'Anniversaire à venir',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  getUpcomingSeniorityAnniversaries(30, undefined, Infinity).forEach(x => {
+  if (hasModule('rh')) getUpcomingSeniorityAnniversaries(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`seniority-${x.employee.id}-${x.years}`, ICONS.medal, `${x.years} ans d'ancienneté`,
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
+  if (hasModule('rh')) getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, ICONS.document, 'Fin de contrat proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
-  getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
+  if (hasModule('rh')) getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
     candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, ICONS.document, 'Fin de période d\'essai proche',
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
-  getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
+  if (hasModule('rh')) getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, ICONS.notepad, 'Entretien professionnel à programmer',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
+  if (hasModule('rh')) getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, ICONS.notepad, 'Bilan à 6 ans à réaliser',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
-  getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
+  if (hasModule('rh')) getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`visite-medicale-${x.employee.id}-${toISODate(x.next)}`, ICONS.stethoscope, x.premiereVisite ? 'Visite médicale d\'embauche à programmer' : 'Visite médicale à programmer',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
@@ -4611,7 +4675,52 @@ function isViewBlockedForCurrentUser(view) {
   return Boolean(navKey && navKey !== 'dashboard' && (user.menusDesactives || []).includes(navKey));
 }
 
+/** §correctif retour QA du 26/08/2026 (point A.1/E.3) : "render() n'est protégé par aucun
+ * try/catch... une seule exception dans n'importe quelle fonction d'affichage laisse le conteneur
+ * vide, silencieusement, sans que l'utilisateur ni nous n'apprenions quoi que ce soit." La vraie
+ * logique de rendu (inchangée) est renommée renderInner() ; render() n'est plus que ce filet. */
 function render() {
+  try {
+    renderInner();
+  } catch (err) {
+    console.error('render() a levé une exception — affichage du filet de sécurité au lieu d\'un écran vide.', err);
+    reportClientError(err, 'render');
+    renderCrashFallback();
+  }
+}
+
+/** Affiche un vrai message + un bouton de rechargement plutôt qu'un écran vide — jamais silencieux. */
+function renderCrashFallback() {
+  const root = document.getElementById('view-root');
+  if (!root) return;
+  root.innerHTML = `
+    <div class="empty-state" style="max-width: 480px; margin: 60px auto; text-align: center;">
+      <div class="empty-icon">${icon(ICONS.warningTriangle, 32)}</div>
+      <h2>Un problème d'affichage est survenu</h2>
+      <p class="text-muted">Cet écran n'a pas pu s'afficher correctement. L'équipe technique en a été informée automatiquement.</p>
+      <button type="button" class="btn btn-primary" id="btn-crash-reload" style="margin-top: 12px;">Recharger la page</button>
+    </div>
+  `;
+  const reloadBtn = document.getElementById('btn-crash-reload');
+  if (reloadBtn) reloadBtn.addEventListener('click', () => window.location.reload());
+}
+
+/** Journalise l'erreur dans le journal d'audit de l'entreprise — RH/Propriétaire peuvent déjà le
+ * consulter (Paramètres → Audit), et audit_log_insert (RLS) accepte déjà une écriture de N'IMPORTE
+ * QUEL salarié de l'entreprise ("toute action journalisée doit pouvoir écrire") : aucune nouvelle
+ * table ni fonction Edge nécessaire. Jamais bloquant, jamais remonté à l'utilisateur (qui vient déjà
+ * de voir le filet de sécurité) ; tout échec de la journalisation elle-même reste local à ce catch. */
+function reportClientError(err, context) {
+  try {
+    const message = (err && err.message) || String(err);
+    const stack = (err && err.stack) || '';
+    auditLogRepository.logAudit('Erreur', 'Application', `${context} : ${message}`, stack.slice(0, 1500));
+  } catch (loggingErr) {
+    console.error('reportClientError : échec de la journalisation elle-même.', loggingErr);
+  }
+}
+
+function renderInner() {
   // Garde-fou de dernier recours (défense en profondeur, comme §15) : quel que soit le chemin qui a
   // amené ici (navigateTo filtre déjà les entrées de menu, mais un lien direct vers une vue de détail
   // ne passe pas forcément par elle), ni un module non souscrit ni un menu retiré individuellement
@@ -11584,6 +11693,13 @@ function renderParametres() {
   // gestion se fait depuis la fiche du salarié (carte "Compte"), avec un repère dans le Centre
   // d'action du tableau de bord à la place (voir renderDashboardActionCenter).
   if (state.parametresTab === 'comptes') state.parametresTab = 'listes';
+  // §correctif QA du 26/08/2026 (point A.2, complément) : mêmes onglets masqués selon le module —
+  // sans cette normalisation, un état resté sur un onglet devenu inaccessible (ex. modules changés,
+  // ou lien profond vers un onglet non couvert par l'abonnement) affiche bien le repli "Référentiels"
+  // via le content-switch plus bas, mais bindParametresEvents() reste aiguillé sur l'ancien onglet et
+  // plante en cherchant des éléments DOM qui n'ont jamais été rendus.
+  if (['types-absences', 'vacances', 'fermetures'].includes(state.parametresTab) && !hasModule('conges')) state.parametresTab = 'listes';
+  if (state.parametresTab === 'integrations' && !hasModule('conges') && !hasModule('planning') && !hasModule('frais')) state.parametresTab = 'listes';
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
@@ -11594,12 +11710,16 @@ function renderParametres() {
       ${canGererAbonnement ? `<button class="tab ${state.parametresTab === 'abonnement' ? 'active' : ''}" data-parametres-tab="abonnement">Abonnement</button>` : ''}
       <button class="tab ${state.parametresTab === 'etablissements' ? 'active' : ''}" data-parametres-tab="etablissements">Établissements</button>
       <button class="tab ${state.parametresTab === 'services' ? 'active' : ''}" data-parametres-tab="services">Services &amp; équipes</button>
-      <button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>
+      <!-- §correctif retour QA du 26/08/2026 (point A.2) : ces 4 onglets relèvent de modules
+           souscrits (congés, ou congés/planning/frais pour Intégrations, qui sert les trois) et
+           s'affichaient pourtant pour tout le monde, quel que soit l'abonnement — même oubli que
+           les 7 sources de notifications corrigées juste au-dessus dans syncNotifications. -->
+      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'types-absences' ? 'active' : ''}" data-parametres-tab="types-absences">Types d'absences</button>` : ''}
       <button class="tab ${state.parametresTab === 'listes' ? 'active' : ''}" data-parametres-tab="listes">Référentiels</button>
-      <button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>
+      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'vacances' ? 'active' : ''}" data-parametres-tab="vacances">Vacances scolaires</button>` : ''}
       <button class="tab ${state.parametresTab === 'feries' ? 'active' : ''}" data-parametres-tab="feries">Jours fériés</button>
-      <button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>
-      <button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>
+      ${hasModule('conges') ? `<button class="tab ${state.parametresTab === 'fermetures' ? 'active' : ''}" data-parametres-tab="fermetures">Fermetures</button>` : ''}
+      ${(hasModule('conges') || hasModule('planning') || hasModule('frais')) ? `<button class="tab ${state.parametresTab === 'integrations' ? 'active' : ''}" data-parametres-tab="integrations">Intégrations</button>` : ''}
       <button class="tab ${state.parametresTab === 'audit' ? 'active' : ''}" data-parametres-tab="audit">Audit</button>
     </div>
     <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
@@ -11610,12 +11730,12 @@ function renderParametres() {
       ${canGererAbonnement ? `<option value="abonnement" ${state.parametresTab === 'abonnement' ? 'selected' : ''}>Abonnement</option>` : ''}
       <option value="etablissements" ${state.parametresTab === 'etablissements' ? 'selected' : ''}>Établissements</option>
       <option value="services" ${state.parametresTab === 'services' ? 'selected' : ''}>Services &amp; équipes</option>
-      <option value="types-absences" ${state.parametresTab === 'types-absences' ? 'selected' : ''}>Types d'absences</option>
+      ${hasModule('conges') ? `<option value="types-absences" ${state.parametresTab === 'types-absences' ? 'selected' : ''}>Types d'absences</option>` : ''}
       <option value="listes" ${state.parametresTab === 'listes' ? 'selected' : ''}>Référentiels</option>
-      <option value="vacances" ${state.parametresTab === 'vacances' ? 'selected' : ''}>Vacances scolaires</option>
+      ${hasModule('conges') ? `<option value="vacances" ${state.parametresTab === 'vacances' ? 'selected' : ''}>Vacances scolaires</option>` : ''}
       <option value="feries" ${state.parametresTab === 'feries' ? 'selected' : ''}>Jours fériés</option>
-      <option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>
-      <option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>
+      ${hasModule('conges') ? `<option value="fermetures" ${state.parametresTab === 'fermetures' ? 'selected' : ''}>Fermetures</option>` : ''}
+      ${(hasModule('conges') || hasModule('planning') || hasModule('frais')) ? `<option value="integrations" ${state.parametresTab === 'integrations' ? 'selected' : ''}>Intégrations</option>` : ''}
       <option value="audit" ${state.parametresTab === 'audit' ? 'selected' : ''}>Audit</option>
     </select>
     <div id="parametres-tab-content">
@@ -11623,11 +11743,11 @@ function renderParametres() {
         : state.parametresTab === 'abonnement' && canGererAbonnement ? renderParametresAbonnement()
         : state.parametresTab === 'etablissements' ? renderParametresEtablissements()
         : state.parametresTab === 'services' ? renderParametresServices()
-        : state.parametresTab === 'types-absences' ? renderParametresTypesAbsences()
-        : state.parametresTab === 'vacances' ? renderParametresVacances()
+        : state.parametresTab === 'types-absences' && hasModule('conges') ? renderParametresTypesAbsences()
+        : state.parametresTab === 'vacances' && hasModule('conges') ? renderParametresVacances()
         : state.parametresTab === 'feries' ? renderParametresFeries()
-        : state.parametresTab === 'fermetures' ? renderParametresFermetures()
-        : state.parametresTab === 'integrations' ? renderParametresIntegrations()
+        : state.parametresTab === 'fermetures' && hasModule('conges') ? renderParametresFermetures()
+        : state.parametresTab === 'integrations' && (hasModule('conges') || hasModule('planning') || hasModule('frais')) ? renderParametresIntegrations()
         : state.parametresTab === 'audit' ? renderParametresAuditHub()
         : renderParametresListes()}
     </div>

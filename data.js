@@ -619,7 +619,13 @@ function migrateLeaveTypeCategories(company) {
  * point signalé), à évaluer séparément. */
 async function hydrateCurrentCompanyWithMigrations() {
   const company = await window.SupabaseSync.hydrateCurrentCompany();
-  if (company) await ensureDefaultLeaveTypesBackfilled(company);
+  if (company) {
+    // company._currentEmployeeId est déjà présent sur l'objet hydraté (voir les appelants), mais
+    // this._currentEmployeeId (DB) ne l'est pas encore à ce stade — tous les appelants l'affectent
+    // APRÈS avoir reçu ce retour. Retrouve donc l'utilisateur courant directement sur `company`.
+    const currentUser = (company.employees || []).find(e => e.id === company._currentEmployeeId) || null;
+    await ensureDefaultLeaveTypesBackfilled(company, currentUser);
+  }
   return company;
 }
 
@@ -627,20 +633,59 @@ async function hydrateCurrentCompanyWithMigrations() {
  * avant leur ajout au jeu par défaut complet — SANS jamais toucher à un type déjà présent, qu'il
  * soit actif ou non, ou déjà modifié par le client. Comparaison par nom (insensible à la casse),
  * seule clé stable disponible ici (les types par défaut n'ont pas d'identifiant fixe entre
- * entreprises). Idempotent : une fois tous les types par défaut présents, ne fait plus rien. */
-async function ensureDefaultLeaveTypesBackfilled(company) {
+ * entreprises).
+ *
+ * §correctif retour QA du 26/08/2026 (point B.2) : deux défauts corrigés.
+ *   1. leave_types_write (RLS) exige gererParametres (RH/Propriétaire) — cette fonction tournait
+ *      pourtant à CHAQUE connexion, quel que soit le rôle. Pour un salarié/manager, l'écriture
+ *      Supabase était refusée, l'erreur avalée par le catch ci-dessous, et son CACHE LOCAL se
+ *      retrouvait avec des types dont l'id n'existe pas en base — toute demande posée sur l'un
+ *      d'eux était ensuite rejetée par le serveur (leave_types.id est une clé étrangère de
+ *      leave_requests.type_id), sans qu'aucune trace ne remonte au-delà d'un "échec de
+ *      synchronisation" générique. Ne tourne donc désormais que pour un utilisateur qui a
+ *      RÉELLEMENT le droit d'écrire.
+ *   2. La comparaison par nom seule ne distinguait pas "jamais eu ce type" de "l'a eu puis l'a
+ *      supprimé volontairement" — un client retirant "Sans solde" le voyait ressusciter à la
+ *      prochaine connexion RH. `company.defaultLeaveTypesSeeded` (liste APPEND-ONLY des noms déjà
+ *      proposés au moins une fois, jamais retirée même si le type est ensuite supprimé) distingue
+ *      maintenant les deux cas. */
+async function ensureDefaultLeaveTypesBackfilled(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) return;
+
+  const defaults = seedLeaveTypes();
+  const allDefaultKeys = defaults.map(t => t.nom.trim().toLowerCase());
+  const alreadySeeded = new Set(company.defaultLeaveTypesSeeded || []);
   const existingNames = new Set((company.leaveTypes || []).map(t => t.nom.trim().toLowerCase()));
-  const manquants = seedLeaveTypes().filter(t => !existingNames.has(t.nom.trim().toLowerCase()));
-  if (!manquants.length) return;
-  const ordreDepart = (company.leaveTypes || []).reduce((max, t) => Math.max(max, t.ordre || 0), -1) + 1;
-  manquants.forEach((t, i) => { t.ordre = ordreDepart + i; });
-  company.leaveTypes = [...(company.leaveTypes || []), ...manquants];
+  const manquants = defaults.filter(t => {
+    const key = t.nom.trim().toLowerCase();
+    return !existingNames.has(key) && !alreadySeeded.has(key);
+  });
+
+  const newSeededList = Array.from(new Set([...alreadySeeded, ...allDefaultKeys]));
+  const seededChanged = newSeededList.length !== alreadySeeded.size;
+  if (!manquants.length && !seededChanged) return;
+
+  if (manquants.length) {
+    const ordreDepart = (company.leaveTypes || []).reduce((max, t) => Math.max(max, t.ordre || 0), -1) + 1;
+    manquants.forEach((t, i) => { t.ordre = ordreDepart + i; });
+    company.leaveTypes = [...(company.leaveTypes || []), ...manquants];
+  }
+  company.defaultLeaveTypesSeeded = newSeededList;
+
   try {
-    await window.SupabaseSync.pushLeaveTypes(company.leaveTypes, company.id);
+    if (manquants.length) await window.SupabaseSync.pushLeaveTypes(company.leaveTypes, company.id);
+    // defaultLeaveTypesSeeded est un champ d'ENTREPRISE (pas un type) — même exclusion de champs
+    // que DB.saveCompanyProfile pour le pousser sans écraser le reste de companies.data, mais sans
+    // son effet de bord de journalisation (ce marqueur interne n'a aucun intérêt dans le journal
+    // d'audit du client).
+    const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+      teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+    await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
-    // Échec silencieux volontaire (ex. hors ligne) : company.leaveTypes reste correct EN MÉMOIRE
-    // pour cette session, et la synchronisation sera retentée à la prochaine connexion (cette
-    // fonction est idempotente, donc sans risque de doublon si elle se déclenche plusieurs fois).
+    // Échec silencieux volontaire (ex. hors ligne) : `company` reste correct EN MÉMOIRE pour cette
+    // session, et la synchronisation sera retentée à la prochaine connexion (cette fonction est
+    // idempotente, donc sans risque de doublon si elle se déclenche plusieurs fois).
     console.error('ensureDefaultLeaveTypesBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
