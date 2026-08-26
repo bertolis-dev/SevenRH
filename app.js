@@ -4180,7 +4180,16 @@ async function syncNotifications() {
   // n'ayant pas souscrit congés/planning/frais recevait quand même des notifications persistées
   // (notificationRepository) et un badge non-zéro pour ces modules — une fuite qui survit même à
   // isViewBlockedForCurrentUser puisqu'elle ne dépend d'aucune navigation.
-  if (hasModule('conges')) leaveRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+  // §correctif retour QA du 26/08/2026 : cf. pruneResolvedRequestNotifications (data.js) — une
+  // notification "en attente"/relance/remontée reste sinon affichée indéfiniment (avec un libellé
+  // devenu faux) une fois la demande réellement validée/refusée, rien ne la retirant jamais.
+  const pendingLeaveRequests = hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente') : [];
+  const pendingTeleworkRequests = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'En attente') : [];
+  const pendingExpenses = hasModule('frais') ? expenseRepository.getAll().filter(n => n.statut === 'En attente') : [];
+  const pendingIds = new Set([...pendingLeaveRequests, ...pendingTeleworkRequests, ...pendingExpenses].map(r => r.id));
+  notificationRepository.pruneResolvedRequestNotifications(pendingIds);
+
+  pendingLeaveRequests.forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type) return;
@@ -4190,7 +4199,7 @@ async function syncNotifications() {
     relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'conge', 'absences', navParams, type.nom));
   });
 
-  if (hasModule('planning')) teleworkRepository.getAll().filter(r => r.statut === 'En attente').forEach(r => {
+  pendingTeleworkRequests.forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee) return;
     const navParams = { absencesHubTab: 'teletravail', teletravailTab: 'demandes' };
@@ -4199,7 +4208,7 @@ async function syncNotifications() {
     relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'teletravail', 'absences', navParams, 'Télétravail'));
   });
 
-  if (hasModule('frais')) expenseRepository.getAll().filter(n => n.statut === 'En attente').forEach(n => {
+  pendingExpenses.forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',

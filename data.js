@@ -2374,6 +2374,25 @@ const DB = {
     this.saveNotifications(list);
   },
 
+  /** §correctif retour QA du 26/08/2026 : une notification "demande en attente" (ou sa relance/
+   * remontée, §7.13) restait affichée indéfiniment — avec son libellé "en attente" devenu faux —
+   * même une fois la demande réellement validée/refusée : addNotificationsIfNew n'est qu'additif,
+   * rien ne retirait jamais une entrée devenue obsolète. Retire ici toute notification dont le
+   * sourceKey est de la forme "leave-<id>"/"telework-<id>"/"expense-<id>"/"relance-<id>"/
+   * "escalade-<id>" quand <id> ne correspond plus à AUCUNE demande encore "En attente" ;
+   * n'importe quelle autre notification (anniversaires, tickets, entretiens...) n'est pas de ce
+   * type et reste intouchée. */
+  pruneResolvedRequestNotifications(pendingIds) {
+    const STALE_PREFIXES = ['leave-', 'telework-', 'expense-', 'relance-', 'escalade-'];
+    const list = this.getCurrentCompany().notifications;
+    const cleaned = list.filter(n => {
+      const prefix = STALE_PREFIXES.find(p => n.sourceKey && n.sourceKey.startsWith(p));
+      if (!prefix) return true;
+      return pendingIds.has(n.sourceKey.slice(prefix.length));
+    });
+    if (cleaned.length !== list.length) this.saveNotifications(cleaned);
+  },
+
   // ---- Authentification réelle (Supabase Auth, voir supabase-client.js — remplace la simulation
   // navigateur précédente, qui comparait un mot de passe en clair stocké dans localStorage) ----
 
@@ -2939,7 +2958,8 @@ const notificationRepository = {
   addNotificationsIfNew: (candidates) => DB.addNotificationsIfNew(candidates),
   markNotificationRead: (id, read) => DB.markNotificationRead(id, read),
   markAllNotificationsRead: () => DB.markAllNotificationsRead(),
-  setNotificationArchived: (id, archived) => DB.setNotificationArchived(id, archived)
+  setNotificationArchived: (id, archived) => DB.setNotificationArchived(id, archived),
+  pruneResolvedRequestNotifications: (pendingIds) => DB.pruneResolvedRequestNotifications(pendingIds)
 };
 
 const favoriteRepository = {
