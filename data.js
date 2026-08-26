@@ -8,6 +8,14 @@
 
 const ROOT_KEY = 'sevenrh_companies';
 const CURRENT_COMPANY_KEY = 'sevenrh_current_company_id';
+/** §retour QA du 26/08/2026 (point 2.6) : file d'attente de re-tentative pour les écritures
+ * Supabase en arrière-plan qui échouent — voir DB._pendingSync/_pushInBackground plus bas. Clé
+ * SÉPARÉE de ROOT_KEY (jamais imbriquée dans l'objet entreprise) : ROOT_KEY est déjà volumineux
+ * (documents/logos en base64, historique d'audit qui ne fait que grossir) et flirte déjà avec le
+ * quota localStorage (voir le gestionnaire QuotaExceededError de saveCompanies) — cette file ne
+ * garde que des identifiants et de petits objets (jamais une liste de salariés/demandes entière),
+ * pour ne jamais aggraver ce risque. */
+const PENDING_SYNC_KEY = 'sevenrh_pending_sync';
 /** Comptes de connexion gardés en parallèle (bascule multi-entreprise façon Gmail, demande du
  * 21/08/2026) — chaque entrée garde son propre jeton Supabase (access + refresh token), PAS de
  * rapport avec les "comptes de connexion" créés pour un salarié au sein d'UNE entreprise
@@ -743,9 +751,68 @@ function appendAuditLogEntry(company, action, entite, cible, details) {
   return entry;
 }
 
+/** §retour QA du 26/08/2026 (point 2.6) : catalogues utilisés par la file de re-tentative
+ * (DB._pendingSync/_pushInBackground plus bas) pour savoir COMMENT rejouer une écriture échouée.
+ * Trois familles, jamais interchangeables :
+ *
+ * - FULL_RESYNC_TABLES : la liste locale ENTIÈRE est repoussée telle quelle via syncTable (upsert
+ *   + balayage de suppression, voir supabase-client.js) — sûr à rejouer sans se souvenir de quoi
+ *   avait précisément échoué, PARCE QUE ces tables sont déjà conçues pour un accès en lecture ET
+ *   écriture identique pour tout le monde (voir le commentaire au-dessus d'insertRows dans
+ *   supabase-client.js).
+ * - ID_CLASSIFIED_TABLES : insertion et mise à jour restent VOLONTAIREMENT séparées, jamais un
+ *   simple resync intégral — leurs policies RLS d'insertion et de mise à jour diffèrent selon le
+ *   rôle (ex. un salarié met à jour sa propre fiche mais ne peut pas en CRÉER une). Un upsert
+ *   unique exigerait de satisfaire les deux policies à la fois et échouerait pour exactement le
+ *   rôle qui devrait pouvoir agir. On retient donc QUELS identifiants attendaient une insertion vs
+ *   une mise à jour, jamais une copie figée de leur contenu — à la nouvelle tentative, on relit
+ *   l'état ACTUEL du cache local pour ces identifiants, jamais une donnée périmée qui écraserait une
+ *   modification plus récente faite entre-temps.
+ * - INSERT_ONLY_TABLES : création unique, jamais mise à jour par ce mécanisme (idées, tickets,
+ *   création d'un entretien — leurs mises à jour éventuelles passent par SINGLE_OBJECT_UPDATE_TABLES
+ *   ci-dessous). Un doublon éventuel à la nouvelle tentative (la ligne a en fait déjà été créée) est
+ *   traité comme un succès (23505, contrainte d'unicité sur l'id), jamais comme un échec permanent.
+ */
+const FULL_RESYNC_TABLES = {
+  etablissements: { getRows: c => c.etablissements, push: (rows, cid) => window.SupabaseSync.pushEtablissements(rows, cid) },
+  services: { getRows: c => c.services, push: (rows, cid) => window.SupabaseSync.pushServices(rows, cid) },
+  leave_types: { getRows: c => c.leaveTypes, push: (rows, cid) => window.SupabaseSync.pushLeaveTypes(rows, cid) },
+  documents: { getRows: c => c.documents, push: (rows, cid) => window.SupabaseSync.pushDocuments(rows, cid) },
+  drafts: { getRows: c => c.brouillons, push: (rows, cid) => window.SupabaseSync.pushDrafts(rows, cid) },
+  notifications: { getRows: c => c.notifications, push: (rows, cid) => window.SupabaseSync.pushNotifications(rows, cid) }
+};
+
+const ID_CLASSIFIED_TABLES = {
+  employees: { getRows: c => c.employees, push: (added, modified, cid) => window.SupabaseSync.pushEmployees({ added, modified }, cid) },
+  leave_requests: { getRows: c => c.leaveRequests, push: (added, modified, cid) => window.SupabaseSync.pushLeaveRequests({ added, modified }, cid) },
+  telework_requests: { getRows: c => c.teleworkRequests, push: (added, modified, cid) => window.SupabaseSync.pushTeleworkRequests({ added, modified }, cid) },
+  expenses: { getRows: c => c.expenses, push: (added, modified, cid) => window.SupabaseSync.pushExpenses({ added, modified }, cid) }
+};
+
+const INSERT_ONLY_TABLES = {
+  support_tickets: { getRows: c => c.supportTickets, push: (rows, cid) => window.SupabaseSync.pushSupportTickets(rows, cid) },
+  idees: { getRows: c => c.idees, push: (rows, cid) => window.SupabaseSync.pushIdees(rows, cid) },
+  entretiens: { getRows: c => c.entretiens, push: (rows, cid) => window.SupabaseSync.pushEntretiens(rows, cid) }
+};
+
+/** Mises à jour d'objet unique déjà idempotentes par construction (un .update() par id ne fait
+ * jamais que reposer les mêmes valeurs) — pas de séparation insert/update à gérer ici. */
+const SINGLE_OBJECT_UPDATE_TABLES = {
+  entretiens: { getRows: c => c.entretiens, push: (obj, cid) => window.SupabaseSync.updateEntretien(obj, cid) }
+};
+
+/** Erreur PostgREST/Postgres pour une violation de contrainte d'unicité (id déjà présent) — signe
+ * qu'une insertion a en réalité déjà réussi lors d'une tentative précédente dont la réponse s'est
+ * perdue (coupure réseau après écriture serveur mais avant réception de la confirmation) : jamais
+ * une vraie erreur du point de vue de l'utilisateur, jamais une raison de réessayer indéfiniment. */
+function isDuplicateKeyError(err) {
+  return Boolean(err && err.code === '23505');
+}
+
 const DB = {
   /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
   init() {
+    this._loadPendingSync();
     if (localStorage.getItem(ROOT_KEY) === null || this.getCompanies().length === 0) {
       const company = seedCompany();
       localStorage.setItem(ROOT_KEY, JSON.stringify([company]));
@@ -861,30 +928,214 @@ const DB = {
   /** onSaveError : hook optionnel branché par app.js (ex. showToast) pour prévenir l'utilisateur sans coupler data.js à l'UI. */
   onSaveError: null,
 
-  /** Cache local optimiste (voir le plan de migration) : le cache mémoire est déjà à jour au
-   * moment de l'appel, ceci envoie juste la même écriture à Supabase en arrière-plan, sans jamais
-   * bloquer l'UI. En cas d'échec réseau, la donnée reste correcte localement — MAIS (D3, audit
-   * fiabilité du 19/08/2026) il n'existe aucune file d'attente/retour automatique : si la page se
-   * recharge ou qu'on se reconnecte avant une écriture réussie ultérieure sur la MÊME entité,
-   * hydrateCurrentCompany() écrase le cache local avec la version serveur, qui n'a jamais reçu ce
-   * changement — perdu silencieusement. En attendant une vraie file d'attente hors-ligne (chantier
-   * séparé, plus risqué à faire vite), on se contente ici d'être honnête : compter les échecs
-   * (this._syncFailureCount, lu par renderSyncFailureBanner côté app.js) pour afficher un
-   * avertissement PERSISTANT (pas juste un toast qui disparaît) et bloquer la fermeture/le
-   * rechargement de la page (voir le handler beforeunload, app.js) tant qu'au moins un échec n'a
-   * pas été résolu par une nouvelle tentative réussie sur cette même session. */
-  _pushInBackground(promise) {
+  /** §retour QA du 26/08/2026 (point 2.6) : remplace l'ancien mécanisme (compter les échecs,
+   * bloquer beforeunload, espérer qu'une écriture réussie ultérieure "rattrape" la précédente sans
+   * jamais vraiment la rejouer — voir l'historique git pour ce commentaire tel qu'il était avant ce
+   * correctif). `descriptor` (optionnel — voir _sectionKeyFor plus bas) permet de retenir CE QUI a
+   * échoué, pas seulement COMBIEN, et de le rejouer plus tard : au prochain chargement de l'app, à
+   * la reconnexion réseau, ou via le bouton "Réessayer" du bandeau (app.js). Le cache local reste
+   * la source de vérité dans tous les cas — cette file ne fait que rattraper l'écart avec le
+   * serveur, jamais l'inverse. */
+  _pushInBackground(promise, descriptor) {
+    const sectionKey = descriptor && this._sectionKeyFor(descriptor);
     promise.then(() => {
-      // Une écriture réussie ne prouve pas que TOUTES les écritures en échec ont été rattrapées
-      // (aucune ne rejoue automatiquement), mais c'est le seul signal honnête disponible sans vraie
-      // file d'attente : on ne baisse le compteur qu'ici, jamais de façon optimiste ailleurs.
-      if (this._syncFailureCount > 0) this._syncFailureCount -= 1;
+      if (descriptor && sectionKey) this._clearPendingSync(descriptor.companyId, sectionKey);
       if (this.onSaveSuccess) this.onSaveSuccess();
     }).catch(err => {
       console.error('Échec de synchronisation Supabase :', err);
-      this._syncFailureCount = (this._syncFailureCount || 0) + 1;
+      if (descriptor && sectionKey) this._markPendingSync(descriptor.companyId, sectionKey, existing => this._mergeDescriptor(existing, descriptor), err);
       if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.');
     });
+  },
+
+  _loadPendingSync() {
+    try {
+      const raw = localStorage.getItem(PENDING_SYNC_KEY);
+      this._pendingSync = raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      console.error('File de re-tentative corrompue dans localStorage, réinitialisation.', err);
+      this._pendingSync = {};
+    }
+  },
+
+  _savePendingSync() {
+    try {
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(this._pendingSync || {}));
+    } catch (err) {
+      // Volontairement un simple log : cette file est conçue pour rester petite (voir le
+      // commentaire sur PENDING_SYNC_KEY) — un échec ici ne doit jamais remonter comme une erreur
+      // de sauvegarde à l'utilisateur, l'écriture locale principale a déjà réussi avant cet appel.
+      console.error('Échec de l\'enregistrement de la file de re-tentative.', err);
+    }
+  },
+
+  _sectionKeyFor(descriptor) {
+    switch (descriptor.kind) {
+      case 'fullResync': return `fullResync:${descriptor.table}`;
+      case 'idClassified': return `idClassified:${descriptor.table}`;
+      case 'insertOnly': return `insertOnly:${descriptor.table}`;
+      case 'singleUpdate': return `singleUpdate:${descriptor.table}:${descriptor.id}`;
+      case 'delete': return `delete:${descriptor.table}:${descriptor.id}`;
+      case 'blob': return `blob:${descriptor.blob}`;
+      case 'auditLogEntry': return `auditLogEntry:${descriptor.entry.id}`;
+      default: return null;
+    }
+  },
+
+  _mergeDescriptor(existing, descriptor) {
+    switch (descriptor.kind) {
+      case 'idClassified': {
+        const insertIds = Array.from(new Set([...(existing.insertIds || []), ...(descriptor.insertIds || [])]));
+        // Un id déjà connu comme "à insérer" le reste (voir le commentaire du catalogue plus haut
+        // dans ce fichier) — ne jamais le redescendre en "à mettre à jour" même si une modification
+        // ultérieure l'a aussi marqué modifié : tant qu'il n'a jamais été créé, seule une
+        // insertion peut réussir.
+        const updateIds = Array.from(new Set([...(existing.updateIds || []), ...(descriptor.updateIds || [])])).filter(id => !insertIds.includes(id));
+        return { insertIds, updateIds };
+      }
+      case 'insertOnly':
+        return { insertIds: Array.from(new Set([...(existing.insertIds || []), ...(descriptor.insertIds || [])])) };
+      case 'singleUpdate':
+      case 'delete':
+        return { id: descriptor.id };
+      case 'auditLogEntry':
+        return { entry: descriptor.entry };
+      default:
+        return {};
+    }
+  },
+
+  _markPendingSync(companyId, sectionKey, mergeFn, err) {
+    if (!this._pendingSync) this._loadPendingSync();
+    const company = this._pendingSync[companyId] || (this._pendingSync[companyId] = {});
+    const existing = company[sectionKey] || { firstFailedAt: new Date().toISOString(), attempts: 0 };
+    company[sectionKey] = Object.assign(existing, mergeFn(existing), {
+      attempts: (existing.attempts || 0) + 1,
+      lastAttemptAt: new Date().toISOString(),
+      lastError: (err && err.message) || String(err)
+    });
+    this._savePendingSync();
+  },
+
+  _clearPendingSync(companyId, sectionKey) {
+    if (!this._pendingSync || !this._pendingSync[companyId]) return;
+    delete this._pendingSync[companyId][sectionKey];
+    if (Object.keys(this._pendingSync[companyId]).length === 0) delete this._pendingSync[companyId];
+    this._savePendingSync();
+  },
+
+  /** Nombre d'écritures distinctes encore en attente pour cette entreprise — lu par
+   * renderSyncFailureBanner (app.js), survit à un rechargement de page (contrairement à l'ancien
+   * _syncFailureCount, purement en mémoire). */
+  getPendingSyncCount(companyId) {
+    if (!this._pendingSync) this._loadPendingSync();
+    const company = this._pendingSync[companyId];
+    return company ? Object.keys(company).length : 0;
+  },
+
+  /** Rejoue toutes les écritures en attente pour cette entreprise, dans l'ordre (jamais en
+   * parallèle : une mise à jour ne doit jamais dépasser une insertion encore en attente pour la
+   * MÊME ligne). Appelé au chargement de l'app, à la reconnexion réseau (voir bindGlobalEvents,
+   * app.js), et manuellement via le bandeau de synchronisation. */
+  async retryPendingSyncNow(companyId) {
+    if (!this._pendingSync) this._loadPendingSync();
+    const pending = this._pendingSync[companyId];
+    if (!pending) return { attempted: 0, resolved: 0 };
+    const company = this.getCompanies().find(c => c.id === companyId);
+    // Entreprise plus en cache localement (déconnexion/changement de compte entre-temps) : rien à
+    // retenter depuis CE cache — la file, elle, reste persistée jusqu'à la prochaine connexion à
+    // cette même entreprise sur ce navigateur.
+    if (!company) return { attempted: 0, resolved: 0 };
+
+    let attempted = 0, resolved = 0;
+    for (const sectionKey of Object.keys(pending)) {
+      attempted++;
+      const ok = await this._retryPendingSyncSection(company, sectionKey, pending[sectionKey]);
+      if (ok) { this._clearPendingSync(company.id, sectionKey); resolved++; }
+    }
+    if (this.onSaveSuccess) this.onSaveSuccess();
+    return { attempted, resolved };
+  },
+
+  async _retryPendingSyncSection(company, sectionKey, data) {
+    const [kind, ...rest] = sectionKey.split(':');
+    try {
+      if (kind === 'fullResync') {
+        const cfg = FULL_RESYNC_TABLES[rest.join(':')];
+        if (cfg) await cfg.push(cfg.getRows(company) || [], company.id);
+        return true;
+      }
+      if (kind === 'idClassified') {
+        const cfg = ID_CLASSIFIED_TABLES[rest.join(':')];
+        if (cfg) {
+          // !r._redacted : le cache local de leave_requests/telework_requests/expenses contient
+          // aussi des versions tronquées des demandes d'autrui (calendrier général) — jamais des
+          // données à renvoyer comme si c'était la fiche complète (voir saveLeaveRequests).
+          const byId = new Map((cfg.getRows(company) || []).filter(r => !r._redacted).map(r => [r.id, r]));
+          const added = (data.insertIds || []).map(id => byId.get(id)).filter(Boolean);
+          const modified = (data.updateIds || []).map(id => byId.get(id)).filter(Boolean);
+          // Les deux ont depuis été supprimées localement (ex. demande annulée avant que la
+          // tentative précédente n'ait pu réussir) : rien à envoyer, mais un succès quand même —
+          // l'état local et le but recherché (que le serveur reflète ce cache) sont déjà d'accord.
+          if (added.length || modified.length) await cfg.push(added, modified, company.id);
+        }
+        return true;
+      }
+      if (kind === 'insertOnly') {
+        const cfg = INSERT_ONLY_TABLES[rest.join(':')];
+        if (cfg) {
+          const byId = new Map((cfg.getRows(company) || []).map(r => [r.id, r]));
+          const toInsert = (data.insertIds || []).map(id => byId.get(id)).filter(Boolean);
+          if (toInsert.length) {
+            try { await cfg.push(toInsert, company.id); }
+            catch (err) { if (!isDuplicateKeyError(err)) throw err; }
+          }
+        }
+        return true;
+      }
+      if (kind === 'singleUpdate') {
+        const cfg = SINGLE_OBJECT_UPDATE_TABLES[rest[0]];
+        if (cfg) {
+          const obj = (cfg.getRows(company) || []).find(r => r.id === data.id);
+          if (obj) await cfg.push(obj, company.id); // sinon : supprimé localement depuis, rien à mettre à jour.
+        }
+        return true;
+      }
+      if (kind === 'delete') {
+        await window.SupabaseSync.deleteRow(rest[0], data.id, company.id);
+        return true;
+      }
+      if (kind === 'blob') {
+        await this._resyncBlob(company, rest.join(':'));
+        return true;
+      }
+      if (kind === 'auditLogEntry') {
+        try { await window.SupabaseSync.pushAuditLogEntry(data.entry, company.id); }
+        catch (err) { if (!isDuplicateKeyError(err)) throw err; }
+        return true;
+      }
+      return true; // clé inconnue (catalogue périmé) : ne bloque jamais indéfiniment sur de l'illisible.
+    } catch (err) {
+      console.error(`retryPendingSyncNow : nouvelle tentative échouée pour "${sectionKey}".`, err);
+      this._markPendingSync(company.id, sectionKey, existing => existing, err);
+      return false;
+    }
+  },
+
+  /** Toujours dérivé de l'état ACTUEL de `company`, jamais d'une copie figée au moment de l'échec —
+   * une mise à jour de profil/paramètres converge de la même façon quel que soit le nombre de
+   * modifications locales intervenues entre l'échec initial et cette nouvelle tentative. */
+  async _resyncBlob(company, blobName) {
+    if (blobName === 'companyProfile') {
+      const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+        teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+        brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+      return window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
+    }
+    if (blobName === 'settings') return window.SupabaseSync.pushSettings(company.id, company.settings);
+    if (blobName === 'schoolHolidays') return window.SupabaseSync.pushSchoolHolidays(company.id, company.schoolHolidays);
+    if (blobName === 'favorites') return window.SupabaseSync.pushFavorites(company.id, company.favorites);
+    if (blobName === 'auditLogClear') return window.SupabaseSync.pushClearAuditLog(company.id);
   },
 
   saveCompanies(list) {
@@ -947,7 +1198,7 @@ const DB = {
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
       brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
-    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData));
+    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
   },
 
   // ---- Salariés ----
@@ -971,8 +1222,10 @@ const DB = {
       return old && JSON.stringify(old) !== JSON.stringify(e);
     });
     const removedIds = previous.filter(p => !list.some(e => e.id === p.id)).map(p => p.id);
-    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushEmployees({ added, modified }, company.id));
-    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('employees', id, company.id)));
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushEmployees({ added, modified }, company.id),
+      { kind: 'idClassified', table: 'employees', companyId: company.id, insertIds: added.map(e => e.id), updateIds: modified.map(e => e.id) });
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('employees', id, company.id),
+      { kind: 'delete', table: 'employees', companyId: company.id, id }));
   },
 
   getEmployeeById(id) {
@@ -1081,7 +1334,7 @@ const DB = {
       settings.categoriesSalarie = deriveCategoriesSalarieFromStatutPro(this.getEmployees());
       company.settings = settings;
       this.saveCurrentCompany(company);
-      this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
+      this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
     }
     return settings;
   },
@@ -1091,7 +1344,7 @@ const DB = {
     company.settings = settings;
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Paramètres', 'Listes et réglages généraux');
-    this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings));
+    this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
   },
 
   /** Index de l'égalité professionnelle femmes-hommes (Code du travail, art. L1142-8) — obligatoire
@@ -1169,7 +1422,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.etablissements = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushEtablissements(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushEtablissements(list, company.id), { kind: 'fullResync', table: 'etablissements', companyId: company.id });
   },
 
   getEtablissementById(id) {
@@ -1219,7 +1472,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.services = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushServices(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushServices(list, company.id), { kind: 'fullResync', table: 'services', companyId: company.id });
   },
 
   getServiceById(id) {
@@ -1331,7 +1584,7 @@ const DB = {
     company.schoolHolidays = data;
     this.saveCurrentCompany(company);
     this.logAudit('Modification', 'Vacances scolaires', data.anneeScolaire || '');
-    this._pushInBackground(window.SupabaseSync.pushSchoolHolidays(company.id, data));
+    this._pushInBackground(window.SupabaseSync.pushSchoolHolidays(company.id, data), { kind: 'blob', blob: 'schoolHolidays', companyId: company.id });
   },
 
   // ---- Types de congés (paramétrables) ----
@@ -1344,7 +1597,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.leaveTypes = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushLeaveTypes(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushLeaveTypes(list, company.id), { kind: 'fullResync', table: 'leave_types', companyId: company.id });
   },
 
   getLeaveTypeById(id) {
@@ -1420,8 +1673,10 @@ const DB = {
       return old && JSON.stringify(old) !== JSON.stringify(r);
     });
     const removedIds = previous.filter(p => !p._redacted && !list.some(r => r.id === p.id)).map(p => p.id);
-    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushLeaveRequests({ added, modified }, company.id));
-    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('leave_requests', id, company.id)));
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushLeaveRequests({ added, modified }, company.id),
+      { kind: 'idClassified', table: 'leave_requests', companyId: company.id, insertIds: added.map(r => r.id), updateIds: modified.map(r => r.id) });
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('leave_requests', id, company.id),
+      { kind: 'delete', table: 'leave_requests', companyId: company.id, id }));
   },
 
   getLeaveRequestById(id) {
@@ -1803,8 +2058,10 @@ const DB = {
       return old && JSON.stringify(old) !== JSON.stringify(r);
     });
     const removedIds = previous.filter(p => !p._redacted && !list.some(r => r.id === p.id)).map(p => p.id);
-    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushTeleworkRequests({ added, modified }, company.id));
-    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('telework_requests', id, company.id)));
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushTeleworkRequests({ added, modified }, company.id),
+      { kind: 'idClassified', table: 'telework_requests', companyId: company.id, insertIds: added.map(r => r.id), updateIds: modified.map(r => r.id) });
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('telework_requests', id, company.id),
+      { kind: 'delete', table: 'telework_requests', companyId: company.id, id }));
   },
 
   getTeleworkRequestById(id) {
@@ -1868,8 +2125,10 @@ const DB = {
       return old && JSON.stringify(old) !== JSON.stringify(e);
     });
     const removedIds = previous.filter(p => !list.some(e => e.id === p.id)).map(p => p.id);
-    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushExpenses({ added, modified }, company.id));
-    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('expenses', id, company.id)));
+    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushExpenses({ added, modified }, company.id),
+      { kind: 'idClassified', table: 'expenses', companyId: company.id, insertIds: added.map(e => e.id), updateIds: modified.map(e => e.id) });
+    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('expenses', id, company.id),
+      { kind: 'delete', table: 'expenses', companyId: company.id, id }));
   },
 
   getExpenseById(id) {
@@ -1931,7 +2190,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.brouillons = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushDrafts(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushDrafts(list, company.id), { kind: 'fullResync', table: 'drafts', companyId: company.id });
   },
 
   getBrouillonById(id) {
@@ -1967,7 +2226,7 @@ const DB = {
     this.saveCurrentCompany(company);
     // Le contenu du fichier n'est jamais envoyé ici : seules les métadonnées + le chemin Storage
     // (une fois l'upload terminé, voir updateDocument ci-dessous) sont synchronisées.
-    this._pushInBackground(window.SupabaseSync.pushDocuments(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushDocuments(list, company.id), { kind: 'fullResync', table: 'documents', companyId: company.id });
   },
 
   getDocumentById(id) {
@@ -2068,7 +2327,13 @@ const DB = {
           const t = (c.supportTickets || []).find(x => x.id === ticket.id);
           if (t) { t.aiAnalysis = result.analysis; this.saveCurrentCompany(c); }
         })
-      ]))
+      ])),
+      // §retour QA du 26/08/2026 (point 2.6) : si SEULS notifyNewTicket/analyzeTicket échouent (le
+      // ticket lui-même est bien enregistré), la nouvelle tentative retentera pushSupportTickets
+      // pour rien — sans danger (23505, traité comme un succès, voir INSERT_ONLY_TABLES) mais pas
+      // les effets de bord manqués (email, analyse IA), volontairement jamais rejoués ici, même
+      // convention que les autres notifications "best effort" de l'app (Slack, relance...).
+      { kind: 'insertOnly', table: 'support_tickets', companyId: company.id, insertIds: [ticket.id] }
     );
     const employee = this.getEmployeeById(ticket.employeeId);
     this.logAudit('Création', 'Ticket support', `${employee ? employee.prenom + ' ' + employee.nom : '—'} · ${ticket.titre}`);
@@ -2181,7 +2446,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.entretiens = [...(company.entretiens || []), entretien];
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushEntretiens([entretien], company.id));
+    this._pushInBackground(window.SupabaseSync.pushEntretiens([entretien], company.id), { kind: 'insertOnly', table: 'entretiens', companyId: company.id, insertIds: [entretien.id] });
     const employee = this.getEmployeeById(entretien.employeeId);
     this.logAudit('Création', 'Entretien', employee ? `${employee.prenom} ${employee.nom}` : '—', entretien.type);
     return entretien;
@@ -2200,7 +2465,7 @@ const DB = {
     if (premiereSoumission) entretien.historique = [...(entretien.historique || []), { date: now, action: 'Auto-évaluation soumise par le salarié' }];
     entretien.dateModification = now;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
     return entretien;
   },
 
@@ -2216,7 +2481,7 @@ const DB = {
     if (premiereSoumission) entretien.historique = [...(entretien.historique || []), { date: now, action: 'Retour ajouté par le manager' }];
     entretien.dateModification = now;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
     return entretien;
   },
 
@@ -2232,7 +2497,7 @@ const DB = {
     entretien.historique = [...(entretien.historique || []), { date: now, action: 'Entretien clôturé' }];
     entretien.dateModification = now;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id));
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
     const employee = this.getEmployeeById(entretien.employeeId);
     this.logAudit('Modification', 'Entretien', employee ? `${employee.prenom} ${employee.nom}` : '—', 'Clôturé');
     return entretien;
@@ -2267,7 +2532,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.idees = [...(company.idees || []), idee];
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushIdees([idee], company.id));
+    this._pushInBackground(window.SupabaseSync.pushIdees([idee], company.id), { kind: 'insertOnly', table: 'idees', companyId: company.id, insertIds: [idee.id] });
     const employee = this.getEmployeeById(idee.employeeId);
     this.logAudit('Création', 'Idée', employee ? `${employee.prenom} ${employee.nom}` : '—', idee.titre);
     return idee;
@@ -2321,14 +2586,14 @@ const DB = {
     const company = this.getCurrentCompany();
     const entry = appendAuditLogEntry(company, action, entite, cible, details);
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id));
+    this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id), { kind: 'auditLogEntry', companyId: company.id, entry });
   },
 
   clearAuditLog() {
     const company = this.getCurrentCompany();
     company.auditLog = [];
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushClearAuditLog(company.id));
+    this._pushInBackground(window.SupabaseSync.pushClearAuditLog(company.id), { kind: 'blob', blob: 'auditLogClear', companyId: company.id });
   },
 
   // ---- Favoris ----
@@ -2356,7 +2621,7 @@ const DB = {
     if (index === -1) list.push(id); else list.splice(index, 1);
     company.favorites[user.id] = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushFavorites(company.id, company.favorites));
+    this._pushInBackground(window.SupabaseSync.pushFavorites(company.id, company.favorites), { kind: 'blob', blob: 'favorites', companyId: company.id });
     return list.includes(id);
   },
 
@@ -2379,7 +2644,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.notifications = list;
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushNotifications(list, company.id));
+    this._pushInBackground(window.SupabaseSync.pushNotifications(list, company.id), { kind: 'fullResync', table: 'notifications', companyId: company.id });
   },
 
   addNotificationsIfNew(candidates) {

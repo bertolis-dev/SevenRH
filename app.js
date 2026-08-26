@@ -674,16 +674,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   DB.onSaveError = (message) => { showToast(message, 'error'); renderSyncFailureBanner(); };
   DB.onSaveSuccess = () => renderSyncFailureBanner();
-  // D3 (audit fiabilité du 19/08/2026) : protection native du navigateur contre le scénario exact
-  // décrit dans l'audit — fermer/recharger la page pendant qu'une écriture n'a pas pu être
-  // synchronisée écraserait silencieusement cette modification à la prochaine connexion
-  // (hydrateCurrentCompany réhydrate depuis le serveur, qui ne l'a jamais reçue). Ne couvre que la
-  // fermeture/le rechargement de CETTE page — pas une vraie file d'attente, voir data.js.
+  // D3 (audit fiabilité du 19/08/2026) : avertissement natif du navigateur si des écritures
+  // restent en attente — depuis le point 2.6, ce n'est plus la seule protection (une vraie file
+  // persistée les rejoue automatiquement au prochain chargement/à la reconnexion, voir
+  // retryPendingSyncNow ci-dessous et dans showApp) mais fermer volontairement l'onglet reste
+  // évitable, donc toujours signalé.
   window.addEventListener('beforeunload', (evt) => {
-    if (DB._syncFailureCount > 0) {
+    const companyId = DB.getCurrentCompanyId();
+    if (companyId && DB.getPendingSyncCount(companyId) > 0) {
       evt.preventDefault();
       evt.returnValue = '';
     }
+  });
+
+  // §retour QA du 26/08/2026 (point 2.6) : reconnexion réseau — la file d'attente n'a pas besoin
+  // d'attendre le prochain chargement de page pour se rattraper, un retour de connexion suffit.
+  window.addEventListener('online', () => {
+    const companyId = DB.getCurrentCompanyId();
+    if (companyId) DB.retryPendingSyncNow(companyId).then(() => renderSyncFailureBanner());
   });
 
   // §correctif retour QA du 26/08/2026 (point A.1/E.3) : "il n'y a ni window.onerror ni gestionnaire
@@ -2226,6 +2234,11 @@ function showApp() {
   handleCheckoutReturn();
   const currentUser = authRepository.getCurrentUser();
   if (currentUser && currentUser.mustChangePassword) openForcedPasswordChangeModal();
+  // §retour QA du 26/08/2026 (point 2.6) : rejoue toute écriture restée en attente d'une session
+  // précédente sur ce navigateur (fermeture pendant une coupure réseau, par ex.) — fire-and-forget,
+  // ne bloque jamais l'affichage de l'app elle-même.
+  const pendingCompanyId = DB.getCurrentCompanyId();
+  if (pendingCompanyId) DB.retryPendingSyncNow(pendingCompanyId).then(() => renderSyncFailureBanner());
 }
 
 /** Après une première connexion avec un mot de passe temporaire (voir openCreerCompteConnexionModal
@@ -2300,23 +2313,34 @@ function openForcedPasswordChangeModal() {
 /** Bandeau persistant app-wide pour les entreprises créées via "Créer mon entreprise" (migration
  * 0012) qui n'ont pas encore souscrit d'offre — pas de blocage total (le Propriétaire fondateur peut
  * explorer l'app normalement), seul l'ajout d'un 2ᵉ salarié est bloqué par le plafond existant. */
-/** D3 (audit fiabilité du 19/08/2026) : bannière PERSISTANTE (contrairement à un toast qui
- * disparaît seul) tant qu'au moins une écriture n'a pas réussi à joindre le serveur — voir
- * DB._pushInBackground (data.js) pour ce que ce compteur signifie exactement et ses limites (pas
- * de vraie file d'attente/retour automatique, juste un décompte honnête). Appelée après chaque
- * succès/échec de synchronisation pour rester à jour sans attendre un re-render de l'écran actif. */
+/** D3 (audit fiabilité du 19/08/2026), remplacé par le point 2.6 du retour QA du 26/08/2026 :
+ * bannière PERSISTANTE tant qu'au moins une écriture attend d'être rejouée — lit désormais
+ * DB.getPendingSyncCount() (persisté, survit à un rechargement) plutôt que l'ancien
+ * DB._syncFailureCount (un simple compteur en mémoire, jamais vraiment rejoué). Le bouton
+ * "Réessayer" appelle DB.retryPendingSyncNow directement — même mécanisme que la reprise
+ * automatique au chargement/à la reconnexion (voir bindGlobalEvents). */
 function renderSyncFailureBanner() {
   const banner = document.getElementById('sync-failure-banner');
   if (!banner) return;
-  if (!DB._syncFailureCount) {
+  const companyId = DB.getCurrentCompanyId();
+  const count = companyId ? DB.getPendingSyncCount(companyId) : 0;
+  if (!count) {
     banner.style.display = 'none';
     banner.innerHTML = '';
     return;
   }
   banner.style.display = 'flex';
   banner.innerHTML = `
-    <span>${icon(ICONS.warningTriangle, 14)} ${DB._syncFailureCount} modification${DB._syncFailureCount > 1 ? 's' : ''} non synchronisée${DB._syncFailureCount > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+    <span>${icon(ICONS.warningTriangle, 14)} ${count} modification${count > 1 ? 's' : ''} non synchronisée${count > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+    <button type="button" class="btn btn-sm" id="btn-retry-sync">Réessayer maintenant</button>
   `;
+  const retryBtn = document.getElementById('btn-retry-sync');
+  if (retryBtn) retryBtn.addEventListener('click', async () => {
+    retryBtn.disabled = true;
+    retryBtn.textContent = 'Nouvelle tentative en cours...';
+    await DB.retryPendingSyncNow(companyId);
+    renderSyncFailureBanner();
+  });
 }
 
 function renderNonSouscritBanner() {
