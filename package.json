@@ -4,7 +4,7 @@
   "description": "Seven RH — SIRH vanilla JS + Supabase. Pas de bundler ni de framework de test : les scripts ci-dessous n'utilisent que Node lui-même.",
   "scripts": {
     "check": "node --check app.js && node --check data.js && node --check supabase-client.js && node --check qrcode.js",
-    "test": "node tests/workflow-resolution.test.js && node tests/leave-types-backfill.test.js && node tests/security-definer-grants.test.js && node tests/module-gating.test.js && node tests/parametres-tabs.test.js && node tests/tableau-compteurs.test.js && node tests/nominative-validators.test.js && node tests/workflow-step-access.test.js && node tests/pending-sync-queue.test.js",
+    "test": "node tests/workflow-resolution.test.js && node tests/leave-types-backfill.test.js && node tests/security-definer-grants.test.js && node tests/module-gating.test.js && node tests/parametres-tabs.test.js && node tests/tableau-compteurs.test.js && node tests/nominative-validators.test.js && node tests/workflow-step-access.test.js && node tests/pending-sync-queue.test.js && node tests/dashboard-empty-chart.test.js",
     "ci": "npm run check && npm run test"
   }
 }

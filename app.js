@@ -5116,7 +5116,9 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${ifModule('conges', chartCard('Congés pris par type', `Année ${new Date().getFullYear()} · jours validés`, congesParType.length === 0
         ? emptyChartMessage()
         : renderBarChartSVG(congesParType)))}
-      ${ifModule('tickets', chartCard('Coût tickets restaurant', 'Part employeur, 6 derniers mois', renderLineChartSVG(ticketsCostTrend)))}
+      ${ifModule('tickets', chartCard('Coût tickets restaurant', 'Part employeur, 6 derniers mois', ticketsCostTrend.length === 0
+        ? emptyChartMessage()
+        : renderLineChartSVG(ticketsCostTrend)))}
     </div>
     ` : ''}
 
