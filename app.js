@@ -4219,7 +4219,11 @@ async function pushRelanceNotificationsForRequest(candidates, request, domain, n
   if (!employee) return;
   const role = request.workflow[request.etapeIndex];
   const periode = domain === 'frais' ? formatDate(request.date) : requestPeriodeLabel(request);
-  const validatorIds = await resolveValidatorEmployeeIdsForStep(request.employeeId, role);
+  // §retour QA du 26/08/2026 (point 6.7) : undefined pour le télétravail/les notes de frais (pas de
+  // valideurs nommés dans ce périmètre) — resolveValidatorEmployeeIdsForStep retombe alors sur la
+  // résolution par rôle habituelle, comportement inchangé pour ces deux domaines.
+  const overrideIds = (request.workflowValidatorOverrides || {})[String(request.etapeIndex)];
+  const validatorIds = await resolveValidatorEmployeeIdsForStep(request.employeeId, role, overrideIds);
 
   candidates.push(makeNotification(`relance-${request.id}`, ICONS.clock, 'Demande en attente depuis plusieurs jours',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
@@ -9613,6 +9617,12 @@ function renderRequestStatutBadge(r) {
  * diffèrent que par la permission de bypass consultée avant d'en arriver là. */
 function isCurrentWorkflowStepFor(request, user, domain) {
   const requiredRole = request.workflow[request.etapeIndex];
+  // §retour QA du 26/08/2026 (point 6.7) : un valideur nommé REMPLACE la vérification de rôle pour
+  // cette étape précise (undefined pour télétravail/frais, jamais concernés par ce point — voir
+  // makeEmptyLeaveRequest) — l'appartenance à la liste nommée prime, quel que soit le rôle réel de
+  // l'utilisateur, c'est exactement le but : pouvoir désigner quelqu'un hors du schéma de rôles.
+  const overrideIds = (request.workflowValidatorOverrides || {})[String(request.etapeIndex)];
+  if (Array.isArray(overrideIds) && overrideIds.length > 0) return overrideIds.includes(user.id);
   if (user.role !== requiredRole) return false;
   if (domain === 'frais') {
     const derniereEtape = request.etapeIndex === request.workflow.length - 1;
@@ -10739,9 +10749,21 @@ function renderCongesTypes(categorie = 'conge') {
 }
 
 /** Décrit une chaîne de workflow pour affichage, ex. ['manager','rh'] → "Manager puis RH". */
-function describeWorkflow(workflow) {
+function describeWorkflow(workflow, overrides) {
   if (!workflow || workflow.length === 0) return 'Automatique';
-  return workflow.map(role => ROLE_LABELS[role] || role).join(' puis ');
+  const ov = overrides || {};
+  return workflow.map((role, i) => {
+    const overrideIds = ov[String(i)];
+    if (!Array.isArray(overrideIds) || !overrideIds.length) return ROLE_LABELS[role] || role;
+    const names = overrideIds.map(eid => {
+      const e = employeeRepository.getById(eid);
+      return e ? `${e.prenom} ${e.nom}` : null;
+    }).filter(Boolean);
+    // §retour QA du 26/08/2026 (point 6.7) : signale qu'une étape n'est plus résolue par rôle —
+    // sans ce libellé, un RH voit "Manager puis RH" sans se rendre compte que "Manager" a en
+    // réalité été remplacé par une personne nommée précise.
+    return names.length ? `${names.join(', ')} (nommé${names.length > 1 ? 's' : ''})` : ROLE_LABELS[role] || role;
+  }).join(' puis ');
 }
 
 // Chaînes de validation proposées (ordre = ordre d'approbation). Un menu à préréglages plutôt
@@ -10777,7 +10799,7 @@ function workflowSelectField(name, label, presets, currentWorkflow) {
 }
 
 function renderLeaveTypeRow(t) {
-  const validationLabel = describeWorkflow(t.workflow);
+  const validationLabel = describeWorkflow(t.workflow, t.workflowValidatorOverrides);
   const acquisitionLabel = t.illimite ? 'Illimitée' : `${t.acquisition} · ${formatDurationFR(t.nombreAnnuel)}/an`;
 
   return `
@@ -10963,6 +10985,9 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             <div class="form-grid">
               ${workflowSelectField('workflow', 'Validation requise', WORKFLOW_PRESETS_CONGES, type.workflow)}
             </div>
+            <!-- §retour QA du 26/08/2026 (point 6.7) : valideurs nommés, par étape — remplace la
+                 résolution par rôle pour l'étape concernée quand au moins un salarié est sélectionné. -->
+            <div id="workflow-overrides-container"></div>
           </fieldset>
 
           <fieldset class="form-section">
@@ -11157,7 +11182,43 @@ function openLeaveTypeModal(id, categorie = 'conge') {
   });
   renderReglesRows();
 
-  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie, currentRegles, currentPaliers));
+  // §retour QA du 26/08/2026 (point 6.7) : valideurs nommés par étape — même patron que
+  // renderReglesRows/renderPaliersRows ci-dessus (état local, re-rendu dans son propre conteneur).
+  // Repart d'une sélection vide si le préréglage change : les étapes n'ont plus le même sens
+  // ("Manager puis RH" -> "RH uniquement"), garder une sélection attachée au mauvais rôle serait
+  // trompeur plutôt qu'utile.
+  let currentOverrides = { ...(type.workflowValidatorOverrides || {}) };
+  const overrideEmployeeChoices = employeeRepository.getAll().filter(e => !e.archive);
+  function renderWorkflowOverridesRows() {
+    const container = document.getElementById('workflow-overrides-container');
+    let workflow = [];
+    try { workflow = JSON.parse(document.getElementById('f-workflow').value || '[]'); } catch { workflow = []; }
+    if (!workflow.length) { container.innerHTML = ''; return; }
+    container.innerHTML = `
+      <div class="form-field" style="margin-top: 14px;">
+        <label>Valideurs nommés (optionnel)</label>
+        <p class="form-hint">Laissez vide pour garder la résolution automatique par rôle. Sélectionner un ou plusieurs salariés désigne PRÉCISÉMENT qui valide cette étape, quel que soit son rôle réel.</p>
+        ${workflow.map((role, i) => `
+          <div class="form-field" style="margin-top: 8px;">
+            <label for="f-workflow-override-${i}">Étape ${i + 1} : ${escapeHtml(ROLE_LABELS[role] || role)}</label>
+            <select class="input" multiple data-workflow-override-step="${i}" id="f-workflow-override-${i}" style="min-height: 70px;">
+              ${overrideEmployeeChoices.map(e => `<option value="${e.id}" ${(currentOverrides[String(i)] || []).includes(e.id) ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} (${escapeHtml(ROLE_LABELS[e.role] || e.role)})</option>`).join('')}
+            </select>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.querySelectorAll('[data-workflow-override-step]').forEach(sel => sel.addEventListener('change', () => {
+      currentOverrides[sel.dataset.workflowOverrideStep] = Array.from(sel.selectedOptions).map(o => o.value);
+    }));
+  }
+  document.getElementById('f-workflow').addEventListener('change', () => {
+    currentOverrides = {};
+    renderWorkflowOverridesRows();
+  });
+  renderWorkflowOverridesRows();
+
+  document.getElementById('leave-type-form').addEventListener('submit', (evt) => submitLeaveTypeForm(evt, id, effectiveCategorie, currentRegles, currentPaliers, currentOverrides));
 }
 
 function checkboxField(name, label, checked) {
@@ -11171,7 +11232,7 @@ function checkboxField(name, label, checked) {
   `;
 }
 
-function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersAnciennete = []) {
+function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersAnciennete = [], workflowValidatorOverrides = {}) {
   evt.preventDefault();
   const form = evt.target;
   const formData = new FormData(form);
@@ -11213,6 +11274,13 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersA
     acquisition,
     nombreAnnuel,
     workflow: JSON.parse(formData.get('workflow') || '[]'),
+    // §retour QA du 26/08/2026 (point 6.7) : ne garde que les étapes réellement configurées (au
+    // moins un salarié choisi) — une entrée vide n'a pas le même sens qu'une entrée absente ailleurs
+    // dans le moteur de résolution (voir resolveWorkflowWithFallback, data.js), autant ne jamais
+    // l'écrire pour éviter toute ambiguïté.
+    workflowValidatorOverrides: Object.fromEntries(
+      Object.entries(workflowValidatorOverrides || {}).filter(([, ids]) => Array.isArray(ids) && ids.length > 0)
+    ),
     compteurPartageAvecId: formData.get('compteurPartageAvecId') || null,
     regles: regles.filter(r => r.critere), // ligne ajoutée puis jamais configurée = ignorée plutôt que sauvegardée à moitié
     paliersAnciennete: paliersAnciennete.filter(p => p.ancienneteMin || p.jours).sort((a, b) => a.ancienneteMin - b.ancienneteMin),

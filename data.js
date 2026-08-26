@@ -1437,10 +1437,11 @@ const DB = {
     const now = new Date().toISOString();
     const leaveType = this.getLeaveTypeById(data.typeId);
     const rawWorkflow = (leaveType && leaveType.workflow) || [];
-    const { workflow, escalated } = await resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence');
+    const { workflow, overrides, escalated } = await resolveWorkflowWithFallback(data.employeeId, rawWorkflow, 'absence', leaveType && leaveType.workflowValidatorOverrides);
     const request = Object.assign(makeEmptyLeaveRequest(), data, {
       id: generateId('lr'),
       workflow,
+      workflowValidatorOverrides: overrides,
       etapeIndex: computeInitialWorkflowStep(workflow),
       statut: computeInitialWorkflowStatus(workflow) || 'Validé',
       historique: [{ date: now, action: 'Demande créée' }],
@@ -3326,6 +3327,15 @@ function makeEmptyLeaveType() {
     // Chaîne de validation ordonnée, ex. ['manager','rh'] ou ['rh'] ou ['manager','proprietaire'] ou [] (aucune validation).
     // Paramétrable par type de congé ; DEFAULT_SETTINGS.workflowCongesDefault sert de modèle pour un nouveau type.
     workflow: ['manager'],
+    // §retour QA du 26/08/2026 (point 6.7) : par étape (clé = index dans `workflow`, en texte —
+    // ex. "0", "1"), une liste de salariés désignés nommément qui REMPLACE la résolution par rôle
+    // pour cette étape précise (ex. "Manager" en théorie, mais en pratique toujours untel et untel).
+    // {} = comportement historique, résolution par rôle sur toutes les étapes. Une étape non
+    // présente ici (ou avec un tableau vide) reste résolue par rôle. Voir resolveWorkflowWithFallback
+    // et isCurrentWorkflowStepFor (app.js) : lisible par tout salarié de l'entreprise sans risque —
+    // ce n'est qu'une liste d'ids déjà choisis par un RH/Propriétaire, jamais une question
+    // d'énumération d'employés filtrée par rôle comme l'était l'ancien hasEligibleValidatorForStep.
+    workflowValidatorOverrides: {},
     saisiParSalarie: true, // §15 : "saisi par le salarié" vs "saisi uniquement par les RH" (ex. arrêts maladie, §24)
     visibleSalarie: true,
     visibleRH: true,
@@ -3429,6 +3439,11 @@ function makeEmptyLeaveRequest() {
     justificatif: null, // { nom, dataUrl } | null
     statut: 'En attente', // 'En attente' | 'Validé' | 'Refusé' | 'Annulé'
     workflow: [], // copie de la chaîne du type au moment de la demande (les changements ultérieurs du type ne l'affectent pas)
+    // §retour QA du 26/08/2026 (point 6.7) : copie de leaveType.workflowValidatorOverrides, réindexée
+    // sur CE workflow (voir resolveWorkflowWithFallback) — même logique de snapshot que `workflow`
+    // ci-dessus, pour la même raison (un changement ultérieur du type ne doit jamais affecter une
+    // demande déjà créée).
+    workflowValidatorOverrides: {},
     etapeIndex: -1, // index dans workflow ; -1 = terminé
     historique: [],
     // §correctif audit du 23/08/2026 (§7.5) : non-null seulement pour une demande générée
@@ -3644,16 +3659,44 @@ function computeInitialWorkflowStep(workflow) {
  * circuit vide : on conserve le circuit d'ORIGINE tel que configuré sur le type, sans le réduire.
  * Une demande qui reste "En attente" à tort est un désagrément ; une demande auto-validée à tort
  * est une faute. */
-async function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
+/** §retour QA du 26/08/2026 (point 6.7) : `overrides` (optionnel — objet {stepIndex: [employeeId]},
+ * voir leaveType.workflowValidatorOverrides) désigne des valideurs nommés qui REMPLACENT la
+ * résolution par rôle pour l'étape concernée. Une étape avec un valideur nommé est TOUJOURS
+ * conservée (jamais envoyée au serveur pour la question "existe-t-il quelqu'un ?" — la réponse est
+ * déjà écrite, littéralement, par un RH/Propriétaire sur le type) ; seules les étapes SANS valideur
+ * nommé passent par la résolution serveur habituelle, inchangée. Les positions nominatives sont
+ * réinsérées à leur place d'origine après la réponse serveur, avec leur propre index recalculé
+ * (`overrides` en retour) — nécessaire car une étape par rôle intercalée peut être retirée par le
+ * serveur, ce qui décale les index des étapes nominatives suivantes. */
+async function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain, overrides) {
   const workflow = rawWorkflow || [];
-  if (!workflow.length) return { workflow: [], escalated: false };
+  if (!workflow.length) return { workflow: [], overrides: {}, escalated: false };
+  const ov = overrides || {};
+  const isOverridden = (i) => Array.isArray(ov[String(i)]) && ov[String(i)].length > 0;
+
+  if (workflow.every((_, i) => isOverridden(i))) return { workflow, overrides: ov, escalated: false };
+
+  const roleBasedRoles = workflow.filter((_, i) => !isOverridden(i));
   try {
-    const result = await window.SupabaseSync.resolveWorkflowWithFallback(employeeId, workflow, domain);
+    const result = await window.SupabaseSync.resolveWorkflowWithFallback(employeeId, roleBasedRoles, domain);
     if (!result.success) throw new Error(result.error || 'Réponse serveur invalide.');
-    return { workflow: result.workflow, escalated: result.escalated };
+    const serverKept = result.workflow || [];
+    let serverIdx = 0;
+    const merged = [];
+    const mergedOverrides = {};
+    workflow.forEach((role, i) => {
+      if (isOverridden(i)) { mergedOverrides[String(merged.length)] = ov[String(i)]; merged.push(role); return; }
+      if (serverIdx < serverKept.length && serverKept[serverIdx] === role) { merged.push(role); serverIdx++; }
+      // sinon : étape retirée par le serveur (aucun valideur par rôle pour celle-ci), ignorée.
+    });
+    // Ce qui reste dans serverKept au-delà de serverIdx est l'ajout d'escalade du serveur (rh/
+    // proprietaire, jamais dans roleBasedRoles) — pertinent seulement si aucune étape nominative n'a
+    // déjà sauvé la chaîne (sinon la chaîne n'est pas réellement "vide", pas besoin d'escalader).
+    if (merged.length === 0 && serverIdx < serverKept.length) merged.push(...serverKept.slice(serverIdx));
+    return { workflow: merged, overrides: mergedOverrides, escalated: JSON.stringify(merged) !== JSON.stringify(workflow) };
   } catch (err) {
     console.error('resolveWorkflowWithFallback : résolution serveur indisponible, conservation du circuit d\'origine.', err);
-    return { workflow, escalated: false };
+    return { workflow, overrides: ov, escalated: false };
   }
 }
 
@@ -3662,7 +3705,12 @@ async function resolveWorkflowWithFallback(employeeId, rawWorkflow, domain) {
  * ids_for_step (0037) tourne côté serveur avec une visibilité complète. Si l'appel échoue, on ne
  * notifie personne plutôt que de deviner : mieux vaut une notification manquante (visible dans le
  * "Centre d'action" du validateur de toute façon) qu'une notification envoyée au hasard. */
-async function resolveValidatorEmployeeIdsForStep(employeeId, role) {
+/** §retour QA du 26/08/2026 (point 6.7) : `overrideIds`, si présent et non vide, désigne les
+ * valideurs nommés de cette étape (voir request.workflowValidatorOverrides) — renvoyé directement,
+ * sans appel serveur : c'est une liste déjà choisie par un RH/Propriétaire, jamais une énumération
+ * d'employés à calculer, donc aucun des risques qui imposaient de déplacer §1 côté serveur. */
+async function resolveValidatorEmployeeIdsForStep(employeeId, role, overrideIds) {
+  if (Array.isArray(overrideIds) && overrideIds.length > 0) return overrideIds;
   try {
     const result = await window.SupabaseSync.resolveValidatorEmployeeIdsForStep(employeeId, role);
     if (!result.success) throw new Error(result.error || 'Réponse serveur invalide.');

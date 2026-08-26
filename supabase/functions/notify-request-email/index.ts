@@ -145,12 +145,23 @@ Deno.serve(async (req) => {
   // L'appelant doit être CONCERNÉ par cette demande : son auteur (création/relance, qui notifie les
   // validateurs), ou un validateur éligible pour l'étape en cours (validation/refus, qui notifie
   // l'auteur). Jamais un tiers qui ne fait que connaître l'id d'une demande d'un collègue.
+  // §retour QA du 26/08/2026 (point 6.7) : un valideur nommé (leaveType.workflowValidatorOverrides,
+  // copié sur la demande à sa création — voir resolveWorkflowWithFallback, data.js) REMPLACE la
+  // résolution par rôle pour cette étape précise, y compris ici. Lu directement depuis `request.data`
+  // (déjà chargé ci-dessus, colonne JSONB qui contient TOUT le reste de la demande) : aucun nouvel
+  // appel, aucune nouvelle fonction security definer, juste une liste déjà choisie par un RH/
+  // Propriétaire — pas une énumération à calculer, donc rien de comparable au risque du point B.1.
   let validatorIds: string[] = [];
-  if (roleEtapeActuelle) {
-    const { data: ids } = await supabaseAdmin.rpc("resolve_validator_employee_ids_for_step", {
-      p_employee_id: request.employee_id, p_role: roleEtapeActuelle,
-    });
-    validatorIds = Array.isArray(ids) ? ids : [];
+  if (request.etape_index >= 0) {
+    const overrideIds = (request.data as any)?.workflowValidatorOverrides?.[String(request.etape_index)];
+    if (Array.isArray(overrideIds) && overrideIds.length > 0) {
+      validatorIds = overrideIds;
+    } else if (roleEtapeActuelle) {
+      const { data: ids } = await supabaseAdmin.rpc("resolve_validator_employee_ids_for_step", {
+        p_employee_id: request.employee_id, p_role: roleEtapeActuelle,
+      });
+      validatorIds = Array.isArray(ids) ? ids : [];
+    }
   }
   const callerIsAuthor = callerEmployeeId === request.employee_id;
   const callerIsValidator = validatorIds.includes(callerEmployeeId);

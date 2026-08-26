@@ -84,6 +84,7 @@ globalThis.__render = render;
 globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
+globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -98,6 +99,7 @@ globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurre
     state: sandbox.__state,
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     getVisibleEmployeeIdsForCurrentUser: sandbox.__getVisibleEmployeeIdsForCurrentUser,
+    isCurrentWorkflowStepFor: sandbox.__isCurrentWorkflowStepFor,
   };
 }
 
