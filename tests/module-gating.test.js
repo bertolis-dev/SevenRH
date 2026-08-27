@@ -5,41 +5,13 @@
  * (Seven Sept, abonné uniquement à "Congés et Absences", recevait des notifications de visite
  * médicale, anniversaire, etc., toutes des données du module RH jamais souscrit).
  *
- * Principe : une règle par préfixe de sourceKey → module requis (ou aucun, pour les notifications
- * qui ne dépendent d'aucun module — ex. les tickets support, une fonctionnalité de base). Si une
- * notification apparaît alors que son module n'est pas dans l'ensemble souscrit, le test échoue et
- * nomme la notification en cause plutôt que de simplement dire "ça a fui".
+ * §correctif retour QA du 27/08/2026 (point 2) : moduleForSourceKey ne duplique plus la table en
+ * local — "elle est dans ton fichier de test, sous le nom SOURCE_KEY_MODULE_RULES... elle n'existe
+ * nulle part dans l'application". Remontée dans app.js (requiredModuleForSourceKey), génération,
+ * purge et affichage partagent désormais la même source de vérité, importée ici plutôt que recopiée.
  */
 const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
-
-// Ordre important : 'entretien-pro-' doit être vérifié AVANT 'entretien-' (préfixe plus spécifique),
-// sinon un rappel de bilan professionnel (module rh) serait confondu avec un entretien planifié
-// (module entretiens) — les deux sourceKeys commencent par "entretien-".
-const SOURCE_KEY_MODULE_RULES = [
-  { prefix: 'leave-', module: 'conges' },
-  { prefix: 'telework-', module: 'planning' },
-  { prefix: 'expense-', module: 'frais' },
-  { prefix: 'cloture-perte-', module: 'conges' },
-  { prefix: 'relance-', module: null }, // dépend de la demande d'origine (leave/telework/expense), déjà couverte par son propre filtre en amont
-  { prefix: 'escalade-', module: null },
-  { prefix: 'entretien-pro-', module: 'rh' },
-  { prefix: 'bilan-six-ans-', module: 'rh' },
-  { prefix: 'birthday-', module: 'rh' },
-  { prefix: 'seniority-', module: 'rh' },
-  { prefix: 'contract-end-', module: 'rh' },
-  { prefix: 'probation-end-', module: 'rh' },
-  { prefix: 'visite-medicale-', module: 'rh' },
-  { prefix: 'document-expiry-', module: 'rh' },
-  { prefix: 'entretien-', module: 'entretiens' },
-  { prefix: 'ticket-status-', module: null }, // support : fonctionnalité de base, jamais liée à un module à la carte
-];
-
-function moduleForSourceKey(sourceKey) {
-  const rule = SOURCE_KEY_MODULE_RULES.find(r => sourceKey.startsWith(r.prefix));
-  if (!rule) throw new Error(`sourceKey sans règle connue : "${sourceKey}" — ajouter une entrée à SOURCE_KEY_MODULE_RULES`);
-  return rule.module;
-}
 
 const ALL_MODULE_KEYS = ['conges', 'planning', 'frais', 'tickets', 'rh', 'remuneration', 'entretiens', 'embauche'];
 
@@ -59,6 +31,8 @@ async function runForModuleSet(activeModules) {
   return DB.getNotifications().map(n => n.sourceKey);
 }
 
+const { requiredModuleForSourceKey } = loadAppJs();
+
 async function run() {
   // Contrôle positif : avec tous les modules, des notifications doivent apparaître — sinon un test
   // "zéro fuite" qui passe parce que rien n'est jamais généré ne prouve rien.
@@ -68,7 +42,7 @@ async function run() {
   for (const activeModule of ALL_MODULE_KEYS) {
     const sourceKeys = await runForModuleSet([activeModule]);
     for (const sourceKey of sourceKeys) {
-      const requiredModule = moduleForSourceKey(sourceKey);
+      const requiredModule = requiredModuleForSourceKey(sourceKey);
       if (requiredModule === null) continue; // notification de base, jamais liée à un module
       assert.strictEqual(requiredModule, activeModule,
         `fuite inter-module : avec UNIQUEMENT "${activeModule}" souscrit, la notification "${sourceKey}" ` +

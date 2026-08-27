@@ -96,6 +96,8 @@ globalThis.__getEmployeesOnLongAbsence = getEmployeesOnLongAbsence;
 globalThis.__getReposCompensateurSolde = getReposCompensateurSolde;
 globalThis.__buildImportPreviewRows = buildImportPreviewRows;
 globalThis.__importEmployeesRows = importEmployeesRows;
+globalThis.__requiredModuleForSourceKey = requiredModuleForSourceKey;
+globalThis.__SOURCE_KEY_MODULE_RULES = SOURCE_KEY_MODULE_RULES;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -118,6 +120,8 @@ globalThis.__importEmployeesRows = importEmployeesRows;
     getReposCompensateurSolde: sandbox.__getReposCompensateurSolde,
     buildImportPreviewRows: sandbox.__buildImportPreviewRows,
     importEmployeesRows: sandbox.__importEmployeesRows,
+    requiredModuleForSourceKey: sandbox.__requiredModuleForSourceKey,
+    SOURCE_KEY_MODULE_RULES: sandbox.__SOURCE_KEY_MODULE_RULES,
   };
 }
 

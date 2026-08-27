@@ -428,6 +428,43 @@ const NAV_ITEMS = [
   { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['proprietaire'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
 ];
 
+/** §correctif retour QA du 27/08/2026 (point 2) : table de correspondance préfixe de sourceKey ->
+ * module requis, remontée ici depuis tests/module-gating.test.js (qui la dupliquait en local, "elle
+ * n'existe nulle part dans l'application") — génération (syncNotifications), purge
+ * (pruneUnsubscribedModuleNotifications) et affichage (getVisibleNotificationsForCurrentUser)
+ * partagent désormais la même source de vérité, au lieu que le test ne certifie que la moitié
+ * corrigée (la génération) pendant qu'une fuite survivait dans ce qui restait en base et dans
+ * l'affichage. Ordre important : 'entretien-pro-' doit être vérifié AVANT 'entretien-' (préfixe plus
+ * spécifique), sinon un rappel de bilan professionnel (module rh) serait confondu avec un entretien
+ * planifié (module entretiens) — les deux sourceKeys commencent par "entretien-". */
+const SOURCE_KEY_MODULE_RULES = [
+  { prefix: 'leave-', module: 'conges' },
+  { prefix: 'telework-', module: 'planning' },
+  { prefix: 'expense-', module: 'frais' },
+  { prefix: 'cloture-perte-', module: 'conges' },
+  { prefix: 'relance-', module: null }, // dépend de la demande d'origine (leave/telework/expense), déjà couverte par son propre filtre en amont
+  { prefix: 'escalade-', module: null },
+  { prefix: 'entretien-pro-', module: 'rh' },
+  { prefix: 'bilan-six-ans-', module: 'rh' },
+  { prefix: 'birthday-', module: 'rh' },
+  { prefix: 'seniority-', module: 'rh' },
+  { prefix: 'contract-end-', module: 'rh' },
+  { prefix: 'probation-end-', module: 'rh' },
+  { prefix: 'visite-medicale-', module: 'rh' },
+  { prefix: 'document-expiry-', module: 'rh' },
+  { prefix: 'entretien-', module: 'entretiens' },
+  { prefix: 'ticket-status-', module: null }, // support : fonctionnalité de base, jamais liée à un module à la carte
+];
+
+/** module requis pour un sourceKey donné, ou null si aucun (notification de base). Lève une erreur
+ * explicite pour un sourceKey sans règle connue plutôt que de laisser fuiter silencieusement une
+ * notification jamais vérifiée — voir SOURCE_KEY_MODULE_RULES ci-dessus. */
+function requiredModuleForSourceKey(sourceKey) {
+  const rule = SOURCE_KEY_MODULE_RULES.find(r => sourceKey.startsWith(r.prefix));
+  if (!rule) throw new Error(`sourceKey sans règle connue : "${sourceKey}" — ajouter une entrée à SOURCE_KEY_MODULE_RULES (app.js)`);
+  return rule.module;
+}
+
 /** true si l'entreprise a accès à ce module (voir LANDING_ALACARTE_MODULES) — toujours vrai pour un
  * abonnement classique (essai/essentiel/professionnel/premium : toujours tout inclus, aucune
  * migration forcée vers l'à la carte, voir upsertSubscriptionFromStripeSubscription dans
@@ -4211,7 +4248,20 @@ function makeNotification(sourceKey, icon, title, message, nav, params, employee
 /** Notifications visibles par l'utilisateur courant : restreint au même périmètre que les listes de congés/frais/salariés (self / équipe / tout, selon le rôle). */
 function getVisibleNotificationsForCurrentUser() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  return notificationRepository.getNotifications().filter(n => !n.employeeId || visibleIds === null || visibleIds.includes(n.employeeId));
+  // §correctif retour QA du 27/08/2026 (point 2) : filtre AUSSI à l'affichage, jamais seulement à la
+  // génération/purge — "deux demi-mesures qui vont ensemble" : la purge (syncNotifications) ne
+  // s'exécute qu'à la connexion/synchronisation, l'affichage doit rester correct entre deux syncs,
+  // y compris juste après un changement de module qui n'a pas encore déclenché de purge.
+  return notificationRepository.getNotifications().filter(n => {
+    if (n.employeeId && visibleIds !== null && !visibleIds.includes(n.employeeId)) return false;
+    if (!n.sourceKey) return true;
+    try {
+      const requiredModule = requiredModuleForSourceKey(n.sourceKey);
+      return requiredModule === null || hasModule(requiredModule);
+    } catch {
+      return true;
+    }
+  });
 }
 
 /** Détecte les événements notifiables actuels et crée les notifications manquantes (idempotent). */
@@ -4283,6 +4333,21 @@ async function syncNotifications() {
   const pendingExpenses = hasModule('frais') ? expenseRepository.getAll().filter(n => n.statut === 'En attente') : [];
   const pendingIds = new Set([...pendingLeaveRequests, ...pendingTeleworkRequests, ...pendingExpenses].map(r => r.id));
   notificationRepository.pruneResolvedRequestNotifications(pendingIds);
+  // §correctif retour QA du 27/08/2026 (point 2) : retire aussi toute notification déjà en base dont
+  // le module n'est plus souscrit (résiliation, ou notification créée avant le correctif de
+  // cloisonnement du 26/08/2026) — la génération cloisonnée par module ne protège que les nouvelles.
+  notificationRepository.pruneUnsubscribedModuleNotifications(sourceKey => {
+    // Un sourceKey inconnu de la table (donnée ancienne, ou un type de notification pas encore
+    // catalogué) est CONSERVÉ plutôt que de faire planter toute la synchronisation — la table lève
+    // volontairement une erreur explicite pour un test (voir requiredModuleForSourceKey), jamais
+    // pour l'application elle-même en production.
+    try {
+      const requiredModule = requiredModuleForSourceKey(sourceKey);
+      return requiredModule === null || hasModule(requiredModule);
+    } catch {
+      return true;
+    }
+  });
 
   pendingLeaveRequests.forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
@@ -17554,6 +17619,15 @@ function openEmployeeModal(id, prefill, candidatureId) {
                   data-check-duplicate-email="true" data-exclude-id="${escapeHtml(employee.id || '')}">
                 <span class="field-warning" id="f-email-duplicate-warning">${icon(ICONS.warningTriangle, 13)} Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
               </div>
+              ${!isEdit && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS) ? `
+                <div class="form-field">
+                  <label for="f-role">Rôle *</label>
+                  <select class="input" id="f-role" name="role" required>
+                    ${Object.values(ROLES).filter(r => r !== ROLES.PROPRIETAIRE).map(r => `<option value="${r}" ${r === 'salarie' ? 'selected' : ''}>${escapeHtml(ROLE_LABELS[r])}</option>`).join('')}
+                  </select>
+                  <p class="form-hint">Détermine ses droits dans l'application ("Poste" ci-dessous n'est qu'un intitulé, sans effet sur les accès). Modifiable ensuite depuis sa fiche, carte "Compte".</p>
+                </div>
+              ` : ''}
               ${textField('telephone', 'Téléphone', employee.telephone)}
               ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
               ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}

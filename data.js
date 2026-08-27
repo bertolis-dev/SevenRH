@@ -2774,6 +2774,19 @@ const DB = {
     if (cleaned.length !== list.length) this.saveNotifications(cleaned);
   },
 
+  /** §correctif retour QA du 27/08/2026 (point 2) : une notification déjà enregistrée AVANT la
+   * résiliation d'un module (ou créée avant le correctif de cloisonnement du 26/08/2026) restait en
+   * base indéfiniment — addNotificationsIfNew est purement additif, la génération cloisonnée par
+   * module (voir syncNotifications, app.js) ne protège que les notifications CRÉÉES APRÈS le
+   * correctif, jamais celles déjà là. isModuleAllowed(sourceKey) est fourni par l'appelant (app.js,
+   * où vivent hasModule/SOURCE_KEY_MODULE_RULES) plutôt que dupliqué ici — ce fichier ne connaît pas
+   * la notion de module à la carte. */
+  pruneUnsubscribedModuleNotifications(isModuleAllowed) {
+    const list = this.getCurrentCompany().notifications;
+    const cleaned = list.filter(n => !n.sourceKey || isModuleAllowed(n.sourceKey));
+    if (cleaned.length !== list.length) this.saveNotifications(cleaned);
+  },
+
   // ---- Authentification réelle (Supabase Auth, voir supabase-client.js — remplace la simulation
   // navigateur précédente, qui comparait un mot de passe en clair stocké dans localStorage) ----
 
@@ -3341,7 +3354,8 @@ const notificationRepository = {
   markNotificationRead: (id, read) => DB.markNotificationRead(id, read),
   markAllNotificationsRead: () => DB.markAllNotificationsRead(),
   setNotificationArchived: (id, archived) => DB.setNotificationArchived(id, archived),
-  pruneResolvedRequestNotifications: (pendingIds) => DB.pruneResolvedRequestNotifications(pendingIds)
+  pruneResolvedRequestNotifications: (pendingIds) => DB.pruneResolvedRequestNotifications(pendingIds),
+  pruneUnsubscribedModuleNotifications: (isModuleAllowed) => DB.pruneUnsubscribedModuleNotifications(isModuleAllowed)
 };
 
 const favoriteRepository = {
