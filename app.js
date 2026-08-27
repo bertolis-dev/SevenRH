@@ -5193,13 +5193,13 @@ function renderOperationalDashboardBody(employees, employeeIds) {
 
     ${isVisible('echeances') ? `
     <div class="dashboard-grid">
-      ${renderUpcomingBirthdaysCard(birthdays)}
-      ${renderUpcomingContractEndsCard(contractEnds)}
-      ${renderUpcomingProbationEndsCard(probationEnds)}
-      ${renderUpcomingSeniorityCard(seniorityAnniversaries)}
-      ${renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns)}
-      ${renderUpcomingVisitesMedicalesCard(visitesMedicales)}
-      ${renderContingentHeuresSupCard(contingentHeuresSup)}
+      ${ifModule('rh', renderUpcomingBirthdaysCard(birthdays))}
+      ${ifModule('rh', renderUpcomingContractEndsCard(contractEnds))}
+      ${ifModule('rh', renderUpcomingProbationEndsCard(probationEnds))}
+      ${ifModule('rh', renderUpcomingSeniorityCard(seniorityAnniversaries))}
+      ${ifModule('entretiens', renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns))}
+      ${ifModule('rh', renderUpcomingVisitesMedicalesCard(visitesMedicales))}
+      ${ifModule('remuneration', renderContingentHeuresSupCard(contingentHeuresSup))}
       ${ifModule('conges', renderLongAbsenceSuspensionCard(absencesLonguesDuree))}
     </div>
     ` : ''}
@@ -5242,8 +5242,13 @@ function renderDashboardActionCenter(employees, employeeIds) {
       const teletravailEnAttente = pendingFor(teleworkRepository);
       if (teletravailEnAttente.length) items.push({ icon: ICONS.laptop, label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     }
-    const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
-    if (contractEnds.length) items.push({ icon: ICONS.document, label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
+    // §correctif retour QA du 27/08/2026 (point 2) : cette ligne n'était pas conditionnée au module
+    // rh, contrairement aux 6 autres lignes de ce même bloc (ex. congés/planning juste au-dessus) —
+    // une entreprise sans le module rh voyait quand même les fins de contrat au Centre d'action.
+    if (hasModule('rh')) {
+      const contractEnds = getUpcomingContractEnds(60, employees, Infinity);
+      if (contractEnds.length) items.push({ icon: ICONS.document, label: `${contractEnds.length} contrat${contractEnds.length > 1 ? 's' : ''} arrivant à échéance (60 jours)`, nav: 'employees', navParams: {} });
+    }
   }
 
   // §correctif audit du 23/08/2026 (§6.6) : "Comptes salariés" n'est plus un onglet Paramètres
@@ -5339,13 +5344,17 @@ function renderDashboardManager() {
 
 function renderDashboardSalarie(user) {
   const today = getTodayPresenceStatus(user);
+  // §correctif retour QA du 27/08/2026 (point 2) : chaque source n'entre dans "Mes demandes"/"À
+  // venir" que si son module est réellement souscrit — sans ce garde, un salarié voyait ses propres
+  // demandes de télétravail/notes de frais même dans une entreprise n'ayant souscrit ni "planning"
+  // ni "frais" (repéré en injectant une demande de chaque type pour un salarié de démo).
   const requests = [
-    ...leaveRepository.getAll().filter(r => r.employeeId === user.id).map(r => {
+    ...(hasModule('conges') ? leaveRepository.getAll().filter(r => r.employeeId === user.id).map(r => {
       const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
       return { label: type ? type.nom : 'Congé', icon: type ? type.icone : ICONS.sun, date: r.dateDebut, statut: r.statut };
-    }),
-    ...teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: ICONS.laptop, date: r.dateDebut, statut: r.statut })),
-    ...expenseRepository.getAll().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: ICONS.receipt, date: n.date, statut: n.statut }))
+    }) : []),
+    ...(hasModule('planning') ? teleworkRepository.getAll().filter(r => r.employeeId === user.id).map(r => ({ label: 'Télétravail', icon: ICONS.laptop, date: r.dateDebut, statut: r.statut })) : []),
+    ...(hasModule('frais') ? expenseRepository.getAll().filter(n => n.employeeId === user.id).map(n => ({ label: n.libelle || 'Note de frais', icon: ICONS.receipt, date: n.date, statut: n.statut })) : [])
   ];
   const enAttente = requests.filter(r => r.statut === 'En attente').sort((a, b) => a.date.localeCompare(b.date));
   const aVenir = requests
@@ -5429,7 +5438,14 @@ function renderDashboardProprietaire() {
   const now = new Date();
   const teleworkRequests = teleworkRepository.getAll();
   const coutTickets = actifs.reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).partEmployeur, 0);
-  const enAttenteToutesEtapes = [...leaveRequests, ...teleworkRepository.getAll(), ...expenses].filter(r => r.statut === 'En attente').length;
+  // §correctif retour QA du 27/08/2026 (point 2) : ne compte que les demandes d'un module réellement
+  // souscrit — sans ce filtre, "Demandes en attente (tous types)" additionnait des congés/télétravail/
+  // notes de frais même pour une entreprise à la carte n'ayant souscrit à aucun de ces modules.
+  const enAttenteToutesEtapes = [
+    ...(hasModule('conges') ? leaveRequests : []),
+    ...(hasModule('planning') ? teleworkRepository.getAll() : []),
+    ...(hasModule('frais') ? expenses : [])
+  ].filter(r => r.statut === 'En attente').length;
 
   const masseSalariale = settings.masseSalarialeActivee
     ? actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)
@@ -5454,8 +5470,8 @@ function renderDashboardProprietaire() {
       ${kpiCard('Turn-over (12 mois)', formatPercentFR(turnover), ICONS.refresh)}
       ${kpiCard('Ancienneté moyenne', `${formatNumberFR(anciennete)} an${anciennete >= 2 ? 's' : ''}`, ICONS.medal)}
       ${kpiCard('Absentéisme (maladie)', formatPercentFR(absenteisme), ICONS.thermometer)}
-      ${kpiCard('Coût notes de frais', formatCurrencyFR(coutFrais), ICONS.receipt)}
-      ${kpiCard('Coût tickets restaurant', formatCurrencyFR(coutTickets), ICONS.utensils)}
+      ${ifModule('frais', kpiCard('Coût notes de frais', formatCurrencyFR(coutFrais), ICONS.receipt))}
+      ${ifModule('tickets', kpiCard('Coût tickets restaurant', formatCurrencyFR(coutTickets), ICONS.utensils))}
       ${kpiCard('Demandes en attente (tous types)', enAttenteToutesEtapes, ICONS.hourglass)}
       ${masseSalariale !== null ? kpiCard('Masse salariale mensuelle', formatCurrencyFR(masseSalariale), ICONS.coin) : ''}
     </div>
