@@ -38,6 +38,8 @@ globalThis.__PERMISSIONS = PERMISSIONS;
 globalThis.__calculateAcquisition = calculateAcquisition;
 globalThis.__resolveProratisationTempsPartiel = resolveProratisationTempsPartiel;
 globalThis.__makeEmptyLeaveType = makeEmptyLeaveType;
+globalThis.__getLeaveBalance = getLeaveBalance;
+globalThis.__getCompteurPeriodBounds = getCompteurPeriodBounds;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -53,6 +55,8 @@ globalThis.__makeEmptyLeaveType = makeEmptyLeaveType;
     calculateAcquisition: sandbox.__calculateAcquisition,
     resolveProratisationTempsPartiel: sandbox.__resolveProratisationTempsPartiel,
     makeEmptyLeaveType: sandbox.__makeEmptyLeaveType,
+    getLeaveBalance: sandbox.__getLeaveBalance,
+    getCompteurPeriodBounds: sandbox.__getCompteurPeriodBounds,
   };
 }
 

@@ -4315,8 +4315,11 @@ async function syncNotifications() {
   // jours non pris sont perdus. Un rappel deux mois avant, au salarié et à son manager." — une
   // seule notification par (salarié, type), employeeId suffit à la rendre visible aux deux (le
   // manager voit déjà les notifications de son équipe, voir getVisibleNotificationsForCurrentUser).
-  // Solde PROJETÉ à la date de clôture elle-même (même mécanisme que §7.11), pas le solde du jour
-  // — sinon on sous-estimerait ce qui sera réellement perdu (l'acquisition continue jusque-là).
+  // §correctif retour QA du 27/08/2026 (point 1) : depuis le passage à deux périodes vivantes
+  // (getLeaveBalance), `disponible` représente déjà LA période sur le point de basculer hors de la
+  // fenêtre de report à cette clôture — plus besoin de projeter à la date de clôture elle-même
+  // (l'ancienne astuce compensait le fait que l'acquisition en cours ET le disponible étaient
+  // auparavant confondus dans un seul nombre ; ce n'est plus le cas, le solde du jour suffit).
   if (hasModule('conges')) {
     const today = new Date();
     const allRequests = leaveRepository.getAll();
@@ -4325,11 +4328,11 @@ async function syncNotifications() {
       const joursAvantCloture = Math.round((current.periodEnd - today) / 86400000);
       if (joursAvantCloture < 0 || joursAvantCloture > 60) return;
       employeeRepository.getAll().filter(e => !e.archive).forEach(employee => {
-        const balanceAtCloture = getLeaveBalance(employee, type, allRequests, null, toISODate(current.periodEnd));
-        if (balanceAtCloture.disponible === Infinity || balanceAtCloture.disponible <= 0) return;
+        const balanceNow = getLeaveBalance(employee, type, allRequests, null, today);
+        if (balanceNow.disponible === Infinity || balanceNow.disponible <= 0) return;
         let perdu = 0;
-        if (type.reportCompteur === 'aucun') perdu = balanceAtCloture.disponible;
-        else if (type.reportCompteur === 'limite') perdu = Math.max(0, round2(balanceAtCloture.disponible - (Number(type.reportLimiteJours) || 0)));
+        if (type.reportCompteur === 'aucun') perdu = balanceNow.disponible;
+        else if (type.reportCompteur === 'limite') perdu = Math.max(0, round2(balanceNow.disponible - (Number(type.reportLimiteJours) || 0)));
         if (perdu <= 0) return;
         candidates.push(makeNotification(`cloture-perte-${type.id}-${employee.id}-${toISODate(current.periodEnd)}`, ICONS.warningTriangle, 'Congés à perdre avant la clôture',
           `${employee.prenom} ${employee.nom} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`,
@@ -6344,6 +6347,11 @@ function renderPaginationControls(page, totalPages, pageStart, pageCount, total)
  * limités à `categorie === 'conge'` (mêmes types qu'utilisés pour les anomalies de paie) — les types
  * "autre" (maladie, maternité...) ne sont pas des compteurs à solde, les y ajouter n'aurait aucun
  * sens (toujours "Illimité" ou une durée légale fixe, jamais un solde qui se consomme). */
+// §correctif retour QA du 27/08/2026 (point 1) : les types INACTIFS (ex. RTT, créé désactivé par
+// défaut — voir seedLeaveTypes) sont désormais inclus, grisés avec la mention "non activé", plutôt
+// que silencieusement absents de l'écran. "Il ne faut pas qu'un client conclue que l'outil ne gère
+// pas les RTT" — une colonne manquante sans aucune explication était indiscernable d'une fonctionnalité
+// absente.
 function getTableauCompteursData() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
@@ -6351,14 +6359,36 @@ function getTableauCompteursData() {
   if (state.tableauCompteursFilters.service) employees = employees.filter(e => e.service === state.tableauCompteursFilters.service);
   employees.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`));
 
-  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.categorie === 'conge');
+  const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
+  const leaveTypes = allLeaveTypes.filter(t => t.categorie === 'conge');
   const allRequests = leaveRepository.getAll();
   const rows = employees.map(e => ({
     employee: e,
-    balances: leaveTypes.map(t => getLeaveBalance(e, t, allRequests, leaveTypes)),
+    balances: leaveTypes.map(t => getLeaveBalance(e, t, allRequests, allLeaveTypes)),
   }));
 
   return { leaveTypes, rows };
+}
+
+// §correctif retour QA du 27/08/2026 (point 1) : détail d'une cellule — solde disponible en avant,
+// puis acquis/pris/en attente/report (RH en a besoin au moins autant que du disponible seul), puis
+// pour un type à clôture, la période exacte du disponible ET ce qui s'acquiert en plus sur la
+// période en cours (jamais mélangé, jamais consommable avant sa propre clôture — voir getLeaveBalance).
+function renderTableauCompteursCell(b) {
+  if (b.disponible === Infinity) return `<div class="tc-disponible">Illimité</div>`;
+  const detail = [`acquis ${formatDurationFR(b.acquis)}`, `pris ${formatDurationFR(b.pris)}`];
+  if (b.enAttente) detail.push(`attente ${formatDurationFR(b.enAttente)}`);
+  if (b.report) detail.push(`dont report ${formatDurationFR(b.report)}`);
+  const periode = b.periodeDisponible ? `<div class="tc-periode text-muted">${formatDate(b.periodeDisponible.debut)} au ${formatDate(b.periodeDisponible.fin)}</div>` : '';
+  const enCours = b.enCoursAcquisition
+    ? `<div class="tc-en-cours text-muted">+ ${formatDurationFR(b.enCoursAcquisition.acquis)} en cours d'acquisition (${formatDate(b.enCoursAcquisition.periode.debut)} au ${formatDate(b.enCoursAcquisition.periode.fin)})</div>`
+    : '';
+  return `
+    <div class="tc-disponible">${formatDurationFR(b.disponible)}</div>
+    ${periode}
+    <div class="tc-detail text-muted">${detail.join(' · ')}</div>
+    ${enCours}
+  `;
 }
 
 function renderTableauCompteurs() {
@@ -6368,7 +6398,7 @@ function renderTableauCompteurs() {
   return `
     <div class="view-header">
       <h1>Tableau des compteurs</h1>
-      <p class="view-subtitle">Solde disponible par salarié et par type de congé</p>
+      <p class="view-subtitle">Solde disponible par salarié et par type de congé — pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ce qui s'acquiert sur la période en cours n'est jamais consommable avant sa propre clôture.</p>
     </div>
     <div class="toolbar card">
       <select id="filter-tableau-compteurs-service" class="input">
@@ -6376,39 +6406,40 @@ function renderTableauCompteurs() {
         ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.tableauCompteursFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
     </div>
-    ${leaveTypes.length === 0 ? `<div class="card"><p class="text-muted">Aucun type de congé actif à afficher.</p></div>` : `
+    ${leaveTypes.length === 0 ? `<div class="card"><p class="text-muted">Aucun type de congé à afficher.</p></div>` : `
       <div class="card table-card">
         ${rows.length === 0 ? renderEmptyState() : `
           <div style="overflow-x: auto;">
-            <table class="table">
+            <table class="table tc-table">
               <thead>
                 <tr>
                   <th>Salarié</th>
-                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;">${escapeHtml(t.nom)}</th>`).join('')}
+                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
                 ${pageItems.map(row => `
                   <tr>
                     <td>${escapeHtml(row.employee.prenom)} ${escapeHtml(row.employee.nom)}</td>
-                    ${row.balances.map(b => `<td style="text-align: right;">${b.disponible === Infinity ? 'Illimité' : formatDurationFR(b.disponible)}</td>`).join('')}
+                    ${row.balances.map((b, i) => `<td style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
               <tfoot>
                 <tr>
-                  <td><strong>Total (tous les salariés filtrés, pas seulement cette page)</strong></td>
+                  <td><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
                   ${leaveTypes.map((t, i) => {
                     const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
                     const hasIllimite = finiteValues.length < rows.length;
                     const total = finiteValues.reduce((sum, v) => sum + v, 0);
-                    return `<td style="text-align: right;"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
+                    return `<td style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
                   }).join('')}
                 </tr>
               </tfoot>
             </table>
           </div>
           ${leaveTypes.some((t, i) => rows.some(r => r.balances[i].disponible === Infinity)) ? '<p class="text-muted" style="margin-top: 8px;">* au moins un salarié a un solde illimité pour ce type, exclu du total.</p>' : ''}
+          ${leaveTypes.some(t => !t.actif) ? '<p class="text-muted" style="margin-top: 8px;">Les types marqués "non activé" existent mais ne sont pas encore ouverts aux salariés — activez-les dans Paramètres → Types d\'absences si besoin.</p>' : ''}
         `}
       </div>
     `}
@@ -8930,13 +8961,19 @@ function renderEmployeeBalances(employee, canAdjust = false) {
       ${types.map(t => {
         const balance = getLeaveBalance(employee, t, requests, allLeaveTypes);
         const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
+        // §correctif retour QA du 27/08/2026 (point 1) : "disponible" et "en cours d'acquisition"
+        // sont deux compteurs vivants distincts (voir getLeaveBalance) — jamais mélangés, chacun
+        // avec sa période écrite en toutes lettres, pour qu'on sache toujours ce que le nombre affiché
+        // représente.
+        const periodeLabel = balance.periodeDisponible ? ` (${formatDate(balance.periodeDisponible.debut)} au ${formatDate(balance.periodeDisponible.fin)})` : '';
         return `
           <div class="balance-card" style="--type-color:${escapeHtml(t.couleur)}">
             ${canAdjust ? `<button type="button" class="btn-link balance-adjust-btn" data-adjust-compteur="${t.id}" title="Ajuster ce compteur">${icon(ICONS.pencil, 13)}</button>` : ''}
             <div class="balance-icon">${escapeHtml(t.icone)}</div>
             <div class="balance-name">${escapeHtml(t.nom)}</div>
             <div class="balance-value">${disponibleLabel}</div>
-            <div class="balance-sub">disponible${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}${balance.ajustement ? ` · ajustement ${balance.ajustement >= 0 ? '+' : ''}${formatDurationFR(balance.ajustement)}` : ''}</div>
+            <div class="balance-sub">disponible${periodeLabel}${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}${balance.ajustement ? ` · ajustement ${balance.ajustement >= 0 ? '+' : ''}${formatDurationFR(balance.ajustement)}` : ''}</div>
+            ${balance.enCoursAcquisition ? `<div class="balance-sub">${formatDurationFR(balance.enCoursAcquisition.acquis)} en cours d'acquisition (${formatDate(balance.enCoursAcquisition.periode.debut)} au ${formatDate(balance.enCoursAcquisition.periode.fin)}), disponible à partir du ${formatDate(toISODate(addDays(parseISODateLocal(balance.enCoursAcquisition.periode.fin), 1)))}</div>` : ''}
             ${balance.reportPerdu ? `<div class="balance-sub text-danger">${formatDurationFR(balance.reportPerdu)} de report perdu (échéance dépassée)</div>` : ''}
           </div>
         `;

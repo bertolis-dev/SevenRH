@@ -747,6 +747,14 @@ p { margin: 0; line-height: 1.5; }
 
 .table-card { padding: 0; overflow-x: auto; }
 
+/* §correctif retour QA du 27/08/2026 (point 1) : Tableau des compteurs — cellule multi-lignes
+   (disponible / période / détail acquis-pris-attente-report / en cours d'acquisition) et colonnes
+   de types non activés grisées, jamais silencieusement absentes. */
+.tc-table td, .tc-table th { vertical-align: top; }
+.tc-disponible { font-weight: 600; }
+.tc-periode, .tc-detail, .tc-en-cours { font-size: 12px; white-space: nowrap; }
+.tc-inactif { opacity: 0.55; }
+
 .pagination-bar {
   display: flex;
   align-items: center;

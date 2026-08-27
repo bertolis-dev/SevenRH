@@ -4325,6 +4325,24 @@ function countSuspendedAcquisitionDays(employee, periodStart, periodEnd, allRequ
   return days;
 }
 
+/** §correctif retour QA du 27/08/2026 (trouvé en corrigeant le point 1) : nombre de mois CALENDAIRES
+ * ENTIÈREMENT écoulés entre periodStart et periodEnd inclus — l'ancien calcul (simple différence
+ * d'index de mois, -1 si le quantième de fin est inférieur à celui de début) sous-comptait TOUJOURS
+ * d'un mois une période pile de 12 mois calendaires (ex. 1er juin au 31 mai) : 30 jours de CP
+ * devenaient 27,5. Un mois ne compte comme entièrement écoulé que lorsque periodEnd atteint la
+ * veille de l'anniversaire mensuel suivant (ex. 1er juin + 1 mois - 1 jour = 30 juin : juin compte
+ * dès le 30 juin, pas seulement à partir du 1er juillet) — addMonths gère déjà le débordement de fin
+ * de mois (ex. 31 janvier + 1 mois = 28/29 février), donc cette définition reste correcte même pour
+ * une clôture configurée un jour qui n'existe pas dans tous les mois. Auto-corrective par petites
+ * boucles (l'estimation de départ n'est jamais fausse de plus d'un mois) plutôt qu'une formule
+ * fermée plus difficile à vérifier à l'œil. */
+function countFullMonthsElapsed(periodStart, periodEnd) {
+  let months = (periodEnd.getFullYear() - periodStart.getFullYear()) * 12 + (periodEnd.getMonth() - periodStart.getMonth());
+  while (months > 0 && addDays(addMonths(periodStart, months), -1) > periodEnd) months -= 1;
+  while (addDays(addMonths(periodStart, months + 1), -1) <= periodEnd) months += 1;
+  return Math.max(0, months);
+}
+
 /** periodOverride ({periodStart, periodEnd}) : borne le calcul à une période de clôture personnalisée
  * (§5) au lieu de l'année civile par défaut — utilisé uniquement quand leaveType.dateClotureCompteur
  * est renseigné (voir getLeaveBalance), sinon comportement strictement inchangé.
@@ -4368,9 +4386,7 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride, allR
   const suspensionRatio = totalDaysInPeriod > 0 ? Math.max(0, (totalDaysInPeriod - joursSuspendus) / totalDaysInPeriod) : 1;
 
   if (leaveType.acquisition === 'Mensuelle') {
-    let monthsElapsed = (periodEnd.getFullYear() - periodStart.getFullYear()) * 12 + (periodEnd.getMonth() - periodStart.getMonth());
-    if (periodEnd.getDate() < periodStart.getDate()) monthsElapsed -= 1;
-    monthsElapsed = Math.max(0, monthsElapsed);
+    const monthsElapsed = countFullMonthsElapsed(periodStart, periodEnd);
     return round2(monthsElapsed * (annualAmount / 12) * activityRatio * suspensionRatio);
   }
 
@@ -4517,61 +4533,83 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     return { acquis, pris, enAttente, disponible, ajustement };
   }
 
+  // §correctif retour QA du 27/08/2026 (point 1, "les compteurs affichent 5 jours à quelqu'un qui en
+  // a 30") : le droit du travail français distingue TOUJOURS deux compteurs vivants en même temps —
+  // ce qui a été acquis sur la période CLOSE (immédiatement consommable) et ce qui s'acquiert sur la
+  // période EN COURS (jamais consommable avant sa propre clôture). L'ancien code ne calculait que la
+  // période contenant refDate et la traitait comme "le solde" : au passage d'une clôture, tout ce qui
+  // avait été acquis avant disparaissait purement et simplement (report à 'aucun' par défaut).
+  //
+  // Le mécanisme report/reportPerdu/fractionnement (plafond, échéance, jours de fractionnement)
+  // existait déjà, correct dans son fonctionnement mais branché au mauvais endroit : entre "en cours"
+  // et "précédente". Ce lien-là doit être un report INTÉGRAL et INCONDITIONNEL (c'est la règle légale
+  // elle-même, pas une exception à activer) — jamais plafonné, jamais expirable. Le mécanisme est
+  // donc décalé d'un cran vers l'arrière : il relie désormais "précédente" (devenue LA période
+  // disponible) à "encore avant" (previous2), exactement la même mécanique qu'avant ce correctif.
   const current = getCompteurPeriodBounds(leaveType.dateClotureCompteur, refDate);
-  const acquisPeriode = calculateAcquisition(employee, leaveType, refDate, current, allRequests, types);
-  const requestsCurrent = requestsFor(current.periodStart, current.periodEnd);
-  const pris = requestsCurrent.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
-  const enAttente = requestsCurrent.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
+  const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, new Date(current.periodStart.getTime() - 86400000));
+  const previous2 = getCompteurPeriodBounds(leaveType.dateClotureCompteur, new Date(previous.periodStart.getTime() - 86400000));
 
-  // Report depuis la période précédente immédiate uniquement (pas de chaîne indéfinie) — c'est la
-  // seule période qui a un solde résiduel encore pertinent, les précédentes ont déjà été closes.
+  // ---- Période EN COURS D'ACQUISITION (current) : purement informatif, jamais consommable avant sa
+  //      propre clôture — jamais mélangé au solde disponible ci-dessous. ----
+  const acquisEnCours = calculateAcquisition(employee, leaveType, refDate, current, allRequests, types);
+
+  // ---- Report dans `previous` depuis `previous2` — même mécanique qu'avant ce correctif (plafond,
+  //      échéance, fractionnement), simplement un cran plus loin dans le temps. ----
   let report = 0;
   if (leaveType.reportCompteur !== 'aucun') {
-    const previousRefDate = new Date(current.periodStart.getTime() - 86400000); // un jour avant le début de la période en cours = dans la précédente
-    const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate);
-    const acquisPrecedent = calculateAcquisition(employee, leaveType, previous.periodEnd, previous, allRequests, types);
-    const requestsPrecedent = requestsFor(previous.periodStart, previous.periodEnd);
-    const prisPrecedent = requestsPrecedent.reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, previous.periodEnd), 0); // validé + en attente : les deux entament le solde reportable
-    const soldeResiduel = Math.max(0, round2(acquisPrecedent - prisPrecedent));
-    report = leaveType.reportCompteur === 'limite' ? Math.min(soldeResiduel, Number(leaveType.reportLimiteJours) || 0) : soldeResiduel;
+    const acquisPrecedent2 = calculateAcquisition(employee, leaveType, previous2.periodEnd, previous2, allRequests, types);
+    const requestsPrecedent2 = requestsFor(previous2.periodStart, previous2.periodEnd);
+    const prisPrecedent2 = requestsPrecedent2.reduce((sum, r) => sum + daysInPeriod(r, previous2.periodStart, previous2.periodEnd), 0);
+    const soldeResiduel2 = Math.max(0, round2(acquisPrecedent2 - prisPrecedent2));
+    report = leaveType.reportCompteur === 'limite' ? Math.min(soldeResiduel2, Number(leaveType.reportLimiteJours) || 0) : soldeResiduel2;
   }
 
-  // §correctif audit du 23/08/2026 (§7.15) : le report plafonnait déjà le NOMBRE de jours reportés
-  // (reportLimiteJours ci-dessus) mais ne portait aucune échéance de consommation — beaucoup de
-  // conventions collectives imposent que le reliquat reporté soit pris avant une date donnée, sous
-  // peine d'être perdu. On considère que les jours pris DANS LA NOUVELLE PÉRIODE avant l'échéance
-  // consomment le report EN PRIORITÉ (c'est lui qui expire, pas l'acquisition normale de la
-  // période) ; une fois l'échéance passée, la part du report encore inutilisée est retirée de
-  // l'acquis — jamais avant, pour ne pas pénaliser un salarié qui a simplement posé ses congés plus
-  // tard dans le mois sans que l'échéance soit encore dépassée.
+  const requestsPrevious = requestsFor(previous.periodStart, previous.periodEnd);
+
+  // §correctif audit du 23/08/2026 (§7.15), décalé d'un cran comme le report ci-dessus : le reliquat
+  // reporté DANS `previous` doit être consommé avant l'échéance DANS `previous`, sous peine d'être perdu.
   let reportPerdu = 0;
   if (report > 0 && leaveType.dateLimiteReportMMJJ) {
-    const echeance = resolveDeadlineInPeriod(leaveType.dateLimiteReportMMJJ, current.periodStart, current.periodEnd);
+    const echeance = resolveDeadlineInPeriod(leaveType.dateLimiteReportMMJJ, previous.periodStart, previous.periodEnd);
     const ref = toRefDate(refDate);
     if (ref > echeance) {
-      const prisAvantEcheance = requestsCurrent.filter(r => r.statut === 'Validé')
-        .reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, echeance), 0);
+      const prisAvantEcheance = requestsPrevious.filter(r => r.statut === 'Validé')
+        .reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, echeance), 0);
       reportPerdu = Math.max(0, round2(report - prisAvantEcheance));
     }
   }
 
-  // §correctif audit du 23/08/2026 (§7.17) : jours de fractionnement — calculés sur la période
-  // PRÉCÉDENTE (comme le report ci-dessus, réutilise d'ailleurs son previous/requestsPrecedent) :
-  // c'est en fin de période qu'on sait combien de jours de congé principal ont été pris hors de la
-  // fenêtre légale du 1er mai au 31 octobre. Crédité sur la période EN COURS, comme un report.
+  // §correctif audit du 23/08/2026 (§7.17), décalé d'un cran comme le report ci-dessus : jours de
+  // fractionnement calculés sur `previous2` (la période qui vient de se clore avant `previous`),
+  // crédités sur `previous` (désormais la période disponible).
   let fractionnement = 0;
   if (leaveType.fractionnementActif) {
-    const previousRefDate2 = new Date(current.periodStart.getTime() - 86400000);
-    const previous2 = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate2);
     const joursHorsFenetre = requestsFor(previous2.periodStart, previous2.periodEnd)
       .filter(r => r.statut === 'Validé')
       .reduce((sum, r) => sum + countJoursHorsFenetreFractionnement(r, employee, settings, leaveType.uniteDecompte), 0);
     fractionnement = joursHorsFenetre >= 6 ? 2 : joursHorsFenetre >= 3 ? 1 : 0;
   }
 
-  const acquis = acquisPeriode === Infinity ? Infinity : round2(acquisPeriode + report - reportPerdu + fractionnement);
+  // ---- Période DISPONIBLE (previous) : ce qui reste réellement consommable maintenant. La
+  //      consommation couvre TOUTE la fenêtre [previous.periodStart, current.periodEnd] — l'année où
+  //      le solde a été acquis ET l'année suivante, celle où il est normalement pris — jamais
+  //      seulement le calendrier de `previous` lui-même. ----
+  const acquisPreviousBrut = calculateAcquisition(employee, leaveType, previous.periodEnd, previous, allRequests, types);
+  const acquis = acquisPreviousBrut === Infinity ? Infinity : round2(acquisPreviousBrut + report - reportPerdu + fractionnement);
+  const requestsDisponible = requestsFor(previous.periodStart, current.periodEnd);
+  const pris = requestsDisponible.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, current.periodEnd), 0);
+  const enAttente = requestsDisponible.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, current.periodEnd), 0);
   const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
-  return { acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement };
+
+  return {
+    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement,
+    periodeDisponible: { debut: toISODate(previous.periodStart), fin: toISODate(previous.periodEnd) },
+    enCoursAcquisition: {
+      acquis: acquisEnCours,
+      periode: { debut: toISODate(current.periodStart), fin: toISODate(current.periodEnd) }
+    }
+  };
 }
 
 /** Jours d'une demande VALIDÉE qui tombent hors de la fenêtre légale du 1er mai au 31 octobre de
