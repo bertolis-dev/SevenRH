@@ -13328,7 +13328,10 @@ function renderParametresVacances() {
     <div class="card table-card">
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <h2>Périodes — année scolaire ${escapeHtml(schoolData.anneeScolaire)}</h2>
-        <button class="btn btn-secondary btn-sm" id="btn-new-school-period">+ Nouvelle période</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" id="btn-fetch-official-school-holidays">${icon(ICONS.refresh, 13)} Récupérer depuis la source officielle</button>
+          <button class="btn btn-secondary btn-sm" id="btn-new-school-period">+ Nouvelle période</button>
+        </div>
       </div>
       <table class="table">
         <thead>
@@ -13361,6 +13364,7 @@ function bindParametresVacancesEvents() {
     showToast('Zone de vacances scolaires mise à jour.');
   });
 
+  document.getElementById('btn-fetch-official-school-holidays').addEventListener('click', () => openFetchOfficialSchoolHolidaysModal());
   document.getElementById('btn-new-school-period').addEventListener('click', () => openSchoolPeriodModal());
   document.querySelectorAll('[data-edit-period]').forEach(btn => {
     btn.addEventListener('click', () => openSchoolPeriodModal(Number(btn.dataset.editPeriod)));
@@ -13383,6 +13387,130 @@ function bindParametresVacancesEvents() {
         }
       });
     });
+  });
+}
+
+/** §retour QA du 26/08/2026 (point 6.5) : "des dates de vacances scolaires officielles ne peuvent
+ * pas être déduites par calcul, elles doivent être saisies" (voir isMonthBeyondSchoolYearCoverage
+ * ci-dessus) — sauf qu'elles SONT déjà publiées en open data par le Ministère (dataset
+ * "fr-en-calendrier-scolaire", data.education.gouv.fr, CORS ouvert — aucune fonction Edge
+ * nécessaire). Remplace la saisie manuelle année après année par une récupération à la demande,
+ * jamais automatique/silencieuse : RH voit toujours un aperçu avant d'enregistrer quoi que ce soit.
+ *
+ * L'API renvoie une ligne par ACADÉMIE (plusieurs dizaines) pour une même zone/période — dédupliquée
+ * ici par (nom, début, fin) : des dates identiques pour plusieurs zones fusionnent en une seule
+ * période avec un tableau `zones`, exactement la forme déjà utilisée par seedSchoolHolidays().
+ *
+ * Dates renvoyées en horodatage UTC représentant minuit HEURE FRANÇAISE (ex.
+ * "2025-10-17T22:00:00+00:00" = le 18 octobre en France, pas le 17) — Intl.DateTimeFormat avec
+ * timeZone Europe/Paris gère la bascule heure d'été/hiver correctement, un décalage fixe (+1h/+2h
+ * codé en dur) donnerait la mauvaise date selon la période de l'année. end_date est EXCLUSIF (minuit
+ * du jour de la rentrée, même convention que DTEND en iCal) — un jour retiré pour obtenir la
+ * dernière date de vacances incluse, cohérente avec le champ `fin` du reste de l'app. */
+function parisDateFromISO(isoString) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(isoString));
+}
+
+function nextAnneeScolaire(anneeScolaire) {
+  const match = /^(\d{4})-(\d{4})$/.exec(anneeScolaire || '');
+  const startYear = match ? Number(match[1]) + 1 : new Date().getFullYear();
+  return `${startYear}-${startYear + 1}`;
+}
+
+async function fetchOfficialSchoolHolidays(anneeScolaire) {
+  const grouped = new Map();
+  for (const zone of ['A', 'B', 'C']) {
+    const url = `https://data.education.gouv.fr/api/records/1.0/search/?dataset=fr-en-calendrier-scolaire&rows=50&refine.zones=${encodeURIComponent('Zone ' + zone)}&refine.annee_scolaire=${encodeURIComponent(anneeScolaire)}&refine.population=${encodeURIComponent('-')}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Réponse ${res.status} de l'API officielle.`);
+    const data = await res.json();
+    (data.records || []).forEach(rec => {
+      const f = rec.fields || {};
+      if (!f.start_date || !f.end_date || !f.description) return;
+      const debut = parisDateFromISO(f.start_date);
+      const finExclusive = parisDateFromISO(f.end_date);
+      const fin = toISODate(addDays(parseISODateLocal(finExclusive), -1));
+      // §retour QA du 26/08/2026 (point 6.5, vérifié en direct contre l'API) : certaines entrées ne
+      // représentent pas une PÉRIODE mais un simple repère ponctuel ("Pont de l'Ascension", "Début
+      // des Vacances d'Été") — start_date et end_date y désignent quasiment le même instant, ce qui
+      // donne fin < debut une fois la convention "fin exclusive" appliquée. Ce ne sont pas des
+      // périodes de vacances au sens de ce modèle (elles n'affectent pas le décompte des congés sur
+      // plusieurs jours) — ignorées plutôt qu'ajoutées avec une plage inversée absurde.
+      if (fin < debut) return;
+      const key = `${f.description}|${debut}|${fin}`;
+      if (!grouped.has(key)) grouped.set(key, { nom: f.description, debut, fin, zones: [] });
+      if (!grouped.get(key).zones.includes(zone)) grouped.get(key).zones.push(zone);
+    });
+  }
+  return Array.from(grouped.values()).sort((a, b) => a.debut.localeCompare(b.debut));
+}
+
+function openFetchOfficialSchoolHolidaysModal() {
+  const schoolData = schoolHolidayRepository.getSchoolHolidays();
+  const targetYear = nextAnneeScolaire(schoolData.anneeScolaire);
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Récupérer depuis la source officielle</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body" id="fetch-school-holidays-body">
+        <p class="text-muted">Interrogation du calendrier scolaire officiel (data.education.gouv.fr) pour l'année ${escapeHtml(targetYear)}...</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  fetchOfficialSchoolHolidays(targetYear).then(periods => {
+    const body = document.getElementById('fetch-school-holidays-body');
+    if (!body) return; // modale déjà fermée entre-temps
+    const existing = schoolData.periodes;
+    const isAlreadyPresent = (p) => existing.some(e => e.nom === p.nom && e.debut === p.debut && e.fin === p.fin);
+    const newPeriods = periods.filter(p => !isAlreadyPresent(p));
+
+    if (periods.length === 0) {
+      body.innerHTML = `<p class="text-muted">${icon(ICONS.info, 14)} Le calendrier officiel n'est pas encore publié pour l'année ${escapeHtml(targetYear)}. Réessayez plus tard, ou ajoutez les dates manuellement avec "+ Nouvelle période".</p>`;
+      return;
+    }
+    if (newPeriods.length === 0) {
+      body.innerHTML = `<p class="text-muted">${icon(ICONS.checkCircle, 14)} Les ${periods.length} période${periods.length > 1 ? 's' : ''} publiée${periods.length > 1 ? 's' : ''} pour ${escapeHtml(targetYear)} ${periods.length > 1 ? 'sont' : 'est'} déjà présente${periods.length > 1 ? 's' : ''} dans le tableau ci-dessous.</p>`;
+      return;
+    }
+    body.innerHTML = `
+      <p class="text-muted">${newPeriods.length} nouvelle${newPeriods.length > 1 ? 's' : ''} période${newPeriods.length > 1 ? 's' : ''} trouvée${newPeriods.length > 1 ? 's' : ''} pour ${escapeHtml(targetYear)}${periods.length > newPeriods.length ? ` (${periods.length - newPeriods.length} déjà présente${periods.length - newPeriods.length > 1 ? 's' : ''}, ignorée${periods.length - newPeriods.length > 1 ? 's' : ''})` : ''} :</p>
+      <p class="text-muted" style="font-size: 13px;">${icon(ICONS.info, 13)} Les vacances d'été n'y figurent pas — la source officielle n'en publie que la date de début, jamais une période complète exploitable ici. Ajoutez-la manuellement avec "+ Nouvelle période" si besoin.</p>
+      <table class="table">
+        <thead><tr><th>Période</th><th>Début</th><th>Fin</th><th>Zones</th></tr></thead>
+        <tbody>
+          ${newPeriods.map(p => `<tr><td>${escapeHtml(p.nom)}</td><td>${formatDate(p.debut)}</td><td>${formatDate(p.fin)}</td><td>${p.zones.map(escapeHtml).join(', ')}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+    const footer = modalRoot.querySelector('.modal-footer');
+    footer.innerHTML = `
+      <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+      <button type="button" class="btn btn-primary" id="btn-confirm-fetch-school-holidays">Ajouter ces ${newPeriods.length} période${newPeriods.length > 1 ? 's' : ''}</button>
+    `;
+    document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-confirm-fetch-school-holidays').addEventListener('click', () => {
+      const updated = schoolHolidayRepository.getSchoolHolidays();
+      updated.periodes = [...updated.periodes, ...newPeriods];
+      updated.anneeScolaire = targetYear;
+      schoolHolidayRepository.saveSchoolHolidays(updated);
+      showToast(`${newPeriods.length} période${newPeriods.length > 1 ? 's' : ''} ajoutée${newPeriods.length > 1 ? 's' : ''}.`);
+      closeModal();
+      render();
+    });
+  }).catch(err => {
+    console.error('fetchOfficialSchoolHolidays a échoué.', err);
+    const body = document.getElementById('fetch-school-holidays-body');
+    if (body) body.innerHTML = `<p class="text-danger">${icon(ICONS.warningTriangle, 14)} Impossible de contacter la source officielle pour le moment. Réessayez plus tard, ou ajoutez les dates manuellement avec "+ Nouvelle période".</p>`;
   });
 }
 

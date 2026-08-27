@@ -63,11 +63,15 @@ function loadAppJs() {
 
   const navigator = { clipboard: { writeText: async () => {} }, userAgent: 'node-test' };
 
-  const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON };
+  const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl };
   sandbox.window = sandbox;
   sandbox.addEventListener = () => {};
   sandbox.removeEventListener = () => {};
   sandbox.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  // §retour QA du 26/08/2026 (point 6.5) : fetch() n'existe pas nativement dans ce bac à sable —
+  // absent par défaut (lève une erreur claire si un test oublie de le fournir), plutôt qu'un appel
+  // réseau réel accidentel vers une API externe pendant les tests.
+  sandbox.fetch = async () => { throw new Error('fetch() non simulé dans ce test — voir sandbox.window.fetch'); };
   vm.createContext(sandbox);
 
   const exposeAfterData = `
@@ -85,6 +89,9 @@ globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
+globalThis.__parisDateFromISO = parisDateFromISO;
+globalThis.__nextAnneeScolaire = nextAnneeScolaire;
+globalThis.__fetchOfficialSchoolHolidays = fetchOfficialSchoolHolidays;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -100,6 +107,9 @@ globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     getVisibleEmployeeIdsForCurrentUser: sandbox.__getVisibleEmployeeIdsForCurrentUser,
     isCurrentWorkflowStepFor: sandbox.__isCurrentWorkflowStepFor,
+    parisDateFromISO: sandbox.__parisDateFromISO,
+    nextAnneeScolaire: sandbox.__nextAnneeScolaire,
+    fetchOfficialSchoolHolidays: sandbox.__fetchOfficialSchoolHolidays,
   };
 }
 
