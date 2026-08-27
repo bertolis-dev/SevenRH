@@ -5624,14 +5624,32 @@ function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
 
 /** Cumul des heures supplémentaires saisies (voir DB.ajusterHeuresSupplementaires) sur l'année
  * civile donnée — comparé à settings.contingentAnnuelHeuresSup pour repérer une approche/un
- * dépassement du contingent légal. Ne calcule PAS le repos compensateur (taux 50%/100% selon
- * l'effectif, potentiellement modifié par accord de branche) : ce module reste un compteur de
- * suivi, pas un moteur de paie. */
+ * dépassement du contingent légal. Ne calcule PAS le solde de repos compensateur (voir
+ * getReposCompensateurSolde ci-dessous pour ça) : cette fonction-ci reste un simple cumul annuel
+ * pour le contrôle du contingent légal, pas le solde disponible à prendre. */
 function getHeuresSupAnnee(employee, year) {
   const heuresSup = employee.heuresSupplementaires || {};
   return Object.entries(heuresSup)
     .filter(([monthKey]) => monthKey.startsWith(`${year}-`))
     .reduce((sum, [, heures]) => sum + (Number(heures) || 0), 0);
+}
+
+/** §retour QA du 26/08/2026 (point 7.21, "compteur en heures") : solde de repos compensateur
+ * disponible — crédit (toutes les heures sup. jamais saisies, TOUTES années confondues, converties
+ * au taux configuré par l'entreprise, settings.tauxReposCompensateur) moins tout ce qui a déjà été
+ * pris (reposCompensateurPris, même principe). Volontairement TOUT L'HISTORIQUE, pas seulement
+ * l'année civile en cours (contrairement à getHeuresSupAnnee, qui sert un contrôle légal ANNUEL) :
+ * un solde de repos compensateur non pris ne s'efface pas au 1er janvier, il continue de s'accumuler
+ * jusqu'à ce qu'il soit consommé (sous réserve des règles de péremption propres à chaque accord,
+ * non gérées ici — encore une fois à la charge de l'entreprise de surveiller). Jamais stocké comme
+ * un champ à part sur le salarié : toujours recalculé à partir des deux journaux bruts, pour ne
+ * jamais diverger silencieusement si le taux de conversion est modifié après coup. */
+function getReposCompensateurSolde(employee) {
+  const taux = settingsRepository.getSettings().tauxReposCompensateur || 0;
+  const totalHeuresSup = Object.values(employee.heuresSupplementaires || {}).reduce((sum, h) => sum + (Number(h) || 0), 0);
+  const totalPris = Object.values(employee.reposCompensateurPris || {}).reduce((sum, h) => sum + (Number(h) || 0), 0);
+  const credit = round2(totalHeuresSup * (1 + taux / 100));
+  return { credit, pris: totalPris, solde: round2(credit - totalPris) };
 }
 
 /** Salariés dont le cumul d'heures sup de l'année civile en cours atteint au moins `seuilPct` du
@@ -8350,6 +8368,17 @@ function renderEmployeeDetail(id) {
               <span class="info-value${depasse ? ' text-danger' : ''}">${formatNumberFR(cumul)} h / ${formatNumberFR(contingent)} h (contingent annuel)</span>
             </div>
             ${depasse ? `<p class="text-muted text-danger" style="margin-top: 4px;">Contingent annuel dépassé — un repos compensateur obligatoire s'applique (taux selon effectif/accord de branche, à vérifier avec votre gestionnaire de paie).</p>` : ''}
+          `;
+        })()}
+        ${(() => {
+          const repos = getReposCompensateurSolde(e);
+          if (!repos.credit && !repos.pris) return '';
+          return `
+            <div class="info-row">
+              <span class="info-label">Solde de repos compensateur</span>
+              <span class="info-value${repos.solde < 0 ? ' text-danger' : ''}">${formatNumberFR(repos.solde)} h</span>
+            </div>
+            <p class="form-hint" style="margin-top: -2px;">${formatNumberFR(repos.credit)} h acquises (taux de majoration ${formatNumberFR(settingsRepository.getSettings().tauxReposCompensateur)} %) − ${formatNumberFR(repos.pris)} h prises.</p>
           `;
         })()}
       </div>
@@ -13117,6 +13146,11 @@ function renderParametresListes() {
           <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
         </div>
+        <div class="form-field">
+          <label for="f-taux-repos-compensateur">Taux de majoration — repos compensateur (%)</label>
+          <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
+          <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise — à vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -13285,6 +13319,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
   bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
+  bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
@@ -16348,7 +16383,10 @@ function getPaieRows(year, month) {
       variablesMontant: (e.variablesPaie && e.variablesPaie[`${year}-${String(month + 1).padStart(2, '0')}`]) || 0,
       // Heures supplémentaires du mois — même principe, aucun module de pointage ne les détecte
       // automatiquement (voir DB.ajusterHeuresSupplementaires).
-      heuresSupHeures: (e.heuresSupplementaires && e.heuresSupplementaires[monthStr]) || 0
+      heuresSupHeures: (e.heuresSupplementaires && e.heuresSupplementaires[monthStr]) || 0,
+      // §retour QA du 26/08/2026 (point 7.21) : heures de repos compensateur prises ce mois, même
+      // principe (voir DB.ajusterReposCompensateurPris).
+      reposCompensateurPrisHeures: (e.reposCompensateurPris && e.reposCompensateurPris[monthStr]) || 0
     };
   });
 }
@@ -16517,6 +16555,7 @@ function renderExportPaiePreparationTab(rows) {
               <th>Notes de frais</th>
               <th>Variables</th>
               <th>Heures sup</th>
+              <th>Repos comp. pris</th>
               <th>Tickets restaurant</th>
               <th>Anomalies</th>
             </tr>
@@ -16532,6 +16571,7 @@ function renderExportPaiePreparationTab(rows) {
                 <td>${formatCurrencyFR(r.notesRembourser)}</td>
                 <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">${icon(ICONS.pencil, 13)}</button></td>
                 <td>${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">${icon(ICONS.pencil, 13)}</button></td>
+                <td>${formatNumberFR(r.reposCompensateurPrisHeures)} h <button type="button" class="btn-link" data-adjust-repos-compensateur="${r.employee.id}" title="Ajuster le repos compensateur pris">${icon(ICONS.pencil, 13)}</button></td>
                 <td>${r.tickets.nbTickets}</td>
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
@@ -16585,6 +16625,7 @@ function renderExportPaieExportTab(rows) {
               ${showColonne('frais') ? '<th>Frais à rembourser</th>' : ''}
               <th>Variables</th>
               <th>Heures sup</th>
+              <th>Repos comp. pris</th>
             </tr>
           </thead>
           <tbody>
@@ -16598,6 +16639,7 @@ function renderExportPaieExportTab(rows) {
                 ${showColonne('frais') ? `<td>${formatCurrencyFR(r.notesRembourser)}</td>` : ''}
                 <td>${formatCurrencyFR(r.variablesMontant)}</td>
                 <td>${formatNumberFR(r.heuresSupHeures)} h</td>
+                <td>${formatNumberFR(r.reposCompensateurPrisHeures)} h</td>
               </tr>
             `).join('')}
           </tbody>
@@ -16648,6 +16690,10 @@ function bindExportPaieEvents() {
 
   document.querySelectorAll('[data-adjust-heures-sup]').forEach(btn => {
     btn.addEventListener('click', () => openHeuresSupModal(btn.dataset.adjustHeuresSup));
+  });
+
+  document.querySelectorAll('[data-adjust-repos-compensateur]').forEach(btn => {
+    btn.addEventListener('click', () => openReposCompensateurPrisModal(btn.dataset.adjustReposCompensateur));
   });
 }
 
@@ -16830,6 +16876,66 @@ function openHeuresSupModal(employeeId) {
   });
 }
 
+/** §retour QA du 26/08/2026 (point 7.21) : repos compensateur pris — même patron qu'openHeuresSupModal
+ * juste au-dessus (saisie manuelle par mois, remplace la valeur précédente). Rappelle le solde
+ * disponible AVANT saisie (getReposCompensateurSolde) plutôt que de l'imposer comme un plafond
+ * strict : voir le commentaire de DB.ajusterReposCompensateurPris sur pourquoi ce module ne bloque
+ * jamais une saisie qui dépasserait le solde calculé (le taux de conversion configuré n'est jamais
+ * garanti être le bon, RH reste seul juge). */
+function openReposCompensateurPrisModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const year = state.paieYear;
+  const month = state.paieMonth;
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const current = (employee.reposCompensateurPris && employee.reposCompensateurPris[monthKey]) || 0;
+  const solde = getReposCompensateurSolde(employee);
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Repos compensateur pris — ${MONTH_NAMES[month]} ${year}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="repos-compensateur-form">
+        <div class="modal-body">
+          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — nombre d'heures de repos compensateur prises ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <p class="form-hint">Solde disponible avant cette saisie : ${formatNumberFR(solde.solde)} h (${formatNumberFR(solde.credit)} h acquises − ${formatNumberFR(solde.pris)} h déjà prises, toutes années confondues).</p>
+          <div class="form-field">
+            <label for="f-heures">Heures prises (h) *</label>
+            <input class="input" type="number" id="f-heures" name="heures" step="0.5" min="0" value="${current}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif">Motif</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. après-midi du 12/06">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('repos-compensateur-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const heures = document.getElementById('f-heures').value;
+    const motif = document.getElementById('f-motif').value;
+    const result = employeeRepository.ajusterReposCompensateurPris(employeeId, year, month, heures, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Repos compensateur enregistré.');
+    closeModal();
+    render();
+  });
+}
+
 function shiftPaieMonth(delta) {
   let month = state.paieMonth + delta;
   let year = state.paieYear;
@@ -16889,7 +16995,8 @@ function exportPaieCSV() {
     ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets — part salarié (€)'] : []),
     ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : []),
     'Variables (€)', // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
-    'Heures supplémentaires (h)' // même raisonnement : élément de paie essentiel, toujours inclus
+    'Heures supplémentaires (h)', // même raisonnement : élément de paie essentiel, toujours inclus
+    'Repos compensateur pris (h)' // §retour QA du 26/08/2026 (point 7.21) : même raisonnement, toujours inclus
   ];
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
@@ -16898,7 +17005,8 @@ function exportPaieCSV() {
     ...(showColonne('tickets') ? [r.tickets.nbTickets, formatNumberFR(r.tickets.partSalarie)] : []),
     ...(showColonne('frais') ? [formatNumberFR(r.notesRembourser)] : []),
     formatNumberFR(r.variablesMontant),
-    formatNumberFR(r.heuresSupHeures)
+    formatNumberFR(r.heuresSupHeures),
+    formatNumberFR(r.reposCompensateurPrisHeures)
   ]);
   exportRowsToCSVWithDelimiter(headers, data, `export-paie-${state.paieYear}-${String(state.paieMonth + 1).padStart(2, '0')}.csv`, delimiter);
   auditLogRepository.logAudit('Export', 'Export paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear} · modèle ${EXPORT_PAIE_MODELES[modele].label}`);

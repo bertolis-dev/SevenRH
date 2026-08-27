@@ -93,6 +93,7 @@ globalThis.__parisDateFromISO = parisDateFromISO;
 globalThis.__nextAnneeScolaire = nextAnneeScolaire;
 globalThis.__fetchOfficialSchoolHolidays = fetchOfficialSchoolHolidays;
 globalThis.__getEmployeesOnLongAbsence = getEmployeesOnLongAbsence;
+globalThis.__getReposCompensateurSolde = getReposCompensateurSolde;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -112,6 +113,7 @@ globalThis.__getEmployeesOnLongAbsence = getEmployeesOnLongAbsence;
     nextAnneeScolaire: sandbox.__nextAnneeScolaire,
     fetchOfficialSchoolHolidays: sandbox.__fetchOfficialSchoolHolidays,
     getEmployeesOnLongAbsence: sandbox.__getEmployeesOnLongAbsence,
+    getReposCompensateurSolde: sandbox.__getReposCompensateurSolde,
   };
 }
 

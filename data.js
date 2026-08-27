@@ -514,9 +514,19 @@ const DEFAULT_SETTINGS = {
   visiteMedicalePerioditeMois: 60,
   // Contingent annuel légal d'heures supplémentaires (Code du travail, à défaut d'accord de
   // branche/entreprise fixant un autre plafond) : 220h/salarié/an par défaut en 2026. Au-delà, un
-  // repos compensateur obligatoire s'applique (taux variable selon l'effectif — non calculé
-  // automatiquement ici, voir renderHeuresSupCard, app.js).
+  // repos compensateur obligatoire s'applique (taux variable selon l'effectif — voir
+  // tauxReposCompensateur ci-dessous et getReposCompensateurSolde, app.js).
   contingentAnnuelHeuresSup: 220,
+  // §retour QA du 26/08/2026 (point 7.21, "compteur en heures") : taux de conversion heures
+  // supplémentaires -> repos compensateur, EN POURCENTAGE DE MAJORATION (25 = 1h travaillée devient
+  // 1,25h de repos). Volontairement laissé à la charge de l'entreprise, jamais présumé par l'app :
+  // le taux réel dépend de l'effectif, d'un accord de branche ou d'entreprise, et du régime retenu
+  // (repos compensateur de remplacement vs contrepartie obligatoire en repos) — aucune valeur
+  // générique ne serait correcte pour tout le monde. 25 par défaut (taux légal le plus courant pour
+  // les 8 premières heures sup./semaine dans les entreprises de plus de 20 salariés, Code du travail
+  // art. L3121-36), à vérifier et ajuster par chaque entreprise avec son gestionnaire de paie —
+  // jamais une valeur à prendre pour argent comptant sans vérification.
+  tauxReposCompensateur: 25,
   // Index de l'égalité professionnelle femmes-hommes (voir DB.enregistrerIndexEgalite) : { [année]:
   // { note, datePublication, mesuresCorrectives } }, une entrée par année civile déclarée.
   indexEgaliteProfessionnelle: {},
@@ -1943,6 +1953,25 @@ const DB = {
     return { success: true };
   },
 
+  /** §retour QA du 26/08/2026 (point 7.21) : heures de repos compensateur PRISES ce mois — même
+   * principe que ajusterHeuresSupplementaires ci-dessus (remplace la valeur du mois, pas un cumul).
+   * Aucune vérification que ça ne dépasse pas le solde disponible : comme le reste de ce module
+   * (saisie manuelle, pas de moteur de paie), c'est à RH de vérifier le solde affiché
+   * (getReposCompensateurSolde, app.js) avant de saisir — imposer un plafond ici supposerait que le
+   * taux de conversion configuré est le bon, ce que l'app ne peut jamais garantir. */
+  ajusterReposCompensateurPris(employeeId, year, month, heures, motif) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const value = Number(heures);
+    if (!Number.isFinite(value) || value < 0) {
+      return { success: false, error: 'Le nombre d\'heures doit être un nombre positif ou nul.' };
+    }
+    const reposCompensateurPris = Object.assign({}, employee.reposCompensateurPris, { [ticketsMonthKey(year, month)]: value });
+    this.updateEmployee(employeeId, { reposCompensateurPris });
+    this.logAudit('Modification', 'Repos compensateur pris', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · ${formatNumberFR(value)} h${motif ? ' · ' + motif : ''}`);
+    return { success: true };
+  },
+
   /** Auto-service limité (§ MODIFIER_PROPRES_COORDONNEES) : seuls téléphone/adresse sont modifiables
    * par ce chemin — signature explicite (pas un patch générique) pour qu'il soit structurellement
    * impossible d'y glisser un autre champ (poste, contrat, salaire...) par erreur plus tard. */
@@ -3072,6 +3101,7 @@ const employeeRepository = {
   ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
   ajusterVariables: (employeeId, year, month, montant, motif) => DB.ajusterVariablesPaie(employeeId, year, month, montant, motif),
   ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
+  ajusterReposCompensateurPris: (employeeId, year, month, heures, motif) => DB.ajusterReposCompensateurPris(employeeId, year, month, heures, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
@@ -3380,6 +3410,13 @@ function makeEmptyEmployee() {
     ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
     variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
     heuresSupplementaires: {}, // { 'AAAA-MM': heures } — heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
+    // §retour QA du 26/08/2026 (point 7.21) : { 'AAAA-MM': heures } — heures de repos compensateur
+    // PRISES ce mois-ci (saisie manuelle, même principe que heuresSupplementaires ci-dessus, aucun
+    // module de pointage ne les détecte automatiquement). Le solde disponible se calcule en
+    // combinant ce champ avec heuresSupplementaires × settings.tauxReposCompensateur, voir
+    // getReposCompensateurSolde (app.js) — jamais stocké comme un solde à part, pour ne jamais
+    // diverger silencieusement de son propre calcul si le taux de conversion change en cours de route.
+    reposCompensateurPris: {},
     typesAbsenceDesactives: [], // Sprint SIRH premium SS1 : ids de types actifs/visibles au niveau entreprise
                                  // mais explicitement désactivés pour CE salarié (liste blanche par défaut : vide = tout ce que l'entreprise autorise)
     menusDesactives: [], // §retour du 21/08/2026 "pouvoir enlever l'accès à tous les menus" : clés NAV_ITEMS
