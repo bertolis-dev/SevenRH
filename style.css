@@ -886,6 +886,50 @@ p { margin: 0; line-height: 1.5; }
   align-items: start;
 }
 
+/* §retour QA du 27/08/2026 (suite) : align-items:start évite qu'une carte courte s'étire pour rien,
+   mais une grille CSS reste organisée en LIGNES de hauteur fixe (celle de la carte la plus haute de
+   la ligne) — la ligne suivante ne peut jamais "remonter" dans le vide laissé sous une carte courte
+   de la ligne précédente, ce n'est pas une vraie mise en page façon Pinterest. .detail-grid-cards
+   (uniquement pour une grille de VRAIES cartes .card, jamais pour une grille de champs infoRow/
+   form-field — celle-ci reste .detail-grid, une grille de lignes reste la bonne présentation pour
+   des champs alignés) passe en colonnes CSS : chaque carte s'empile dans la colonne la moins
+   remplie, sans jamais laisser de trou. break-inside:avoid empêche une carte d'être coupée en deux
+   entre deux colonnes. */
+.detail-grid-cards {
+  display: block;
+  column-count: 1;
+  column-gap: 16px;
+}
+@media (min-width: 720px) {
+  .detail-grid-cards { column-count: 2; }
+}
+@media (min-width: 1200px) {
+  .detail-grid-cards { column-count: 3; }
+}
+/* §retour QA du 27/08/2026 : panneau déroulant natif (Compteurs de congés, potentiellement très
+   long) — repose sur <details>/<summary> (accessible, sans JS) plutôt qu'un composant maison. */
+.collapsible-panel { margin-top: 10px; }
+.collapsible-panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-primary);
+  list-style: none;
+  padding: 4px 0;
+}
+.collapsible-panel > summary::-webkit-details-marker { display: none; }
+.collapsible-panel > summary::before { content: '▸ '; display: inline-block; transition: transform 0.15s ease; }
+.collapsible-panel[open] > summary::before { transform: rotate(90deg); }
+.collapsible-panel > summary:hover { text-decoration: underline; }
+.collapsible-panel .balance-grid { margin-top: 12px; }
+
+.detail-grid-cards > .card {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  vertical-align: top;
+}
+
 .about-modal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));

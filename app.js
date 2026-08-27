@@ -7816,7 +7816,7 @@ function renderTicketDescriptionAndAi(description, contexte, pieceJointe, aiAnal
     </div>
   `;
   if (!aiAnalysis) return descriptionCard;
-  return `<div class="detail-grid">${descriptionCard}${renderTicketAiSuggestion(aiAnalysis, showApplyButton)}</div>`;
+  return `<div class="detail-grid-cards">${descriptionCard}${renderTicketAiSuggestion(aiAnalysis, showApplyButton)}</div>`;
 }
 
 function renderTicketDetail(id) {
@@ -8531,7 +8531,7 @@ function renderEmployeeDetail(id) {
       </div>
     </div>
 
-    <div class="detail-grid">
+    <div class="detail-grid-cards">
       <div class="card">
         <h2>Identité</h2>
         ${infoRow('Matricule', e.matricule)}
@@ -8611,6 +8611,12 @@ function renderEmployeeDetail(id) {
       </div>
 
       <div class="card">
+        <!-- §retour QA du 27/08/2026 ("fais un panneau déroulant pour compteurs de congés") : cette
+             carte peut afficher un très grand nombre de types (chacun avec son détail acquis/pris/
+             en cours), au point de dominer toute la fiche à elle seule. <details>/<summary> natifs
+             (repliable au clic, sans JS, accessible par défaut) plutôt qu'un composant maison — les
+             boutons "Demander" restent TOUJOURS visibles, en dehors du panneau repliable, pour rester
+             utilisables sans avoir à déplier le détail des compteurs. -->
         <div class="view-header-row">
           <h2>Compteurs de congés</h2>
           <div class="detail-header-actions">
@@ -8618,9 +8624,12 @@ function renderEmployeeDetail(id) {
             <button class="btn btn-secondary btn-sm" id="btn-request-telework">Demander du télétravail</button>
           </div>
         </div>
-        ${user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)
-          ? renderEmployeeBalances(e, user.id !== e.id && hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS))
-          : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
+        <details class="collapsible-panel">
+          <summary>Voir le détail des compteurs</summary>
+          ${user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)
+            ? renderEmployeeBalances(e, user.id !== e.id && hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS))
+            : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
+        </details>
       </div>
 
       ${renderTypesAbsenceCard(e, user)}
