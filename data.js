@@ -245,7 +245,19 @@ const _categoriesSalarieMigratedCompanyIds = new Set();
  * — la liste officielle complète du Ministère du Travail dépasse 700 entrées, dont une grande partie
  * très régionales/obsolètes ; ce catalogue couvre les ~180 conventions les plus courantes pour une
  * PME/ETI française, classées par secteur. Non exhaustif par construction — si une entreprise ne
- * trouve pas la sienne, "Aucune" reste toujours disponible plutôt que d'obliger un choix erroné. */
+ * trouve pas la sienne, "Aucune" reste toujours disponible plutôt que d'obliger un choix erroné.
+ *
+ * §retour QA du 26/08/2026 (point 6.1) : "liste statique, jamais liée à la source" — recherché un
+ * vrai jeu de données ouvert (même principe que seedSchoolHolidays, point 6.5) pour resynchroniser
+ * automatiquement ; AUCUN n'existe en accès libre pour les conventions collectives (contrairement au
+ * calendrier scolaire) — la base KALI officielle n'est accessible que via l'API Légifrance (PISTE),
+ * qui exige un compte + des identifiants OAuth à enregistrer, hors de portée d'une simple correction
+ * de données. Solution retenue à la place : pointer explicitement vers l'outil officiel de
+ * vérification (voir le lien "Vérifier ma convention" dans Paramètres → Entreprise,
+ * renderParametresEntreprise) plutôt que de laisser cette liste statique sans aucun moyen de la
+ * confronter à la source réelle. Les codes IDCC changent occasionnellement (fusions de branches
+ * professionnelles) — cette liste peut donc être en retard sur un IDCC précis, d'où l'importance du
+ * lien de vérification plutôt qu'une confiance aveugle dans ce catalogue. */
 const IDCC_CONVENTIONS = [
   // Industrie
   { code: '18', nom: 'Industries textiles', secteur: 'Industrie' },

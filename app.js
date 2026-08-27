@@ -12258,6 +12258,7 @@ function renderParametresEntreprise() {
           ${textField('email', 'Email', profile.email, true, 'email')}
           ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, profile.conventionCollective)}
         </div>
+        <p class="form-hint">${icon(ICONS.info, 12)} Liste des conventions collectives non exhaustive (~180 les plus courantes) et pas automatiquement mise à jour — si la vôtre n'apparaît pas ou que le code IDCC vous semble dépassé, <a href="https://code.travail.gouv.fr/outils/convention-collective" target="_blank" rel="noopener noreferrer">vérifiez sur l'outil officiel du Ministère du Travail</a>.</p>
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
