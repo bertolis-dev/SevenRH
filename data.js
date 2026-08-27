@@ -3710,7 +3710,18 @@ function makeEmptyLeaveType() {
     // N'a d'effet que si dateClotureCompteur est renseigné (voir la section "report" de
     // getLeaveBalance, data.js, où le calcul est fait — même dépendance que le report lui-même).
     fractionnementActif: false,
-    exportPaie: true
+    exportPaie: true,
+    // §correctif retour QA du 27/08/2026 (point 2.4, confirmé par l'expert-comptable de l'entreprise) :
+    // 'proportionnelle' (défaut, comportement historique) réduit l'acquisition au pourcentage
+    // d'activité — correct pour un type sans réponse explicite, mais confirmé À TORT pour les congés
+    // payés : la loi acquiert les CP en jours par mois travaillé, sans proratisation selon la durée
+    // du travail (seul le décompte à la consommation doit refléter le temps partiel, jamais
+    // l'acquisition). 'aucune' (CP) : acquisition toujours pleine, quel que soit le temps de travail.
+    // 'exclu' (RTT) : nulle pour tout salarié à moins de 100 % — un temps partiel ne dépasse jamais
+    // 35h/semaine par définition, donc n'a droit à aucun RTT (pas juste "moins"). Voir
+    // resolveProratisationTempsPartiel (identifie CP/RTT par nom, comme deduireRTT/deduireCP déjà
+    // existants) et calculateAcquisition.
+    proratisationTempsPartiel: 'proportionnelle'
   };
 }
 
@@ -4286,7 +4297,14 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
 
   if (periodStart > periodEnd) return 0;
 
-  const activityRatio = (Number(employee.pourcentageActivite) || 100) / 100;
+  // §correctif retour QA du 27/08/2026 (point 2.4, confirmé par l'expert-comptable) : la réduction
+  // au pourcentage d'activité ne s'applique plus uniformément à tous les types — voir
+  // resolveProratisationTempsPartiel et le commentaire de proratisationTempsPartiel (makeEmptyLeaveType).
+  const rawActivityRatio = (Number(employee.pourcentageActivite) || 100) / 100;
+  const proratisation = resolveProratisationTempsPartiel(leaveType);
+  const activityRatio = proratisation === 'aucune' ? 1
+    : proratisation === 'exclu' ? (rawActivityRatio >= 1 ? 1 : 0)
+    : rawActivityRatio;
   const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now);
 
   if (leaveType.acquisition === 'Mensuelle') {
@@ -4317,6 +4335,20 @@ function leaveTypeNameMatches(nom, target) {
   const n = (nom || '').trim().toLowerCase();
   const t = target.trim().toLowerCase();
   return n === t || n.startsWith(t + ' ');
+}
+
+/** §correctif retour QA du 27/08/2026 (point 2.4) : leaveType.proratisationTempsPartiel n'existait
+ * pas avant ce correctif — un type déjà en base (donc sans ce champ) retombe ici sur une inférence
+ * par nom (même technique que deduireRTT/deduireCP au-dessus) plutôt qu'une migration d'écriture :
+ * "Congés payés"/"RTT" retrouvent la règle confirmée par l'expert-comptable même sur une entreprise
+ * dont les types n'ont jamais été resauvegardés depuis ce correctif ; tout AUTRE type (y compris un
+ * type nommé "RTT" ou "Congés payés" par coïncidence après avoir explicitement choisi un autre
+ * réglage) respecte la valeur explicitement enregistrée dès qu'elle existe. */
+function resolveProratisationTempsPartiel(leaveType) {
+  if (leaveType.proratisationTempsPartiel) return leaveType.proratisationTempsPartiel;
+  if (leaveTypeNameMatches(leaveType.nom, 'Congés payés')) return 'aucune';
+  if (leaveTypeNameMatches(leaveType.nom, 'RTT')) return 'exclu';
+  return 'proportionnelle';
 }
 
 function getLeaveTypeIdsByName(leaveTypes, nom) {

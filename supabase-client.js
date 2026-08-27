@@ -136,6 +136,15 @@ function serviceFromRow(row) {
   return { id: row.id, nom: row.nom, equipes: row.equipes ?? [] };
 }
 
+/** §correctif retour QA du 27/08/2026 (trouvé en implémentant le point 2.4) : cette fonction listait
+ * ses champs un par un (contrairement à leaveTypeToRow, qui écrit tout `...rest` génériquement dans
+ * data) et n'avait jamais été mise à jour au fil des fonctionnalités ajoutées à un type de congé
+ * depuis (paliers d'ancienneté §7.18, clôture de compteur + report §5/§7.15, délai de prévenance
+ * §7.8, fractionnement §7.17, valideurs nommés §6.7, compteurPartageAvecId/regles §3, unité de
+ * décompte §7.9). Conséquence réelle, silencieuse : ces réglages étaient bien écrits en base (data
+ * intacte), mais jamais relus après une reconnexion/un changement d'appareil — ils réapparaissaient
+ * à leur valeur par défaut dans l'interface alors que la vraie donnée dormait toujours côté serveur.
+ * Complété ici pour lister exactement les mêmes champs que makeEmptyLeaveType (data.js). */
 function leaveTypeFromRow(row) {
   const d = row.data || {};
   return {
@@ -143,10 +152,22 @@ function leaveTypeFromRow(row) {
     icone: d.icone ?? '🏖️', couleur: d.couleur ?? '#4f46e5', description: d.description ?? '',
     nombreAnnuel: d.nombreAnnuel ?? 0, illimite: d.illimite ?? false, acquisition: d.acquisition ?? 'Annuelle',
     paye: d.paye ?? true, justificatifObligatoire: d.justificatifObligatoire ?? false,
-    workflow: d.workflow ?? ['manager'], saisiParSalarie: d.saisiParSalarie ?? true,
+    workflow: d.workflow ?? ['manager'], workflowValidatorOverrides: d.workflowValidatorOverrides ?? {},
+    saisiParSalarie: d.saisiParSalarie ?? true,
     visibleSalarie: d.visibleSalarie ?? true, visibleRH: d.visibleRH ?? true,
     autoriserDemiJournee: d.autoriserDemiJournee ?? true, autoriserPlusieursDemandes: d.autoriserPlusieursDemandes ?? true,
     deduireCompteur: d.deduireCompteur ?? true, deduireRTT: d.deduireRTT ?? false, deduireCP: d.deduireCP ?? false,
+    compteurPartageAvecId: d.compteurPartageAvecId ?? null, regles: d.regles ?? [],
+    dateClotureCompteur: d.dateClotureCompteur ?? null, reportCompteur: d.reportCompteur ?? 'aucun',
+    reportLimiteJours: d.reportLimiteJours ?? null, dateLimiteReportMMJJ: d.dateLimiteReportMMJJ ?? null,
+    delaiPrevenanceJours: d.delaiPrevenanceJours ?? null, delaiPrevenanceMode: d.delaiPrevenanceMode ?? 'alerte',
+    uniteDecompte: d.uniteDecompte ?? 'ouvres', paliersAnciennete: d.paliersAnciennete ?? [],
+    fractionnementActif: d.fractionnementActif ?? false,
+    // Jamais de "?? 'proportionnelle'" ici (contrairement aux autres champs ci-dessus) : un type
+    // existant en base SANS cette clé doit rester `undefined` pour que resolveProratisationTempsPartiel
+    // (data.js) applique son inférence par nom ("Congés payés" -> aucune, "RTT" -> exclu) — un
+    // défaut appliqué ici l'empêcherait de jamais se déclencher pour les types déjà en production.
+    proratisationTempsPartiel: d.proratisationTempsPartiel,
     exportPaie: d.exportPaie ?? true
   };
 }

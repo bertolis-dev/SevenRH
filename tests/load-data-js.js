@@ -35,6 +35,9 @@ globalThis.__seedLeaveTypes = seedLeaveTypes;
 globalThis.__ensureDefaultLeaveTypesBackfilled = ensureDefaultLeaveTypesBackfilled;
 globalThis.__hasPermission = hasPermission;
 globalThis.__PERMISSIONS = PERMISSIONS;
+globalThis.__calculateAcquisition = calculateAcquisition;
+globalThis.__resolveProratisationTempsPartiel = resolveProratisationTempsPartiel;
+globalThis.__makeEmptyLeaveType = makeEmptyLeaveType;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -47,6 +50,9 @@ globalThis.__PERMISSIONS = PERMISSIONS;
     ensureDefaultLeaveTypesBackfilled: sandbox.__ensureDefaultLeaveTypesBackfilled,
     hasPermission: sandbox.__hasPermission,
     PERMISSIONS: sandbox.__PERMISSIONS,
+    calculateAcquisition: sandbox.__calculateAcquisition,
+    resolveProratisationTempsPartiel: sandbox.__resolveProratisationTempsPartiel,
+    makeEmptyLeaveType: sandbox.__makeEmptyLeaveType,
   };
 }
 

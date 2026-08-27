@@ -11090,6 +11090,15 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                 </select>
                 <p class="form-hint">Le Code du travail exprime les congés payés en jours ouvrables (30) ; la plupart des conventions comptent en jours ouvrés (25).</p>
               </div>
+              <div class="form-field">
+                <label for="f-proratisationTempsPartiel">Effet du temps partiel sur l'acquisition</label>
+                <select class="input" id="f-proratisationTempsPartiel" name="proratisationTempsPartiel">
+                  <option value="proportionnelle" ${resolveProratisationTempsPartiel(type) === 'proportionnelle' ? 'selected' : ''}>Réduite au pourcentage d'activité</option>
+                  <option value="aucune" ${resolveProratisationTempsPartiel(type) === 'aucune' ? 'selected' : ''}>Jamais réduite (ex. congés payés)</option>
+                  <option value="exclu" ${resolveProratisationTempsPartiel(type) === 'exclu' ? 'selected' : ''}>Nulle pour un temps partiel (ex. RTT)</option>
+                </select>
+                <p class="form-hint">Confirmé par votre expert-comptable pour Congés payés (jamais réduite) et RTT (nulle) — à vérifier avant de changer ce réglage pour un autre type.</p>
+              </div>
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Paliers d'ancienneté (optionnel)</label>
@@ -11453,7 +11462,12 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersA
     delaiPrevenanceJours,
     delaiPrevenanceMode,
     uniteDecompte: formData.get('uniteDecompte') === 'ouvrables' ? 'ouvrables' : 'ouvres',
-    fractionnementActif: dateClotureCompteur ? document.getElementById('f-fractionnementActif').checked : false
+    fractionnementActif: dateClotureCompteur ? document.getElementById('f-fractionnementActif').checked : false,
+    // §correctif retour QA du 27/08/2026 (point 2.4) : un choix explicite ici prévaut désormais sur
+    // l'inférence par nom (voir resolveProratisationTempsPartiel) — même pour un type nommé "RTT"/
+    // "Congés payés" par coïncidence après avoir choisi volontairement un autre réglage.
+    proratisationTempsPartiel: ['proportionnelle', 'aucune', 'exclu'].includes(formData.get('proratisationTempsPartiel'))
+      ? formData.get('proratisationTempsPartiel') : 'proportionnelle'
   };
   patch.illimite = patch.acquisition === 'Illimitée';
   checkboxNames.forEach(name => { patch[name] = form.querySelector(`#f-${name}`).checked; });
