@@ -3721,7 +3721,18 @@ function makeEmptyLeaveType() {
     // 35h/semaine par définition, donc n'a droit à aucun RTT (pas juste "moins"). Voir
     // resolveProratisationTempsPartiel (identifie CP/RTT par nom, comme deduireRTT/deduireCP déjà
     // existants) et calculateAcquisition.
-    proratisationTempsPartiel: 'proportionnelle'
+    proratisationTempsPartiel: 'proportionnelle',
+    // §correctif retour QA du 27/08/2026 (point 7.16, confirmé par l'expert-comptable : "ça dépend
+    // des congés, il faut pouvoir le changer") : jusqu'ici l'acquisition ne dépendait QUE du temps
+    // écoulé depuis l'embauche — un salarié en congé sabbatique ou en congé parental de 6 mois
+    // continuait d'acquérir des CP comme s'il travaillait. Coché sur CE type d'ABSENCE (ex. "Sans
+    // solde"), une demande validée de ce type suspend l'acquisition de TOUS les compteurs pendant sa
+    // durée (voir calculateAcquisition/joursSuspendusAcquisition) — jamais coché par défaut,
+    // volontairement : contrairement à proratisationTempsPartiel ci-dessus, l'expert-comptable n'a
+    // PAS donné de liste "ceci suspend, cela non" (maternité = travail effectif, sabbatique = non,
+    // mais rien de plus précis) — deviner un défaut par type serait aussi risqué que ce qu'on corrige.
+    // Coché à la main, type par type, par l'entreprise.
+    suspendAcquisitionAutresCompteurs: false
   };
 }
 
@@ -4276,10 +4287,35 @@ function resolveAncienneteAcquisAnnuel(leaveType, employee, refDate) {
   return atteints.length ? Number(atteints[0].jours) || 0 : 0;
 }
 
+/** §correctif retour QA du 27/08/2026 (point 7.16) : nombre de jours calendaires, dans
+ * [periodStart, periodEnd], couverts par une demande VALIDÉE d'un type marqué
+ * suspendAcquisitionAutresCompteurs (voir makeEmptyLeaveType) — jamais calculé si allRequests/
+ * allLeaveTypes ne sont pas fournis (0, comportement strictement inchangé), voir calculateAcquisition. */
+function countSuspendedAcquisitionDays(employee, periodStart, periodEnd, allRequests, allLeaveTypes) {
+  if (!allRequests || !allLeaveTypes) return 0;
+  const suspendingTypeIds = new Set(allLeaveTypes.filter(t => t.suspendAcquisitionAutresCompteurs).map(t => t.id));
+  if (!suspendingTypeIds.size) return 0;
+  let days = 0;
+  allRequests.forEach(r => {
+    if (r.employeeId !== employee.id || r.statut !== 'Validé' || !suspendingTypeIds.has(r.typeId)) return;
+    if (!r.dateDebut || !r.dateFin) return;
+    const reqStart = parseISODateLocal(r.dateDebut);
+    const reqEnd = parseISODateLocal(r.dateFin);
+    const clippedStart = reqStart < periodStart ? periodStart : reqStart;
+    const clippedEnd = reqEnd > periodEnd ? periodEnd : reqEnd;
+    if (clippedStart > clippedEnd) return;
+    days += daysBetween(clippedStart, clippedEnd) + 1;
+  });
+  return days;
+}
+
 /** periodOverride ({periodStart, periodEnd}) : borne le calcul à une période de clôture personnalisée
  * (§5) au lieu de l'année civile par défaut — utilisé uniquement quand leaveType.dateClotureCompteur
- * est renseigné (voir getLeaveBalance), sinon comportement strictement inchangé. */
-function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
+ * est renseigné (voir getLeaveBalance), sinon comportement strictement inchangé.
+ * allRequests/allLeaveTypes (§7.16, optionnels) : permettent de suspendre l'acquisition pendant une
+ * absence validée d'un type marqué suspendAcquisitionAutresCompteurs — omis, le calcul reste
+ * strictement celui d'avant ce correctif (voir countSuspendedAcquisitionDays). */
+function calculateAcquisition(employee, leaveType, refDate, periodOverride, allRequests, allLeaveTypes) {
   if (!leaveType || leaveType.illimite || leaveType.acquisition === 'Illimitée') return Infinity;
 
   const now = toRefDate(refDate);
@@ -4307,18 +4343,26 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride) {
     : rawActivityRatio;
   const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now);
 
+  // §correctif retour QA du 27/08/2026 (point 7.16, confirmé par l'expert-comptable) : une absence
+  // validée d'un type marqué suspendAcquisitionAutresCompteurs réduit le nombre de jours "travaillés"
+  // du calcul, exactement comme le ferait un employeur qui ne compterait pas cette période comme du
+  // temps de travail effectif — jamais d'effet si allRequests/allLeaveTypes ne sont pas fournis.
+  const totalDaysInPeriod = daysBetween(periodStart, periodEnd) + 1;
+  const joursSuspendus = countSuspendedAcquisitionDays(employee, periodStart, periodEnd, allRequests, allLeaveTypes);
+  const suspensionRatio = totalDaysInPeriod > 0 ? Math.max(0, (totalDaysInPeriod - joursSuspendus) / totalDaysInPeriod) : 1;
+
   if (leaveType.acquisition === 'Mensuelle') {
     let monthsElapsed = (periodEnd.getFullYear() - periodStart.getFullYear()) * 12 + (periodEnd.getMonth() - periodStart.getMonth());
     if (periodEnd.getDate() < periodStart.getDate()) monthsElapsed -= 1;
     monthsElapsed = Math.max(0, monthsElapsed);
-    return round2(monthsElapsed * (annualAmount / 12) * activityRatio);
+    return round2(monthsElapsed * (annualAmount / 12) * activityRatio * suspensionRatio);
   }
 
   // Acquisition annuelle : prorata du nombre de jours travaillés sur l'année.
   const daysInYear = daysBetween(yearStart, yearEnd) + 1;
-  const daysWorked = daysBetween(periodStart, periodEnd) + 1;
+  const daysWorked = totalDaysInPeriod;
   const prorata = Math.min(Math.max(daysWorked / daysInYear, 0), 1);
-  return round2(annualAmount * prorata * activityRatio);
+  return round2(annualAmount * prorata * activityRatio * suspensionRatio);
 }
 
 /** Ids des types de congé/absence portant EXACTEMENT ce nom — utilisé partout où un calcul doit
@@ -4449,7 +4493,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   // §5 sprint amélioration : sans dateClotureCompteur, comportement strictement inchangé (une seule
   // période continue depuis l'embauche, comme avant ce champ).
   if (!leaveType.dateClotureCompteur) {
-    const acquis = calculateAcquisition(employee, leaveType, refDate);
+    const acquis = calculateAcquisition(employee, leaveType, refDate, undefined, allRequests, types);
     const requests = requestsFor(null, null);
     const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
     const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
@@ -4458,7 +4502,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   }
 
   const current = getCompteurPeriodBounds(leaveType.dateClotureCompteur, refDate);
-  const acquisPeriode = calculateAcquisition(employee, leaveType, refDate, current);
+  const acquisPeriode = calculateAcquisition(employee, leaveType, refDate, current, allRequests, types);
   const requestsCurrent = requestsFor(current.periodStart, current.periodEnd);
   const pris = requestsCurrent.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
   const enAttente = requestsCurrent.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, current.periodStart, current.periodEnd), 0);
@@ -4469,7 +4513,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   if (leaveType.reportCompteur !== 'aucun') {
     const previousRefDate = new Date(current.periodStart.getTime() - 86400000); // un jour avant le début de la période en cours = dans la précédente
     const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, previousRefDate);
-    const acquisPrecedent = calculateAcquisition(employee, leaveType, previous.periodEnd, previous);
+    const acquisPrecedent = calculateAcquisition(employee, leaveType, previous.periodEnd, previous, allRequests, types);
     const requestsPrecedent = requestsFor(previous.periodStart, previous.periodEnd);
     const prisPrecedent = requestsPrecedent.reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, previous.periodEnd), 0); // validé + en attente : les deux entament le solde reportable
     const soldeResiduel = Math.max(0, round2(acquisPrecedent - prisPrecedent));
@@ -4669,8 +4713,19 @@ function getGenderBreakdown(employees) {
  * était faux et risquait de rester non vérifié. Décision : on les GARDE (les retirer supprimerait
  * une fonctionnalité déjà utilisable par des entreprises clientes existantes) mais on documente
  * explicitement, dans la description de chaque type concerné, ce qui reste une simplification à
- * vérifier au cas par cas — en particulier "Décès", où une durée unique masque une vraie
- * différence légale selon le lien de parenté (voir sa description ci-dessous). */
+ * vérifier au cas par cas.
+ *
+ * §correctif retour QA du 27/08/2026 (point 7.1, expert-comptable : "mettre le minimum légal et
+ * que ce soit modifiable") : "Décès" masquait une vraie différence légale selon le lien de parenté
+ * (une durée unique, 5 jours, pour un texte qui distingue 3 jours pour un proche et 12-14 jours
+ * pour un enfant) — corrigé en 3 jours + un nouveau type dédié "Décès d'un enfant" (12 jours).
+ * Ajout aussi de "Mariage d'un enfant" (1 jour) et "Annonce de handicap ou maladie grave d'un
+ * enfant" (10 jours), absents jusqu'ici. Toutes les valeurs vérifiées en direct sur Légifrance
+ * (Art. L3142-4, version en vigueur au 27/08/2026 — cet article a été modifié en 2026, donc jamais
+ * présumées de mémoire) plutôt que devinées. Ces 3 nouveaux types sont automatiquement proposés aux
+ * entreprises déjà existantes via ensureDefaultLeaveTypesBackfilled (ci-dessus) à leur prochaine
+ * connexion — jamais en écrasant une valeur qu'une entreprise aurait déjà personnalisée sur un type
+ * du même nom : seuls les types VRAIMENT ABSENTS sont ajoutés, jamais mis à jour. */
 function seedLeaveTypes() {
   const rows = [
     ['Congés payés', '🏖️', '#2563eb', 30, 'Mensuelle', true, false, ['manager'], 'conge'],
@@ -4678,7 +4733,10 @@ function seedLeaveTypes() {
     ['Ancienneté', '🎖️', '#0891b2', 0, 'Annuelle', true, false, ['manager'], 'autre'],
     ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh'], 'autre'],
     ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
-    ['Décès', '🕊️', '#4b5563', 5, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Mariage d\'un enfant', '💍', '#db2777', 1, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
+    ['Décès', '🕊️', '#4b5563', 3, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Décès d\'un enfant', '🕊️', '#4b5563', 12, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Annonce de handicap ou maladie grave d\'un enfant', '🎗️', '#dc2626', 10, 'Annuelle', true, true, ['rh'], 'autre'],
     ['Enfant malade', '🤒', '#f59e0b', 3, 'Annuelle', false, true, ['manager'], 'autre'],
     ['Formation', '📚', '#059669', 5, 'Annuelle', true, false, ['manager', 'rh'], 'autre'],
     ['Naissance / adoption', '👶', '#ec4899', 3, 'Annuelle', true, true, ['rh'], 'autre'],
@@ -4724,16 +4782,26 @@ function seedLeaveTypes() {
       type.description = 'Barème standard, supplétif : +1 jour à 5 ans d\'ancienneté, +2 à 10 ans, +3 à 15 ans, +4 à 20 ans (non cumulatif). Votre convention collective peut le relever, jamais l\'abaisser.';
     }
     if (nom === 'Décès') {
-      // §correctif retour QA du 26/08/2026 (point 5.1) : une durée unique (5 jours) masque une
-      // vraie différence légale selon le lien de parenté — le Code du travail distingue le décès
-      // d'un enfant (durée relevée, et encore allongée par la loi du 8 juin 2023 pour certains cas)
-      // du décès du conjoint/partenaire de PACS/concubin/parent/beau-parent/frère/sœur (durée
-      // généralement moindre). Ne PAS inventer ici les seuils exacts : à faire confirmer avec
-      // l'expert-comptable avant d'ajuster, cas par cas selon le lien de parenté réel.
-      type.description = 'Valeur par défaut UNIQUE (5 jours), à vérifier : le Code du travail distingue plusieurs durées selon le lien de parenté (le décès d\'un enfant ouvre une durée plus longue, encore allongée par la loi du 8 juin 2023 pour certains cas). Ne pas appliquer 5 jours à toutes les situations sans vérifier avec votre expert-comptable ou votre convention collective.';
+      // §correctif retour QA du 27/08/2026 (points 2.4/7.1, confirmé par l'expert-comptable :
+      // "mettre le minimum légal, modifiable") : Art. L3142-4 du Code du travail (dans sa version
+      // en vigueur au 27/08/2026) fixe 3 jours pour le décès du conjoint/partenaire de PACS/
+      // concubin/père/mère/beau-père/belle-mère/frère/sœur — DISTINCT du décès d'un enfant (durée
+      // bien plus longue, voir le nouveau type "Décès d'un enfant" ci-dessous, qui existait
+      // auparavant confondu dans une seule valeur "5 jours" ici). Vérifié en direct sur Légifrance
+      // au moment du correctif plutôt que présumé de mémoire — cet article a été modifié en 2026.
+      type.description = 'Minimum légal (Art. L3142-4, décès du conjoint/partenaire de PACS/concubin/père/mère/beau-parent/frère/sœur) : 3 jours ouvrables. Pour le décès d\'un enfant, voir le type dédié "Décès d\'un enfant" (durée légale bien plus longue). Votre convention collective peut relever cette durée, jamais l\'abaisser.';
+    }
+    if (nom === 'Décès d\'un enfant') {
+      type.description = 'Minimum légal (Art. L3142-4) : 12 jours ouvrables, porté à 14 jours si l\'enfant avait moins de 25 ans OU si l\'enfant décédé était lui-même parent (quel que soit son âge dans ce cas). Ce deuxième seuil n\'est pas automatisé (l\'application ne connaît pas l\'âge de l\'enfant décédé ni sa situation familiale) : ajustez manuellement le nombre de jours de la demande au cas par cas.';
+    }
+    if (nom === 'Mariage d\'un enfant') {
+      type.description = 'Minimum légal (Art. L3142-4) : 1 jour ouvrable. Distinct du mariage/PACS du salarié lui-même (voir le type "Mariage / PACS", 4 jours).';
+    }
+    if (nom === 'Annonce de handicap ou maladie grave d\'un enfant') {
+      type.description = 'Minimum légal (Art. L3142-4) : 10 jours ouvrables, pour l\'annonce d\'un handicap, d\'une pathologie chronique nécessitant un apprentissage thérapeutique, ou d\'un cancer chez un enfant.';
     }
     if (nom === 'Mariage / PACS' || nom === 'Naissance / adoption') {
-      type.description = 'Durée légale par défaut, supplétive. Votre convention collective peut la relever, jamais l\'abaisser — à vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
+      type.description = 'Durée légale par défaut (Art. L3142-4), supplétive. Votre convention collective peut la relever, jamais l\'abaisser — à vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
     }
     if (nom === 'Enfant malade') {
       // La bonification à 5 jours (enfant de moins d'1 an, ou salarié ayant 3 enfants de moins de

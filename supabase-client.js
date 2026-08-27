@@ -168,6 +168,7 @@ function leaveTypeFromRow(row) {
     // (data.js) applique son inférence par nom ("Congés payés" -> aucune, "RTT" -> exclu) — un
     // défaut appliqué ici l'empêcherait de jamais se déclencher pour les types déjà en production.
     proratisationTempsPartiel: d.proratisationTempsPartiel,
+    suspendAcquisitionAutresCompteurs: d.suspendAcquisitionAutresCompteurs ?? false,
     exportPaie: d.exportPaie ?? true
   };
 }

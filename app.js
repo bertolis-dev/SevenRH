@@ -11099,6 +11099,10 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                 </select>
                 <p class="form-hint">Confirmé par votre expert-comptable pour Congés payés (jamais réduite) et RTT (nulle) — à vérifier avant de changer ce réglage pour un autre type.</p>
               </div>
+              <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
+                <label><input type="checkbox" id="f-suspendAcquisitionAutresCompteurs" ${type.suspendAcquisitionAutresCompteurs ? 'checked' : ''}> Une absence validée de CE type suspend l'acquisition des autres compteurs (ex. CP)</label>
+                <p class="form-hint">Ex. congé sabbatique. Décoché par défaut pour tous les types (y compris déjà existants) — votre expert-comptable n'a pas donné de liste type par type, à cocher au cas par cas selon ses réponses.</p>
+              </div>
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Paliers d'ancienneté (optionnel)</label>
@@ -11467,7 +11471,8 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersA
     // l'inférence par nom (voir resolveProratisationTempsPartiel) — même pour un type nommé "RTT"/
     // "Congés payés" par coïncidence après avoir choisi volontairement un autre réglage.
     proratisationTempsPartiel: ['proportionnelle', 'aucune', 'exclu'].includes(formData.get('proratisationTempsPartiel'))
-      ? formData.get('proratisationTempsPartiel') : 'proportionnelle'
+      ? formData.get('proratisationTempsPartiel') : 'proportionnelle',
+    suspendAcquisitionAutresCompteurs: document.getElementById('f-suspendAcquisitionAutresCompteurs').checked
   };
   patch.illimite = patch.acquisition === 'Illimitée';
   checkboxNames.forEach(name => { patch[name] = form.querySelector(`#f-${name}`).checked; });
