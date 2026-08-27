@@ -878,6 +878,12 @@ p { margin: 0; line-height: 1.5; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+  /* §retour QA du 27/08/2026 ("gros trou blanc" sur une fiche salarié) : align-items défaut d'une
+     grille CSS est stretch — chaque carte d'une même ligne s'étire à la hauteur de la plus haute
+     (ex. "Identité", plusieurs champs) même si son propre contenu (ex. "Suivi médical", 2-3 lignes)
+     tient en bien moins de place, laissant un grand vide en bas de la carte courte. `start` laisse
+     chaque carte prendre sa hauteur naturelle. */
+  align-items: start;
 }
 
 .about-modal-grid {
