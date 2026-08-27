@@ -24,6 +24,13 @@ const PENDING_SYNC_KEY = 'sevenrh_pending_sync';
  * de passe. Voir DB.getSavedAccounts()/switchToSavedAccount()/logoutCurrentAccount() plus bas. */
 const SAVED_ACCOUNTS_KEY = 'sevenrh_saved_accounts';
 const NOTIF_STORAGE_LIMIT = 500; // même logique que le Journal d'audit (borné à 2000) : évite une croissance illimitée du blob localStorage au fil des années
+/** §correctif retour QA du 27/08/2026 ("ce vestige mériterait d'être retiré", audit du 23/08/2026,
+ * section 1) : contrairement à ROOT_KEY/CURRENT_COMPANY_KEY, jamais effacée par
+ * _purgeLocalCompanyCache() — permet à DB.init() de distinguer un TOUT PREMIER lancement (avant
+ * toute inscription/connexion réelle sur ce navigateur, où semer une entreprise de démonstration a
+ * du sens) d'un cache simplement vidé après une déconnexion ou corrompu sur un appareil qui a déjà
+ * servi à un vrai compte (où ressemer une fausse entreprise de démo n'a jamais de sens — voir DB.init). */
+const HAS_RUN_BEFORE_KEY = 'sevenrh_has_run_before';
 
 /**
  * Administrateur BERTOLIS (§9.6) — l'éditeur du logiciel, PAS un salarié d'une entreprise cliente.
@@ -842,10 +849,19 @@ function isDuplicateKeyError(err) {
 }
 
 const DB = {
-  /** Initialise le stockage au premier lancement (seed de démo) : une entreprise, active par défaut. Re-seed aussi si les données existantes sont absentes OU corrompues (getCompanies() retombe sur [] dans ce cas). */
+  /** Initialise le stockage au TOUT PREMIER lancement de ce navigateur (seed de démo) : une
+   * entreprise, active par défaut. §correctif retour QA du 27/08/2026 : ne re-sème JAMAIS au-delà de
+   * ce tout premier lancement (voir HAS_RUN_BEFORE_KEY) — auparavant, un cache vidé par
+   * _purgeLocalCompanyCache() (déconnexion, connexion refusée) OU simplement corrompu sur un
+   * appareil ayant déjà servi à un vrai compte retombait sur cette même fausse entreprise de
+   * démonstration, comme si c'était un premier lancement. Sans conséquence pour restoreSession()
+   * (qui écrase toujours ce cache par les vraies données Supabase si une session existe), mais un
+   * vestige inutile et potentiellement déroutant sur un poste RH partagé entre deux connexions. */
   init() {
     this._loadPendingSync();
-    if (localStorage.getItem(ROOT_KEY) === null || this.getCompanies().length === 0) {
+    const hasRunBefore = localStorage.getItem(HAS_RUN_BEFORE_KEY) !== null;
+    if (!hasRunBefore) localStorage.setItem(HAS_RUN_BEFORE_KEY, '1');
+    if (!hasRunBefore && (localStorage.getItem(ROOT_KEY) === null || this.getCompanies().length === 0)) {
       const company = seedCompany();
       localStorage.setItem(ROOT_KEY, JSON.stringify([company]));
       localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
