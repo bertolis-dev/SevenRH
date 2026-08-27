@@ -1020,6 +1020,17 @@ async function resolveValidatorEmployeeIdsForStep(employeeId, role) {
   return { success: true, ids: data };
 }
 
+/** §correctif retour QA du 27/08/2026 (bug matricules dupliqués) : réserve atomiquement le prochain
+ * numéro de séquence (par entreprise + année d'embauche) via assign_matricule_number
+ * (0040_matricule_atomique.sql, verrou implicite par la contrainte d'unicité de matricule_counters,
+ * jamais un compteur en mémoire côté client). Voir DB.assignMatricule (data.js) pour le formatage et
+ * le comportement en cas d'échec (bloquant, volontairement — jamais de repli local ici). */
+async function assignMatriculeNumber(companyId, year) {
+  const { data, error } = await supabase.rpc('assign_matricule_number', { p_company_id: companyId, p_year: year });
+  if (error || typeof data !== 'number') return { success: false, error: error ? error.message : 'Réponse serveur invalide.' };
+  return { success: true, number: data };
+}
+
 /** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
  * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
  * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
@@ -1160,7 +1171,7 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
-  resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep,
+  resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo,

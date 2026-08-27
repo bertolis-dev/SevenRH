@@ -469,6 +469,10 @@ const DEFAULT_SETTINGS = {
   forfaits: ['Aucun', 'Forfait jours', 'Forfait heures'],
   joursOuvres: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
   schoolZone: 'C', // 'A' | 'B' | 'C' — code court, aligné avec LeaveType.zones / seedSchoolHolidays()
+  // §correctif retour QA du 27/08/2026 : format des NOUVEAUX matricules (AAAA-NNNN par défaut, ex.
+  // 2026-0001) — false retire le tiret (20260001). Purement cosmétique : voir formatMatricule ;
+  // n'affecte jamais l'unicité, garantie côté serveur indépendamment de ce réglage.
+  matriculeAvecTiret: true,
   teletravailQuotaSemaine: 2,
   categoriesFrais: ['Transport', 'Repas', 'Hébergement', 'Fournitures', 'Kilométrique', 'Autre'],
   ticketsValeurFaciale: 9,
@@ -557,6 +561,12 @@ function makeEmptyCompany() {
     telephone: '',
     email: '',
     conventionCollective: 'Aucune',
+    // §correctif retour QA du 27/08/2026 : obsolète — cette valeur n'était jamais persistée par
+    // saveEmployees (seul saveCompanyProfile la pousse, jamais appelé à la création d'un salarié),
+    // donc réinitialisée à chaque nouvelle session et source de matricules dupliqués. La numérotation
+    // vient désormais d'un compteur atomique côté serveur (assign_matricule_number, voir
+    // assignMatricule ci-dessous et 0040_matricule_atomique.sql) — ce champ ne sert plus qu'à ne pas
+    // casser la lecture d'anciens blobs company déjà persistés.
     matriculeSeq: 0,
     abonnement: null, // §36 — voir makeEmptyAbonnement()/migrateCompanyAbonnement()
     etablissements: [],
@@ -1254,14 +1264,17 @@ const DB = {
     return this.getEmployees().find(e => e.id === id) || null;
   },
 
-  addEmployee(data) {
+  async addEmployee(data) {
     const company = this.getCurrentCompany();
     const now = new Date().toISOString();
-    company.matriculeSeq = (company.matriculeSeq || 0) + 1;
     const settings = this.getSettings();
+    // data.matricule : déjà fourni tel quel par l'import Excel en mode "conserver les matricules du
+    // fichier" (voir buildImportPreviewRows/importEmployeesRows, app.js) — sinon attribué par le
+    // serveur, jamais recalculé localement (voir assignMatricule ci-dessous).
+    const matricule = data.matricule || await assignMatricule(company.id, data.dateEmbauche);
     const employee = Object.assign(makeEmptyEmployee(), data, {
       id: generateId('emp'),
-      matricule: data.matricule || 'SRH-' + String(company.matriculeSeq).padStart(4, '0'),
+      matricule,
       dateCreation: now,
       dateModification: now,
       // Copie figée du modèle au moment de l'embauche (voir DEFAULT_SETTINGS.onboardingChecklistTemplate)
@@ -4033,6 +4046,33 @@ async function resolveValidatorEmployeeIdsForStep(employeeId, role, overrideIds)
     console.error('resolveValidatorEmployeeIdsForStep : résolution serveur indisponible.', err);
     return [];
   }
+}
+
+/** §correctif retour QA du 27/08/2026 (bug matricules dupliqués) : contrairement à
+ * resolveWorkflowWithFallback/resolveValidatorEmployeeIdsForStep ci-dessus, qui se replient TOUJOURS
+ * sur un comportement dégradé plutôt que de bloquer l'utilisateur, l'attribution du matricule NE PEUT
+ * PAS se replier sur un calcul local — c'est précisément l'ancien calcul local (company.matriculeSeq,
+ * jamais persisté par saveEmployees) qui produisait des doublons à chaque nouvelle session, un
+ * salarié sur deux sessions/appareils différents pouvant recevoir le même numéro. Le numéro doit venir
+ * du compteur atomique serveur (assign_matricule_number, 0040_matricule_atomique.sql) — sinon la
+ * création du salarié échoue avec un message clair (voir addEmployee, et submitEmployeeForm/
+ * importEmployeesRows côté app.js qui affichent l'erreur) plutôt que de risquer un doublon silencieux.
+ */
+async function assignMatricule(companyId, hireDateISO) {
+  const year = (hireDateISO && /^\d{4}/.test(hireDateISO)) ? parseInt(hireDateISO.slice(0, 4), 10) : new Date().getFullYear();
+  const result = await window.SupabaseSync.assignMatriculeNumber(companyId, year);
+  if (!result.success) throw new Error(result.error || 'Impossible d\'attribuer un matricule : connexion au serveur requise. Réessayez.');
+  return formatMatricule(year, result.number);
+}
+
+// Format AAAA-NNNN (année sur 4 chiffres, jamais 2 : une PME peut avoir des salariés embauchés avant
+// 2000, une ambiguïté qu'un format sur 2 chiffres réintroduirait pour rien). Le séparateur reste
+// configurable (settings.matriculeAvecTiret) — la numérotation/l'unicité, garanties côté serveur, ne
+// dépendent jamais de ce choix purement cosmétique.
+function formatMatricule(year, seq) {
+  const num = String(seq).padStart(4, '0');
+  const settings = DB.getSettings();
+  return (settings && settings.matriculeAvecTiret === false) ? `${year}${num}` : `${year}-${num}`;
 }
 
 /** §correctif audit du 23/08/2026 (§7.4) : notifie par email les validateurs de la PREMIÈRE étape

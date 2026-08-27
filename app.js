@@ -6534,16 +6534,30 @@ const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Construit l'aperçu ligne par ligne : statut 'ok' (prêt à créer), 'duplicate' (email déjà utilisé
  * par un salarié actif — ignoré par défaut, jamais de doublon silencieux) ou 'error' (champ
- * obligatoire manquant/invalide). N'écrit rien — la création réelle se fait dans importEmployeesRows. */
-function buildImportPreviewRows(dataRows, mapping) {
+ * obligatoire manquant/invalide). N'écrit rien — la création réelle se fait dans importEmployeesRows.
+ *
+ * §correctif retour QA du 27/08/2026 : preserveMatricule (case "conserver les matricules du fichier",
+ * décochée par défaut) contrôle le matricule de la colonne importée, DÉJÀ lue dans record.matricule
+ * avant ce correctif mais jusqu'ici jamais validée ni même utilisable pour désactiver la génération
+ * automatique. Décochée (par défaut) : le matricule du fichier est ignoré, chaque ligne reçoit un
+ * matricule attribué par le serveur comme une création normale (voir DB.assignMatricule, data.js).
+ * Cochée : le matricule du fichier est conservé tel quel — sauf s'il est vide (toujours généré, quel
+ * que soit l'état de la case) ou en doublon (avec un salarié existant ou une autre ligne du fichier),
+ * auquel cas la ligne est rejetée plutôt que de risquer un doublon que l'index unique refuserait de
+ * toute façon côté serveur (voir 0040_matricule_atomique.sql). */
+function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
   const existingEmails = new Set(
     employeeRepository.getAll().filter(e => !e.archive && e.email).map(e => normalizeForSearch(e.email))
   );
+  const existingMatricules = new Set(
+    employeeRepository.getAll().filter(e => e.matricule).map(e => normalizeForSearch(e.matricule))
+  );
   const seenInFile = new Set();
+  const seenMatriculesInFile = new Set();
   return dataRows.map((cells, i) => {
     const get = (field) => (mapping[field] !== undefined ? (cells[mapping[field]] || '').trim() : '');
     const record = {
-      matricule: get('matricule'),
+      matricule: preserveMatricule ? get('matricule') : '',
       nom: get('nom'),
       prenom: get('prenom'),
       email: get('email'),
@@ -6557,26 +6571,34 @@ function buildImportPreviewRows(dataRows, mapping) {
     };
     let status = 'ok', message = '';
     const emailKey = normalizeForSearch(record.email);
+    const matriculeKey = normalizeForSearch(record.matricule);
     if (!record.nom || !record.prenom || !record.email || !record.dateEmbauche) {
       status = 'error'; message = 'Nom, prénom, email et date d\'embauche sont obligatoires.';
     } else if (!EMAIL_FORMAT_REGEX.test(record.email)) {
       status = 'error'; message = 'Email invalide.';
     } else if (existingEmails.has(emailKey) || seenInFile.has(emailKey)) {
       status = 'duplicate'; message = 'Email déjà utilisé, ligne ignorée.';
+    } else if (matriculeKey && (existingMatricules.has(matriculeKey) || seenMatriculesInFile.has(matriculeKey))) {
+      status = 'error'; message = `Matricule "${record.matricule}" déjà utilisé (doublon), ligne ignorée.`;
     }
     if (status !== 'error' && emailKey) seenInFile.add(emailKey);
+    if (status === 'ok' && matriculeKey) seenMatriculesInFile.add(matriculeKey);
     return { rowIndex: i + 2, record, status, message }; // +2 : ligne 1 = en-têtes, humains comptent depuis 1
   });
 }
 
-function importEmployeesRows(previewRows) {
+async function importEmployeesRows(previewRows) {
   const results = { created: 0, skipped: 0, errors: 0 };
-  previewRows.filter(r => r.status === 'ok').forEach(r => {
-    employeeRepository.create(r.record);
-    results.created++;
-  });
+  for (const r of previewRows.filter(r => r.status === 'ok')) {
+    try {
+      await employeeRepository.create(r.record);
+      results.created++;
+    } catch (err) {
+      results.errors++;
+    }
+  }
   results.skipped = previewRows.filter(r => r.status === 'duplicate').length;
-  results.errors = previewRows.filter(r => r.status === 'error').length;
+  results.errors += previewRows.filter(r => r.status === 'error').length;
   return results;
 }
 
@@ -6751,7 +6773,11 @@ function openImportSalariesModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <label style="display: flex; align-items: center; gap: 8px; margin: 12px 0;">
+          <input type="checkbox" id="f-import-preserve-matricule">
+          <span>Conserver les matricules du fichier (sinon attribués automatiquement — recommandé)</span>
+        </label>
         <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
         <div id="import-preview-zone" style="margin-top: 16px;"></div>
       </div>
@@ -6768,6 +6794,9 @@ function openImportSalariesModal() {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 
   let currentPreview = [];
+  let lastDataRows = null;
+  let lastMapping = null;
+  let lastHeaderRow = null;
 
   document.getElementById('f-import-file').addEventListener('change', (evt) => {
     const file = evt.target.files[0];
@@ -6815,10 +6844,20 @@ function openImportSalariesModal() {
       }
       const [headerRow, ...dataRows] = rows;
       const mapping = guessEmployeeColumnMapping(headerRow);
-      currentPreview = buildImportPreviewRows(dataRows, mapping);
+      lastDataRows = dataRows; lastMapping = mapping; lastHeaderRow = headerRow;
+      currentPreview = buildImportPreviewRows(dataRows, mapping, document.getElementById('f-import-preserve-matricule').checked);
       renderImportPreview(currentPreview, mapping, headerRow);
     };
     reader.readAsArrayBuffer(file);
+  });
+
+  // §correctif retour QA du 27/08/2026 : re-génère l'aperçu (sans redemander le fichier) quand la
+  // case "conserver les matricules" change d'état — la validation des doublons de matricule en
+  // dépend (voir buildImportPreviewRows).
+  document.getElementById('f-import-preserve-matricule').addEventListener('change', () => {
+    if (!lastDataRows) return;
+    currentPreview = buildImportPreviewRows(lastDataRows, lastMapping, document.getElementById('f-import-preserve-matricule').checked);
+    renderImportPreview(currentPreview, lastMapping, lastHeaderRow);
   });
 
   function renderImportPreview(preview, mapping, headerRow) {
@@ -6835,11 +6874,12 @@ function openImportSalariesModal() {
       <p><span class="badge badge-success">${okCount} à créer</span> <span class="badge badge-warning">${dupCount} doublon${dupCount > 1 ? 's' : ''} ignoré${dupCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
-          <thead><tr><th>Ligne</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Date d'embauche</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Ligne</th><th>Matricule</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Date d'embauche</th><th>Statut</th></tr></thead>
           <tbody>
             ${preview.map(r => `
               <tr>
                 <td>${r.rowIndex}</td>
+                <td>${r.record.matricule ? escapeHtml(r.record.matricule) : '<span class="text-muted">(auto)</span>'}</td>
                 <td>${escapeHtml(r.record.nom)}</td>
                 <td>${escapeHtml(r.record.prenom)}</td>
                 <td>${escapeHtml(r.record.email)}</td>
@@ -6858,10 +6898,10 @@ function openImportSalariesModal() {
     const confirmBtn = document.getElementById('btn-confirm-import');
     confirmBtn.style.display = okCount > 0 ? 'inline-block' : 'none';
     confirmBtn.textContent = `Importer ${okCount} salarié${okCount > 1 ? 's' : ''}`;
-    confirmBtn.onclick = () => {
+    confirmBtn.onclick = async () => {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Import en cours...';
-      const results = importEmployeesRows(currentPreview);
+      const results = await importEmployeesRows(currentPreview);
       auditLogRepository.logAudit('Création', 'Salariés (import CSV)', `${results.created} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}`);
       document.getElementById('import-preview-zone').innerHTML = `
         <div class="empty-state">
@@ -13151,6 +13191,10 @@ function renderParametresListes() {
           <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
           <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise — à vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
         </div>
+        <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
+          <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
+          <p class="form-hint">Purement visuel — n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -13320,6 +13364,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
+  bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
@@ -17701,8 +17746,21 @@ function submitEmployeeForm(evt, id, candidatureId) {
       showToast(`Plafond de l'offre « ${offre.label} » atteint (${plafond} salarié${plafond > 1 ? 's' : ''}). ${abonnement && abonnement.statut === 'non_souscrit' ? 'Souscrivez une offre pour ajouter d\'autres salariés.' : 'Contactez BERTOLIS pour changer d\'offre.'}`, 'error');
       return;
     }
-    const finalizeEmployeeCreation = () => {
-      const created = employeeRepository.create(patch);
+    const finalizeEmployeeCreation = async () => {
+      // §correctif retour QA du 27/08/2026 : employeeRepository.create est désormais async — le
+      // matricule est attribué par le serveur (voir DB.assignMatricule, data.js), jamais calculé
+      // localement. Un échec (hors ligne, serveur injoignable) bloque volontairement la création
+      // plutôt que de risquer un matricule dupliqué — voir le commentaire de DB.assignMatricule.
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      let created;
+      try {
+        created = await employeeRepository.create(patch);
+      } catch (err) {
+        showToast(err.message || 'Impossible de créer le salarié (connexion au serveur requise). Réessayez.', 'error');
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+      }
       if (candidatureId) {
         candidatureRepository.marquerEmbauchee(candidatureId, created.id)
           .catch(() => showToast('Salarié créé, mais la candidature n\'a pas pu être mise à jour.', 'error'));
