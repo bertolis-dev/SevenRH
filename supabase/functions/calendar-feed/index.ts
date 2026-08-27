@@ -30,12 +30,41 @@ function textResponse(body: string, status = 200, contentType = "text/plain; cha
   return new Response(body, { status, headers: { ...CORS_HEADERS, "Content-Type": contentType } });
 }
 
-/** RFC 5545 impose des retours ligne CRLF et un repli des lignes de plus de 75 octets — le repli
- * n'est pas fait ici (nos lignes générées, résumés de congé compris, restent courtes en pratique) ;
- * seuls les retours CRLF sont réellement indispensables pour que les clients (Outlook en
- * particulier, plus strict que Google Agenda) acceptent le flux. */
+/** §retour QA du 26/08/2026 (point 5.3) : un \n isolé était échappé, jamais un \r isolé (ex. copié-
+ * collé depuis un traitement de texte qui n'utilise que CR) — laissé tel quel, un CR brut est un
+ * terminateur de ligne pour la plupart des lecteurs iCal, ce qui coupe la ligne de contenu en deux
+ * (structure du flux corrompue à partir de là) plutôt qu'une simple faute d'affichage. Toute
+ * combinaison CRLF/CR/LF isolée est donc normalisée vers le même échappement "\n" texte (RFC 5545
+ * §3.3.11), qui affiche un retour à la ligne SANS jamais laisser un caractère de contrôle brut dans
+ * la ligne de contenu. */
 function icsEscape(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
+  return s.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\r\n|\r|\n/g, "\\n");
+}
+
+/** RFC 5545 §3.1 : une ligne de contenu ne doit pas dépasser 75 OCTETS (pas des caractères — un
+ * accent en UTF-8 pèse 2 octets, donc un résumé "Jean-Baptiste Létourneau — Congés payés" peut
+ * dépasser 75 octets bien avant 75 caractères) hors le saut de ligne lui-même. Repliée en insérant
+ * un CRLF suivi d'un unique espace ; le déplioir standard retire cette séquence exacte. Ne coupe
+ * jamais au milieu d'un caractère multi-octets (un octet de continuation UTF-8 commence par la
+ * séquence binaire 10xxxxxx) — sans cette garde, un accent à la limite des 75 octets se retrouverait
+ * tronqué en un caractère invalide chez le client qui déplie. Outlook (plus strict que Google
+ * Agenda) est le client qui a motivé ce correctif : les résumés avec prénom+nom+type dépassent
+ * régulièrement 75 octets en pratique, contrairement à ce que supposait le commentaire précédent. */
+function foldLine(line: string): string {
+  const bytes = new TextEncoder().encode(line);
+  if (bytes.length <= 75) return line;
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let start = 0;
+  let limit = 75;
+  while (start < bytes.length) {
+    let end = Math.min(start + limit, bytes.length);
+    while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
+    chunks.push(decoder.decode(bytes.slice(start, end)));
+    start = end;
+    limit = 74; // une ligne de continuation commence par un espace, qui compte dans son propre quota de 75 octets.
+  }
+  return chunks.join("\r\n ");
 }
 
 function toIcsDate(isoDate: string): string {
@@ -69,7 +98,7 @@ function buildEvent(uid: string, dateDebut: string, dateFin: string, summary: st
     `DESCRIPTION:${icsEscape(description)}`,
     "TRANSP:TRANSPARENT",
     "END:VEVENT",
-  ].join("\r\n");
+  ].map(foldLine).join("\r\n");
 }
 
 function buildCalendar(calname: string, events: string[]): string {
@@ -79,7 +108,7 @@ function buildCalendar(calname: string, events: string[]): string {
     "PRODID:-//Nexus RH//Calendar Feed//FR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${icsEscape(calname)}`,
+    foldLine(`X-WR-CALNAME:${icsEscape(calname)}`),
     "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
     "X-PUBLISHED-TTL:PT6H",
     ...events,
