@@ -4,21 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Nexus</title>
-  <meta name="description" content="Nexus est le SIRH simple pour piloter congés, planning, paie et notes de frais — un seul outil clair pour toute votre équipe, installable comme une vraie application.">
+  <meta name="description" content="Nexus est le SIRH simple pour piloter congés, planning, paie et notes de frais : un seul outil clair pour toute votre équipe, installable comme une vraie application.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nexus-rh.com/">
-  <meta property="og:title" content="Nexus — Le SIRH simple pour votre entreprise">
+  <meta property="og:title" content="Nexus, le SIRH simple pour votre entreprise">
   <meta property="og:description" content="Congés, planning, paie, notes de frais et tickets restaurant réunis dans un seul outil clair. Installable sur PC, iPhone et Android.">
   <meta property="og:image" content="https://nexus-rh.com/icon-512.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Nexus — Le SIRH simple pour votre entreprise">
+  <meta name="twitter:title" content="Nexus, le SIRH simple pour votre entreprise">
   <meta name="twitter:description" content="Congés, planning, paie, notes de frais et tickets restaurant réunis dans un seul outil clair.">
   <meta name="twitter:image" content="https://nexus-rh.com/icon-512.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css?v=20260827g">
+  <link rel="stylesheet" href="style.css?v=20260827h">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -76,17 +76,17 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260827g"></script>
-  <script src="qrcode.js?v=20260827g"></script>
+  <script type="module" src="supabase-client.js?v=20260827h"></script>
+  <script src="qrcode.js?v=20260827h"></script>
   <!-- §correctif audit du 23/08/2026 (2.7) : xlsx.full.min.js (~930 Ko) n'est plus chargé ici en
        statique pour tout le monde — voir loadXLSXLibrary() (app.js), qui l'injecte à la demande,
        seulement quand Exporter/Importer Excel est réellement utilisé (rôle RH/Propriétaire/Manager,
        page Salariés). -->
-  <script src="data.js?v=20260827g"></script>
-  <script src="app.js?v=20260827g"></script>
+  <script src="data.js?v=20260827h"></script>
+  <script src="app.js?v=20260827h"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260827g'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260827h'));
     }
   </script>
 </body>

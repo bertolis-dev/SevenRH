@@ -393,7 +393,7 @@ const IDCC_CONVENTIONS = [
   // Commerce
   { code: '43', nom: 'Import-export et commerce international', secteur: 'Commerce' },
   { code: '179', nom: 'Coopératives de consommation', secteur: 'Commerce' },
-  { code: '493', nom: 'Vins et spiritueux — gros', secteur: 'Commerce' },
+  { code: '493', nom: 'Vins et spiritueux, gros', secteur: 'Commerce' },
   { code: '573', nom: 'Commerces de gros (étendue)', secteur: 'Commerce' },
   { code: '675', nom: 'Succursales habillement', secteur: 'Commerce' },
   { code: '731', nom: 'Quincaillerie (cadres)', secteur: 'Commerce' },
@@ -442,8 +442,8 @@ const IDCC_CONVENTIONS = [
   { code: '275', nom: 'Transport aérien (personnel au sol)', secteur: 'Transports' },
   { code: '538', nom: 'Manutention ferroviaire', secteur: 'Transports' },
   { code: '1424', nom: 'Transports publics urbains', secteur: 'Transports' },
-  { code: '1612', nom: 'Travail aérien — navigants des essais et réceptions', secteur: 'Transports' },
-  { code: '2480', nom: 'Manutention portuaire — Fort-de-France', secteur: 'Transports' },
+  { code: '1612', nom: 'Travail aérien, navigants des essais et réceptions', secteur: 'Transports' },
+  { code: '2480', nom: 'Manutention portuaire, Fort-de-France', secteur: 'Transports' },
   { code: '2583', nom: 'Sociétés d\'autoroutes', secteur: 'Transports' },
   { code: '3017', nom: 'Ports et manutention', secteur: 'Transports' },
   { code: '3217', nom: 'Branche ferroviaire', secteur: 'Transports' },
@@ -4869,7 +4869,7 @@ function seedLeaveTypes() {
       type.description = 'Minimum légal (Art. L3142-4) : 10 jours ouvrables, pour l\'annonce d\'un handicap, d\'une pathologie chronique nécessitant un apprentissage thérapeutique, ou d\'un cancer chez un enfant.';
     }
     if (nom === 'Mariage / PACS' || nom === 'Naissance / adoption') {
-      type.description = 'Durée légale par défaut (Art. L3142-4), supplétive. Votre convention collective peut la relever, jamais l\'abaisser — à vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
+      type.description = 'Durée légale par défaut (Art. L3142-4), supplétive. Votre convention collective peut la relever, jamais l\'abaisser. À vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
     }
     if (nom === 'Enfant malade') {
       // La bonification à 5 jours (enfant de moins d'1 an, ou salarié ayant 3 enfants de moins de

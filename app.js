@@ -755,6 +755,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // rotation d'un tablette, redimensionnement de fenêtre) — un seul listener posé une fois, jamais
   // par render() lui-même (qui tourne bien trop souvent pour ça).
   MOBILE_NAV_QUERY.addEventListener('change', renderSidebar);
+  // §correctif retour QA du 27/08/2026 (point 4) : re-mesure le débordement des onglets Paramètres
+  // au redimensionnement (rotation d'écran, fenêtre agrandie/réduite) — un seul listener posé une
+  // fois, jamais par render() (voir le commentaire de checkParametresTabsOverflow ci-dessus).
+  window.addEventListener('resize', () => { if (state.view === 'parametres') checkParametresTabsOverflow(); });
 
   // La console BERTOLIS (super-admin multi-entreprise) est un système entièrement séparé, basé sur
   // localStorage, qui n'a besoin d'aucune donnée Supabase — une session BERTOLIS déjà active ne doit
@@ -2593,7 +2597,7 @@ async function loadBertolisTickets() {
 
 function renderBertolisTicketDetail() {
   const ticket = (state.bertolisTicketsData.tickets || []).find(t => t.id === state.bertolisCurrentTicketId);
-  if (!ticket) return '<p class="text-muted">Ticket introuvable — il a peut-être été fermé.</p><button class="btn-link" id="btn-back-to-bertolis-tickets">← Retour aux tickets</button>';
+  if (!ticket) return '<p class="text-muted">Ticket introuvable : il a peut-être été fermé.</p><button class="btn-link" id="btn-back-to-bertolis-tickets">← Retour aux tickets</button>';
   const data = ticket.data || {};
   const comments = data.comments || [];
   return `
@@ -2885,7 +2889,7 @@ function renderBertolisLoginView() {
     <div class="login-card">
       <div class="login-logo">${NEXUS_LOGO_MARK} Nexus <span class="badge badge-info">BERTOLIS</span></div>
       <h1>Accès éditeur</h1>
-      <p class="text-muted">Réservé à l'équipe BERTOLIS — gestion des entreprises clientes et des abonnements (§9.6). Ce n'est pas un compte salarié.</p>
+      <p class="text-muted">Réservé à l'équipe BERTOLIS : gestion des entreprises clientes et des abonnements (§9.6). Ce n'est pas un compte salarié.</p>
       <form id="bertolis-login-form">
         <div class="form-field">
           <label for="f-bertolis-email">Email</label>
@@ -3436,7 +3440,7 @@ function openIcalLinkFallbackModal(url) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">La copie automatique a échoué — sélectionnez et copiez ce lien manuellement. Ne le partagez qu'avec vous-même (votre logiciel de calendrier) : quiconque l'obtient peut lire ce calendrier.</p>
+        <p class="text-muted">La copie automatique a échoué : sélectionnez et copiez ce lien manuellement. Ne le partagez qu'avec vous-même (votre logiciel de calendrier) : quiconque l'obtient peut lire ce calendrier.</p>
         <input class="input" type="text" id="f-ical-link-fallback" readonly value="${escapeHtml(url)}">
       </div>
       <div class="modal-footer">
@@ -4306,7 +4310,7 @@ async function pushRelanceNotificationsForRequest(candidates, request, domain, n
   }
 
   if (joursEnAttente < ESCALADE_APRES_JOURS) return;
-  candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente — remontée',
+  candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente, remontée',
     `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
   if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && validatorIds.length) {
     window.SupabaseSync.notifyRequestEmail(request.id, domain, 'relance').catch(() => {});
@@ -4787,7 +4791,7 @@ function render() {
   try {
     renderInner();
   } catch (err) {
-    console.error('render() a levé une exception — affichage du filet de sécurité au lieu d\'un écran vide.', err);
+    console.error('render() a levé une exception : affichage du filet de sécurité au lieu d\'un écran vide.', err);
     reportClientError(err, 'render');
     renderCrashFallback();
   }
@@ -6348,7 +6352,7 @@ function renderEmployeesList() {
     </div>
     ${indexEgaliteRappel ? `
       <div class="card" style="margin-bottom: 12px; border-left: 3px solid var(--color-danger, #d33);">
-        <p class="${indexEgaliteRappel.retard ? 'text-danger' : ''}" style="font-weight: 600;">${indexEgaliteRappel.retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : icon(ICONS.scale, 14) + ' '}Index égalité professionnelle ${indexEgaliteRappel.anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${indexEgaliteRappel.currentYear}${indexEgaliteRappel.retard ? ' (dépassée)' : ''}.</p>
+        <p class="${indexEgaliteRappel.retard ? 'text-danger' : ''}" style="font-weight: 600;">${indexEgaliteRappel.retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : icon(ICONS.scale, 14) + ' '}Index égalité professionnelle ${indexEgaliteRappel.anneePrecedente} pas encore déclaré (échéance légale le 1er mars ${indexEgaliteRappel.currentYear}${indexEgaliteRappel.retard ? ', dépassée' : ''}).</p>
       </div>
     ` : ''}
 
@@ -6479,7 +6483,7 @@ function renderTableauCompteurs() {
   return `
     <div class="view-header">
       <h1>Tableau des compteurs</h1>
-      <p class="view-subtitle">Solde disponible par salarié et par type de congé — pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ce qui s'acquiert sur la période en cours n'est jamais consommable avant sa propre clôture.</p>
+      <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ce qui s'acquiert sur la période en cours n'est jamais consommable avant sa propre clôture.</p>
     </div>
     <div class="toolbar card">
       <select id="filter-tableau-compteurs-service" class="input">
@@ -6520,7 +6524,7 @@ function renderTableauCompteurs() {
             </table>
           </div>
           ${leaveTypes.some((t, i) => rows.some(r => r.balances[i].disponible === Infinity)) ? '<p class="text-muted" style="margin-top: 8px;">* au moins un salarié a un solde illimité pour ce type, exclu du total.</p>' : ''}
-          ${leaveTypes.some(t => !t.actif) ? '<p class="text-muted" style="margin-top: 8px;">Les types marqués "non activé" existent mais ne sont pas encore ouverts aux salariés — activez-les dans Paramètres → Types d\'absences si besoin.</p>' : ''}
+          ${leaveTypes.some(t => !t.actif) ? '<p class="text-muted" style="margin-top: 8px;">Les types marqués "non activé" existent mais ne sont pas encore ouverts aux salariés. Activez-les dans Paramètres → Types d\'absences si besoin.</p>' : ''}
         `}
       </div>
     `}
@@ -6885,10 +6889,10 @@ function openImportSalariesModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance — Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance. Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
         <label style="display: flex; align-items: center; gap: 8px; margin: 12px 0;">
           <input type="checkbox" id="f-import-preserve-matricule">
-          <span>Conserver les matricules du fichier (sinon attribués automatiquement — recommandé)</span>
+          <span>Conserver les matricules du fichier (sinon attribués automatiquement, recommandé)</span>
         </label>
         <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
         <div id="import-preview-zone" style="margin-top: 16px;"></div>
@@ -7714,7 +7718,7 @@ function renderTicketAiSuggestion(aiAnalysis, showApplyButton) {
   if (!aiAnalysis) return '';
   return `
     <div class="card" style="border: 1px dashed var(--color-primary); background: var(--color-primary-soft);">
-      <div class="search-section-label" style="padding-left:0;">${icon(ICONS.checkCircle, 14)} Analyse automatique — n'a pas modifié votre demande</div>
+      <div class="search-section-label" style="padding-left:0;">${icon(ICONS.checkCircle, 14)} Analyse automatique : n'a pas modifié votre demande</div>
       <p style="margin:6px 0;"><strong>Catégorie suggérée :</strong> ${escapeHtml(aiAnalysis.categorieSuggeree || '—')} · <strong>Priorité suggérée :</strong> ${escapeHtml(aiAnalysis.prioriteSuggeree || '—')}</p>
       ${aiAnalysis.resume ? `<p style="margin:6px 0;">${escapeHtml(aiAnalysis.resume)}</p>` : ''}
       ${Array.isArray(aiAnalysis.pointsCles) && aiAnalysis.pointsCles.length ? `<ul style="margin:6px 0;">${aiAnalysis.pointsCles.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
@@ -8093,7 +8097,7 @@ function renderIdees() {
     </div>
     <div class="card">
       <div id="idees-list">
-        ${idees.length === 0 ? '<p class="text-muted">Aucune idée pour le moment — soyez le premier à en proposer une !</p>' : idees.map(i => renderIdeeRow(i, user.id)).join('')}
+        ${idees.length === 0 ? '<p class="text-muted">Aucune idée pour le moment, soyez le premier à en proposer une !</p>' : idees.map(i => renderIdeeRow(i, user.id)).join('')}
       </div>
     </div>
   `;
@@ -8519,7 +8523,7 @@ function renderEmployeeDetail(id) {
               <span class="info-label">Heures sup. cumulées en ${year}</span>
               <span class="info-value${depasse ? ' text-danger' : ''}">${formatNumberFR(cumul)} h / ${formatNumberFR(contingent)} h (contingent annuel)</span>
             </div>
-            ${depasse ? `<p class="text-muted text-danger" style="margin-top: 4px;">Contingent annuel dépassé — un repos compensateur obligatoire s'applique (taux selon effectif/accord de branche, à vérifier avec votre gestionnaire de paie).</p>` : ''}
+            ${depasse ? `<p class="text-muted text-danger" style="margin-top: 4px;">Contingent annuel dépassé : un repos compensateur obligatoire s'applique (taux selon effectif/accord de branche, à vérifier avec votre gestionnaire de paie).</p>` : ''}
           `;
         })()}
         ${(() => {
@@ -8985,7 +8989,7 @@ function renderMenusAutorisesCard(e, user) {
   return `
     <div class="card">
       <h2>Menus autorisés</h2>
-      <p class="text-muted">Décochez un menu pour le retirer de la navigation de ce salarié — sans effet sur les autres salariés.</p>
+      <p class="text-muted">Décochez un menu pour le retirer de la navigation de ce salarié, sans effet sur les autres salariés.</p>
       <div class="form-grid checkbox-grid">
         ${items.map(item => `
           <div class="form-field form-field-checkbox">
@@ -9268,7 +9272,7 @@ function openAttestationEmployeurModal(id) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
+        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
           <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
           <p style="text-align: right;">${formatDate(today)}</p>
@@ -9417,9 +9421,9 @@ function openIndexEgaliteModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> — cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
+        <p class="text-muted">Obligatoire pour toute entreprise d'au moins 50 salariés, publié chaque année au plus tard le 1er mars (porte sur l'année précédente). Le calcul des indicateurs se fait sur l'outil officiel <a href="https://index-egapro.travail.gouv.fr" target="_blank" rel="noopener">index-egapro.travail.gouv.fr</a> ; cet écran trace seulement la note obtenue, pour ne plus oublier l'échéance.</p>
         ${!concerne ? `<p class="text-muted" style="margin-top: 8px;">Non obligatoire pour ${anneePrecedente} : effectif sous 50 salariés au 31 décembre ${anneePrecedente} (${effectifAnneePrecedente}).</p>` : ''}
-        ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré — échéance légale le 1er mars ${currentYear}${retard ? ' (dépassée)' : ''}.</p>` : ''}
+        ${concerne && !anneePrecedenteDeclaree ? `<p class="${retard ? 'text-danger' : 'text-muted'}" style="margin-top: 8px; font-weight: 600;">${retard ? icon(ICONS.warningTriangle, 14) + ' En retard : ' : ''}Index ${anneePrecedente} pas encore déclaré (échéance légale le 1er mars ${currentYear}${retard ? ', dépassée' : ''}).</p>` : ''}
         <div class="mini-list" style="margin-top: 12px;">
           ${anneesDeclarees.length === 0 ? `<p class="text-muted">Aucune année déclarée.</p>` : anneesDeclarees.map(year => {
             const r = records[year];
@@ -9472,7 +9476,7 @@ function openAjouterIndexEgaliteModal(defaultYear) {
           <div class="form-field">
             <label for="f-index-annee">Année</label>
             <input class="input" type="number" id="f-index-annee" value="${defaultYear}" ${existing ? 'readonly' : ''} required>
-            ${existing ? `<p class="text-muted" style="margin-top: 4px;">L'année ne peut pas être changée ici — modifiez plutôt l'entrée de l'année correspondante.</p>` : ''}
+            ${existing ? `<p class="text-muted" style="margin-top: 4px;">L'année ne peut pas être changée ici : modifiez plutôt l'entrée de l'année correspondante.</p>` : ''}
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-index-note">Note obtenue (/100) *</label>
@@ -9530,7 +9534,7 @@ function openCertificatTravailModal(id) {
       </div>
       <div class="modal-body">
         ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de fin de contrat renseignée sur cette fiche : ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
-        <p class="text-muted">Modèle type à relire avant remise — complétez/ajustez si besoin avant impression.</p>
+        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
           <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
           <p style="text-align: right;">${formatDate(today)}</p>
@@ -11268,7 +11272,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                   <input type="checkbox" id="f-fractionnementActif" ${type.fractionnementActif ? 'checked' : ''}>
                   Jours de fractionnement
                 </label>
-                <p class="form-hint">Règle supplétive française : +1 jour si 3 à 5 jours de congé sont pris hors du 1er mai-31 octobre (période précédente), +2 jours si 6 ou plus. Beaucoup d'accords l'écartent — désactivé par défaut.</p>
+                <p class="form-hint">Règle supplétive française : +1 jour si 3 à 5 jours de congé sont pris hors du 1er mai-31 octobre (période précédente), +2 jours si 6 ou plus. Beaucoup d'accords l'écartent. Désactivé par défaut.</p>
               </div>
             </div>
           </fieldset>
@@ -12254,7 +12258,7 @@ function renderParametresQuotasSimultanes() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Quotas d'absences simultanées</h2>
-          <p class="text-muted">Nombre maximum de salariés d'un même service ou d'une même équipe absents en même temps — alerte à la saisie d'une demande, sans jamais bloquer.</p>
+          <p class="text-muted">Nombre maximum de salariés d'un même service ou d'une même équipe absents en même temps ; alerte à la saisie d'une demande, sans jamais bloquer.</p>
         </div>
         <button class="btn btn-primary btn-sm" id="btn-add-quota">+ Ajouter un quota</button>
       </div>
@@ -12476,7 +12480,32 @@ function bindParametresIntegrationsEvents() {
   });
 }
 
+/** §correctif retour QA du 27/08/2026 (point 4) : la rangée d'onglets Paramètres passait au menu
+ * déroulant uniquement sous 860px (voir style.css) — entre 860px et la largeur réellement nécessaire
+ * aux 11 onglets, la rangée débordait sans AUCUN moyen de l'atteindre à la souris (la barre de
+ * défilement est volontairement masquée, .tabs, pour tout le reste de l'app — voir ce commentaire —
+ * et le glissé tactile n'existe pas sur ordinateur). "Le seuil ne devrait pas être une largeur
+ * d'écran mais le fait que les onglets tiennent ou non" : mesure réelle (scrollWidth > clientWidth)
+ * plutôt qu'un second seuil de largeur à deviner — bascule vers le menu déroulant dès que ça déborde,
+ * à N'IMPORTE QUELLE largeur d'écran, y compris desktop large avec beaucoup de modules souscrits. */
+function checkParametresTabsOverflow() {
+  const tabsRow = document.querySelector('.parametres-tabs-desktop');
+  const select = document.getElementById('parametres-tab-select');
+  if (!tabsRow || !select) return;
+  // Mesure avec la rangée forcée visible (elle a pu être masquée par un précédent appel, ce qui
+  // donnerait 0 débordement en boucle) — puis on retranche la largeur déjà prise par le sélecteur
+  // caché (0 ici) : simplement remettre display:flex avant de mesurer.
+  tabsRow.style.display = 'flex';
+  select.style.display = 'none';
+  const overflowing = tabsRow.scrollWidth > tabsRow.clientWidth + 1; // +1 : tolérance d'arrondi sub-pixel
+  if (overflowing) {
+    tabsRow.style.display = 'none';
+    select.style.display = 'block';
+  }
+}
+
 function bindParametresEvents() {
+  checkParametresTabsOverflow();
   const tabSelect = document.getElementById('parametres-tab-select');
   if (tabSelect) tabSelect.addEventListener('change', () => { state.parametresTab = tabSelect.value; render(); renderSidebar(); });
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {
@@ -12531,7 +12560,7 @@ function renderParametresEntreprise() {
           ${textField('email', 'Email', profile.email, true, 'email')}
           ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, profile.conventionCollective)}
         </div>
-        <p class="form-hint">${icon(ICONS.info, 12)} Liste des conventions collectives non exhaustive (~180 les plus courantes) et pas automatiquement mise à jour — si la vôtre n'apparaît pas ou que le code IDCC vous semble dépassé, <a href="https://code.travail.gouv.fr/outils/convention-collective" target="_blank" rel="noopener noreferrer">vérifiez sur l'outil officiel du Ministère du Travail</a>.</p>
+        <p class="form-hint">${icon(ICONS.info, 12)} Liste des conventions collectives non exhaustive (~180 les plus courantes) et pas automatiquement mise à jour : si la vôtre n'apparaît pas ou que le code IDCC vous semble dépassé, <a href="https://code.travail.gouv.fr/outils/convention-collective" target="_blank" rel="noopener noreferrer">vérifiez sur l'outil officiel du Ministère du Travail</a>.</p>
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
@@ -13311,6 +13340,11 @@ function renderParametresListes() {
   const anyWorkflowModule = hasModule('conges') || hasModule('planning') || hasModule('frais');
 
   return `
+    <!-- §correctif retour QA du 27/08/2026 (point 5) : "j'ai cherché un onglet 'Catégories de
+         salariés', il n'existe plus" — regroupé ici depuis le sprint §6.3, mais sans aucun indice
+         pour qui cherche encore par l'ancien nom. Rappel visible en tête d'onglet, en plus de
+         l'indexation déjà correcte dans la recherche globale (voir PARAMETRES_SEARCH_SECTIONS). -->
+    <p class="text-muted" style="margin: -8px 0 16px;">Postes, catégories de frais, <strong>catégories de salariés</strong>, conventions collectives et autres listes de référence.</p>
     ${hasModule('rh') ? `
     <div class="card">
       <h2>Salariés</h2>
@@ -13324,13 +13358,13 @@ function renderParametresListes() {
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
         </div>
         <div class="form-field">
-          <label for="f-taux-repos-compensateur">Taux de majoration — repos compensateur (%)</label>
+          <label for="f-taux-repos-compensateur">Taux de majoration, repos compensateur (%)</label>
           <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
-          <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise — à vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
+          <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
         </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
-          <p class="form-hint">Purement visuel — n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
+          <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
         </div>
       </div>
     </div>
@@ -13353,7 +13387,7 @@ function renderParametresListes() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Catégories de salariés</h2>
-          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise — utilisable dans les règles de congés, jours fériés et fermetures.</p>
+          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise, utilisable dans les règles de congés, jours fériés et fermetures.</p>
         </div>
         <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
       </div>
@@ -13442,7 +13476,7 @@ function renderSettingsListCard(listDef, items, readOnlyValues) {
   return `
     <div class="card">
       <h2>${escapeHtml(listDef.label)}</h2>
-      ${readOnlyValues ? `<p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici — ajoutez seulement une convention qui en serait absente.</p>` : ''}
+      ${readOnlyValues ? `<p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici : ajoutez seulement une convention qui en serait absente.</p>` : ''}
       <div class="chip-list">
         ${items.map((item, i) => {
           const readOnly = readOnlyValues && readOnlyValues.has(item);
@@ -13612,7 +13646,7 @@ function renderParametresVacances() {
 
     <div class="card table-card">
       <div class="view-header-row" style="padding: 20px 20px 0;">
-        <h2>Périodes — année scolaire ${escapeHtml(schoolData.anneeScolaire)}</h2>
+        <h2>Périodes, année scolaire ${escapeHtml(schoolData.anneeScolaire)}</h2>
         <div style="display: flex; gap: 8px;">
           <button class="btn btn-secondary btn-sm" id="btn-fetch-official-school-holidays">${icon(ICONS.refresh, 13)} Récupérer depuis la source officielle</button>
           <button class="btn btn-secondary btn-sm" id="btn-new-school-period">+ Nouvelle période</button>
@@ -13769,7 +13803,7 @@ function openFetchOfficialSchoolHolidaysModal() {
     }
     body.innerHTML = `
       <p class="text-muted">${newPeriods.length} nouvelle${newPeriods.length > 1 ? 's' : ''} période${newPeriods.length > 1 ? 's' : ''} trouvée${newPeriods.length > 1 ? 's' : ''} pour ${escapeHtml(targetYear)}${periods.length > newPeriods.length ? ` (${periods.length - newPeriods.length} déjà présente${periods.length - newPeriods.length > 1 ? 's' : ''}, ignorée${periods.length - newPeriods.length > 1 ? 's' : ''})` : ''} :</p>
-      <p class="text-muted" style="font-size: 13px;">${icon(ICONS.info, 13)} Les vacances d'été n'y figurent pas — la source officielle n'en publie que la date de début, jamais une période complète exploitable ici. Ajoutez-la manuellement avec "+ Nouvelle période" si besoin.</p>
+      <p class="text-muted" style="font-size: 13px;">${icon(ICONS.info, 13)} Les vacances d'été n'y figurent pas : la source officielle n'en publie que la date de début, jamais une période complète exploitable ici. Ajoutez-la manuellement avec "+ Nouvelle période" si besoin.</p>
       <table class="table">
         <thead><tr><th>Période</th><th>Début</th><th>Fin</th><th>Zones</th></tr></thead>
         <tbody>
@@ -13878,7 +13912,7 @@ function renderParametresFeries() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Jours fériés ${year}</h2>
-          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement — ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant. Par défaut, personne ne travaille un jour férié — configurez des exceptions par catégorie si certains salariés doivent le travailler.</p>
+          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement, ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant. Par défaut, personne ne travaille un jour férié ; configurez des exceptions par catégorie si certains salariés doivent le travailler.</p>
         </div>
         <div class="calendar-nav">
           <button class="btn btn-secondary btn-sm" id="btn-feries-prev">← ${year - 1}</button>
@@ -14128,8 +14162,8 @@ function openFermetureModal(existing) {
           <div class="form-field" style="margin-top:12px;">
             <label for="f-fermeture-decompte">Cette fermeture décompte-t-elle un congé ?</label>
             <select class="input" id="f-fermeture-decompte">
-              <option value="" ${!decompteActif ? 'selected' : ''}>Non — jour offert, comme un jour férié</option>
-              <option value="oui" ${decompteActif ? 'selected' : ''}>Oui — congé imposé, décompté d'un type</option>
+              <option value="" ${!decompteActif ? 'selected' : ''}>Non, jour offert, comme un jour férié</option>
+              <option value="oui" ${decompteActif ? 'selected' : ''}>Oui, congé imposé, décompté d'un type</option>
             </select>
           </div>
           <div class="form-field" id="f-fermeture-decompte-type-wrap" style="margin-top:12px; ${decompteActif ? '' : 'display:none;'}">
@@ -14307,7 +14341,7 @@ function renderParametresQualite() {
   return `
     <div class="card">
       <h2>Qualité des données</h2>
-      <p class="text-muted">Contrôles automatiques sur les salariés actifs — à corriger avant que ça ne pose problème en paie ou en déclaration.</p>
+      <p class="text-muted">Contrôles automatiques sur les salariés actifs, à corriger avant que ça ne pose problème en paie ou en déclaration.</p>
       ${issues.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.checkCircle}</div><p>Aucun problème détecté.</p></div>` : `
         <div class="mini-list" style="margin-top: 12px;">
           ${issues.map(issue => `
@@ -14478,7 +14512,7 @@ function renderPlanning() {
   return `
     <div class="view-header">
       <h1>Planning</h1>
-      <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail — congés et télétravail validés</p>
+      <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail : congés et télétravail validés</p>
     </div>
     ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
     <div class="tabs">
@@ -14860,10 +14894,10 @@ function openHorairesModal(employeeId) {
       <form id="horaires-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${textField('horaireMatinDebut', 'Matin — début', employee.horaireMatinDebut || '09:00', true, 'time')}
-            ${textField('horaireMatinFin', 'Matin — fin', employee.horaireMatinFin || '12:00', true, 'time')}
-            ${textField('horaireApresMidiDebut', 'Après-midi — début', employee.horaireApresMidiDebut || '13:00', true, 'time')}
-            ${textField('horaireApresMidiFin', 'Après-midi — fin', employee.horaireApresMidiFin || '17:00', true, 'time')}
+            ${textField('horaireMatinDebut', 'Matin, début', employee.horaireMatinDebut || '09:00', true, 'time')}
+            ${textField('horaireMatinFin', 'Matin, fin', employee.horaireMatinFin || '12:00', true, 'time')}
+            ${textField('horaireApresMidiDebut', 'Après-midi, début', employee.horaireApresMidiDebut || '13:00', true, 'time')}
+            ${textField('horaireApresMidiFin', 'Après-midi, fin', employee.horaireApresMidiFin || '17:00', true, 'time')}
           </div>
         </div>
         <div class="modal-footer">
@@ -16718,7 +16752,7 @@ function renderExportPaiePreparationTab(rows) {
         <p>Aucune anomalie détectée pour ${MONTH_NAMES[state.paieMonth]} ${state.paieYear}. Prêt pour l'export.</p>
       </div>
     ` : `
-      ${anomalySection(`${icon(ICONS.block, 15)} Bloquantes — à corriger avant export`, bloquantes, 'badge-danger')}
+      ${anomalySection(`${icon(ICONS.block, 15)} Bloquantes, à corriger avant export`, bloquantes, 'badge-danger')}
       ${anomalySection(`${icon(ICONS.warningTriangle, 15)} Avertissements`, avertissements, 'badge-warning')}
       ${anomalySection(`${icon(ICONS.info, 15)} Informations`, informations, 'badge-info')}
     `}
@@ -16783,7 +16817,7 @@ function renderExportPaieExportTab(rows) {
           </select>
         </div>
       </div>
-      <p class="text-muted" style="margin-top: 8px;">${icon(ICONS.warningTriangle, 14)} Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel — les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
+      <p class="text-muted" style="margin-top: 8px;">${icon(ICONS.warningTriangle, 14)} Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel : les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
       ${modele === 'personnalise' ? `
         <div class="form-grid" style="margin-top: 12px;">
           ${checkboxField('paieCol.conges', 'Congés', colonnes.conges)}
@@ -17174,7 +17208,7 @@ function exportPaieCSV() {
     'Matricule', 'Nom', 'Prénom',
     ...(showColonne('conges') ? leaveTypesExportables.map(t => `${t.nom} (jours)`) : []),
     ...(showColonne('teletravail') ? ['Télétravail (jours)'] : []),
-    ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets — part salarié (€)'] : []),
+    ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets, part salarié (€)'] : []),
     ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : []),
     'Variables (€)', // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
     'Heures supplémentaires (h)', // même raisonnement : élément de paie essentiel, toujours inclus
@@ -17354,7 +17388,7 @@ function renderEmbauche() {
   return `
     <div class="view-header">
       <h1>Embauche</h1>
-      <p class="view-subtitle">Affichez ce QR code (poster, page carrière...) pour recevoir des candidatures directement — CV et lettre de motivation compris, sans compte à créer.</p>
+      <p class="view-subtitle">Affichez ce QR code (poster, page carrière...) pour recevoir des candidatures directement : CV et lettre de motivation compris, sans compte à créer.</p>
     </div>
     <div class="card" style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
       <div style="flex-shrink: 0; line-height: 0;">${qrSvg}</div>
@@ -17693,10 +17727,10 @@ function openEmployeeModal(id, prefill, candidatureId) {
             </div>
             <p class="text-muted" style="margin-top: 14px;">Horaires (identiques chaque jour travaillé) — utilisés par le Planning (§3).</p>
             <div class="form-grid">
-              ${textField('horaireMatinDebut', 'Matin — début', employee.horaireMatinDebut || '09:00', false, 'time')}
-              ${textField('horaireMatinFin', 'Matin — fin', employee.horaireMatinFin || '12:00', false, 'time')}
-              ${textField('horaireApresMidiDebut', 'Après-midi — début', employee.horaireApresMidiDebut || '13:00', false, 'time')}
-              ${textField('horaireApresMidiFin', 'Après-midi — fin', employee.horaireApresMidiFin || '17:00', false, 'time')}
+              ${textField('horaireMatinDebut', 'Matin, début', employee.horaireMatinDebut || '09:00', false, 'time')}
+              ${textField('horaireMatinFin', 'Matin, fin', employee.horaireMatinFin || '12:00', false, 'time')}
+              ${textField('horaireApresMidiDebut', 'Après-midi, début', employee.horaireApresMidiDebut || '13:00', false, 'time')}
+              ${textField('horaireApresMidiFin', 'Après-midi, fin', employee.horaireApresMidiFin || '17:00', false, 'time')}
             </div>
           </fieldset>
 
