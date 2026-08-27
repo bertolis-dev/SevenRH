@@ -98,6 +98,7 @@ globalThis.__buildImportPreviewRows = buildImportPreviewRows;
 globalThis.__importEmployeesRows = importEmployeesRows;
 globalThis.__requiredModuleForSourceKey = requiredModuleForSourceKey;
 globalThis.__SOURCE_KEY_MODULE_RULES = SOURCE_KEY_MODULE_RULES;
+globalThis.__HELP_CONTENT = HELP_CONTENT;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -122,6 +123,7 @@ globalThis.__SOURCE_KEY_MODULE_RULES = SOURCE_KEY_MODULE_RULES;
     importEmployeesRows: sandbox.__importEmployeesRows,
     requiredModuleForSourceKey: sandbox.__requiredModuleForSourceKey,
     SOURCE_KEY_MODULE_RULES: sandbox.__SOURCE_KEY_MODULE_RULES,
+    HELP_CONTENT: sandbox.__HELP_CONTENT,
   };
 }
 

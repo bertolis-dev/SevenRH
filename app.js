@@ -3615,8 +3615,58 @@ const HELP_CONTENT = {
     body: `<p>Configuration de l'entreprise : établissements, services &amp; équipes, <strong>types d'absences</strong> (créer/modifier/désactiver un type, justificatif obligatoire, comptabilisation sur le compteur RTT/congés payés, même écran que l'onglet "Types" de Congés/Autres absences), listes de référence (postes, catégories de frais...), vacances scolaires, jours fériés, et le journal d'audit si vous y avez accès.</p>`,
     faq: [{ q: 'Un salarié voit un type d\'absence que je viens de désactiver ?', r: 'La désactivation empêche les NOUVELLES demandes sur ce type mais préserve l\'historique des demandes déjà créées. C\'est normal, ce n\'est pas un bug.' }],
     bonnesPratiques: ['Désactivez un type plutôt que de le supprimer si des demandes existantes s\'y réfèrent encore : la suppression est destinée aux types jamais utilisés.']
+  },
+  // §correctif retour QA du 27/08/2026 (point 7) : "l'aide ne couvre que 11 écrans sur 19 [...] le
+  // plus gênant est le Tableau des compteurs, à la fois le plus récent et le plus difficile à
+  // interpréter". Complété pour les 6 écrans du menu qui n'avaient encore aucune aide (les vues de
+  // détail — fiche salarié, entretien, ticket, idée, candidature — restent sans contenu dédié pour
+  // l'instant : le bouton s'y masque désormais plutôt que d'afficher un message vide, voir openHelpModal).
+  'tableau-compteurs': {
+    title: 'Tableau des compteurs',
+    body: `<p>Solde de chaque salarié pour chaque type de congé (colonnes). Les types <strong>inactifs</strong> (ex. RTT non encore activé) restent affichés, grisés, pour ne jamais laisser croire qu'un type n'est pas géré par l'outil.</p>
+           <p>Pour un type à <strong>clôture</strong> (ex. congés payés, période du 1er juin au 31 mai) : le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, immédiatement consommable, avec ses dates affichées en dessous. En petit, le détail acquis/pris/en attente/report ; et si un montant apparaît en "+ ... en cours d'acquisition", c'est ce qui s'accumule sur la période EN COURS, jamais consommable avant sa propre clôture. Ne l'additionnez jamais au disponible : ce sont deux compteurs distincts.</p>`,
+    faq: [
+      { q: 'Pourquoi je ne vois pas les RTT ?', r: 'Le type existe mais est grisé "non activé" si personne ne l\'a encore activé dans Paramètres > Types d\'absences : pas une fonctionnalité manquante.' },
+      { q: 'Le solde ne correspond pas à ce que j\'attendais ?', r: 'Vérifiez d\'abord la période affichée sous le chiffre : un solde "disponible" ne concerne que la période close, jamais celle en cours d\'acquisition.' }
+    ],
+    bonnesPratiques: ['Filtrez par service avant d\'exporter/comparer les soldes d\'une grande équipe.']
+  },
+  'mes-tickets': {
+    title: 'Mes tickets',
+    body: `<p>Vos demandes de support envoyées à l'équipe BERTOLIS (éditeur du logiciel), pas un ticket restaurant. Créez-en un pour un bug, une question ou une demande d'évolution ; suivez les réponses et le statut directement ici.</p>`,
+    faq: [{ q: 'Je cherche mes tickets restaurant, pas mes demandes de support ?', r: 'C\'est l\'écran "Tickets restaurant" (module dédié) qu\'il vous faut, pas "Mes tickets" — le nom se ressemble, mais ce sont deux choses différentes.' }]
+  },
+  entretiens: {
+    title: 'Entretiens',
+    body: `<p>Planification et suivi des entretiens professionnels et entretiens annuels. RH/Manager planifient un entretien (date, participants), le salarié complète son auto-évaluation avant la date, le manager son retour, RH clôture. Un rappel apparaît automatiquement si le bilan à 6 ans (obligation légale récurrente) approche.</p>`,
+    faq: [{ q: 'Le salarié ne peut plus modifier son auto-évaluation ?', r: 'Elle se verrouille une fois l\'entretien clôturé par RH, pour garder une trace fidèle de ce qui a été échangé ce jour-là.' }]
+  },
+  idees: {
+    title: 'Boîte à idées',
+    body: `<p>Tout salarié peut proposer une idée, que les autres votent. RH/Propriétaire peuvent changer le statut (à l'étude, retenue, refusée...) pour indiquer où en est chaque idée.</p>`,
+    faq: [{ q: 'Peut-on retirer son vote ?', r: 'Oui, cliquez à nouveau sur le bouton de vote : il fonctionne comme un interrupteur, pas un vote définitif.' }]
+  },
+  remuneration: {
+    title: 'Rémunération',
+    body: `<p>Vue consolidée des éléments de rémunération : salaire brut mensuel, heures supplémentaires saisies et leur suivi par rapport au contingent annuel (Paramètres), et solde de repos compensateur (voir la fiche salarié pour le détail et l'ajustement par salarié).</p>`,
+    faq: [{ q: 'Le taux de conversion des heures sup en repos compensateur est-il calculé automatiquement ?', r: 'Non, volontairement : le taux dépend de votre effectif et d\'un éventuel accord de branche/entreprise, à confirmer avec votre gestionnaire de paie avant de le régler dans Paramètres.' }]
+  },
+  embauche: {
+    title: 'Embauche',
+    body: `<p>Postes ouverts au recrutement et candidatures reçues (formulaire public accessible par QR code ou lien direct, sans compte à créer pour le candidat). Depuis une candidature, "Embaucher" crée directement la fiche salarié pré-remplie avec ses informations.</p>`,
+    faq: [{ q: 'Comment un candidat postule-t-il ?', r: 'Partagez le QR code ou le lien de l\'offre (bouton dédié sur cet écran) : aucune connexion n\'est requise côté candidat, juste le formulaire avec CV et lettre de motivation.' }]
   }
 };
+
+/** §correctif retour QA du 27/08/2026 (point 7) : "quand un écran n'a pas d'aide, la fenêtre affiche
+ * 'aucune aide n'est disponible'. Ça fait produit inachevé. Tant que le contenu n'est pas écrit,
+ * masque le bouton." Appelé à chaque render() (pas seulement au chargement) : state.view change à
+ * chaque navigation, un bouton resté affiché depuis un écran couvert resterait visible à tort sur
+ * une vue de détail (fiche salarié, entretien, ticket, idée, candidature — pas encore de contenu dédié). */
+function updateHelpButtonVisibility() {
+  const btn = document.getElementById('btn-help');
+  if (btn) btn.style.display = HELP_CONTENT[state.view] ? '' : 'none';
+}
 
 function openHelpModal() {
   const help = HELP_CONTENT[state.view] || { title: 'Aide', body: '<p class="text-muted">Aucune aide spécifique n\'est disponible pour cet écran.</p>' };
@@ -4104,6 +4154,23 @@ function performGlobalSearch(term) {
       .forEach(s => results.push({ icon: ICONS.gear, label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
   }
 
+  // §correctif retour QA du 27/08/2026 (point 7, tier 1) : "indexer l'aide dans la recherche globale
+  // [...] peu de travail, et ça règle mon cas" — HELP_CONTENT (titres, texte, FAQ, bonnes pratiques)
+  // devient cherchable comme n'importe quelle autre donnée, sans avoir à deviner d'abord sur quel
+  // écran aller. isViewBlockedForCurrentUser filtre les écrans que ce rôle/ces modules ne peuvent de
+  // toute façon pas atteindre — jamais un résultat qui mène à un écran bloqué.
+  Object.entries(HELP_CONTENT)
+    .filter(([view]) => !isViewBlockedForCurrentUser(view))
+    .filter(([, help]) => {
+      const haystack = normalizeForSearch([
+        help.title, help.body.replace(/<[^>]+>/g, ' '),
+        ...(help.faq || []).flatMap(f => [f.q, f.r]),
+        ...(help.bonnesPratiques || [])
+      ].join(' '));
+      return haystack.includes(q);
+    })
+    .forEach(([view, help]) => results.push({ icon: ICONS.info, label: help.title, sublabel: 'Aide', nav: view, params: {}, openHelp: true }));
+
   return results.slice(0, 8);
 }
 
@@ -4173,6 +4240,9 @@ function bindGlobalSearchEvents() {
     const result = currentResults[index];
     if (!result) return;
     navigateTo(result.nav, result.params || {});
+    // §correctif retour QA du 27/08/2026 (point 7, tier 1) : un résultat "Aide" ouvre directement la
+    // rubrique après avoir navigué sur le bon écran, plutôt que de laisser deviner où cliquer ensuite.
+    if (result.openHelp) openHelpModal();
     input.value = '';
     resultsBox.classList.remove('open');
   }
@@ -4790,6 +4860,7 @@ function isViewBlockedForCurrentUser(view) {
 function render() {
   try {
     renderInner();
+    updateHelpButtonVisibility();
   } catch (err) {
     console.error('render() a levé une exception : affichage du filet de sécurité au lieu d\'un écran vide.', err);
     reportClientError(err, 'render');
