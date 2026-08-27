@@ -92,6 +92,7 @@ globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
 globalThis.__nextAnneeScolaire = nextAnneeScolaire;
 globalThis.__fetchOfficialSchoolHolidays = fetchOfficialSchoolHolidays;
+globalThis.__getEmployeesOnLongAbsence = getEmployeesOnLongAbsence;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -110,6 +111,7 @@ globalThis.__fetchOfficialSchoolHolidays = fetchOfficialSchoolHolidays;
     parisDateFromISO: sandbox.__parisDateFromISO,
     nextAnneeScolaire: sandbox.__nextAnneeScolaire,
     fetchOfficialSchoolHolidays: sandbox.__fetchOfficialSchoolHolidays,
+    getEmployeesOnLongAbsence: sandbox.__getEmployeesOnLongAbsence,
   };
 }
 

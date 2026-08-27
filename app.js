@@ -5086,6 +5086,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const bilansSixAns = getUpcomingBilansSixAns(60, employees);
   const visitesMedicales = getUpcomingVisitesMedicales(60, employees);
   const contingentHeuresSup = getEmployeesNearingContingentHeuresSup(employees);
+  const absencesLonguesDuree = hasModule('conges') ? getEmployeesOnLongAbsence(employees) : [];
 
   const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
@@ -5131,6 +5132,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns)}
       ${renderUpcomingVisitesMedicalesCard(visitesMedicales)}
       ${renderContingentHeuresSupCard(contingentHeuresSup)}
+      ${ifModule('conges', renderLongAbsenceSuspensionCard(absencesLonguesDuree))}
     </div>
     ` : ''}
 
@@ -5645,6 +5647,71 @@ function getEmployeesNearingContingentHeuresSup(employees, seuilPct = 0.8) {
     .map(e => ({ employee: e, cumul: getHeuresSupAnnee(e, year), contingent }))
     .filter(x => x.cumul >= x.contingent * seuilPct)
     .sort((a, b) => b.cumul - a.cumul);
+}
+
+/** §retour QA du 26/08/2026 (point 7.16) : signale les salariés en absence longue durée (arrêt
+ * maladie, congé non assimilé prolongé...) plutôt que d'automatiser quoi que ce soit sur
+ * l'acquisition des congés payés. Le Code du travail (art. L3141-5) "assimile" CERTAINES absences à
+ * du temps de travail effectif pour le calcul des CP (accident du travail, maternité...) mais pas
+ * TOUTES, avec des règles, seuils et exceptions qui varient encore selon la nature exacte de
+ * l'absence et la convention collective applicable (voir le lien vers l'outil officiel ajouté au
+ * point 6.1) — une réduction AUTOMATIQUE et potentiellement fausse du compteur serait pire qu'aucune
+ * automatisation (un salarié perdrait des droits qu'il a légalement, ou l'inverse). Ce module reste
+ * donc, comme getHeuresSupAnnee/getEmployeesNearingContingentHeuresSup juste au-dessus, un signal
+ * pour RH — jamais un moteur de calcul — qui pointe vers l'ajustement manuel déjà existant
+ * (openAjusterCompteurModal) une fois la vérification faite.
+ *
+ * Seuil de 30 jours calendaires consécutifs (repère usuel pour une "absence longue" en droit du
+ * travail français, sans prétendre reproduire un seuil légal précis qui varie par motif). Inclut les
+ * absences EN COURS aujourd'hui et celles terminées il y a moins de 60 jours (RH doit encore pouvoir
+ * vérifier l'impact CP après le retour du salarié, pas seulement pendant l'absence). */
+function getEmployeesOnLongAbsence(employees, seuilJours = 30, fenetreApresRetourJours = 60) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive);
+  const employeeIds = new Set(employees.map(e => e.id));
+  const todayStr = toISODate(new Date());
+  const seuilRetourStr = toISODate(addDays(new Date(), -fenetreApresRetourJours));
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
+  const typeById = new Map(leaveTypes.map(t => [t.id, t]));
+
+  return leaveRepository.getAll()
+    .filter(r => r.statut === 'Validé' && employeeIds.has(r.employeeId) && !r._redacted)
+    .filter(r => {
+      const type = typeById.get(r.typeId);
+      // Seules les absences NON assimilables d'office à des congés payés eux-mêmes sont concernées —
+      // un salarié qui prend simplement 6 semaines de congés payés d'affilée n'a par définition aucun
+      // impact sur l'acquisition de SES PROPRES congés payés.
+      return type && type.categorie === 'autre';
+    })
+    .filter(r => r.dateFin >= r.dateDebut && daysBetween(parseISODateLocal(r.dateDebut), parseISODateLocal(r.dateFin)) + 1 >= seuilJours)
+    .filter(r => r.dateFin >= seuilRetourStr) // en cours, ou terminée il y a moins de fenetreApresRetourJours jours
+    .map(r => ({
+      employee: employees.find(e => e.id === r.employeeId),
+      request: r,
+      type: typeById.get(r.typeId),
+      enCours: r.dateDebut <= todayStr && r.dateFin >= todayStr,
+      dureeJours: daysBetween(parseISODateLocal(r.dateDebut), parseISODateLocal(r.dateFin)) + 1
+    }))
+    .filter(x => x.employee)
+    .sort((a, b) => b.dureeJours - a.dureeJours);
+}
+
+function renderLongAbsenceSuspensionCard(items) {
+  return `
+    <div class="card">
+      <h2>Absences longue durée</h2>
+      <p class="form-hint" style="margin-top: -8px;">Vérifiez l'impact sur l'acquisition des congés payés au cas par cas (règles variables selon le motif) avant d'ajuster un compteur.</p>
+      ${items.length === 0 ? `<p class="text-muted">Aucune absence longue durée en cours ou récente.</p>` : `
+        <div class="mini-list">
+          ${items.map(x => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${escapeHtml(x.type.nom)}</span>
+              <span class="text-muted">${formatDurationFR(x.dureeJours)}${x.enCours ? ' · en cours' : ' · terminée'}</span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
 }
 
 function renderContingentHeuresSupCard(items) {
