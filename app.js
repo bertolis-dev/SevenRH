@@ -8303,14 +8303,16 @@ function bindIdeeDetailEvents() {
 // Vue : Fiche salarié (détail)
 // ---------------------------------------------------------------------------
 
-/** Un RH ne peut pas modifier sa propre fiche sensible ; seul le Propriétaire le peut. */
+/** §correctif retour QA du 27/08/2026 ("la RH ne peut pas modifier sa propre fiche il faut changer
+ * ça") : la restriction §9.3 ("seul le Propriétaire modifie sa propre fiche") bloquait aussi RH,
+ * alors que RH a par défaut la permission MODIFIER_SALARIE pour tout le monde SAUF elle-même — sans
+ * bénéfice de sécurité réel (le journal d'audit trace de toute façon chaque modification, y compris
+ * une auto-modification), juste un blocage gênant au quotidien. Quiconque a MODIFIER_SALARIE peut
+ * désormais modifier sa propre fiche comme celle de n'importe qui d'autre. */
 function canEditEmployeeRecord(employee) {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
-  if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) {
-    if (user.role !== ROLES.PROPRIETAIRE && user.id === employee.id) return false; // §9.3 : seul le Propriétaire modifie sa propre fiche
-    return true;
-  }
+  if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) return true;
   if (user.role === ROLES.MANAGER) return (employee.managerIds || []).includes(user.id);
   return false;
 }
@@ -17801,7 +17803,18 @@ function openEmployeeModal(id, prefill, candidatureId) {
             <div class="form-grid">
               ${selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail)}
               ${textField('pourcentageActivite', 'Pourcentage d\'activité', employee.pourcentageActivite, false, 'number')}
-              ${textField('horairesHebdo', 'Heures hebdomadaires', employee.horairesHebdo, false, 'number')}
+              <div class="form-field">
+                <!-- §retour QA du 27/08/2026 ("pouvoir mettre un chiffre à virgule") : un <input
+                     type="number"> refuse la virgule décimale française au clavier (même avec
+                     step="any", la locale du champ number reste le point, jamais la virgule) — un
+                     salarié à 35h30 (35,5h) ne pouvait pas être saisi. Texte + inputmode="decimal"
+                     (clavier numérique adapté sur mobile) plutôt qu'un number, avec normalisation
+                     virgule/point à l'enregistrement (voir submitEmployeeForm) et à l'affichage
+                     (formatNumberFR, déjà utilisé partout ailleurs pour ce champ, affiche déjà la
+                     virgule française en lecture — seule la SAISIE posait problème). -->
+                <label for="f-horairesHebdo">Heures hebdomadaires</label>
+                <input class="input" type="text" inputmode="decimal" id="f-horairesHebdo" name="horairesHebdo" value="${escapeHtml(employee.horairesHebdo != null ? String(employee.horairesHebdo).replace('.', ',') : '')}" placeholder="35 ou 35,5">
+              </div>
               ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait)}
               ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT)}
             </div>
@@ -17967,7 +17980,10 @@ function submitEmployeeForm(evt, id, candidatureId) {
     return;
   }
   patch.pourcentageActivite = pourcentageActivite;
-  patch.horairesHebdo = Number(patch.horairesHebdo) || 35;
+  // §retour QA du 27/08/2026 : champ texte (voir openEmployeeModal), pas un <input type="number">
+  // qui refusait la virgule décimale française — normalise avant conversion, un point saisi
+  // directement (ou collé depuis ailleurs) reste accepté tel quel.
+  patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || 35;
   patch.managerIds = formData.getAll('managerIds');
   if ('salaireBrutMensuel' in patch) patch.salaireBrutMensuel = Number(patch.salaireBrutMensuel) || 0;
 

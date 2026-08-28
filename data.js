@@ -247,6 +247,10 @@ const EXPORT_PAIE_MODELES = {
 // instant avant la fin du premier appel this.saveCurrentCompany() lui-même synchrone.
 const _categoriesSalarieMigratedCompanyIds = new Set();
 
+// Même principe que ci-dessus, pour le correctif conventions collectives (voir DB.getSettings()) —
+// évite de retenter l'écriture à chaque lecture une fois la liste déjà complétée cette session.
+const _conventionsCollectivesMigratedCompanyIds = new Set();
+
 /** Catalogue des conventions collectives françaises avec leur code IDCC (Identifiant De Convention
  * Collective), sourcé du wiki travail-industrie.com (lui-même dérivé des brochures JORF/Légifrance)
  * — la liste officielle complète du Ministère du Travail dépasse 700 entrées, dont une grande partie
@@ -1383,6 +1387,24 @@ const DB = {
     if (company && !settings.categoriesSalarie.length && !_categoriesSalarieMigratedCompanyIds.has(company.id)) {
       _categoriesSalarieMigratedCompanyIds.add(company.id);
       settings.categoriesSalarie = deriveCategoriesSalarieFromStatutPro(this.getEmployees());
+      company.settings = settings;
+      this.saveCurrentCompany(company);
+      this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
+    }
+    // §correctif retour QA du 27/08/2026 ("la convention collective n'existe pas encore") : dès que
+    // la clé conventionsCollectives existe déjà dans company.settings (même vide ou bien plus courte
+    // qu'aujourd'hui — capturée telle quelle à la création de l'entreprise, voir makeEmptyCompany),
+    // le merge superficiel ci-dessus ne la complète plus jamais avec les entrées officielles ajoutées
+    // depuis à DEFAULT_SETTINGS.conventionsCollectives. Contrairement à categoriesSalarie ci-dessus,
+    // pas question de recalculer à partir de rien : renderSettingsListCard interdit de retirer une
+    // convention officielle (lecture seule, voir readOnlyValues) — tout ce qui manque à la liste
+    // officielle actuelle n'a donc jamais pu être un retrait volontaire, seulement des données figées
+    // à une version antérieure de la liste. On réunit avec la liste officielle courante (jamais on ne
+    // retire), en conservant toute convention ajoutée manuellement par l'entreprise en plus.
+    const conventionsOfficielles = DEFAULT_SETTINGS.conventionsCollectives;
+    if (company && conventionsOfficielles.some(c => !settings.conventionsCollectives.includes(c)) && !_conventionsCollectivesMigratedCompanyIds.has(company.id)) {
+      _conventionsCollectivesMigratedCompanyIds.add(company.id);
+      settings.conventionsCollectives = [...new Set([...conventionsOfficielles, ...settings.conventionsCollectives])];
       company.settings = settings;
       this.saveCurrentCompany(company);
       this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
@@ -3520,12 +3542,17 @@ function makeEmptyCategorieSalarie() {
  * entreprise, qu'elle vienne du cache local de démo ou de Supabase, contrairement aux migrateXxx(company)
  * historiques ci-dessous qui ne s'appliquent qu'au chemin de démo locale via DB.init()). Ne mute et
  * ne persiste rien : calcule à la volée, à chaque lecture, les catégories à partir des valeurs
- * distinctes de statutPro déjà utilisées par les salariés de l'entreprise — préserve exactement ce
- * que l'entreprise avait déjà personnalisé, plutôt que d'imposer un "Cadre/Non cadre" générique.
- * Idempotent et sans effet dès que settings.categoriesSalarie existe réellement (tableau non vide). */
+ * distinctes de statutPro déjà utilisées par les salariés de l'entreprise, UNIES avec le socle
+ * standard (DEFAULT_SETTINGS.statutsPro). §correctif retour QA du 27/08/2026 ("le statut « cadre »
+ * n'apparaît pas dans la liste déroulante") : ne partir QUE des statutPro déjà utilisés rendait
+ * invisible une catégorie standard et légitime tant qu'aucun salarié ne l'avait encore, ce qui est
+ * absurde pour "Cadre" (justement ce qu'on veut pouvoir choisir en créant un NOUVEAU salarié). Le
+ * socle standard est toujours présent ; un statutPro déjà en usage mais hors socle (personnalisation
+ * de l'entreprise) s'ajoute en plus, jamais remplacé. Idempotent et sans effet dès que
+ * settings.categoriesSalarie existe réellement (tableau non vide). */
 function deriveCategoriesSalarieFromStatutPro(employees) {
-  const noms = [...new Set((employees || []).map(e => (e.statutPro || '').trim()).filter(Boolean))];
-  if (!noms.length) noms.push('Cadre', 'Non cadre'); // aucun salarié encore créé : valeurs de départ raisonnables, pas figées.
+  const used = (employees || []).map(e => (e.statutPro || '').trim()).filter(Boolean);
+  const noms = [...new Set([...DEFAULT_SETTINGS.statutsPro, ...used])];
   return noms.map((nom, i) => ({ id: generateId('cat'), nom, description: '', ordre: i }));
 }
 

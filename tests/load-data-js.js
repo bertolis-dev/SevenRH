@@ -40,6 +40,8 @@ globalThis.__resolveProratisationTempsPartiel = resolveProratisationTempsPartiel
 globalThis.__makeEmptyLeaveType = makeEmptyLeaveType;
 globalThis.__getLeaveBalance = getLeaveBalance;
 globalThis.__getCompteurPeriodBounds = getCompteurPeriodBounds;
+globalThis.__deriveCategoriesSalarieFromStatutPro = deriveCategoriesSalarieFromStatutPro;
+globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -57,6 +59,8 @@ globalThis.__getCompteurPeriodBounds = getCompteurPeriodBounds;
     makeEmptyLeaveType: sandbox.__makeEmptyLeaveType,
     getLeaveBalance: sandbox.__getLeaveBalance,
     getCompteurPeriodBounds: sandbox.__getCompteurPeriodBounds,
+    deriveCategoriesSalarieFromStatutPro: sandbox.__deriveCategoriesSalarieFromStatutPro,
+    DEFAULT_SETTINGS: sandbox.__DEFAULT_SETTINGS,
   };
 }
 
