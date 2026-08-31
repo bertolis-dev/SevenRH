@@ -4387,6 +4387,63 @@ function resolveAncienneteAcquisAnnuel(leaveType, employee, refDate) {
   return atteints.length ? Number(atteints[0].jours) || 0 : 0;
 }
 
+// §"Simulateur convention collective" (roadmap différenciation #9, PILOTE du 01/09/2026, une seule
+// convention codée pour l'instant — Syntec) : contrairement à paliersAnciennete ci-dessus (réglage
+// générique par ENTREPRISE, un seul jeu de paliers pour tous les salariés du type), une convention
+// collective s'applique par SALARIÉ (employee.conventionCollective, voir openEmployeeModal) — deux
+// salariés de la même entreprise peuvent relever de conventions différentes. D'où un moteur séparé,
+// jamais mélangé avec paliersAnciennete : le bonus calculé ici s'AJOUTE au résultat de
+// resolveAncienneteAcquisAnnuel (voir calculateAcquisition), il ne le remplace jamais.
+//
+// Un salarié dont la convention ne correspond à aucune clé ci-dessous (l'immense majorité aujourd'hui
+// — 178 des 179 conventions du référentiel n'ont encore aucune règle codée) n'est JAMAIS affecté :
+// comportement strictement inchangé pour tout le monde sauf les salariés réellement sous Syntec.
+//
+// Syntec (IDCC 1486) — Article 5.1 "Congés d'ancienneté" (vérifié le 01/09/2026 via Légifrance et
+// plusieurs sources professionnelles concordantes — LégiSocial, Juritravail, Fédération Syntec) :
+// jours OUVRÉS supplémentaires en plus des congés payés légaux, NON CUMULATIFS (seul le palier le
+// plus haut atteint compte, jamais la somme des paliers passés) : +1j après 5 ans, +2j après 10 ans,
+// +3j après 15 ans, +4j après 20 ans d'ancienneté. L'ancienneté se compte normalement à l'ouverture
+// de la période de référence des congés (1er mai par défaut) — approximée ici par calculateAncienneteYears
+// à la date de référence du calcul, cohérent avec le reste de ce fichier (voir resolveAncienneteAcquisAnnuel
+// ci-dessus, même principe). ESTIMATION INDICATIVE — à confirmer avec votre expert-comptable/juriste
+// avant toute application en paie, exactement comme les autres calculs légaux de ce fichier.
+const CONVENTION_COLLECTIVE_RULES = {
+  '1486': {
+    nom: 'Syntec',
+    congesAnciennete: [
+      { anneesMin: 5, joursSupplementaires: 1 },
+      { anneesMin: 10, joursSupplementaires: 2 },
+      { anneesMin: 15, joursSupplementaires: 3 },
+      { anneesMin: 20, joursSupplementaires: 4 }
+    ]
+  }
+};
+
+// Le champ employee.conventionCollective est un texte libre formaté "Nom (IDCC XXXX)" (voir
+// formatConventionCollective, DEFAULT_SETTINGS.conventionsCollectives) — jamais un id stable. On
+// extrait le code IDCC de ce texte plutôt que de rapprocher par nom (plus robuste : le nom affiché
+// peut varier légèrement, le code IDCC ne varie jamais pour une même convention).
+function getConventionCollectiveIdccCode(conventionCollectiveLabel) {
+  const match = (conventionCollectiveLabel || '').match(/IDCC\s*(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function getConventionCollectiveCongesAncienneteBonus(employee, leaveType, refDate) {
+  if (!leaveTypeNameMatches(leaveType.nom, 'Congés payés')) return 0;
+  const idcc = getConventionCollectiveIdccCode(employee.conventionCollective);
+  const regle = idcc && CONVENTION_COLLECTIVE_RULES[idcc];
+  if (!regle || !regle.congesAnciennete) return 0;
+  // L'article exprime le bonus en jours OUVRÉS précisément — l'ajouter tel quel à un compteur réglé
+  // en jours ouvrables mélangerait deux unités différentes (1 jour ouvré ≠ 1 jour ouvrable). Plutôt
+  // qu'une conversion approximative, le bonus ne s'applique que si le type est déjà en jours ouvrés
+  // (valeur par défaut de tout nouveau type, voir makeEmptyLeaveType) — plus sûr qu'un mauvais calcul.
+  if (leaveType.uniteDecompte !== 'ouvres') return 0;
+  const years = calculateAncienneteYears(employee, refDate);
+  const atteints = regle.congesAnciennete.filter(p => years >= p.anneesMin).sort((a, b) => b.anneesMin - a.anneesMin);
+  return atteints.length ? atteints[0].joursSupplementaires : 0;
+}
+
 /** §correctif retour QA du 27/08/2026 (point 7.16) : nombre de jours calendaires, dans
  * [periodStart, periodEnd], couverts par une demande VALIDÉE d'un type marqué
  * suspendAcquisitionAutresCompteurs (voir makeEmptyLeaveType) — jamais calculé si allRequests/
@@ -4459,7 +4516,13 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride, allR
   const activityRatio = proratisation === 'aucune' ? 1
     : proratisation === 'exclu' ? (rawActivityRatio >= 1 ? 1 : 0)
     : rawActivityRatio;
-  const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now);
+  // §"Simulateur convention collective" (roadmap différenciation #9, 01/09/2026) : le bonus de
+  // congés d'ancienneté propre à la convention collective du salarié (voir
+  // getConventionCollectiveCongesAncienneteBonus ci-dessus) s'ajoute au résultat déjà déterminé par
+  // les paliers d'ancienneté génériques de l'entreprise — jamais l'inverse, un salarié sans
+  // convention couverte (l'immense majorité) obtient exactement resolveAncienneteAcquisAnnuel comme
+  // avant (bonus toujours à 0 dans ce cas).
+  const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now) + getConventionCollectiveCongesAncienneteBonus(employee, leaveType, now);
 
   // §correctif retour QA du 27/08/2026 (point 7.16, confirmé par l'expert-comptable) : une absence
   // validée d'un type marqué suspendAcquisitionAutresCompteurs réduit le nombre de jours "travaillés"
@@ -4606,6 +4669,12 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     r.employeeId === employee.id && typeIds.has(r.typeId) && r.statut !== 'Refusé' && r.statut !== 'Annulé' && overlapsPeriod(r, start, end)
   );
 
+  // §"Simulateur convention collective" (roadmap différenciation #9, 01/09/2026) : déjà intégré au
+  // total via calculateAcquisition (voir ce commentaire), mais exposé ICI séparément uniquement pour
+  // que l'UI puisse expliquer d'où vient un total qui ne correspondrait pas au calcul "standard"
+  // attendu par RH — jamais utilisé dans un calcul, purement informatif.
+  const conventionCollectiveBonus = getConventionCollectiveCongesAncienneteBonus(employee, leaveType, refDate);
+
   // §5 sprint amélioration : sans dateClotureCompteur, comportement strictement inchangé (une seule
   // période continue depuis l'embauche, comme avant ce champ).
   if (!leaveType.dateClotureCompteur) {
@@ -4614,7 +4683,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
     const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
     const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
     const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
-    return { acquis, pris, enAttente, disponible, ajustement };
+    return { acquis, pris, enAttente, disponible, ajustement, conventionCollectiveBonus };
   }
 
   // §correctif retour QA du 27/08/2026 (point 1, "les compteurs affichent 5 jours à quelqu'un qui en
@@ -4687,7 +4756,7 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
 
   return {
-    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement,
+    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement, conventionCollectiveBonus,
     periodeDisponible: { debut: toISODate(previous.periodStart), fin: toISODate(previous.periodEnd) },
     enCoursAcquisition: {
       acquis: acquisEnCours,

@@ -6572,11 +6572,19 @@ function renderTableauCompteursCell(b) {
   const enCours = b.enCoursAcquisition
     ? `<div class="tc-en-cours text-muted">+ ${formatDurationFR(b.enCoursAcquisition.acquis)} en cours d'acquisition (${formatDate(b.enCoursAcquisition.periode.debut)} au ${formatDate(b.enCoursAcquisition.periode.fin)})</div>`
     : '';
+  // §"Simulateur convention collective" (roadmap différenciation #9, 01/09/2026) : un total qui
+  // s'écarte du calcul "standard" attendu par RH (ex. 26 au lieu de 25) sans explication ressemblerait
+  // à un bug — ce rappel explique d'où vient l'écart, avec le même disclaincer que les autres calculs
+  // légaux du fichier.
+  const conventionBonus = b.conventionCollectiveBonus
+    ? `<div class="tc-convention text-muted">Dont ${formatDurationFR(b.conventionCollectiveBonus)} de congé(s) d'ancienneté (convention collective) — à confirmer avec votre expert-comptable/juriste.</div>`
+    : '';
   return `
     <div class="tc-disponible">${formatDurationFR(b.disponible)}</div>
     ${periode}
     <div class="tc-detail text-muted">${detail.join(' · ')}</div>
     ${enCours}
+    ${conventionBonus}
   `;
 }
 
