@@ -11,7 +11,7 @@ const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository } = loadAppJs();
+  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository, getThemePreference, applyThemePreference } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
 
@@ -66,7 +66,23 @@ async function run() {
     assert.strictEqual(limited.length, 1, 'doit respecter la limite demandée');
   }
 
-  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche)');
+  // ---- Mode sombre manuel : 'system' n'écrit rien (suit l'OS), 'light'/'dark' persistent et se relisent ----
+  {
+    assert.strictEqual(getThemePreference(), 'system', 'par défaut, sans réglage enregistré, doit suivre le système');
+
+    applyThemePreference('dark');
+    assert.strictEqual(getThemePreference(), 'dark', 'un choix "dark" doit être relu tel quel');
+    assert.strictEqual(sandbox.localStorage.getItem('nexus_theme'), 'dark', 'doit être persisté en localStorage pour survivre à un rechargement');
+
+    applyThemePreference('light');
+    assert.strictEqual(getThemePreference(), 'light');
+
+    applyThemePreference('system');
+    assert.strictEqual(getThemePreference(), 'system', 'revenir à "system" doit repasser au comportement par défaut');
+    assert.strictEqual(sandbox.localStorage.getItem('nexus_theme'), null, '"system" ne doit laisser aucune valeur en localStorage (jamais confondu avec un choix explicite)');
+  }
+
+  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche, réglage de thème)');
 }
 
 run().catch((err) => {

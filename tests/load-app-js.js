@@ -20,6 +20,7 @@ function stubElement() {
     dataset: {},
     setAttribute() {},
     getAttribute() { return null; },
+    removeAttribute() {},
     appendChild() {},
     remove() {},
     querySelector() { return null; },
@@ -127,6 +128,8 @@ globalThis.__renderContratBadge = renderContratBadge;
 globalThis.__renderBreadcrumb = renderBreadcrumb;
 globalThis.__getEmployeeActivityHistory = getEmployeeActivityHistory;
 globalThis.__auditLogRepository = auditLogRepository;
+globalThis.__getThemePreference = getThemePreference;
+globalThis.__applyThemePreference = applyThemePreference;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -180,6 +183,8 @@ globalThis.__auditLogRepository = auditLogRepository;
     renderBreadcrumb: sandbox.__renderBreadcrumb,
     getEmployeeActivityHistory: sandbox.__getEmployeeActivityHistory,
     auditLogRepository: sandbox.__auditLogRepository,
+    getThemePreference: sandbox.__getThemePreference,
+    applyThemePreference: sandbox.__applyThemePreference,
   };
 }
 

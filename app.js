@@ -220,6 +220,32 @@ function getInitialViewState() {
 
 const state = getInitialViewState();
 
+/** §refonte "mode sombre" du 01/09/2026 : la base de tokens dark existait déjà (media query
+ * prefers-color-scheme, voir style.css) mais suivait uniquement le système, sans réglage possible
+ * dans l'app. THEME_KEY absent (ou 'system') = comportement inchangé (suit l'OS) ; 'light'/'dark'
+ * pose l'attribut data-theme, qui l'emporte sur la préférence système côté CSS (voir les deux blocs
+ * dark de style.css). Appliqué dès le <head> d'index.html (script inline) pour éviter un flash du
+ * mauvais thème avant que app.js ne soit chargé — ces fonctions ne font qu'exposer le même réglage
+ * au reste de l'app (menu utilisateur) une fois chargée. */
+const THEME_KEY = 'nexus_theme';
+function getThemePreference() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return (v === 'light' || v === 'dark') ? v : 'system';
+  } catch (e) { return 'system'; }
+}
+function applyThemePreference(value) {
+  try {
+    if (value === 'light' || value === 'dark') {
+      localStorage.setItem(THEME_KEY, value);
+      document.documentElement.setAttribute('data-theme', value);
+    } else {
+      localStorage.removeItem(THEME_KEY);
+      document.documentElement.removeAttribute('data-theme');
+    }
+  } catch (e) { /* localStorage indisponible (navigation privée stricte) : le thème reste celui du système, jamais bloquant */ }
+}
+
 /** Sprint SIRH premium §5/§7 : navParams "aller aux demandes en attente" — partagés entre l'entrée
  * de sidebar équipe (NAV_ITEMS) et le Centre d'action du tableau de bord (renderDashboardActionCenter),
  * pour que les deux points d'entrée vers le même filtre ne puissent pas silencieusement diverger. */
@@ -3231,6 +3257,12 @@ function renderUserMenuPanel() {
       <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
       ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
+    <div class="theme-toggle-group" role="group" aria-label="Thème de l'application">
+      ${[['system', 'Système'], ['light', 'Clair'], ['dark', 'Sombre']].map(([value, label]) =>
+        `<button type="button" class="theme-toggle-btn${getThemePreference() === value ? ' active' : ''}" data-theme-choice="${value}">${label}</button>`
+      ).join('')}
+    </div>
+    <div class="user-menu-divider"></div>
     ${otherAccounts.length ? `
       <div class="user-menu-section-label">Autres comptes</div>
       ${otherAccounts.map(a => `
@@ -3287,6 +3319,12 @@ function renderUserMenuPanel() {
   document.getElementById('btn-add-account').addEventListener('click', () => {
     document.getElementById('user-menu-panel').classList.remove('open');
     openAddAccountFlow();
+  });
+  document.querySelectorAll('[data-theme-choice]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyThemePreference(btn.dataset.themeChoice);
+      renderUserMenuPanel();
+    });
   });
 
   if (canSeeGroupSummary) {

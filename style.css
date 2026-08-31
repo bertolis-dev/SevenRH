@@ -2309,6 +2309,21 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .user-menu-name { font-weight: 600; font-size: 14px; }
 
+/* §refonte "mode sombre" du 01/09/2026 : réglage manuel Système/Clair/Sombre, menu utilisateur. */
+.theme-toggle-group { display: flex; gap: 4px; padding: 10px 14px; }
+.theme-toggle-btn {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.theme-toggle-btn.active { background: var(--color-primary); color: #fff; border-color: transparent; }
+
 .user-menu-item {
   display: block;
   width: 100%;
@@ -3185,11 +3200,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 /* ---------------------------------------------------------------------
-   Dark mode (base prête, à étendre)
+   Dark mode — suit le système par défaut, ou le réglage manuel Système/
+   Clair/Sombre du menu utilisateur (data-theme, voir applyThemePreference
+   dans app.js). MÊMES valeurs dans les deux blocs ci-dessous : le premier
+   suit l'OS (sauf choix explicite "Clair"), le second force "Sombre" même
+   si l'OS est en clair — à garder synchronisés si l'un des deux change.
    --------------------------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --color-bg: #14161a;
     --color-surface: #1c1f26;
     --color-border: #383c46;
@@ -3225,11 +3244,38 @@ textarea.input { resize: vertical; font-family: inherit; }
      haut) — utilise déjà --color-primary-soft/--color-primary-text, redéfinies ci-dessus pour le mode
      sombre. .tag-color-* (catégories de contrat) garde en revanche ses propres teintes sombres,
      contraste texte vérifié ≥4.5:1. */
-  .tag-color-0 { background: #3a2f1c; color: #d8b98a; }
-  .tag-color-1 { background: #1e2b26; color: #8fb5a8; }
-  .tag-color-2 { background: #24243a; color: #a6a6d6; }
-  .tag-color-3 { background: #3a2424; color: #d6a3a3; }
+  :root:not([data-theme="light"]) .tag-color-0 { background: #3a2f1c; color: #d8b98a; }
+  :root:not([data-theme="light"]) .tag-color-1 { background: #1e2b26; color: #8fb5a8; }
+  :root:not([data-theme="light"]) .tag-color-2 { background: #24243a; color: #a6a6d6; }
+  :root:not([data-theme="light"]) .tag-color-3 { background: #3a2424; color: #d6a3a3; }
 }
+
+/* Choix manuel "Sombre" : mêmes valeurs, appliquées sans condition de préférence système. */
+:root[data-theme="dark"] {
+  --color-bg: #14161a;
+  --color-surface: #1c1f26;
+  --color-border: #383c46;
+  --color-border-soft: #262a33;
+  --login-card-border: rgba(74, 114, 173, 0.5);
+  --color-text: #f2f3f5;
+  --color-text-muted: #9aa0ab;
+  --color-primary: #4a72ad;
+  --color-primary-hover: #3a5a8f;
+  --color-primary-soft: #192134;
+  --color-chip-bg: #2f4972;
+  --color-muted-soft: #23262e;
+  --color-success-soft: #0f2a1c;
+  --color-warning-soft: #2a1f0f;
+  --color-info-soft: #10203a;
+  --color-danger-soft: #2a1414;
+  --color-gold-soft: #2e2410;
+  --color-primary-text: #7694d6;
+  --color-info-text: #60a5fa;
+}
+:root[data-theme="dark"] .tag-color-0 { background: #3a2f1c; color: #d8b98a; }
+:root[data-theme="dark"] .tag-color-1 { background: #1e2b26; color: #8fb5a8; }
+:root[data-theme="dark"] .tag-color-2 { background: #24243a; color: #a6a6d6; }
+:root[data-theme="dark"] .tag-color-3 { background: #3a2424; color: #d6a3a3; }
 
 /* ---------------------------------------------------------------------
    Impression — n'imprime que le contenu marqué .print-area (notes de frais,
