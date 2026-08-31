@@ -16542,7 +16542,7 @@ function renderFrais() {
       ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucune note de frais ne correspond à ces filtres.</p></div>` : `
         <table class="table">
           <thead>
-            <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th>Montant TTC</th><th>Statut</th><th></th></tr>
+            <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
           </thead>
           <tbody>${pageItems.map(renderExpenseRow).join('')}</tbody>
         </table>
@@ -16566,7 +16566,7 @@ function renderExpenseRow(n) {
       <td>${formatDate(n.date)}</td>
       <td>${escapeHtml(n.categorie)}</td>
       <td>${escapeHtml(n.libelle)}</td>
-      <td>${formatCurrencyFR(n.montantTTC)}</td>
+      <td class="cell-numeric">${formatCurrencyFR(n.montantTTC)}</td>
       <td>${renderRequestStatutBadge(n)}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
@@ -16992,14 +16992,14 @@ function renderMesTicketsRestaurant() {
         <h2>Historique</h2>
       </div>
       <table class="table">
-        <thead><tr><th>Mois</th><th>Tickets</th><th>Montant total</th><th>Part salarié</th></tr></thead>
+        <thead><tr><th>Mois</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part salarié</th></tr></thead>
         <tbody>
           ${historique.map(h => `
             <tr class="table-row" data-mes-tickets-month="${h.year}-${h.month}">
               <td>${MONTH_NAMES[h.month]} ${h.year}</td>
-              <td>${h.result.nbTickets}${h.result.ajustement ? ` <span class="text-muted">(correction ${h.result.ajustement >= 0 ? '+' : ''}${h.result.ajustement})</span>` : ''}</td>
-              <td>${formatCurrencyFR(h.result.montantTotal)}</td>
-              <td>${formatCurrencyFR(h.result.partSalarie)}</td>
+              <td class="cell-numeric">${h.result.nbTickets}${h.result.ajustement ? ` <span class="text-muted">(correction ${h.result.ajustement >= 0 ? '+' : ''}${h.result.ajustement})</span>` : ''}</td>
+              <td class="cell-numeric">${formatCurrencyFR(h.result.montantTotal)}</td>
+              <td class="cell-numeric">${formatCurrencyFR(h.result.partSalarie)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -17107,15 +17107,15 @@ function renderTicketsEquipe() {
 
     <div class="card table-card">
       <table class="table">
-        <thead><tr><th>Salarié</th><th>Tickets</th><th>Montant total</th><th>Part employeur</th><th>Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
+        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
               <td>${personNameHtml(r.employee)}</td>
-              <td>${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
-              <td>${formatCurrencyFR(r.result.montantTotal)}</td>
-              <td>${formatCurrencyFR(r.result.partEmployeur)}</td>
-              <td>${formatCurrencyFR(r.result.partSalarie)}</td>
+              <td class="cell-numeric">${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
+              <td class="cell-numeric">${formatCurrencyFR(r.result.montantTotal)}</td>
+              <td class="cell-numeric">${formatCurrencyFR(r.result.partEmployeur)}</td>
+              <td class="cell-numeric">${formatCurrencyFR(r.result.partSalarie)}</td>
               ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
@@ -17459,15 +17459,15 @@ function renderExportPaiePreparationTab(rows) {
           <thead>
             <tr>
               <th>Salarié</th>
-              <th>Congés payés</th>
-              <th>RTT</th>
-              <th>Maladie</th>
-              <th>Télétravail</th>
-              <th>Notes de frais</th>
-              <th>Variables</th>
-              <th>Heures sup</th>
-              <th>Repos comp. pris</th>
-              <th>Tickets restaurant</th>
+              <th class="cell-numeric">Congés payés</th>
+              <th class="cell-numeric">RTT</th>
+              <th class="cell-numeric">Maladie</th>
+              <th class="cell-numeric">Télétravail</th>
+              <th class="cell-numeric">Notes de frais</th>
+              <th class="cell-numeric">Variables</th>
+              <th class="cell-numeric">Heures sup</th>
+              <th class="cell-numeric">Repos comp. pris</th>
+              <th class="cell-numeric">Tickets restaurant</th>
               <th>Anomalies</th>
             </tr>
           </thead>
@@ -17475,15 +17475,15 @@ function renderExportPaiePreparationTab(rows) {
             ${rows.map(r => `
               <tr>
                 <td>${personNameHtml(r.employee)}</td>
-                <td>${formatDurationFR(r.congesPayesJours)}</td>
-                <td>${formatDurationFR(r.rttJours)}</td>
-                <td>${formatDurationFR(r.maladieJours)}</td>
-                <td>${formatDurationFR(r.teletravailJours)}</td>
-                <td>${formatCurrencyFR(r.notesRembourser)}</td>
-                <td>${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">${icon(ICONS.pencil, 13)}</button></td>
-                <td>${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">${icon(ICONS.pencil, 13)}</button></td>
-                <td>${formatNumberFR(r.reposCompensateurPrisHeures)} h <button type="button" class="btn-link" data-adjust-repos-compensateur="${r.employee.id}" title="Ajuster le repos compensateur pris">${icon(ICONS.pencil, 13)}</button></td>
-                <td>${r.tickets.nbTickets}</td>
+                <td class="cell-numeric">${formatDurationFR(r.congesPayesJours)}</td>
+                <td class="cell-numeric">${formatDurationFR(r.rttJours)}</td>
+                <td class="cell-numeric">${formatDurationFR(r.maladieJours)}</td>
+                <td class="cell-numeric">${formatDurationFR(r.teletravailJours)}</td>
+                <td class="cell-numeric">${formatCurrencyFR(r.notesRembourser)}</td>
+                <td class="cell-numeric">${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">${icon(ICONS.pencil, 13)}</button></td>
+                <td class="cell-numeric">${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">${icon(ICONS.pencil, 13)}</button></td>
+                <td class="cell-numeric">${formatNumberFR(r.reposCompensateurPrisHeures)} h <button type="button" class="btn-link" data-adjust-repos-compensateur="${r.employee.id}" title="Ajuster le repos compensateur pris">${icon(ICONS.pencil, 13)}</button></td>
+                <td class="cell-numeric">${r.tickets.nbTickets}</td>
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
             `).join('')}

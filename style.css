@@ -833,6 +833,11 @@ p { margin: 0; line-height: 1.5; }
   font-size: 14px;
 }
 
+/* §refonte "formatage des nombres" du 01/09/2026 : colonnes montants/durées alignées à droite avec
+   chiffres de largeur fixe (tabular-nums) — un tableau de paie où chaque colonne numérique reste
+   verticalement alignée d'une ligne à l'autre, plutôt que des chiffres calés à gauche comme du texte. */
+.table td.cell-numeric, .table th.cell-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+
 .table-row { cursor: pointer; transition: background-color 0.1s ease; }
 .table-row:hover { background: var(--color-muted-soft); }
 .table-row:last-child td { border-bottom: none; }
