@@ -3698,7 +3698,7 @@ const HELP_CONTENT = {
   dashboard: {
     title: 'Accueil',
     body: `<p>Vue d'ensemble adaptée à votre rôle. Manager/RH/Propriétaire voient un <strong>Centre d'action</strong> (demandes à valider, anomalies de paie, contrats à échéance ; cliquez une ligne pour aller directement au bon écran, filtré) et des indicateurs/graphiques. Un salarié voit son statut du jour, ses soldes de congés et ses demandes en cours.</p>
-           <p>Le bouton <strong>🧩 Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas. Le réglage est propre à votre compte.</p>`,
+           <p>Le bouton <strong>Personnaliser</strong> permet de masquer les blocs qui ne vous intéressent pas. Le réglage est propre à votre compte.</p>`,
     faq: [
       { q: 'Un bloc masqué est-il perdu ?', r: 'Non, "Personnaliser" ne fait que le masquer sur votre compte, aucune donnée n\'est supprimée, et vous pouvez le réafficher à tout moment.' },
       { q: 'Pourquoi je ne vois pas le Centre d\'action ?', r: 'Il n\'apparaît que pour les rôles Manager/RH/Propriétaire, et seulement s\'il y a au moins un élément à signaler (aucun bruit si tout est à jour).' }
@@ -3760,12 +3760,12 @@ const HELP_CONTENT = {
   },
   'export-paie': {
     title: 'Préparation de paie',
-    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié (Congés payés/RTT/Maladie/Télétravail/Notes de frais/<strong>Variables</strong>/Tickets restaurant) : le bouton ✎ sur la colonne Variables permet de saisir une prime ou un autre élément ponctuel du mois.</p>
+    body: `<p>Onglet <strong>Préparation &amp; anomalies</strong> (à consulter avant tout export) : signale les soldes négatifs, dates hors période contractuelle, justificatifs manquants, données administratives incomplètes et fins de contrat du mois, classés Bloquantes/Avertissements/Informations, avec un récapitulatif par salarié (Congés payés/RTT/Maladie/Télétravail/Notes de frais/<strong>Variables</strong>/Tickets restaurant) : le bouton d'édition sur la colonne Variables permet de saisir une prime ou un autre élément ponctuel du mois.</p>
            <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais, variables) au format de votre logiciel de paie.</p>`,
     faq: [
       { q: 'Une anomalie "Bloquante" empêche-t-elle l\'export ?', r: 'Non, le bouton "Exporter CSV" reste actif volontairement (un blocage technique dur serait risqué un jour de paie), mais une anomalie bloquante doit être corrigée avant de considérer l\'export fiable.' },
       { q: 'Que signifie "comptabilisé dans les congés" pour un type ?', r: 'Défini sur le type dans Paramètres > Types d\'absences (case "Déduire du compteur RTT/CP") : les jours de ce type viennent en plus s\'imputer sur le compteur RTT ou congés payés du salarié.' },
-      { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) : saisissez le montant du mois via le bouton ✎ sur la colonne Variables du récapitulatif.' }
+      { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) : saisissez le montant du mois via le bouton d\'édition sur la colonne Variables du récapitulatif.' }
     ],
     bonnesPratiques: ['Ouvrez cet écran systématiquement avant l\'export, pas seulement quand une anomalie est suspectée : l\'onglet par défaut est volontairement "Préparation" et non "Export".']
   },
