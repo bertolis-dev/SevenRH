@@ -5410,7 +5410,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   return `
     ${isVisible('kpis') ? `
     <div class="kpi-grid">
-      ${kpiCard('Salariés actifs', actifs.length, ICONS.people)}
+      ${kpiCard('Salariés actifs', actifs.length, ICONS.people, true)}
       ${kpiCard('Contrats CDI', cdi, ICONS.document)}
       ${kpiCard('Contrats CDD', cdd, ICONS.calendar)}
       ${kpiCard('Services', services, ICONS.building)}
@@ -5637,7 +5637,7 @@ function renderDashboardSalarie(user) {
     ${renderDashboardHero(`Bonjour ${user.prenom}`, 'Votre espace personnel', renderDashboardCustomizeButton())}
 
     <div class="kpi-grid">
-      ${kpiCard('Statut aujourd\'hui', today.label, today.icon)}
+      ${kpiCard('Statut aujourd\'hui', today.label, today.icon, true)}
       ${kpiCard('Demandes en attente', enAttente.length, ICONS.hourglass)}
       ${kpiCard('Ancienneté', calculateAnciennete(user.dateEmbauche), ICONS.cake)}
     </div>
@@ -5738,7 +5738,7 @@ function renderDashboardProprietaire() {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Effectif actif', actifs.length, ICONS.people)}
+      ${kpiCard('Effectif actif', actifs.length, ICONS.people, true)}
       ${kpiCard('Turn-over (12 mois)', formatPercentFR(turnover), ICONS.refresh)}
       ${kpiCard('Ancienneté moyenne', `${formatNumberFR(anciennete)} an${anciennete >= 2 ? 's' : ''}`, ICONS.medal)}
       ${kpiCard('Absentéisme (maladie)', formatPercentFR(absenteisme), ICONS.thermometer)}
@@ -6191,8 +6191,8 @@ function chartCard(title, subtitleOrContent, maybeContent) {
 
 function renderBarChartSVG(data) {
   const width = 480;
-  const barHeight = 22;
-  const gap = 12;
+  const barHeight = 10;
+  const gap = 18;
   const labelWidth = 130;
   const maxValue = Math.max(...data.map(d => d.value), 1);
   const chartWidth = width - labelWidth - 46;
@@ -6213,14 +6213,17 @@ function renderBarChartSVG(data) {
 
 function renderDonutChartSVG(data) {
   const size = 160;
-  const strokeWidth = 22;
+  // §refonte "traits fins" du 01/09/2026 : anneau fin (12px, était 22px) plutôt que plein, avec un
+  // espacement plus généreux entre segments — cohérent avec la demande de graphiques redessinés en
+  // traits fins et espacement généreux, plutôt qu'un anneau épais façon widget par défaut.
+  const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   // Depuis que tous les segments partagent la même teinte (CHART_COLORS, §retour du 21/08/2026),
   // un petit espace entre eux reste indispensable pour distinguer les segments à l'œil — sans lui,
   // plusieurs segments de même couleur se confondraient en un seul anneau plein.
-  const gap = data.length > 1 ? 3 : 0;
+  const gap = data.length > 1 ? 7 : 0;
   let offset = 0;
 
   const segments = data.map(d => {
@@ -6518,7 +6521,7 @@ function renderPresenceCard() {
   `;
 }
 
-function kpiCard(label, value, icon) {
+function kpiCard(label, value, icon, hero) {
   // value peut provenir de texte libre saisi par un administrateur (ex. nom d'un type de congé) —
   // jamais interpolé sans échappement, sinon une valeur malveillante s'exécute chez tout salarié
   // dont le tableau de bord affiche cette carte. icon passe par escapeIcon (voir plus haut) : SVG
@@ -6526,8 +6529,11 @@ function kpiCard(label, value, icon) {
   // §retour du 21/08/2026 : marine/or gardés comme base de la charte — pas une couleur différente
   // par carte (essayé, jugé trop "juste des noms colorés"), un dégradé marine plus riche qu'un
   // aplat pour la puce (voir .kpi-icon, style.css).
+  // §refonte "carte héros" du 01/09/2026 : une seule carte (la métrique la plus représentative de
+  // l'écran, ex. "Salariés actifs") reçoit un traitement distinct — fond marine plein, chiffre en
+  // or — au lieu de 5 cartes identiques qui se valent toutes à l'œil. Jamais plus d'une par grille.
   return `
-    <div class="kpi-card">
+    <div class="kpi-card${hero ? ' kpi-card-hero' : ''}">
       <div class="kpi-icon">${escapeIcon(icon)}</div>
       <div class="kpi-value">${escapeHtml(String(value))}</div>
       <div class="kpi-label">${escapeHtml(label)}</div>

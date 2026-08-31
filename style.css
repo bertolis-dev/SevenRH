@@ -28,6 +28,11 @@
      blanc/quasi-blanc) — sépare plus nettement la barre latérale, la barre du haut et chaque carte,
      demande explicite plutôt qu'une simple ombre discrète. */
   --color-border: #d6dae0;
+  /* §refonte "ombres légères" du 01/09/2026 : liseré atténué réservé aux cartes, qui comptent
+     désormais sur une ombre portée pour se détacher du fond plutôt que sur un contour marqué —
+     --color-border (plus soutenu) reste utilisé tel quel pour les séparateurs qui doivent rester
+     nets (sidebar, topbar, tableaux). */
+  --color-border-soft: #e7e9ed;
   --login-card-border: rgba(23, 40, 77, 0.65);
   --color-text: #1a1d24;
   --color-text-muted: #6b7280;
@@ -78,6 +83,11 @@
   --topbar-height: 64px;
   --mobile-nav-height: 64px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  /* §refonte typographique du 01/09/2026 : registre serif réservé aux titres d'écran et aux chiffres
+     clés (KPI héros, total d'un donut) — jamais au corps de texte, aux boutons ni aux tableaux, qui
+     restent en --font-sans. Deux registres plutôt qu'une seule graisse partout donne le côté "produit
+     dessiné" recherché, à l'opposé d'un outil où tout le texte sort de la même police par défaut. */
+  --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
 * { box-sizing: border-box; }
@@ -102,7 +112,7 @@ html { scroll-behavior: smooth; }
   html { scroll-behavior: auto; }
 }
 
-h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+h1 { font-family: var(--font-serif); font-size: 26px; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 4px; }
 h2 { font-size: 16px; font-weight: 600; margin: 0 0 10px; }
 p { margin: 0; line-height: 1.5; }
 
@@ -563,15 +573,15 @@ p { margin: 0; line-height: 1.5; }
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .kpi-card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-md);
-  padding: 13px;
+  padding: 15px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -591,8 +601,25 @@ p { margin: 0; line-height: 1.5; }
   margin-bottom: 7px;
 }
 .kpi-icon svg { width: 16px; height: 16px; display: block; }
-.kpi-value { font-size: 21px; font-weight: 700; }
+.kpi-value { font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
 .kpi-label { font-size: 12.5px; color: var(--color-text-muted); margin-top: 1px; }
+
+/* §refonte "carte héros" du 01/09/2026 : LA métrique la plus représentative de l'écran (une seule,
+   jamais plus dans une même grille) — fond marine plein, chiffre en or, au lieu de 5 cartes identiques
+   qui se valent toutes à l'œil. Réutilise §retour du 21/08/2026 (pas une couleur par carte) : ici ce
+   n'est pas "une couleur pour CETTE carte" mais un second NIVEAU de carte, appliqué au même titre pour
+   toutes les grilles KPI de l'appli. */
+.kpi-card-hero {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+  border-color: transparent;
+  grid-column: span 2;
+}
+.kpi-card-hero .kpi-icon { background: rgba(255, 255, 255, 0.16); color: var(--landing-gold-300); }
+.kpi-card-hero .kpi-value { color: var(--landing-gold-300); font-size: 28px; }
+.kpi-card-hero .kpi-label { color: rgba(255, 255, 255, 0.78); }
+@media (max-width: 480px) {
+  .kpi-card-hero { grid-column: 1 / -1; }
+}
 
 /* ---------------------------------------------------------------------
    Cartes
@@ -603,11 +630,11 @@ p { margin: 0; line-height: 1.5; }
    la sidebar), assez discret pour ne jamais gêner la lecture du texte posé dessus. */
 .card {
   background: linear-gradient(135deg, var(--color-surface), var(--color-primary-soft) 320%);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 12px;
+  padding: 18px 22px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 14px;
   min-width: 0;
 }
 
@@ -818,18 +845,18 @@ p { margin: 0; line-height: 1.5; }
   font-size: 13px;
 }
 
-/* Palette d'avatars façon Slack/Trello (§passe couleur "premium ++, pas que les boutons" du
-   21/08/2026, voir getAvatarColorClass — data.js) : une couleur stable par personne plutôt qu'un
-   seul avatar marine partout. Teintes choisies pour rester à l'écart des couleurs déjà porteuses
-   d'un sens fonctionnel (succès/alerte/danger/info/marine/or). Contraste texte vérifié ≥4.5:1 dans
-   les deux thèmes (mode sombre réécrit plus bas, comme --color-*). */
-.avatar-color-0 { background: #ccfbf1; color: #0f766e; }
-.avatar-color-1 { background: #ede9fe; color: #7c3aed; }
-.avatar-color-2 { background: #fce7f3; color: #be185d; }
-.avatar-color-3 { background: #e0e7ff; color: #4f46e5; }
-.avatar-color-4 { background: #ffedd5; color: #c2410c; }
-.avatar-color-5 { background: #cffafe; color: #0e7490; }
-.avatar-color-6 { background: #fae8ff; color: #a21caf; }
+/* §refonte accent unique du 01/09/2026 : la palette d'avatars façon Slack/Trello (7 teintes
+   distinctes par personne, §"premium ++, pas que les boutons" du 21/08/2026) revient sur un seul
+   accent chromatique — le marine de la marque, qui reste la seule couleur "active" de l'appli, l'or
+   étant réservé aux éléments qui comptent vraiment (carte héros, validation). Les 7 classes restent
+   (voir getAvatarColorClass — data.js, qui continue d'assigner un index stable par personne) pour ne
+   rien changer côté JS, mais pointent maintenant toutes vers le même traitement marine — les
+   personnes se distinguent par leurs initiales, pas par une couleur au hasard. */
+.avatar-color-0, .avatar-color-1, .avatar-color-2, .avatar-color-3,
+.avatar-color-4, .avatar-color-5, .avatar-color-6 {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
 
 /* ---------------------------------------------------------------------
    Badges
@@ -1745,20 +1772,26 @@ textarea.input { resize: vertical; font-family: inherit; }
 .chart-value { fill: var(--color-text); font-weight: 600; }
 
 .chart-donut-total {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 500;
   fill: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
 }
 
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 10px 18px;
   justify-content: center;
-  margin-top: 12px;
-  font-size: 12px;
+  margin-top: 14px;
+  font-size: 11px;
   color: var(--color-text-muted);
+  /* Petites capitales (§refonte "traits fins" du 01/09/2026) : approximation via majuscules +
+     espacement des lettres — plus fiable d'une police à l'autre que font-variant: small-caps, qui
+     dépend du support de petites capitales réelles dans la police système du visiteur. */
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .chart-legend-item { display: flex; align-items: center; gap: 6px; }
@@ -3104,6 +3137,7 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-bg: #14161a;
     --color-surface: #1c1f26;
     --color-border: #383c46;
+    --color-border-soft: #262a33;
     --login-card-border: rgba(74, 114, 173, 0.5);
     --color-text: #f2f3f5;
     --color-text-muted: #9aa0ab;
@@ -3131,15 +3165,9 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-info-text: #60a5fa;
   }
 
-  /* Palette d'avatars (voir .avatar-color-0..6 plus haut) — fonds assombris, textes éclaircis, même
-     principe que --color-*-soft/--color-*-text ci-dessus, contraste texte vérifié ≥6.2:1. */
-  .avatar-color-0 { background: #134e4a; color: #5eead4; }
-  .avatar-color-1 { background: #2e1065; color: #c4b5fd; }
-  .avatar-color-2 { background: #4a0d2c; color: #f9a8d4; }
-  .avatar-color-3 { background: #1e1b4b; color: #a5b4fc; }
-  .avatar-color-4 { background: #431407; color: #fdba74; }
-  .avatar-color-5 { background: #164e63; color: #67e8f9; }
-  .avatar-color-6 { background: #4a044e; color: #f0abfc; }
+  /* §refonte accent unique du 01/09/2026 : plus de règle dédiée ici — .avatar-color-0..6 (plus haut)
+     utilise déjà --color-primary-soft/--color-primary-text, déjà redéfinies ci-dessus pour le mode
+     sombre, donc déjà cohérentes sans rien dupliquer. */
 }
 
 /* ---------------------------------------------------------------------
