@@ -47,6 +47,7 @@ globalThis.__getConventionCollectiveCongesAncienneteBonus = getConventionCollect
 globalThis.__getConventionCollectiveIdccCode = getConventionCollectiveIdccCode;
 globalThis.__getEffectifActifAt = getEffectifActifAt;
 globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
+globalThis.__getRadarTresorerieRH = getRadarTresorerieRH;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -71,6 +72,7 @@ globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
     getConventionCollectiveIdccCode: sandbox.__getConventionCollectiveIdccCode,
     getEffectifActifAt: sandbox.__getEffectifActifAt,
     getSeuilsEffectifStatus: sandbox.__getSeuilsEffectifStatus,
+    getRadarTresorerieRH: sandbox.__getRadarTresorerieRH,
   };
 }
 

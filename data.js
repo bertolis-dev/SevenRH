@@ -4821,6 +4821,53 @@ function calculateIndemniteCompensatrice(employee, refDate) {
   return { montant, joursRestants };
 }
 
+// §"Radar Trésorerie RH" (roadmap différenciation #4, 01/09/2026) : "projection de l'impact d'une
+// embauche, d'un départ [...] sur la trésorerie à 30/60/90 jours". Volontairement PAS d'effet des
+// congés payés ordinaires : dans le modèle standard français, le salaire mensuel est le même que le
+// salarié soit présent ou en congé payé — un congé ordinaire n'a donc aucun impact réel sur la
+// trésorerie (contrairement à ce que le libellé initial de l'idée pouvait suggérer). Les deux
+// évènements qui ONT un impact de trésorerie réel et déjà calculable avec les données de Nexus :
+//   - une embauche à venir (dateEmbauche future) : + salaireBrutMensuel à partir de cette date.
+//   - un départ à venir (dateDepart future) : - salaireBrutMensuel à partir de cette date, PLUS une
+//     sortie de trésorerie PONCTUELLE (l'indemnité compensatrice de congés payés non pris, déjà
+//     calculée par calculateIndemniteCompensatrice ci-dessus — jamais réimplémentée séparément).
+// ESTIMATION INDICATIVE (hors charges patronales, primes, variables de paie, avenants de salaire à
+// venir) — un vrai pilotage de trésorerie reste la responsabilité de votre expert-comptable.
+const RADAR_TRESORERIE_HORIZONS_JOURS = [30, 60, 90];
+
+function getRadarTresorerieRH(employees, refDate) {
+  const ref = toRefDate(refDate);
+  const todayStr = toISODate(ref);
+  // Coût actuel : salariés réellement EN POSTE aujourd'hui (déjà embauchés, pas encore partis) — pas
+  // simplement statut === 'Actif', qui resterait vrai pour un salarié pré-créé avant sa date
+  // d'embauche réelle (limite connue ailleurs dans l'app, hors périmètre ici).
+  const enPosteAujourdhui = employees.filter(e => e.dateEmbauche && e.dateEmbauche <= todayStr && (!e.dateDepart || e.dateDepart > todayStr));
+  const coutMensuelActuel = round2(enPosteAujourdhui.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0));
+
+  const horizons = RADAR_TRESORERIE_HORIZONS_JOURS.map(jours => {
+    const dateLimite = toISODate(addDays(ref, jours));
+    const evenements = [];
+
+    employees.filter(e => e.dateEmbauche && e.dateEmbauche > todayStr && e.dateEmbauche <= dateLimite).forEach(e => {
+      evenements.push({ type: 'embauche', employeeId: e.id, employee: `${e.prenom} ${e.nom}`, date: e.dateEmbauche, impactMensuel: round2(e.salaireBrutMensuel || 0) });
+    });
+
+    employees.filter(e => e.dateDepart && e.dateDepart > todayStr && e.dateDepart <= dateLimite).forEach(e => {
+      evenements.push({ type: 'depart', employeeId: e.id, employee: `${e.prenom} ${e.nom}`, date: e.dateDepart, impactMensuel: round2(-(e.salaireBrutMensuel || 0)) });
+      const { montant } = calculateIndemniteCompensatrice(e, e.dateDepart);
+      if (montant > 0) evenements.push({ type: 'indemnite_compensatrice', employeeId: e.id, employee: `${e.prenom} ${e.nom}`, date: e.dateDepart, montantUnique: montant });
+    });
+
+    evenements.sort((a, b) => a.date.localeCompare(b.date));
+    const impactMensuelTotal = round2(evenements.reduce((sum, ev) => sum + (ev.impactMensuel || 0), 0));
+    const sortiesPonctuelles = round2(evenements.reduce((sum, ev) => sum + (ev.montantUnique || 0), 0));
+
+    return { jours, dateLimite, coutMensuelProjete: round2(coutMensuelActuel + impactMensuelTotal), sortiesPonctuelles, evenements };
+  });
+
+  return { coutMensuelActuel, horizons };
+}
+
 // §roadmap différenciation point #8 (01/09/2026) : "suivi automatique des fins de période d'essai
 // [...] avec les fenêtres de préavis légales calculées". Article L1221-25 du Code du travail (en
 // vigueur depuis le 26/06/2014, vérifié sur Légifrance le 01/09/2026) : quand l'EMPLOYEUR met fin à

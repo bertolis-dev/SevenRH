@@ -3663,7 +3663,7 @@ const HELP_CONTENT = {
   },
   remuneration: {
     title: 'Rémunération',
-    body: `<p>Vue consolidée des éléments de rémunération : salaire brut mensuel, heures supplémentaires saisies et leur suivi par rapport au contingent annuel (Paramètres), et solde de repos compensateur (voir la fiche salarié pour le détail et l'ajustement par salarié).</p>`,
+    body: `<p>Vue consolidée des éléments de rémunération : salaire brut mensuel, heures supplémentaires saisies et leur suivi par rapport au contingent annuel (Paramètres), et solde de repos compensateur (voir la fiche salarié pour le détail et l'ajustement par salarié). Le Radar trésorerie RH projette l'impact des embauches/départs déjà planifiés sur la masse salariale à 30/60/90 jours.</p>`,
     faq: [{ q: 'Le taux de conversion des heures sup en repos compensateur est-il calculé automatiquement ?', r: 'Non, volontairement : le taux dépend de votre effectif et d\'un éventuel accord de branche/entreprise, à confirmer avec votre gestionnaire de paie avant de le régler dans Paramètres.' }]
   },
   embauche: {
@@ -17292,6 +17292,36 @@ function bindExportPaieEvents() {
  * réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel, jusqu'ici affichés
  * uniquement comme un seul chiffre agrégé sur le tableau de bord Direction (renderDashboard) : le
  * réglage/la donnée existaient déjà, seul un vrai écran dédié manquait. */
+// §"Radar Trésorerie RH" (roadmap différenciation #4, 01/09/2026) : les 90 jours englobent déjà les
+// 60 et les 30 (horizons cumulatifs, pas des tranches disjointes) — la liste d'évènements n'est donc
+// affichée qu'une fois, à partir de l'horizon le plus large, pour ne jamais dupliquer une même
+// embauche/un même départ dans 2 ou 3 lignes identiques.
+const RADAR_TRESORERIE_EVENT_LABELS = { embauche: 'Embauche prévue', depart: 'Départ prévu', indemnite_compensatrice: 'Indemnité compensatrice de CP' };
+
+function renderRadarTresorerieCard(radar) {
+  const dernierHorizon = radar.horizons[radar.horizons.length - 1];
+  return `
+    <div class="card">
+      <h2>${icon(ICONS.trendingUp, 16)} Radar trésorerie RH</h2>
+      <p class="text-muted" style="margin-top:-6px;">Impact prévisionnel des embauches/départs déjà planifiés sur la masse salariale mensuelle (coût actuel : ${formatCurrencyFR(radar.coutMensuelActuel)}).</p>
+      <div class="kpi-grid" style="margin-top:12px;">
+        ${radar.horizons.map(h => kpiCard(`Coût mensuel à ${h.jours} jours`, formatCurrencyFR(h.coutMensuelProjete), ICONS.coin)).join('')}
+      </div>
+      ${dernierHorizon.evenements.length ? `
+        <div class="mini-list" style="margin-top:12px;">
+          ${dernierHorizon.evenements.map(ev => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(RADAR_TRESORERIE_EVENT_LABELS[ev.type] || ev.type)} · ${escapeHtml(ev.employee)} · ${formatDate(ev.date)}</span>
+              <span class="text-muted">${ev.impactMensuel !== undefined ? `${ev.impactMensuel > 0 ? '+' : ''}${formatCurrencyFR(ev.impactMensuel)}/mois` : `${formatCurrencyFR(ev.montantUnique)} (sortie ponctuelle)`}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<p class="text-muted" style="margin-top:12px;">Aucune embauche ni départ planifié dans les 90 prochains jours.</p>`}
+      <p class="form-hint" style="margin-top:10px;">Estimation à partir des salaires bruts mensuels renseignés (hors charges patronales, primes, variables de paie). Les congés payés ordinaires n'ont volontairement aucun effet ici : le salaire mensuel reste le même, présent ou en congé. À affiner avec votre expert-comptable pour un vrai pilotage de trésorerie.</p>
+    </div>
+  `;
+}
+
 function renderRemuneration() {
   const settings = settingsRepository.getSettings();
   if (!settings.masseSalarialeActivee) {
@@ -17323,6 +17353,7 @@ function renderRemuneration() {
       ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), ICONS.chart)}
       ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), ICONS.trendingUp)}
     </div>
+    ${renderRadarTresorerieCard(getRadarTresorerieRH(employees, new Date()))}
     <div class="card table-card">
       <table class="table">
         <thead>
