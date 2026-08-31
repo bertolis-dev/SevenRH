@@ -9884,8 +9884,10 @@ function openRegistreUniquePersonnelModal() {
       <div class="modal-body">
         <p class="text-muted" style="margin-bottom: 14px;">Document obligatoire (Code du travail, art. L1221-13), à présenter sur demande de l'inspection du travail. Classé par ordre chronologique d'embauche, salariés partis compris.</p>
         <div class="print-area print-document">
-          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}</p>
-          <h1>Registre unique du personnel</h1>
+          <div class="print-header">
+            <h1>Registre unique du personnel</h1>
+            <p class="text-muted">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.siret ? ' · SIRET ' + escapeHtml(profile.siret) : ''} · Document généré le ${formatDate(toISODate(new Date()))}</p>
+          </div>
           <div style="overflow-x: auto;">
             <table class="table">
               <thead>
@@ -9911,6 +9913,7 @@ function openRegistreUniquePersonnelModal() {
               </tbody>
             </table>
           </div>
+          <p class="text-muted" style="margin-top: 20px; font-size: 12px;">${employees.length} salarié${employees.length > 1 ? 's' : ''} au total (actifs et partis confondus) · Document tenu à disposition de l'inspection du travail conformément à l'article L1221-13 du Code du travail.</p>
         </div>
       </div>
       <div class="modal-footer">
