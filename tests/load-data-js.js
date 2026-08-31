@@ -45,6 +45,8 @@ globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 globalThis.__getDelaiPrevenanceFinEssai = getDelaiPrevenanceFinEssai;
 globalThis.__getConventionCollectiveCongesAncienneteBonus = getConventionCollectiveCongesAncienneteBonus;
 globalThis.__getConventionCollectiveIdccCode = getConventionCollectiveIdccCode;
+globalThis.__getEffectifActifAt = getEffectifActifAt;
+globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -67,6 +69,8 @@ globalThis.__getConventionCollectiveIdccCode = getConventionCollectiveIdccCode;
     getDelaiPrevenanceFinEssai: sandbox.__getDelaiPrevenanceFinEssai,
     getConventionCollectiveCongesAncienneteBonus: sandbox.__getConventionCollectiveCongesAncienneteBonus,
     getConventionCollectiveIdccCode: sandbox.__getConventionCollectiveIdccCode,
+    getEffectifActifAt: sandbox.__getEffectifActifAt,
+    getSeuilsEffectifStatus: sandbox.__getSeuilsEffectifStatus,
   };
 }
 

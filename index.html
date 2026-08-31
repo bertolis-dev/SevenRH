@@ -18,7 +18,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1c2b4a">
-  <link rel="stylesheet" href="style.css?v=20260831e">
+  <link rel="stylesheet" href="style.css?v=20260831f">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -76,17 +76,17 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260831e"></script>
-  <script src="qrcode.js?v=20260831e"></script>
+  <script type="module" src="supabase-client.js?v=20260831f"></script>
+  <script src="qrcode.js?v=20260831f"></script>
   <!-- §correctif audit du 23/08/2026 (2.7) : xlsx.full.min.js (~930 Ko) n'est plus chargé ici en
        statique pour tout le monde — voir loadXLSXLibrary() (app.js), qui l'injecte à la demande,
        seulement quand Exporter/Importer Excel est réellement utilisé (rôle RH/Propriétaire/Manager,
        page Salariés). -->
-  <script src="data.js?v=20260831e"></script>
-  <script src="app.js?v=20260831e"></script>
+  <script src="data.js?v=20260831f"></script>
+  <script src="app.js?v=20260831f"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260831e'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260831f'));
     }
   </script>
 </body>

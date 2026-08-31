@@ -5396,11 +5396,35 @@ function renderDashboardShortcuts() {
   `;
 }
 
+// §"Radar Seuils" (roadmap différenciation #1, 01/09/2026) : rendu directement ici — comme
+// indexEgaliteRappel un peu plus loin dans ce fichier — plutôt que via le système de notifications
+// partagé (pas de gating par rôle indépendant d'un salarié précis, voir makeNotification). Appelé
+// depuis renderDashboardRH ET renderDashboardProprietaire, jamais depuis renderDashboardManager
+// (l'effectif de toute l'entreprise n'a pas de sens à l'échelle d'une seule équipe).
+function renderRadarSeuilsCard(employees) {
+  const statuts = getSeuilsEffectifStatus(employees, new Date()).filter(s => s.franchi);
+  if (!statuts.length) return '';
+  return `
+    <div class="card" style="margin-bottom: 12px; border-left: 3px solid var(--color-warning);">
+      <h2>${icon(ICONS.warningTriangle, 16)} Radar seuils d'effectif</h2>
+      ${statuts.map(s => `
+        <div style="margin-top: 8px;">
+          <p style="font-weight: 600; margin: 0;">Seuil de ${s.seuil} salariés franchi (effectif actuel : ${s.effectifActuel}, en continu depuis environ ${formatDate(s.depuisDate)}).</p>
+          ${s.obligationsCourtDelai.length ? `<p class="text-muted" style="margin: 4px 0 0;">${s.courtDelaiApplicable ? 'Applicables (délai de 12 mois écoulé)' : 'Applicables dans 12 mois si le seuil se maintient'} : ${s.obligationsCourtDelai.map(o => escapeHtml(o)).join(', ')}.</p>` : ''}
+          ${s.obligationsLongDelai.length ? `<p class="text-muted" style="margin: 4px 0 0;">${s.longDelaiApplicable ? 'Applicables (délai de 5 ans écoulé)' : 'Applicables après 5 années civiles consécutives si le seuil se maintient'} : ${s.obligationsLongDelai.map(o => escapeHtml(o)).join(', ')}.</p>` : ''}
+        </div>
+      `).join('')}
+      <p class="form-hint" style="margin-top:10px;">Estimation indicative à partir de l'effectif enregistré dans Nexus (peut ne pas couvrir tout l'historique réel de l'entreprise) — les délais précis varient par obligation ; à confirmer avec votre expert-comptable/juriste social avant toute décision de mise en conformité.</p>
+    </div>
+  `;
+}
+
 function renderDashboardRH() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const user = authRepository.getCurrentUser();
   return `
     ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
+    ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
     ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
@@ -5533,6 +5557,7 @@ function renderDashboardProprietaire() {
   const user = authRepository.getCurrentUser();
   return `
     ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
+    ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
 

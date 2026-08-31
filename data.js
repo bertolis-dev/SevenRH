@@ -4904,6 +4904,80 @@ function calculateAbsenteeismRate(employees, leaveRequests, leaveTypes, year) {
   return round2((joursAbsence / joursTheoriques) * 100);
 }
 
+// §"Radar Seuils" (roadmap différenciation #1, 01/09/2026) : "scan mensuel automatique de l'effectif
+// actif [...] alerte au franchissement de 11, 50 ou 250 salariés, avec la liste des obligations qui
+// s'activent [...] et leur échéance légale calculée." Effectif = même notion simple déjà utilisée
+// ailleurs sur ce tableau de bord (nombre de salariés actifs, voir calculateTurnoverRate) — PAS le
+// calcul légal pondéré de l'effectif (Art. L1111-2/L1111-3 : temps partiel/CDD/intérim proratisés,
+// certains contrats exclus), volontairement hors périmètre ("l'effectif actif déjà calculé").
+//
+// Reconstruit l'effectif à une date passée à partir des dates d'embauche/départ déjà enregistrées —
+// ne peut refléter que l'historique RÉELLEMENT saisi dans Nexus (un salarié parti avant l'adoption de
+// l'outil et jamais renseigné n'y apparaît pas). Limite explicite, rappelée dans le disclaimer UI.
+function getEffectifActifAt(employees, date) {
+  const dateStr = toISODate(toRefDate(date));
+  return employees.filter(e => e.dateEmbauche && e.dateEmbauche <= dateStr && (!e.dateDepart || e.dateDepart > dateStr)).length;
+}
+
+// Seuils harmonisés par la loi PACTE (n°2019-486 du 22/05/2019, en vigueur depuis le 01/01/2020),
+// vérifiés le 01/09/2026 (economie.gouv.fr, service-public.fr, sources professionnelles concordantes
+// — LégiSocial, Talvio, Orcom) :
+//   - 11 salariés : CSE obligatoire (Art. L2311-2), applicable 12 mois après un franchissement CONTINU.
+//   - 50 salariés : règlement intérieur (Art. L1311-2, même délai de 12 mois que le CSE) et BDESE
+//     (support du CSE à "missions élargies" à ce seuil) ; en revanche la participation aux résultats,
+//     la participation à l'effort de construction (PEEC) et les autres obligations harmonisées par la
+//     loi PACTE suivent la règle générale des 5 ANNÉES CIVILES CONSÉCUTIVES — deux délais DIFFÉRENTS
+//     au même seuil, jamais confondus ici (obligationsCourtDelai vs obligationsLongDelai).
+//   - 250 salariés : référent handicap et référent de lutte contre les agissements sexistes/
+//     harcèlement sexuel deviennent obligatoires ; l'index égalité professionnelle (déjà obligatoire
+//     dès 50 salariés avec 4 indicateurs) passe à 5 indicateurs — pas une nouveauté du seuil, une
+//     extension de calcul.
+// ESTIMATION INDICATIVE, volontairement simplifiée sur 2 délais génériques (12 mois / 5 ans) — la
+// réalité comporte des nuances propres à chaque obligation qu'un expert-comptable/juriste social peut
+// seul confirmer. Ne remplace jamais un audit de conformité réel.
+const SEUILS_EFFECTIF = [
+  { seuil: 11, obligationsCourtDelai: ['Mise en place du CSE (comité social et économique)'], obligationsLongDelai: [] },
+  {
+    seuil: 50,
+    obligationsCourtDelai: ['Règlement intérieur', 'BDESE (base de données économiques, sociales et environnementales)', 'CSE à missions élargies'],
+    obligationsLongDelai: ['Participation aux résultats', 'Participation à l\'effort de construction (PEEC)']
+  },
+  {
+    seuil: 250,
+    obligationsCourtDelai: ['Référent handicap', 'Référent de lutte contre les agissements sexistes et le harcèlement sexuel', 'Index égalité professionnelle : passage à 5 indicateurs'],
+    obligationsLongDelai: []
+  }
+];
+
+// Pour chaque seuil déjà franchi, recule mois par mois (jusqu'à 61, marge d'un mois au-delà des 5 ans
+// nécessaires pour le délai le plus long) tant que l'effectif était déjà au moins égal au seuil, afin
+// de déterminer depuis quand le franchissement est CONTINU (retombé sous le seuil entre-temps = le
+// compteur recommencerait à zéro à la loi, mais ce cas n'arrive jamais ici puisqu'on s'arrête au
+// premier mois qui repasse sous le seuil).
+function getSeuilsEffectifStatus(employees, refDate) {
+  const ref = toRefDate(refDate);
+  const effectifActuel = getEffectifActifAt(employees, ref);
+
+  return SEUILS_EFFECTIF.map(({ seuil, obligationsCourtDelai, obligationsLongDelai }) => {
+    if (effectifActuel < seuil) return { seuil, franchi: false, effectifActuel };
+
+    let moisConsecutifs = 0;
+    let curseur = ref;
+    while (moisConsecutifs < 61 && getEffectifActifAt(employees, curseur) >= seuil) {
+      moisConsecutifs++;
+      curseur = addMonths(curseur, -1);
+    }
+
+    return {
+      seuil, franchi: true, effectifActuel, moisConsecutifs,
+      depuisDate: toISODate(addMonths(ref, -(moisConsecutifs - 1))),
+      courtDelaiApplicable: moisConsecutifs >= 12,
+      longDelaiApplicable: moisConsecutifs >= 60,
+      obligationsCourtDelai, obligationsLongDelai
+    };
+  });
+}
+
 function getAgePyramidBuckets(employees) {
   const buckets = [
     { label: '< 25 ans', min: 0, max: 24, hommes: 0, femmes: 0, autres: 0, total: 0 },
