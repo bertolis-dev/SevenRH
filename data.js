@@ -4752,6 +4752,42 @@ function calculateIndemniteCompensatrice(employee, refDate) {
   return { montant, joursRestants };
 }
 
+// §roadmap différenciation point #8 (01/09/2026) : "suivi automatique des fins de période d'essai
+// [...] avec les fenêtres de préavis légales calculées". Article L1221-25 du Code du travail (en
+// vigueur depuis le 26/06/2014, vérifié sur Légifrance le 01/09/2026) : quand l'EMPLOYEUR met fin à
+// la période d'essai (renouvellement inclus), le salarié doit être prévenu au moins :
+//   24h avant 8 jours de présence · 48h entre 8 jours et 1 mois · 2 semaines après 1 mois ·
+//   1 mois après 3 mois.
+// Le même article précise que "la période d'essai [...] ne peut être prolongée du fait de la durée
+// du délai de prévenance" : le délai se compte donc EN AMONT de la date de fin prévue. La présence
+// est estimée ici à cette date de fin (la loi ne précise pas explicitement le point de mesure ; la
+// date de fin est l'estimation la plus proche du moment réel où l'employeur déciderait de notifier).
+// ESTIMATION INDICATIVE, comme les autres calculs légaux de ce fichier (calculateIndemniteCompensatrice
+// ci-dessus) — à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai,
+// l'enjeu (indemnité compensatrice en cas de non-respect) étant réel en cas d'erreur.
+//
+// Volontairement PAS de fonction équivalente pour une fin de CDD à échéance normale : contrairement à
+// la période d'essai, aucun délai de préavis légal général n'existe pour l'arrivée à terme d'un CDD
+// (le contrat s'arrête simplement à la date prévue) — il n'y a donc rien de comparable à calculer.
+function getDelaiPrevenanceFinEssai(employee) {
+  if (!employee.dateEmbauche || !employee.dateFinPeriodeEssai) return null;
+  const debut = parseISODateLocal(employee.dateEmbauche);
+  const fin = parseISODateLocal(employee.dateFinPeriodeEssai);
+  if (Number.isNaN(debut.getTime()) || Number.isNaN(fin.getTime()) || fin <= debut) return null;
+
+  const huitJours = addDays(debut, 8);
+  const unMois = addMonths(debut, 1);
+  const troisMois = addMonths(debut, 3);
+
+  let delaiLabel, dateLimitePrevenance;
+  if (fin < huitJours) { delaiLabel = '24 heures'; dateLimitePrevenance = addDays(fin, -1); }
+  else if (fin < unMois) { delaiLabel = '48 heures'; dateLimitePrevenance = addDays(fin, -2); }
+  else if (fin < troisMois) { delaiLabel = '2 semaines'; dateLimitePrevenance = addDays(fin, -14); }
+  else { delaiLabel = '1 mois'; dateLimitePrevenance = addMonths(fin, -1); }
+
+  return { delaiLabel, dateLimitePrevenance: toISODate(dateLimitePrevenance) };
+}
+
 // ---- Indicateurs du tableau de bord Propriétaire ----
 
 const JOURS_OUVRES_PAR_AN = 218; // moyenne France (jours ouvrés hors fériés/congés), utilisée comme base de taux

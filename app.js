@@ -6205,19 +6205,30 @@ function renderUpcomingContractEndsCard(contractEnds) {
 /** Même champ/notification que "Fins de contrat" (getUpcomingProbationEnds, déjà câblé — voir
  * date-report de session) mais sans carte au tableau de bord jusqu'ici, donc invisible tant qu'on
  * n'ouvre pas le centre de notifications. */
+// §roadmap différenciation point #8 (01/09/2026) : ajoute le délai de prévenance légal calculé (voir
+// getDelaiPrevenanceFinEssai, data.js) à côté de la date de fin — auparavant une simple date qui
+// approche, sans dire à RH avant quand agir pour respecter la loi. Estimation indicative (disclaimer
+// explicite), pas un calcul juridique figé.
 function renderUpcomingProbationEndsCard(probationEnds) {
   return `
     <div class="card">
       <h2>Fins de période d'essai</h2>
       ${probationEnds.length === 0 ? `<p class="text-muted">Aucune fin de période d'essai dans les 60 prochains jours.</p>` : `
         <div class="mini-list">
-          ${probationEnds.map(e => `
+          ${probationEnds.map(e => {
+            const delai = getDelaiPrevenanceFinEssai(e);
+            const enRetard = delai && delai.dateLimitePrevenance < toISODate(new Date());
+            return `
             <div class="mini-list-item">
               <span>${personNameHtml(e)}</span>
-              <span class="text-muted">${formatDate(e.dateFinPeriodeEssai)}</span>
+              <span class="text-muted">
+                ${formatDate(e.dateFinPeriodeEssai)}
+                ${delai ? `<br><span class="${enRetard ? 'text-danger' : ''}" style="font-size:12px;">${enRetard ? 'Délai de prévenance dépassé' : `Prévenir avant le ${formatDate(delai.dateLimitePrevenance)}`} (préavis ${delai.delaiLabel})</span>` : ''}
+              </span>
             </div>
-          `).join('')}
+          `; }).join('')}
         </div>
+        <p class="form-hint" style="margin-top:10px;">Délai de prévenance estimé (article L1221-25 du Code du travail) — à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>
       `}
     </div>
   `;
@@ -8612,6 +8623,14 @@ function renderEmployeeDetail(id) {
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
         ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
         ${canSeeContractuel && e.dateFinPeriodeEssai ? infoRow('Fin de période d\'essai', formatDate(e.dateFinPeriodeEssai)) : ''}
+        ${(() => {
+          if (!canSeeContractuel || !e.dateFinPeriodeEssai) return '';
+          const delai = getDelaiPrevenanceFinEssai(e);
+          if (!delai) return '';
+          const enRetard = delai.dateLimitePrevenance < toISODate(new Date());
+          return infoRow('Délai de prévenance', `${enRetard ? 'Dépassé' : `Prévenir avant le ${formatDate(delai.dateLimitePrevenance)}`} (préavis ${delai.delaiLabel})`);
+        })()}
+        ${canSeeContractuel && e.dateFinPeriodeEssai ? `<p class="form-hint">Délai de prévenance estimé (article L1221-25 du Code du travail) — à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>` : ''}
         ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
       </div>
 
