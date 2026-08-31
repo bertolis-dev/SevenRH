@@ -99,7 +99,13 @@ function employeeFromRow(row) {
     onboardingChecklist: d.onboardingChecklist ?? [],
     offboardingChecklist: d.offboardingChecklist ?? [],
     avenants: d.avenants ?? [],
-    heuresSupplementaires: d.heuresSupplementaires ?? {}
+    heuresSupplementaires: d.heuresSupplementaires ?? {},
+    // §correctif audit du 31/08/2026 : même bug D2 ci-dessus, réintroduit par 2 champs ajoutés après
+    // ce correctif (§7.21, astreintes le 23/08/2026 et reposCompensateurPris le 26/08/2026) et jamais
+    // ajoutés à cette liste — employeeToRow les pousse (spread `...rest`), mais ils revenaient
+    // undefined à la relecture, faisant disparaître astreintes/repos compensateur pris au rechargement.
+    astreintes: d.astreintes ?? [],
+    reposCompensateurPris: d.reposCompensateurPris ?? {}
   };
 }
 
@@ -178,7 +184,14 @@ function leaveRequestFromRow(row) {
   return {
     id: row.id, employeeId: row.employee_id, typeId: row.type_id,
     dateDebut: row.date_debut, dateFin: row.date_fin,
-    demiJournee: d.demiJournee ?? null, nbJours: d.nbJours ?? 0,
+    demiJournee: d.demiJournee ?? null,
+    // §correctif audit du 31/08/2026 : leaveRequestToRow() pousse déjà ces 4 champs via son spread
+    // `...rest` — absents ici, ils revenaient toujours undefined après un rechargement (demi-journée
+    // de début/fin perdue à l'affichage, validateurs nommés perdus au profit d'une résolution par
+    // rôle, lien vers la fermeture d'origine perdu).
+    demiJourneeDebut: d.demiJourneeDebut ?? null, demiJourneeFin: d.demiJourneeFin ?? null,
+    workflowValidatorOverrides: d.workflowValidatorOverrides ?? {}, fermetureId: d.fermetureId ?? null,
+    nbJours: d.nbJours ?? 0,
     commentaire: d.commentaire ?? '', justificatif: d.justificatif ?? null,
     statut: row.statut, workflow: d.workflow ?? [], etapeIndex: row.etape_index,
     historique: d.historique ?? [], prolongations: d.prolongations ?? [], regularisations: d.regularisations ?? [],
@@ -512,7 +525,13 @@ async function syncFavorites(companyId, favoritesMap) {
   Object.keys(favoritesMap || {}).forEach(userId => {
     (favoritesMap[userId] || []).forEach(favId => rows.push({ company_id: companyId, user_id: userId, favorite_employee_id: favId }));
   });
-  await supabase.from('favorites').delete().eq('company_id', companyId);
+  // §correctif audit du 31/08/2026 : le delete était lancé sans lire son {error} — s'il échouait
+  // (RLS, réseau), l'exécution continuait vers l'insert comme s'il avait réussi (doublons possibles),
+  // et si c'est l'insert qui échouait APRÈS un delete réussi, l'entreprise se retrouvait sans aucun
+  // favori côté serveur alors que le cache local en montrait encore — plus aucune réconciliation
+  // possible à la prochaine hydratation complète.
+  const { error: deleteError } = await supabase.from('favorites').delete().eq('company_id', companyId);
+  if (deleteError) throw deleteError;
   if (rows.length > 0) {
     const { error } = await supabase.from('favorites').insert(rows);
     if (error) throw error;
@@ -692,7 +711,23 @@ async function hydrateCurrentCompany() {
     supabase.from('subscription_modules').select('*').eq('company_id', companyId)
   ]);
 
+  // §correctif audit du 31/08/2026 : companyRes.data était déréférencé (company.id ligne suivante)
+  // sans garde — une erreur sur cette seule requête (session expirée pendant l'hydratation, RLS)
+  // faisait planter toute l'hydratation avec un TypeError brut au lieu d'un échec propre comme
+  // !employeeRow ci-dessus. Les ~20 autres requêtes ci-dessus retombent délibérément sur un tableau
+  // vide en cas d'erreur (résilience voulue plutôt qu'un écran cassé) — mais totalement silencieuse
+  // jusqu'ici ; on logue au moins celles qui ont échoué pour que ça reste diagnosticable.
   const company = companyRes.data;
+  if (!company) return null;
+  [
+    ['companies', companyRes], ['employees', employeesRes], ['etablissements', etablissementsRes],
+    ['services', servicesRes], ['leave_types', leaveTypesRes], ['leave_requests', leaveRequestsRes],
+    ['telework_requests', teleworkRequestsRes], ['expenses', expensesRes], ['documents', documentsRes],
+    ['support_tickets', supportTicketsRes], ['entretiens', entretiensRes], ['idees', ideesRes],
+    ['drafts', draftsRes], ['notifications', notificationsRes], ['favorites', favoritesRes],
+    ['audit_log', auditLogRes], ['settings', settingsRes], ['subscriptions', subscriptionRes],
+    ['subscription_modules', subscriptionModulesRes]
+  ].forEach(([table, res]) => { if (res && res.error) console.error(`Échec de lecture Supabase (${table}) :`, res.error); });
 
   // Fusionne la table complète (ce que RLS autorise pour ce rôle : soi-même/son équipe/tout si
   // RH-Propriétaire) avec la vue calendrier redactée (tout le monde, champs minimaux) — sans écraser
@@ -930,12 +965,18 @@ const passwordRecoveryCallbacks = [];
 // devient périmé après le premier rafraîchissement silencieux et la bascule échoue la prochaine
 // fois qu'on revient sur ce compte — même en restant connecté sans interruption entre les deux.
 const sessionRefreshCallbacks = [];
+// §correctif audit du 31/08/2026 : même race qu'expliquée ci-dessus pour PASSWORD_RECOVERY, mais un
+// rafraîchissement silencieux au tout premier chargement (session proche d'expirer) peut lui aussi
+// survenir avant qu'app.js/data.js n'aient appelé onSessionRefreshed() — l'évènement était alors
+// perdu pour toujours, sans rejeu possible, contrairement à PASSWORD_RECOVERY.
+let lastRefreshedSession = null;
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
     passwordRecoveryDetected = true;
     passwordRecoveryCallbacks.forEach(cb => cb());
   }
   if (event === 'TOKEN_REFRESHED' && session) {
+    lastRefreshedSession = session;
     sessionRefreshCallbacks.forEach(cb => cb(session));
   }
 });
@@ -951,6 +992,7 @@ function wasPasswordRecoveryDetected() {
 
 function onSessionRefreshed(callback) {
   sessionRefreshCallbacks.push(callback);
+  if (lastRefreshedSession) callback(lastRefreshedSession);
 }
 
 /** Réactive une session déjà connue (compte gardé en parallèle, voir DB.switchToSavedAccount) sans

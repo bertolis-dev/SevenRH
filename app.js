@@ -4521,12 +4521,14 @@ async function syncNotifications() {
   });
 
   if (hasModule('rh')) getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
-    candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, ICONS.document, 'Fin de contrat proche',
+    const titre = e.dateFinContrat < toISODate(new Date()) ? 'Fin de contrat dépassée' : 'Fin de contrat proche';
+    candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, ICONS.document, titre,
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
   if (hasModule('rh')) getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
-    candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, ICONS.document, 'Fin de période d\'essai proche',
+    const titre = e.dateFinPeriodeEssai < toISODate(new Date()) ? 'Fin de période d\'essai dépassée' : 'Fin de période d\'essai proche';
+    candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, ICONS.document, titre,
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
@@ -5646,12 +5648,16 @@ function getUpcomingBirthdays(daysAhead = 60, employees, limit = 5) {
     .slice(0, limit);
 }
 
+// §correctif audit du 31/08/2026 : ne gardait que dateFinContrat >= aujourd'hui, donc un contrat déjà
+// arrivé à échéance (fiche pas encore mise à jour/archivée à temps) disparaissait purement et
+// simplement de cette liste et de la notification associée — alors que c'est justement le cas le
+// plus urgent. Même bug déjà corrigé pour l'expiration de documents (voir daysUntil < 0 ci-dessus),
+// jamais appliqué ici. On garde désormais tout ce qui est déjà passé (pas de borne basse).
 function getUpcomingContractEnds(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinContrat);
-  const todayStr = toISODate(new Date());
   const limitStr = toISODate(addDays(new Date(), daysAhead));
   return employees
-    .filter(e => e.dateFinContrat >= todayStr && e.dateFinContrat <= limitStr)
+    .filter(e => e.dateFinContrat <= limitStr)
     .sort((a, b) => a.dateFinContrat.localeCompare(b.dateFinContrat))
     .slice(0, limit);
 }
@@ -5771,12 +5777,14 @@ function getDataQualityIssues() {
 
 /** Même principe que getUpcomingContractEnds, pour la fin de période d'essai — champ existant
  * depuis le début (formulaire + fiche salarié) mais jamais consulté par le moteur de notifications. */
+// §correctif audit du 31/08/2026 : même bug que getUpcomingContractEnds ci-dessus — une période
+// d'essai déjà terminée sans que la fiche soit mise à jour disparaissait de la liste/notification au
+// lieu d'apparaître comme en retard (risque réel de rater la fenêtre légale pour confirmer/rompre).
 function getUpcomingProbationEnds(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateFinPeriodeEssai);
-  const todayStr = toISODate(new Date());
   const limitStr = toISODate(addDays(new Date(), daysAhead));
   return employees
-    .filter(e => e.dateFinPeriodeEssai >= todayStr && e.dateFinPeriodeEssai <= limitStr)
+    .filter(e => e.dateFinPeriodeEssai <= limitStr)
     .sort((a, b) => a.dateFinPeriodeEssai.localeCompare(b.dateFinPeriodeEssai))
     .slice(0, limit);
 }
@@ -6342,7 +6350,7 @@ function getVisibleEmployeeIdsForCurrentUser() {
   if (!user) return [];
   if ([ROLES.RH, ROLES.PROPRIETAIRE, ROLES.COMPTABILITE].includes(user.role)) return null;
   if (user.role === ROLES.MANAGER) {
-    const team = employeeRepository.getAll().filter(e => (e.managerIds || []).includes(user.id)).map(e => e.id);
+    const team = employeeRepository.getAll().filter(e => isManagerOfEmployee(user.id, e.id)).map(e => e.id);
     return [user.id, ...team];
   }
   return [user.id];
@@ -7407,10 +7415,15 @@ function bindOrganigrammeEvents() {
 // Coffre-fort documents RH — partagé entre la fiche salarié et "Mes documents"
 // ---------------------------------------------------------------------------
 
-/** Upload/suppression réservés à RH et Propriétaire ; la consultation suit l'accès normal à la fiche. */
+/** Upload/suppression réservés à qui a GERER_UTILISATEURS (RH/Propriétaire par défaut, mais
+ * surchargeable par salarié — voir le panneau de permissions individuelles) ; la consultation suit
+ * l'accès normal à la fiche. §correctif audit du 31/08/2026 : reposait sur un contrôle de rôle en dur
+ * au lieu de hasPermission(), contrairement à toutes les autres fonctionnalités sensibles à l'écriture
+ * de l'app et à la policy RLS du même bucket (0030_employee_files_storage.sql, has_permission
+ * 'gererUtilisateurs') — un override de permission sur cette clé n'était donc jamais respecté ici. */
 function canManageDocumentsFor() {
   const user = authRepository.getCurrentUser();
-  return Boolean(user && (user.role === ROLES.RH || user.role === ROLES.PROPRIETAIRE));
+  return hasPermission(user, PERMISSIONS.GERER_UTILISATEURS);
 }
 
 function documentExpirationInfo(dateExpiration) {
@@ -8313,7 +8326,7 @@ function canEditEmployeeRecord(employee) {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
   if (hasPermission(user, PERMISSIONS.MODIFIER_SALARIE)) return true;
-  if (user.role === ROLES.MANAGER) return (employee.managerIds || []).includes(user.id);
+  if (user.role === ROLES.MANAGER) return isManagerOfEmployee(user.id, employee.id);
   return false;
 }
 
@@ -9995,8 +10008,7 @@ function isCurrentWorkflowStepFor(request, user, domain) {
     if (!hasPermission(user, derniereEtape ? PERMISSIONS.MARQUER_NOTE_REMBOURSEE : PERMISSIONS.CONTROLER_NOTE_FRAIS)) return false;
   }
   if (requiredRole === ROLES.MANAGER) {
-    const emp = employeeRepository.getById(request.employeeId);
-    return Boolean(emp && (emp.managerIds || []).includes(user.id));
+    return isManagerOfEmployee(user.id, request.employeeId);
   }
   return true;
 }
@@ -10038,8 +10050,7 @@ function canManageRequestFor(employeeId, domain = 'absence') {
   if (employeeId === user.id && !canSelfServiceAsProprietaire(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
   if (user.role === ROLES.MANAGER) {
-    const emp = employeeRepository.getById(employeeId);
-    return Boolean(emp && (emp.managerIds || []).includes(user.id));
+    return isManagerOfEmployee(user.id, employeeId);
   }
   return false;
 }
@@ -10136,6 +10147,14 @@ function openProlongerModal(requestId) {
   const employee = employeeRepository.getById(request.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
   if (!employee || !type) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
+  // §correctif audit du 31/08/2026 : défense en profondeur — le bouton "Prolonger" n'est déjà rendu
+  // que si canProlonger (renderRequestActions) est vrai, mais cette fonction reste appelable
+  // directement (devtools/console), contrairement à ses sœurs handleApproveRequest/handleCancelRequest
+  // qui revérifient déjà. La vraie barrière reste côté serveur (RLS), mais éviter d'ouvrir la modale
+  // pour une action qui échouerait de toute façon reste plus honnête pour l'UI.
+  if (type.saisiParSalarie || !hasPermission(authRepository.getCurrentUser(), PERMISSIONS.PROLONGER_MALADIE)) {
+    showToast('Action non autorisée.', 'error'); return;
+  }
 
   const html = `
     <div class="modal modal-small">
@@ -10187,6 +10206,11 @@ function openProlongerModal(requestId) {
 function openRegulariserModal(requestId) {
   const request = leaveRepository.getById(requestId);
   if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
+  // §correctif audit du 31/08/2026 : défense en profondeur, même contrôle que le bouton "Régulariser"
+  // (renderRequestActions) et que handleCancelRequest pour la même permission "gérer cette demande" —
+  // manquait ici alors que la doc de cette fonction dit explicitement "réservée à qui peut déjà gérer
+  // la demande (même contrôle que Annuler)".
+  if (!canManageRequestFor(request.employeeId)) { showToast('Action non autorisée.', 'error'); return; }
   const employee = employeeRepository.getById(request.employeeId);
   const currentType = leaveTypeRepository.getLeaveTypeById(request.typeId);
   if (!employee || !currentType) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
@@ -10639,7 +10663,7 @@ function requestTargetIdsForCurrentUser(kind) {
   if (user.role !== ROLES.MANAGER) return [user.id];
 
   const managedIds = employeeRepository.getAll()
-    .filter(e => (e.managerIds || []).includes(user.id))
+    .filter(e => isManagerOfEmployee(user.id, e.id))
     .map(e => e.id);
   // Un manager ne dépose une note de frais pour son équipe que s'il la contrôle (même nuance que
   // expenses_insert : controlerNoteFrais côté manager, validerNoteFrais côté RH).
@@ -11902,6 +11926,12 @@ function renderCalendrier() {
   `;
 }
 
+// §correctif audit du 31/08/2026 : bindCalendrierEvents() ré-attachait un listener 'click' sur
+// `document` à CHAQUE rendu du calendrier (changement de mois, bascule Moi/Équipe, etc.), sans jamais
+// retirer le précédent — une fuite mémoire qui accumule des closures mortes (capturant un
+// filtersPanel détaché du DOM précédent) au fil de la navigation. Même garde que
+// landingNavMenuOutsideCloseBound un peu plus haut dans ce fichier : posé une seule fois.
+let calendarFiltersOutsideCloseBound = false;
 function bindCalendrierEvents() {
   document.getElementById('btn-cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));
   document.getElementById('btn-cal-next').addEventListener('click', () => shiftCalendarMonth(1));
@@ -11928,9 +11958,18 @@ function bindCalendrierEvents() {
       bindCalendarFilterToggles();
       filtersPanel.classList.add('open');
     });
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.dropdown-wrapper')) filtersPanel.classList.remove('open');
-    });
+    if (!calendarFiltersOutsideCloseBound) {
+      calendarFiltersOutsideCloseBound = true;
+      // Ne capture jamais `filtersPanel` directement dans la closure : un rendu ultérieur du
+      // calendrier remplace le DOM de #view-root, rendant ce nœud obsolète (détaché) — le listener
+      // n'étant posé qu'une fois, il doit relire l'élément courant à chaque clic, pas celui du tout
+      // premier rendu.
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('.dropdown-wrapper')) return;
+        const panel = document.getElementById('calendar-filters-panel');
+        if (panel) panel.classList.remove('open');
+      });
+    }
   }
 
   document.querySelectorAll('[data-calendar-day]').forEach(cell => {
@@ -15867,9 +15906,14 @@ function neutralizeCsvFormulaInjection(str) {
 
 
 
+// §correctif audit du 31/08/2026 (reuse) : csvEscape/exportRowsToCSV étaient une quasi-copie de
+// csvEscapeWithDelimiter/exportRowsToCSVWithDelimiter (~1400 lignes plus bas), avec une condition
+// d'échappement réécrite indépendamment (/[;"\n]/.test(str) ici vs .includes() là-bas) — déjà
+// fonctionnellement identique pour le délimiteur ';' mais deux implémentations qui pouvaient diverger
+// silencieusement à la prochaine évolution de la règle d'échappement CSV. Route désormais vers
+// l'unique implémentation paramétrée.
 function csvEscape(value) {
-  const str = neutralizeCsvFormulaInjection(String(value === null || value === undefined ? '' : value));
-  return /[;"\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+  return csvEscapeWithDelimiter(value, ';');
 }
 
 function downloadTextFile(content, filename, mimeType) {
@@ -15885,8 +15929,7 @@ function downloadTextFile(content, filename, mimeType) {
 }
 
 function exportRowsToCSV(headers, rows, filename) {
-  const csv = [headers, ...rows].map(row => row.map(csvEscape).join(';')).join('\r\n');
-  downloadTextFile(csv, filename, 'text/csv;charset=utf-8;');
+  exportRowsToCSVWithDelimiter(headers, rows, filename, ';');
 }
 
 // ---------------------------------------------------------------------------
@@ -17974,8 +18017,14 @@ function submitEmployeeForm(evt, id, candidatureId) {
     if (categorie) patch.statutPro = categorie.nom;
   }
 
-  const pourcentageActivite = Number(patch.pourcentageActivite) || 100;
-  if (pourcentageActivite <= 0 || pourcentageActivite > 100) {
+  // §correctif audit du 31/08/2026 : `Number(patch.pourcentageActivite) || 100` coerce un '0' saisi
+  // explicitement (Number('0') === 0, falsy) en 100 AVANT même que la validation ci-dessous ne
+  // s'exécute — son branchement "<= 0" devenait donc inatteignable, et une saisie invalide (0, ou du
+  // texte non numérique) était silencieusement remplacée par 100 au lieu d'être rejetée. Seul un champ
+  // réellement vide (non renseigné, cas normal puisque le champ est optionnel) doit retomber sur 100.
+  const pourcentageActiviteRaw = patch.pourcentageActivite;
+  const pourcentageActivite = (pourcentageActiviteRaw === '' || pourcentageActiviteRaw == null) ? 100 : Number(pourcentageActiviteRaw);
+  if (Number.isNaN(pourcentageActivite) || pourcentageActivite <= 0 || pourcentageActivite > 100) {
     showToast('Le pourcentage d\'activité doit être compris entre 1 et 100.', 'error');
     return;
   }

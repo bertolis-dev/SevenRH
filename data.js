@@ -1353,13 +1353,37 @@ const DB = {
     this.saveBrouillons(this.getBrouillons().filter(b => b.ownerId !== id && (!b.champs || b.champs.employeeId !== id)));
 
     const company = this.getCurrentCompany();
+
+    // §correctif audit du 31/08/2026 : entretiens/idées/tickets support référencent employeeId eux
+    // aussi (ajoutés après ce nettoyage — jamais mis à jour depuis) et restaient orphelins, invisibles
+    // dans leurs écrans respectifs et potentiellement crashants au rendu (employé introuvable).
+    ['supportTickets', 'entretiens', 'idees'].forEach(key => {
+      const before = company[key] || [];
+      const removedIds = before.filter(item => item.employeeId === id).map(item => item.id);
+      if (!removedIds.length) return;
+      company[key] = before.filter(item => item.employeeId !== id);
+      const table = key === 'supportTickets' ? 'support_tickets' : key;
+      removedIds.forEach(rowId => this._pushInBackground(window.SupabaseSync.deleteRow(table, rowId, company.id),
+        { kind: 'delete', table, companyId: company.id, id: rowId }));
+    });
+
+    // §correctif audit du 31/08/2026 : la mutation locale de company.favorites n'était jamais
+    // repoussée à Supabase (contrairement à toggleFavoriteEmployee) — l'id fantôme survivait à la
+    // prochaine hydratation complète depuis le serveur, qui écrase le cache local.
+    let favoritesChanged = false;
     if (company.favorites && !Array.isArray(company.favorites)) {
-      delete company.favorites[id];
+      if (Object.prototype.hasOwnProperty.call(company.favorites, id)) {
+        delete company.favorites[id];
+        favoritesChanged = true;
+      }
       Object.keys(company.favorites).forEach(userId => {
-        company.favorites[userId] = company.favorites[userId].filter(fid => fid !== id);
+        const before = company.favorites[userId];
+        company.favorites[userId] = before.filter(fid => fid !== id);
+        if (company.favorites[userId].length !== before.length) favoritesChanged = true;
       });
     }
     this.saveCurrentCompany(company);
+    if (favoritesChanged) this._pushInBackground(window.SupabaseSync.pushFavorites(company.id, company.favorites), { kind: 'blob', blob: 'favorites', companyId: company.id });
 
     if (employee) this.logAudit('Suppression', 'Salarié', `${employee.prenom} ${employee.nom}`);
   },
@@ -1707,7 +1731,26 @@ const DB = {
 
   deleteLeaveType(id) {
     const type = this.getLeaveTypeById(id);
-    this.saveLeaveTypes(this.getLeaveTypes().filter(t => t.id !== id));
+    // §correctif audit du 31/08/2026 : un AUTRE type peut pointer vers celui-ci via
+    // compteurPartageAvecId (partage de compteur, §3), et une fermeture d'entreprise peut le
+    // référencer via decompteTypeId (§9) — sans ce nettoyage, l'id supprimé restait pointé dans le
+    // vide (arrêt silencieux du partage de compteur ; nouvelles demandes de fermeture générées avec
+    // un typeId qui ne résout plus jamais vers aucun type réel).
+    const otherTypes = this.getLeaveTypes().filter(t => t.id !== id);
+    let typesChanged = false;
+    const remainingTypes = otherTypes.map(t => {
+      if (t.compteurPartageAvecId === id) { typesChanged = true; return { ...t, compteurPartageAvecId: null }; }
+      return t;
+    });
+    this.saveLeaveTypes(remainingTypes);
+    if (typesChanged) this.logAudit('Modification', 'Type de congé', 'Partage de compteur retiré (type source supprimé)');
+
+    const settings = this.getSettings();
+    if ((settings.fermetures || []).some(f => f.decompteTypeId === id)) {
+      settings.fermetures = settings.fermetures.map(f => f.decompteTypeId === id ? { ...f, decompteTypeId: null } : f);
+      this.saveSettings(settings);
+    }
+
     this.saveLeaveRequests(this.getLeaveRequests().filter(r => r.typeId !== id));
     if (type) this.logAudit('Suppression', 'Type de congé', type.nom);
   },

@@ -100,6 +100,10 @@ globalThis.__requiredModuleForSourceKey = requiredModuleForSourceKey;
 globalThis.__SOURCE_KEY_MODULE_RULES = SOURCE_KEY_MODULE_RULES;
 globalThis.__HELP_CONTENT = HELP_CONTENT;
 globalThis.__canEditEmployeeRecord = canEditEmployeeRecord;
+globalThis.__getUpcomingContractEnds = getUpcomingContractEnds;
+globalThis.__getUpcomingProbationEnds = getUpcomingProbationEnds;
+globalThis.__canManageDocumentsFor = canManageDocumentsFor;
+globalThis.__isManagerOfEmployee = isManagerOfEmployee;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -126,6 +130,10 @@ globalThis.__canEditEmployeeRecord = canEditEmployeeRecord;
     SOURCE_KEY_MODULE_RULES: sandbox.__SOURCE_KEY_MODULE_RULES,
     HELP_CONTENT: sandbox.__HELP_CONTENT,
     canEditEmployeeRecord: sandbox.__canEditEmployeeRecord,
+    getUpcomingContractEnds: sandbox.__getUpcomingContractEnds,
+    getUpcomingProbationEnds: sandbox.__getUpcomingProbationEnds,
+    canManageDocumentsFor: sandbox.__canManageDocumentsFor,
+    isManagerOfEmployee: sandbox.__isManagerOfEmployee,
   };
 }
 
