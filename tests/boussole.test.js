@@ -4,12 +4,19 @@
  * réel à l'API Anthropic (le contenu de la question/réponse dépend du modèle, hors périmètre d'un
  * test unitaire) : l'instantané de données envoyé (buildBoussoleContext), le rendu de l'écran, et le
  * fait que l'entrée de navigation reste hors de portée d'un manager.
+ *
+ * §correctif du 01/09/2026 : fonctionnalité désactivée à la demande de Betty ("je veux pas on
+ * annule" — coût API Anthropic). L'entrée NAV_ITEMS reste en place pour ne jamais laisser la vue
+ * accessible à n'importe quel rôle (voir navigateTo, qui ne bloque une vue par rôle QUE si elle est
+ * listée dans NAV_ITEMS) — seul renderSidebar() l'exclut désormais de l'affichage, exactement comme
+ * 'parametres'. Un dernier bloc de test verrouille précisément ce point : présente dans NAV_ITEMS
+ * (gating actif) mais absente du rendu réel de la barre latérale (jamais cliquable).
  */
 const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  const { DB, sandbox, buildBoussoleContext, renderBoussole, NAV_ITEMS } = loadAppJs();
+  const { DB, sandbox, buildBoussoleContext, renderBoussole, renderSidebar, NAV_ITEMS } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
 
@@ -56,7 +63,16 @@ async function run() {
     assert.ok(html.includes('vérifier avant toute décision importante'), 'le rappel IA doit être visible sur l\'écran, pas seulement dans le code');
   }
 
-  console.log('OK — boussole.test.js (nav réservée RH/Propriétaire/Comptabilité, instantané compact et sans champ sensible, écran rendu correctement)');
+  // ---- Désactivée le 01/09/2026 : jamais dans la barre latérale réelle, même pour RH ----
+  {
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    renderSidebar();
+    const sidebarHtml = (sandbox.document.getElementById('sidebar-nav').innerHTML || '') + (sandbox.document.getElementById('sidebar-nav-pinned').innerHTML || '');
+    assert.ok(!sidebarHtml.includes('Boussole'), 'la Boussole ne doit plus apparaître dans la barre latérale (désactivée), même pour RH');
+  }
+
+  console.log('OK — boussole.test.js (nav réservée RH/Propriétaire/Comptabilité, instantané compact et sans champ sensible, écran rendu correctement, désactivation confirmée hors de la barre latérale)');
 }
 
 run().catch((err) => {

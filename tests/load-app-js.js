@@ -117,6 +117,7 @@ globalThis.__ideeRepository = ideeRepository;
 globalThis.__buildBoussoleContext = buildBoussoleContext;
 globalThis.__renderBoussole = renderBoussole;
 globalThis.__NAV_ITEMS = NAV_ITEMS;
+globalThis.__renderSidebar = renderSidebar;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -160,6 +161,7 @@ globalThis.__NAV_ITEMS = NAV_ITEMS;
     buildBoussoleContext: sandbox.__buildBoussoleContext,
     renderBoussole: sandbox.__renderBoussole,
     NAV_ITEMS: sandbox.__NAV_ITEMS,
+    renderSidebar: sandbox.__renderSidebar,
   };
 }
 

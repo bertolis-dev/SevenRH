@@ -394,9 +394,14 @@ const NAV_ITEMS = [
   // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
   { key: 'tableau-compteurs', label: 'Tableau des compteurs', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'conges' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
-  // §"Boussole" (roadmap différenciation #2, 01/09/2026) : jamais 'manager' (l'instantané envoyé à
-  // l'IA couvre TOUTE l'entreprise, voir buildBoussoleContext — pas de sens à l'échelle d'une équipe,
-  // même raisonnement que renderRadarSeuilsCard/canSeeRegistrePersonnel).
+  // §"Boussole" (roadmap différenciation #2) : désactivée le 01/09/2026 à la demande de Betty (coût
+  // API Anthropic non retenu — "je veux pas on annule"). L'entrée RESTE dans NAV_ITEMS (jamais
+  // commentée/supprimée) : navigateTo() ne bloque une vue par rôle QUE si elle est listée ici (voir
+  // NAV_ITEMS.some(i => i.key === view) dans navigateTo) — la retirer aurait rendu 'boussole'
+  // accessible à N'IMPORTE QUEL rôle via un navigateTo('boussole') direct (devtools/console), pire
+  // qu'avant. Seul renderSidebar() l'exclut de l'affichage (même technique déjà utilisée pour
+  // 'parametres' juste au-dessus, voir son propre commentaire) : la route reste gated normalement,
+  // simplement plus jamais atteignable depuis l'interface.
   { key: 'boussole', label: 'Boussole', icon: ICONS.compass, roles: ['rh', 'comptabilite', 'proprietaire'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
@@ -4750,7 +4755,9 @@ function renderSidebar() {
   // desktop) — restent accessibles via le menu utilisateur en haut à droite (renderUserMenuPanel),
   // qui les propose déjà. navItemsForRole() les garde côté permissions (navigateTo() doit toujours
   // pouvoir y aller depuis ce menu) ; seul l'AFFICHAGE ici les exclut.
-  const items = navItemsForRole(user).filter(i => i.key !== 'parametres');
+  // 'boussole' : désactivée (§"Boussole" ci-dessus, NAV_ITEMS) — exclue de l'affichage exactement
+  // comme 'parametres', jamais atteignable depuis l'interface tant qu'elle reste dans cette liste.
+  const items = navItemsForRole(user).filter(i => i.key !== 'parametres' && i.key !== 'boussole');
   const nav = document.getElementById('sidebar-nav');
   const pinnedNav = document.getElementById('sidebar-nav-pinned');
   // Referme toujours le panneau mobile "☰" au changement de vue (innerHTML reconstruit juste après
