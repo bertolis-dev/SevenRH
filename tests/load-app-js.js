@@ -130,6 +130,8 @@ globalThis.__getEmployeeActivityHistory = getEmployeeActivityHistory;
 globalThis.__auditLogRepository = auditLogRepository;
 globalThis.__getThemePreference = getThemePreference;
 globalThis.__applyThemePreference = applyThemePreference;
+globalThis.__performGlobalSearch = performGlobalSearch;
+globalThis.__getGlobalCommands = getGlobalCommands;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -185,6 +187,8 @@ globalThis.__applyThemePreference = applyThemePreference;
     auditLogRepository: sandbox.__auditLogRepository,
     getThemePreference: sandbox.__getThemePreference,
     applyThemePreference: sandbox.__applyThemePreference,
+    performGlobalSearch: sandbox.__performGlobalSearch,
+    getGlobalCommands: sandbox.__getGlobalCommands,
   };
 }
 

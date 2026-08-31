@@ -2591,7 +2591,7 @@ function renderBertolisTicketsTab() {
     return renderBertolisTicketDetail();
   }
   if (state.bertolisTicketsLoading && !state.bertolisTicketsData) {
-    return '<p class="text-muted">Chargement des tickets...</p>';
+    return renderSkeletonLines(4);
   }
   if (state.bertolisTicketsData.error) {
     return `<div class="empty-state"><p>Erreur lors du chargement des tickets : ${escapeHtml(state.bertolisTicketsData.error)}</p></div>`;
@@ -4250,6 +4250,43 @@ const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Audit', tab: 'audit', keywords: ['audit', 'historique', 'log', 'qualité des données', 'journal d\'audit', 'contrôle des dossiers'] }
 ];
 
+/** §refonte "palette de commandes" du 01/09/2026 : la recherche globale (Ctrl+K) ne faisait jusqu'ici
+ * que chercher des données/écrans — ces commandes exécutent directement une action (ouvrent la
+ * modale voulue), jamais juste "va sur cet écran et clique toi-même sur le bouton". Filtrées par
+ * module/permission comme le reste de performGlobalSearch : jamais un raccourci vers une action que
+ * le rôle courant n'a de toute façon pas le droit de faire. `run` navigue d'abord sur l'écran
+ * pertinent (navigateTo est synchrone, voir sa définition) PUIS ouvre la modale — jamais l'inverse,
+ * sinon la modale s'ouvrirait sur un écran qui va être remplacé juste après. */
+function getGlobalCommands(user) {
+  return [
+    {
+      label: 'Ajouter un salarié', icon: ICONS.personPlus, keywords: ['nouveau salarié', 'embaucher', 'créer salarié'],
+      visible: () => hasPermission(user, PERMISSIONS.CREER_SALARIE),
+      run: () => { navigateTo('employees'); openEmployeeModal(); }
+    },
+    {
+      label: 'Demander un congé', icon: ICONS.sun, keywords: ['poser congé', 'nouveau congé', 'absence'],
+      visible: () => hasModule('conges'),
+      run: () => { navigateTo('absences', { absencesHubTab: 'conges' }); openLeaveRequestModal(undefined, 'conge'); }
+    },
+    {
+      label: 'Déclarer du télétravail', icon: ICONS.laptop, keywords: ['nouveau télétravail'],
+      visible: () => hasModule('planning'),
+      run: () => { navigateTo('absences', { absencesHubTab: 'teletravail' }); openTeleworkRequestModal(); }
+    },
+    {
+      label: 'Déposer une note de frais', icon: ICONS.receipt, keywords: ['nouvelle dépense', 'frais'],
+      visible: () => hasModule('frais'),
+      run: () => { navigateTo('frais'); openExpenseModal(); }
+    },
+    {
+      label: 'Personnaliser le tableau de bord', icon: ICONS.puzzle, keywords: ['widgets', 'masquer un bloc'],
+      visible: () => true,
+      run: () => { navigateTo('dashboard'); openDashboardCustomizeModal(); }
+    }
+  ];
+}
+
 function performGlobalSearch(term) {
   const q = normalizeForSearch(term.trim());
   if (!q) return [];
@@ -4373,6 +4410,14 @@ function performGlobalSearch(term) {
     })
     .forEach(([view, help]) => results.push({ icon: ICONS.info, label: help.title, sublabel: 'Aide', nav: view, params: {}, openHelp: true }));
 
+  // Commandes en tête de liste (jamais reléguées derrière des résultats de données) : une palette de
+  // commandes n'a d'intérêt que si l'action cherchée reste visible même avec beaucoup de résultats.
+  const commandMatches = getGlobalCommands(user)
+    .filter(c => c.visible())
+    .filter(c => normalizeForSearch(c.label).includes(q) || c.keywords.some(k => normalizeForSearch(k).includes(q)))
+    .map(c => ({ icon: c.icon, label: c.label, sublabel: 'Action rapide', run: c.run }));
+  results.unshift(...commandMatches);
+
   return results.slice(0, 8);
 }
 
@@ -4441,10 +4486,16 @@ function bindGlobalSearchEvents() {
   function selectResult(index) {
     const result = currentResults[index];
     if (!result) return;
-    navigateTo(result.nav, result.params || {});
-    // §correctif retour QA du 27/08/2026 (point 7, tier 1) : un résultat "Aide" ouvre directement la
-    // rubrique après avoir navigué sur le bon écran, plutôt que de laisser deviner où cliquer ensuite.
-    if (result.openHelp) openHelpModal();
+    if (typeof result.run === 'function') {
+      // Commande (palette d'actions, §01/09/2026) : run() navigue déjà sur le bon écran avant
+      // d'ouvrir sa modale, voir getGlobalCommands — rien d'autre à faire ici.
+      result.run();
+    } else {
+      navigateTo(result.nav, result.params || {});
+      // §correctif retour QA du 27/08/2026 (point 7, tier 1) : un résultat "Aide" ouvre directement la
+      // rubrique après avoir navigué sur le bon écran, plutôt que de laisser deviner où cliquer ensuite.
+      if (result.openHelp) openHelpModal();
+    }
     input.value = '';
     resultsBox.classList.remove('open');
   }
@@ -8906,6 +8957,14 @@ function openAjouterAvenantModal(employeeId) {
  * est la page courante (texte simple, jamais un lien). Réutilise le mécanisme data-nav existant
  * (délégation globale sur [data-nav], voir plus bas dans le fichier) — un <button>, jamais un <a>,
  * pour rester cohérent avec toutes les navigations déjà en place dans l'appli. */
+/** §refonte "chargement unifié" du 01/09/2026 : remplace un "Chargement..." en texte brut par
+ * quelques barres animées de largeurs variées (plus crédible qu'une seule ligne uniforme) — même
+ * effet partout (voir .skeleton-line, style.css), jamais une variante par écran. */
+function renderSkeletonLines(count = 3) {
+  const widths = ['100%', '85%', '60%', '92%', '70%'];
+  return `<div class="skeleton-lines">${Array.from({ length: count }, (_, i) => `<div class="skeleton-line" style="width:${widths[i % widths.length]}"></div>`).join('')}</div>`;
+}
+
 function renderBreadcrumb(items) {
   return `<div class="breadcrumb">${items.map((it, i) => {
     const sep = i > 0 ? '<span class="breadcrumb-sep">/</span>' : '';
@@ -13055,7 +13114,7 @@ const CHAT_INTEGRATIONS = [
 ];
 
 function renderParametresIntegrations() {
-  if (state.integrationsCache === undefined) return '<p class="text-muted">Chargement...</p>';
+  if (state.integrationsCache === undefined) return renderSkeletonLines(3);
   if (state.integrationsCache === null) return '<p class="text-muted">Impossible de charger les intégrations pour le moment.</p>';
   return CHAT_INTEGRATIONS.map(integ => `
     <div class="card" style="max-width: 560px;">
@@ -16834,7 +16893,7 @@ async function renderJustificatifPreview(containerId, justificatif) {
     return;
   }
   if (justificatif.path) {
-    container.innerHTML = '<p class="text-muted">Chargement du justificatif…</p>';
+    container.innerHTML = renderSkeletonLines(1);
     try {
       const url = await window.SupabaseSync.getJustificatifFileUrl(justificatif.path);
       container.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Voir le justificatif</a>`;
@@ -18068,7 +18127,7 @@ function renderEmbauche() {
     ${renderPostesOuvertsCard(settings.postesOuverts)}
     <div class="card table-card" style="margin-top: 16px;">
       <h2>Candidatures reçues</h2>
-      <div id="embauche-candidatures-list"><p class="text-muted">Chargement...</p></div>
+      <div id="embauche-candidatures-list">${renderSkeletonLines(4)}</div>
     </div>
   `;
 }
@@ -18157,7 +18216,7 @@ function renderCandidatureDetail(id) {
     <div class="view-header">
       <button type="button" class="btn-link" id="btn-back-embauche">← Retour aux candidatures</button>
     </div>
-    <div id="candidature-detail-body"><p class="text-muted">Chargement...</p></div>
+    <div id="candidature-detail-body">${renderSkeletonLines(5)}</div>
   `;
 }
 

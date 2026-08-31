@@ -11,7 +11,7 @@ const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository, getThemePreference, applyThemePreference } = loadAppJs();
+  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository, getThemePreference, applyThemePreference, performGlobalSearch } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
 
@@ -82,7 +82,26 @@ async function run() {
     assert.strictEqual(sandbox.localStorage.getItem('nexus_theme'), null, '"system" ne doit laisser aucune valeur en localStorage (jamais confondu avec un choix explicite)');
   }
 
-  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche, réglage de thème)');
+  // ---- Palette de commandes (Ctrl+K) : une action correspondante apparaît en tête, avec run() exécutable ----
+  {
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const results = performGlobalSearch('salarié');
+    const command = results.find(r => r.label === 'Ajouter un salarié');
+    assert.ok(command, 'RH (a CREER_SALARIE) doit voir la commande "Ajouter un salarié" en cherchant "salarié"');
+    assert.strictEqual(command.sublabel, 'Action rapide', 'une commande doit se distinguer visuellement d\'un résultat de donnée');
+    assert.strictEqual(typeof command.run, 'function', 'une commande doit être directement exécutable, pas juste une navigation');
+    assert.strictEqual(results[0].label, command.label, 'les commandes doivent apparaître en tête, jamais reléguées derrière les résultats de données');
+
+    const manager = DB.getEmployees().find(e => e.role === 'manager');
+    DB._currentEmployeeId = manager.id;
+    const resultsManager = performGlobalSearch('salarié');
+    assert.ok(!resultsManager.some(r => r.label === 'Ajouter un salarié'), 'un manager (sans CREER_SALARIE) ne doit jamais voir cette commande, même en cherchant le même terme');
+
+    DB._currentEmployeeId = rh.id;
+  }
+
+  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche, réglage de thème, palette de commandes)');
 }
 
 run().catch((err) => {

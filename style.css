@@ -1852,6 +1852,24 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .mini-list-item:last-child { border-bottom: none; }
 
+/* §refonte "chargement unifié" du 01/09/2026 : remplace les "Chargement..." en texte brut par un
+   effet de balayage, cohérent partout (une seule animation, voir renderSkeletonLines, app.js). */
+.skeleton-lines { display: flex; flex-direction: column; gap: 8px; }
+.skeleton-line {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-muted-soft) 25%, var(--color-border-soft) 37%, var(--color-muted-soft) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; background-position: 50% 50%; }
+}
+
 /* §refonte "avatars discrets" du 01/09/2026 : remplace la liste "Présence aujourd'hui" (noms +
    badge texte) par des avatars ronds avec un anneau d'état — même code couleur que les badges
    (success/warning/info/muted, voir getTodayPresenceStatus), jamais une nouvelle palette. */
@@ -2196,7 +2214,10 @@ textarea.input { resize: vertical; font-family: inherit; }
   display: none;
 }
 
-.notif-panel.open { display: block; }
+/* §refonte "micro-interaction unique" du 01/09/2026 : réutilise EXACTEMENT le même fondu que les
+   modales (@keyframes modal-in) — un seul effet net, cohérent sur toute l'appli, plutôt qu'une
+   animation différente par type de popover (notification/menu utilisateur/filtres). */
+.notif-panel.open { display: block; animation: modal-in 0.15s ease; }
 
 .notif-header {
   display: flex;
@@ -2249,7 +2270,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   overflow-y: auto;
 }
 
-.user-menu-panel.open { display: block; }
+.user-menu-panel.open { display: block; animation: modal-in 0.15s ease; }
 
 /* Sélecteur de poste(s) du formulaire public de candidature (§demande 18/08/2026) — même patron que
    .notif-panel/.user-menu-panel : bouton statique + panneau qui se déplie juste dessous. */
@@ -2412,7 +2433,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   display: none;
 }
 
-.dropdown-panel.open { display: block; }
+.dropdown-panel.open { display: block; animation: modal-in 0.15s ease; }
 .dropdown-panel.align-left { right: auto; left: 0; }
 
 
