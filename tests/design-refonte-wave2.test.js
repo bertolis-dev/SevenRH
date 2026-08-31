@@ -11,7 +11,7 @@ const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository, getThemePreference, applyThemePreference, performGlobalSearch } = loadAppJs();
+  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository, getThemePreference, applyThemePreference, performGlobalSearch, renderCongesDemandes, bulkSelection } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
 
@@ -101,7 +101,25 @@ async function run() {
     DB._currentEmployeeId = rh.id;
   }
 
-  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche, réglage de thème, palette de commandes)');
+  // ---- Hiérarchie de boutons : jamais 2 boutons pleins en même temps sur l'écran Congés/Absences ----
+  {
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const countPrimary = (html) => (html.match(/btn-primary/g) || []).length;
+
+    bulkSelection.conge.clear();
+    const htmlSansSelection = renderCongesDemandes('conge');
+    assert.strictEqual(countPrimary(htmlSansSelection), 1, 'sans sélection active, "+ Nouvelle demande" doit être le seul bouton plein');
+
+    bulkSelection.conge.add('un-id-quelconque');
+    const htmlAvecSelection = renderCongesDemandes('conge');
+    assert.strictEqual(countPrimary(htmlAvecSelection), 1, 'avec une sélection active, "Valider la sélection" doit être seul en plein — "+ Nouvelle demande" repasse en secondaire, jamais les deux en même temps');
+    assert.ok(htmlAvecSelection.includes('btn-bulk-approve'), 'le bouton de validation groupée doit toujours être présent quand une sélection existe');
+
+    bulkSelection.conge.clear();
+  }
+
+  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche, réglage de thème, palette de commandes, hiérarchie de boutons)');
 }
 
 run().catch((err) => {

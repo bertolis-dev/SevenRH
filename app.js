@@ -10411,7 +10411,10 @@ function renderCongesDemandes(categorie = 'conge') {
       <p class="view-subtitle">${requests.length} demande${requests.length > 1 ? 's' : ''}</p>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-conges">Exporter CSV</button>
-        <button class="btn btn-primary" id="btn-new-leave-request">+ Nouvelle demande</button>
+        <!-- §refonte "hiérarchie de boutons" du 01/09/2026 : jamais 2 boutons pleins en même temps sur
+             cet écran — "Valider la sélection" (ci-dessous) prend le relais dès qu'une sélection est
+             active, plus urgent à ce moment que créer une nouvelle demande. -->
+        <button class="btn ${selectedCount > 0 ? 'btn-secondary' : 'btn-primary'}" id="btn-new-leave-request">+ Nouvelle demande</button>
       </div>
     </div>
 

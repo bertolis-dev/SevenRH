@@ -132,6 +132,8 @@ globalThis.__getThemePreference = getThemePreference;
 globalThis.__applyThemePreference = applyThemePreference;
 globalThis.__performGlobalSearch = performGlobalSearch;
 globalThis.__getGlobalCommands = getGlobalCommands;
+globalThis.__renderCongesDemandes = renderCongesDemandes;
+globalThis.__bulkSelection = bulkSelection;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -189,6 +191,8 @@ globalThis.__getGlobalCommands = getGlobalCommands;
     applyThemePreference: sandbox.__applyThemePreference,
     performGlobalSearch: sandbox.__performGlobalSearch,
     getGlobalCommands: sandbox.__getGlobalCommands,
+    renderCongesDemandes: sandbox.__renderCongesDemandes,
+    bulkSelection: sandbox.__bulkSelection,
   };
 }
 
