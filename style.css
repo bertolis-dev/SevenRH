@@ -2540,6 +2540,19 @@ textarea.input { resize: vertical; font-family: inherit; }
   background: var(--color-bg);
 }
 
+/* §refonte typographique du 01/09/2026 : Fraunces (titres/chiffres clés, --font-serif) auto-hébergée
+   pour la même raison que Manrope juste en dessous — un premier essai avait chargé cette police
+   depuis Google Fonts (CDN externe), incohérent avec le choix déjà fait ici de ne jamais envoyer
+   l'IP des visiteurs à Google. Un seul poids (500, le seul réellement utilisé) plutôt que toute la
+   police variable. */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/fraunces-500.woff2') format('woff2');
+}
+
 /* Police de marque de la landing, auto-hébergée (fichiers dans /fonts) plutôt que chargée depuis
    Google Fonts — évite d'envoyer l'IP des visiteurs à Google à chaque visite, cohérent avec les
    mentions RGPD de la page. N'affecte que .landing-page, pas l'appli connectée. */
@@ -2717,7 +2730,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .landing-mock-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
 .landing-mock-kpi { background: var(--color-muted-soft); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
-.landing-mock-kpi strong { display: block; font-size: 18px; }
+.landing-mock-kpi strong { display: block; font-size: 18px; font-family: var(--font-serif); font-weight: 500; }
 .landing-mock-kpi span { font-size: 11px; color: var(--color-text-muted); }
 .landing-mock-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); background: var(--color-muted-soft); margin-bottom: 8px; font-size: 13px; }
 .landing-mock-row .badge { margin-left: auto; }

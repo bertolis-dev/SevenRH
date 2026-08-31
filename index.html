@@ -28,11 +28,12 @@
       } catch (e) {}
     })();
   </script>
-  <!-- §refonte typographique du 01/09/2026 : registre serif réservé aux titres/chiffres clés (--font-serif, style.css) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260901l">
+  <!-- §refonte typographique du 01/09/2026 : registre serif réservé aux titres/chiffres clés (--font-serif,
+       style.css) — auto-hébergé (fonts/fraunces-500.woff2), pas chargé depuis Google Fonts : cohérent avec
+       le choix déjà fait pour Manrope (police de la landing), qui évite justement d'envoyer l'IP des
+       visiteurs à Google à chaque visite. Un correctif du 01/09/2026 a supprimé la dépendance Google
+       Fonts posée plus tôt dans la même refonte, repérée en découvrant cette règle déjà en place. -->
+  <link rel="stylesheet" href="style.css?v=20260901m">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -90,17 +91,17 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260901l"></script>
-  <script src="qrcode.js?v=20260901l"></script>
+  <script type="module" src="supabase-client.js?v=20260901m"></script>
+  <script src="qrcode.js?v=20260901m"></script>
   <!-- §correctif audit du 23/08/2026 (2.7) : xlsx.full.min.js (~930 Ko) n'est plus chargé ici en
        statique pour tout le monde — voir loadXLSXLibrary() (app.js), qui l'injecte à la demande,
        seulement quand Exporter/Importer Excel est réellement utilisé (rôle RH/Propriétaire/Manager,
        page Salariés). -->
-  <script src="data.js?v=20260901l"></script>
-  <script src="app.js?v=20260901l"></script>
+  <script src="data.js?v=20260901m"></script>
+  <script src="app.js?v=20260901m"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260901l'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260901m'));
     }
   </script>
 </body>

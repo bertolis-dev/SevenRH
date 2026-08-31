@@ -302,6 +302,7 @@ const ICONS = {
   checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>',
   car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-4.5A2 2 0 0 1 6.4 7h11.2a2 2 0 0 1 1.9 1.5L21 13"/><rect x="3" y="13" width="18" height="5" rx="1.5"/><circle cx="7.5" cy="18" r="1.3"/><circle cx="16.5" cy="18" r="1.3"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3c2.5 2.5 4 5.8 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.8-4-9s1.5-6.5 4-9z"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   wrench: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-.7-.7-2z"/></svg>',
@@ -1310,6 +1311,14 @@ const LANDING_FAQ_ITEMS = [
   {
     q: "Faut-il installer un logiciel pour utiliser Nexus ?",
     a: "Non, Nexus fonctionne directement dans votre navigateur. Vous pouvez aussi l'installer en un clic comme une application sur PC, iPhone ou Android pour un accès plus rapide."
+  },
+  {
+    q: "Et si je change de logiciel de paie ?",
+    a: "Nexus n'impose aucun logiciel de paie. L'écran Préparation de paie exporte un fichier CSV consolidé (congés, télétravail, tickets restaurant, notes de frais, variables), avec un modèle adaptable à votre outil actuel : vous changez de logiciel de paie sans changer de SIRH."
+  },
+  {
+    q: "Combien de temps pour migrer nos données existantes ?",
+    a: "L'import de vos salariés et de leurs soldes de congés se fait depuis un fichier Excel, avec un aperçu ligne par ligne avant validation (rien n'est enregistré sans votre confirmation) : quelques minutes pour une équipe de taille courante, sans ressaisie manuelle."
   }
 ];
 
@@ -1399,6 +1408,7 @@ function renderLandingNavMenu() {
         <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
         <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-tarifs">Tarifs</button>
         <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-installer">Installer</button>
+        <button type="button" class="landing-nav-menu-item" data-landing-action="changelog">Nouveautés</button>
         <button type="button" class="landing-nav-menu-item" data-landing-action="about">À propos</button>
       </div>
     </div>
@@ -1592,7 +1602,7 @@ function renderFeatureDetailPage(index) {
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
           </nav>
         </div>
-        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a> · Réponse sous 24h ouvrées</p>
       </footer>
     </div>
   `;
@@ -1636,6 +1646,17 @@ function openAboutModal() {
  * liste marketing inventée) — regroupé par mois plutôt que jour par jour, la plupart de ces
  * changements ayant été livrés sur une courte période. */
 const CHANGELOG_ENTRIES = [
+  {
+    date: 'Septembre 2026',
+    items: [
+      "Nouvelle identité visuelle : typographie dédiée pour les titres et les chiffres clés, cartes et graphiques redessinés, mode sombre disponible en réglage manuel.",
+      "La recherche globale (Ctrl+K) exécute désormais des actions directement (ajouter un salarié, poser un congé, déclarer du télétravail...), pas seulement une recherche.",
+      "Historique d'activité visible directement sur chaque fiche salarié.",
+      "Boîte à idées transformée en tableau de suivi par statut (nouvelle, à l'étude, en cours, livrée).",
+      "Alerte automatique au franchissement des seuils d'effectif légaux (11/50/250 salariés).",
+      "Calcul du délai de prévenance de fin de période d'essai, et des jours de congés d'ancienneté pour les conventions collectives Syntec."
+    ]
+  },
   {
     date: 'Août 2026',
     items: [
@@ -1724,6 +1745,7 @@ function renderLandingScreen() {
               <span>${icon(ICONS.lock, 14)} Paiement sécurisé par Stripe</span>
               <span>${icon(ICONS.shield, 14)} Accès isolé par entreprise</span>
               <span>${icon(ICONS.undo, 14)} Résiliable à tout moment</span>
+              <span>${icon(ICONS.globe, 14)} Données hébergées en UE · Conforme RGPD</span>
             </div>
           </div>
           <div class="landing-hero-mock" aria-hidden="true">
@@ -1993,7 +2015,7 @@ function renderLandingScreen() {
             <button type="button" class="btn-link" data-legal-trigger="confidentialite">Politique de confidentialité</button>
           </nav>
         </div>
-        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+        <p class="landing-footer-bottom">© ${new Date().getFullYear()} BERTOLIS · Nexus · <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a> · Réponse sous 24h ouvrées</p>
       </footer>
     </div>
 
