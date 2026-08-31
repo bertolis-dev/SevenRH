@@ -111,6 +111,9 @@ globalThis.__getPaieAnomalies = getPaieAnomalies;
 globalThis.__getFilteredLeaveRequests = getFilteredLeaveRequests;
 globalThis.__getFilteredTeleworkRequests = getFilteredTeleworkRequests;
 globalThis.__getFilteredExpenses = getFilteredExpenses;
+globalThis.__renderIdees = renderIdees;
+globalThis.__IDEE_STATUT_LABELS = IDEE_STATUT_LABELS;
+globalThis.__ideeRepository = ideeRepository;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -148,6 +151,9 @@ globalThis.__getFilteredExpenses = getFilteredExpenses;
     getFilteredLeaveRequests: sandbox.__getFilteredLeaveRequests,
     getFilteredTeleworkRequests: sandbox.__getFilteredTeleworkRequests,
     getFilteredExpenses: sandbox.__getFilteredExpenses,
+    renderIdees: sandbox.__renderIdees,
+    IDEE_STATUT_LABELS: sandbox.__IDEE_STATUT_LABELS,
+    ideeRepository: sandbox.__ideeRepository,
   };
 }
 

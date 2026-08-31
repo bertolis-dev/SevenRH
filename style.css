@@ -1857,6 +1857,62 @@ textarea.input { resize: vertical; font-family: inherit; }
 .ticket-row { cursor: pointer; }
 .ticket-row:hover { background: var(--color-muted-soft); }
 
+/* ---------------------------------------------------------------------
+   Boîte à idées — "Vitrine Idées" (roadmap différenciation, 31/08/2026) : board par statut plutôt
+   qu'une liste plate, pour un suivi visible de la proposition à la livraison.
+   --------------------------------------------------------------------- */
+
+.idees-board {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.idees-column {
+  flex: 1 1 220px;
+  min-width: 220px;
+  background: var(--color-muted-soft);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.idees-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.idee-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.idee-card:hover { border-color: var(--color-primary); }
+
+.idee-card-title { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+
+.idee-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .idees-column { min-width: 200px; }
+}
+
 .ticket-thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 
 .ticket-comment {

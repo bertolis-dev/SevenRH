@@ -3643,7 +3643,7 @@ const HELP_CONTENT = {
   },
   idees: {
     title: 'Boîte à idées',
-    body: `<p>Tout salarié peut proposer une idée, que les autres votent. RH/Propriétaire peuvent changer le statut (à l'étude, retenue, refusée...) pour indiquer où en est chaque idée.</p>`,
+    body: `<p>Tout salarié peut proposer une idée, que les autres votent. Le tableau est organisé en colonnes par statut (nouvelle, à l'étude, en cours, livrée, non retenue) : RH/Propriétaire font avancer une idée d'une colonne à l'autre pour que son suivi reste visible de tous jusqu'à sa livraison.</p>`,
     faq: [{ q: 'Peut-on retirer son vote ?', r: 'Oui, cliquez à nouveau sur le bouton de vote : il fonctionne comme un interrupteur, pas un vote définitif.' }]
   },
   remuneration: {
@@ -8156,32 +8156,48 @@ function bindEntretienDetailEvents() {
 // Vue : Boîte à idées (§14 modules futurs, construit)
 // ---------------------------------------------------------------------------
 
-const IDEE_STATUT_LABELS = { nouvelle: 'Nouvelle', etudiee: 'À l\'étude', retenue: 'Retenue', refusee: 'Non retenue' };
-const IDEE_STATUT_BADGE_CLASS = { nouvelle: 'info', etudiee: 'warning', retenue: 'success', refusee: 'muted' };
+// §"Vitrine Idées" (roadmap différenciation du 31/08/2026) : 'retenue' (état terminal flou — accepté
+// mais jamais dit si c'est réellement fait) devient 'en_cours' + 'livree', deux étapes qui montrent
+// un vrai suivi jusqu'à la livraison — voir 0043_idees_vitrine_statuts.sql pour la migration des
+// idées déjà en 'retenue'. L'ORDRE de cet objet fixe l'ordre des colonnes du board (voir renderIdees).
+const IDEE_STATUT_LABELS = { nouvelle: 'Nouvelle', etudiee: 'À l\'étude', en_cours: 'En cours', livree: 'Livrée', refusee: 'Non retenue' };
+const IDEE_STATUT_BADGE_CLASS = { nouvelle: 'info', etudiee: 'warning', en_cours: 'warning', livree: 'success', refusee: 'muted' };
 
-function renderIdeeRow(idee, userId) {
+// §"Vitrine Idées" (roadmap différenciation du 31/08/2026) : petite carte de board, plus la ligne
+// pleine largeur d'avant (renderIdeeRow) — le statut n'a plus besoin d'être répété en badge sur
+// chaque carte, il est déjà porté par la colonne (voir renderIdees ci-dessous).
+function renderIdeeCard(idee, userId) {
   const author = employeeRepository.getById(idee.employeeId);
   const votes = idee.votes || [];
   const aVote = votes.includes(userId);
   return `
-    <div class="mini-list-item ticket-row idee-row" data-open-idee="${idee.id}">
-      <span>
-        <span class="badge badge-${IDEE_STATUT_BADGE_CLASS[idee.statut] || 'muted'}">${escapeHtml(IDEE_STATUT_LABELS[idee.statut] || idee.statut)}</span>
-        ${escapeHtml(idee.titre)}
-        ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
-      </span>
-      <span class="detail-header-actions">
+    <div class="idee-card" data-open-idee="${idee.id}">
+      <div class="idee-card-title">${escapeHtml(idee.titre)}</div>
+      <div class="idee-card-meta">
+        <span class="text-muted">${author ? personNameHtml(author) : '—'}</span>
         <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'} idee-vote-btn" data-vote-idee="${idee.id}" title="${aVote ? 'Retirer mon vote' : 'Voter pour cette idée'}">
           ${icon(ICONS.thumbsUp, 13)} ${votes.length}
         </button>
-      </span>
+      </div>
     </div>
   `;
 }
 
+// §"Vitrine Idées" (roadmap différenciation du 31/08/2026) : "répond directement au silence actuel
+// [...] aucun des concurrents comparés n'affiche de roadmap publique votée" — la liste plate d'avant
+// ne montrait jamais ce qu'il advenait d'une idée une fois "retenue". Un board par statut (une colonne
+// par valeur de IDEE_STATUT_LABELS, dans son ordre de déclaration) rend le suivi visible d'un coup
+// d'œil, de la proposition à la livraison. Le tri par votes décroissant (déjà fait par DB.getIdees())
+// est préservé À L'INTÉRIEUR de chaque colonne par le simple filter ci-dessous, qui ne réordonne rien.
 function renderIdees() {
   const user = authRepository.getCurrentUser();
   const idees = ideeRepository.getAll();
+
+  const columns = Object.keys(IDEE_STATUT_LABELS).map(statut => ({
+    statut,
+    label: IDEE_STATUT_LABELS[statut],
+    items: idees.filter(i => i.statut === statut)
+  }));
 
   return `
     <div class="view-header view-header-row">
@@ -8193,11 +8209,21 @@ function renderIdees() {
         <button class="btn btn-primary" id="btn-proposer-idee">+ Proposer une idée</button>
       </div>
     </div>
-    <div class="card">
-      <div id="idees-list">
-        ${idees.length === 0 ? '<p class="text-muted">Aucune idée pour le moment, soyez le premier à en proposer une !</p>' : idees.map(i => renderIdeeRow(i, user.id)).join('')}
+    ${idees.length === 0 ? `
+      <div class="card"><p class="text-muted">Aucune idée pour le moment, soyez le premier à en proposer une !</p></div>
+    ` : `
+      <div class="idees-board">
+        ${columns.map(col => `
+          <div class="idees-column">
+            <div class="idees-column-header">
+              <span>${escapeHtml(col.label)}</span>
+              <span class="badge badge-${IDEE_STATUT_BADGE_CLASS[col.statut] || 'muted'}">${col.items.length}</span>
+            </div>
+            ${col.items.length === 0 ? '<p class="text-muted" style="font-size:13px; margin:0;">Aucune idée</p>' : col.items.map(i => renderIdeeCard(i, user.id)).join('')}
+          </div>
+        `).join('')}
       </div>
-    </div>
+    `}
   `;
 }
 
