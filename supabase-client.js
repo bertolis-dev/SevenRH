@@ -1231,7 +1231,8 @@ const pushCompanyProfile = (companyId, raisonSociale, data) => syncCompanyProfil
 async function pushAuditLogEntry(entry, companyId) {
   const { error } = await supabase.from('audit_log').insert({
     id: entry.id, company_id: companyId, date: entry.date,
-    action: entry.action, entite: entry.entite, cible: entry.cible, details: entry.details
+    action: entry.action, entite: entry.entite, cible: entry.cible, details: entry.details,
+    auteur: entry.auteur || null
   });
   if (error) throw error;
 }

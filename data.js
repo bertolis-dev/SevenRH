@@ -780,14 +780,18 @@ function migrateCompanyAbonnement(company) {
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
  * session) et toute action qui cible une entreprise précise sans que ce soit "l'entreprise
  * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
-function appendAuditLogEntry(company, action, entite, cible, details) {
+function appendAuditLogEntry(company, action, entite, cible, details, auteur) {
   const list = company.auditLog || [];
   const entry = {
     id: generateId('log'),
     date: new Date().toISOString(),
     action, entite,
     cible: cible || '',
-    details: details || ''
+    details: details || '',
+    // §refonte "historique d'activité par fiche" du 01/09/2026 : capturé une seule fois ici plutôt
+    // que dans chacun des ~50 appels à logAudit — 0044_audit_log_auteur.sql ajoute la colonne
+    // correspondante côté Supabase (nullable : les entrées déjà en base restent lisibles).
+    auteur: auteur || ''
   };
   list.push(entry);
   company.auditLog = list.length > 2000 ? list.slice(list.length - 2000) : list;
@@ -2719,7 +2723,11 @@ const DB = {
   /** Historique borné (2000 entrées) pour ne pas saturer le localStorage indéfiniment. */
   logAudit(action, entite, cible, details) {
     const company = this.getCurrentCompany();
-    const entry = appendAuditLogEntry(company, action, entite, cible, details);
+    // Peut être absent (ex. tout premier seed, avant toute session) — jamais bloquant, l'entrée
+    // reste alors sans auteur plutôt que de faire échouer l'action elle-même.
+    const user = this.getCurrentUser();
+    const auteur = user ? `${user.prenom} ${user.nom}` : '';
+    const entry = appendAuditLogEntry(company, action, entite, cible, details, auteur);
     this.saveCurrentCompany(company);
     this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id), { kind: 'auditLogEntry', companyId: company.id, entry });
   },

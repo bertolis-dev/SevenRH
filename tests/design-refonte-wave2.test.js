@@ -1,0 +1,76 @@
+/**
+ * Seven RH — refonte visuelle "produit premium" demandée par Betty le 01/09/2026, vague 2 : couvre
+ * les points qui touchent à de la vraie logique (pas seulement du CSS, déjà vérifié en direct dans le
+ * navigateur) — auteur capturé dans le journal d'audit, historique d'activité par fiche salarié, fil
+ * d'Ariane, et surtout la non-régression des 4 badges de type de contrat (Stage/Alternance/
+ * Apprentissage/Intérim), qui réutilisaient les classes .avatar-color-* AVANT que ces dernières ne
+ * soient repassées au marine uni pour l'accent chromatique unique — sans palette dédiée (.tag-color-*),
+ * les 4 badges seraient devenus visuellement identiques.
+ */
+const assert = require('assert');
+const { loadAppJs } = require('./load-app-js');
+
+async function run() {
+  const { DB, sandbox, renderContratBadge, renderBreadcrumb, getEmployeeActivityHistory, auditLogRepository } = loadAppJs();
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+
+  // ---- Non-régression : les 4 badges catégoriels restent visuellement distincts (classes .tag-color-*
+  //      dédiées), jamais recollés sur .avatar-color-* (repassées au marine uni pour tout le monde) ----
+  {
+    const classes = ['Stage', 'Alternance', 'Apprentissage', 'Intérim'].map(t => {
+      const html = renderContratBadge(t);
+      const m = html.match(/class="badge ([\w-]+)"/);
+      return m && m[1];
+    });
+    assert.ok(classes.every(c => /^tag-color-\d$/.test(c)), `les 4 badges catégoriels doivent utiliser .tag-color-*, jamais .avatar-color-* (obtenu ${classes})`);
+    assert.strictEqual(new Set(classes).size, 4, 'les 4 badges catégoriels doivent rester 4 classes distinctes, sinon ils redeviennent indiscernables à l\'œil');
+    // CDI/CDD gardent leur portée sémantique (badge-success/warning), jamais touchés par ce correctif.
+    assert.ok(renderContratBadge('CDI').includes('badge-success'));
+    assert.ok(renderContratBadge('CDD').includes('badge-warning'));
+  }
+
+  // ---- Fil d'Ariane : dernier maillon toujours du texte simple (jamais un lien vers soi-même) ----
+  {
+    const html = renderBreadcrumb([{ label: 'Salariés', nav: 'employees' }, { label: 'Jean Dupont' }]);
+    assert.ok(html.includes('data-nav="employees"'), 'le premier maillon doit être cliquable (retour à la liste)');
+    assert.ok(/<span>Jean Dupont<\/span>/.test(html), 'le dernier maillon (page courante) doit être du texte simple, jamais un lien');
+    assert.ok(!html.includes('data-nav="employees">Jean Dupont'), 'le nom du salarié ne doit jamais être rendu cliquable');
+  }
+
+  // ---- Auteur capturé automatiquement dans le journal d'audit (nouveau champ, 0044_audit_log_auteur) ----
+  {
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    DB.logAudit('Modification', 'Test', 'Une cible quelconque');
+    const last = auditLogRepository.getAuditLog()[0];
+    assert.strictEqual(last.auteur, `${rh.prenom} ${rh.nom}`, 'logAudit doit capturer automatiquement l\'utilisateur courant comme auteur, sans que chaque appel n\'ait à le préciser');
+  }
+
+  // ---- Historique d'activité par fiche : filtre par nom, respecte la limite, plus récent d'abord ----
+  {
+    const employee = DB.getEmployees().find(e => e.role !== 'rh');
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const fullName = `${employee.prenom} ${employee.nom}`;
+    DB.logAudit('Modification', 'Salarié', fullName);
+    DB.logAudit('Modification', 'Compteur congé', `${fullName} · CP · ajustement +1 j`);
+    DB.logAudit('Modification', 'Salarié', 'Quelqu\'un d\'autre entièrement');
+
+    const history = getEmployeeActivityHistory(employee, 8);
+    assert.ok(history.length >= 2, 'doit retrouver les entrées dont la cible mentionne ce salarié');
+    assert.ok(history.every(h => h.cible.includes(fullName)), 'ne doit jamais faire remonter une entrée d\'un autre salarié');
+    assert.ok(new Date(history[0].date) >= new Date(history[history.length - 1].date), 'doit rester trié du plus récent au plus ancien (ordre de getAuditLog)');
+
+    const limited = getEmployeeActivityHistory(employee, 1);
+    assert.strictEqual(limited.length, 1, 'doit respecter la limite demandée');
+  }
+
+  console.log('OK — design-refonte-wave2.test.js (badges catégoriels non régressés, fil d\'Ariane, auteur capturé, historique d\'activité par fiche)');
+}
+
+run().catch((err) => {
+  console.error('ÉCHEC — design-refonte-wave2.test.js');
+  console.error(err.stack || err.message);
+  process.exitCode = 1;
+});

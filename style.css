@@ -858,6 +858,17 @@ p { margin: 0; line-height: 1.5; }
   color: var(--color-primary-text);
 }
 
+/* §refonte accent unique du 01/09/2026 : renderContratBadge (Stage/Alternance/Apprentissage/Intérim)
+   réutilisait ces mêmes classes .avatar-color-* précisément pour rester distinguable (§"une seule
+   teinte pour 4 concepts différents" était le problème corrigé à l'époque) — les recoller au marine
+   ci-dessus aurait réintroduit exactement ce problème. Palette dédiée, à part des avatars (qui n'ont
+   plus besoin d'être distingués par couleur, le nom suffit) : 4 teintes sourdes, pas un aplat vif par
+   catégorie, pour rester dans le registre "un seul accent" sans redevenir illisible. */
+.tag-color-0 { background: #efe7da; color: #7a5a33; }
+.tag-color-1 { background: #dde3e0; color: #3f5d52; }
+.tag-color-2 { background: #e3e2ec; color: #4a4a72; }
+.tag-color-3 { background: #ece0e0; color: #7a4646; }
+
 /* ---------------------------------------------------------------------
    Badges
    --------------------------------------------------------------------- */
@@ -890,6 +901,13 @@ p { margin: 0; line-height: 1.5; }
 /* ---------------------------------------------------------------------
    Détail salarié
    --------------------------------------------------------------------- */
+
+/* §refonte "fil d'Ariane" du 01/09/2026 : "Salariés / Prénom Nom" en haut de fiche, pour ne jamais
+   perdre le fil de la navigation — voir renderBreadcrumb (app.js). */
+.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); margin-bottom: 10px; }
+.breadcrumb .btn-link { font-size: 13px; font-weight: 500; padding: 0; margin: 0; min-height: 0; color: var(--color-text-muted); }
+.breadcrumb .btn-link:hover { color: var(--color-primary-text); text-decoration: underline; }
+.breadcrumb-sep { opacity: 0.5; }
 
 .detail-header {
   display: flex;
@@ -1815,6 +1833,26 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .mini-list-item:last-child { border-bottom: none; }
+
+/* §refonte "avatars discrets" du 01/09/2026 : remplace la liste "Présence aujourd'hui" (noms +
+   badge texte) par des avatars ronds avec un anneau d'état — même code couleur que les badges
+   (success/warning/info/muted, voir getTodayPresenceStatus), jamais une nouvelle palette. */
+.presence-avatars { display: flex; flex-wrap: wrap; gap: 16px; }
+.presence-avatar-item { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 60px; }
+.avatar-ring { display: inline-flex; padding: 2px; border-radius: 50%; border: 2px solid transparent; }
+.avatar-ring-success { border-color: var(--color-success); }
+.avatar-ring-warning { border-color: var(--color-warning); }
+.avatar-ring-info { border-color: var(--color-info); }
+.avatar-ring-muted { border-color: var(--color-border); }
+.presence-avatar-name {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Checklists d'intégration/de départ (fiche salarié) */
 .checklist { display: flex; flex-direction: column; gap: 2px; }
@@ -3165,9 +3203,14 @@ textarea.input { resize: vertical; font-family: inherit; }
     --color-info-text: #60a5fa;
   }
 
-  /* §refonte accent unique du 01/09/2026 : plus de règle dédiée ici — .avatar-color-0..6 (plus haut)
-     utilise déjà --color-primary-soft/--color-primary-text, déjà redéfinies ci-dessus pour le mode
-     sombre, donc déjà cohérentes sans rien dupliquer. */
+  /* §refonte accent unique du 01/09/2026 : plus de règle dédiée ici pour .avatar-color-0..6 (plus
+     haut) — utilise déjà --color-primary-soft/--color-primary-text, redéfinies ci-dessus pour le mode
+     sombre. .tag-color-* (catégories de contrat) garde en revanche ses propres teintes sombres,
+     contraste texte vérifié ≥4.5:1. */
+  .tag-color-0 { background: #3a2f1c; color: #d8b98a; }
+  .tag-color-1 { background: #1e2b26; color: #8fb5a8; }
+  .tag-color-2 { background: #24243a; color: #a6a6d6; }
+  .tag-color-3 { background: #3a2424; color: #d6a3a3; }
 }
 
 /* ---------------------------------------------------------------------

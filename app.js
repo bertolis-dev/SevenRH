@@ -6507,11 +6507,11 @@ function renderPresenceCard() {
         ${Object.entries(counts).map(([label, count]) => `<span class="badge badge-muted">${count} ${escapeHtml(label)}</span>`).join('')}
       </div>
       ${rows.length === 0 ? '<p class="text-muted">Aucun salarié à afficher.</p>' : `
-        <div class="mini-list">
+        <div class="presence-avatars">
           ${visibleRows.map(r => `
-            <div class="mini-list-item">
-              <span>${personNameHtml(r.employee)}</span>
-              <span class="badge badge-${r.status.level}">${escapeIcon(r.status.icon)} ${escapeHtml(r.status.label)}</span>
+            <div class="presence-avatar-item" title="${escapeHtml(`${r.employee.prenom} ${r.employee.nom} · ${r.status.label}`)}">
+              <div class="avatar-ring avatar-ring-${r.status.level}">${renderAvatar(r.employee)}</div>
+              <span class="presence-avatar-name">${escapeHtml(r.employee.prenom)}</span>
             </div>
           `).join('')}
         </div>
@@ -7375,12 +7375,12 @@ function renderAvatar(e) {
 
 /** CDI/CDD gardent une vraie portée sémantique (permanent/temporaire, garde badge-success/warning) —
  * les 4 autres types n'ont pas d'axe "bon/mauvais" naturel, tous plaqués sur badge-info avant : une
- * seule teinte pour 4 concepts différents. Réutilise directement les teintes .avatar-color-* (même
- * fond/texte que les avatars, §passe couleur "premium ++" du 21/08/2026) plutôt que de dupliquer une
- * seconde palette. */
+ * seule teinte pour 4 concepts différents. §refonte accent unique du 01/09/2026 : ne réutilise plus
+ * .avatar-color-* (repassées au marine uni, les avatars n'ayant plus besoin d'être distingués par
+ * couleur) — palette .tag-color-* dédiée à ce seul besoin catégoriel (voir style.css). */
 function renderContratBadge(type) {
   const semantic = { CDI: 'badge-success', CDD: 'badge-warning' };
-  const categorical = { Stage: 'avatar-color-1', Alternance: 'avatar-color-3', Apprentissage: 'avatar-color-5', 'Intérim': 'avatar-color-0' };
+  const categorical = { Stage: 'tag-color-1', Alternance: 'tag-color-3', Apprentissage: 'tag-color-2', 'Intérim': 'tag-color-0' };
   const cls = semantic[type] || categorical[type] || 'badge-muted';
   return `<span class="badge ${cls}">${escapeHtml(type || '—')}</span>`;
 }
@@ -8864,6 +8864,49 @@ function openAjouterAvenantModal(employeeId) {
   });
 }
 
+/** §refonte "fil d'Ariane" du 01/09/2026 : items = [{label, nav?, params?}, ...], le dernier élément
+ * est la page courante (texte simple, jamais un lien). Réutilise le mécanisme data-nav existant
+ * (délégation globale sur [data-nav], voir plus bas dans le fichier) — un <button>, jamais un <a>,
+ * pour rester cohérent avec toutes les navigations déjà en place dans l'appli. */
+function renderBreadcrumb(items) {
+  return `<div class="breadcrumb">${items.map((it, i) => {
+    const sep = i > 0 ? '<span class="breadcrumb-sep">/</span>' : '';
+    const isLast = i === items.length - 1;
+    const crumb = (isLast || !it.nav)
+      ? `<span>${escapeHtml(it.label)}</span>`
+      : `<button type="button" class="btn-link" data-nav="${escapeHtml(it.nav)}"${it.params ? ` data-nav-params='${escapeHtml(JSON.stringify(it.params))}'` : ''}>${escapeHtml(it.label)}</button>`;
+    return sep + crumb;
+  }).join('')}</div>`;
+}
+
+/** §refonte "historique d'activité par fiche" du 01/09/2026 : le journal d'audit (Paramètres) existe
+ * déjà, mais rien ne le rend visible directement sur la fiche concernée. cible (voir logAudit) est
+ * un texte libre, pas une référence par id — filtre par correspondance de nom, comme la recherche
+ * globale (performGlobalSearch) : accepté ici, une fiche reste consultable même sans cet historique
+ * si jamais deux salariés partagent exactement le même nom complet. */
+function getEmployeeActivityHistory(employee, limit = 8) {
+  const fullName = `${employee.prenom} ${employee.nom}`;
+  return auditLogRepository.getAuditLog().filter(entry => entry.cible && entry.cible.includes(fullName)).slice(0, limit);
+}
+
+function renderEmployeeActivityCard(employee) {
+  const history = getEmployeeActivityHistory(employee);
+  if (!history.length) return '';
+  return `
+    <div class="card">
+      <h2>Historique d'activité</h2>
+      <div class="mini-list">
+        ${history.map(entry => `
+          <div class="mini-list-item">
+            <span>${auditActionBadge(entry.action)} ${escapeHtml(entry.entite)}${entry.details ? ` · ${escapeHtml(entry.details)}` : ''}</span>
+            <span class="text-muted">${formatDate(entry.date)}${entry.auteur ? ` · ${escapeHtml(entry.auteur)}` : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderEmployeeDetail(id) {
   const e = employeeRepository.getById(id);
   if (!e) return `<button class="btn-link" id="btn-back-to-list">← Retour à la liste</button><div class="empty-state"><p>Salarié introuvable.</p></div>`;
@@ -8887,7 +8930,7 @@ function renderEmployeeDetail(id) {
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   return `
-    <button class="btn-link" id="btn-back-to-list">← Retour à la liste</button>
+    ${renderBreadcrumb([{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }])}
 
     <div class="detail-header card">
       ${renderAvatar(e)}
@@ -9040,6 +9083,8 @@ function renderEmployeeDetail(id) {
         ? renderChecklistCard('Checklist de départ', 'offboardingChecklist', e.offboardingChecklist)
         : `<div class="card"><h2>Checklist de départ</h2><p class="text-muted" style="margin-bottom: 10px;">À démarrer quand ce salarié quitte l'entreprise (récupération du matériel, désactivation des accès, solde de tout compte...).</p><button type="button" class="btn btn-secondary btn-sm" id="btn-demarrer-offboarding">Démarrer le offboarding</button></div>`
       ) : ''}
+
+      ${hasPermission(user, PERMISSIONS.VOIR_JOURNAL_AUDIT) ? renderEmployeeActivityCard(e) : ''}
     </div>
   `;
 }
@@ -10038,7 +10083,12 @@ function openCertificatTravailModal(id) {
 }
 
 function bindEmployeeDetailEvents() {
-  document.getElementById('btn-back-to-list').addEventListener('click', () => navigateTo('employees'));
+  // §refonte "fil d'Ariane" du 01/09/2026 : la fiche trouvée/accessible n'a plus ce bouton — le
+  // retour vers la liste se fait désormais via le premier maillon du fil d'Ariane (data-nav, géré
+  // par la délégation globale). L'id ne subsiste que sur les 2 écrans d'erreur (introuvable/accès
+  // refusé, voir renderEmployeeDetail), d'où le garde-fou plutôt qu'un accès direct.
+  const backBtn = document.getElementById('btn-back-to-list');
+  if (backBtn) backBtn.addEventListener('click', () => navigateTo('employees'));
 
   const favoriteBtn = document.getElementById('btn-toggle-favorite');
   if (!favoriteBtn) return; // fiche introuvable ou accès non autorisé : seul le lien de retour existe sur cet état
@@ -14922,7 +14972,7 @@ function renderParametresAudit() {
       </div>
       ${log.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.cabinet}</div><p>Aucun événement ne correspond à ces filtres.</p></div>` : `
         <table class="table">
-          <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th><th>Détails</th></tr></thead>
+          <thead><tr><th>Date</th><th>Action</th><th>Entité</th><th>Cible</th><th>Par</th><th>Détails</th></tr></thead>
           <tbody>
             ${pageItems.map(entry => `
               <tr>
@@ -14930,6 +14980,7 @@ function renderParametresAudit() {
                 <td>${auditActionBadge(entry.action)}</td>
                 <td>${escapeHtml(entry.entite)}</td>
                 <td>${escapeHtml(entry.cible)}</td>
+                <td class="text-muted">${escapeHtml(entry.auteur || '—')}</td>
                 <td class="text-muted">${escapeHtml(entry.details || '—')}</td>
               </tr>
             `).join('')}
@@ -14981,8 +15032,8 @@ function bindParametresAuditEvents() {
 
 function exportAuditLogCSV() {
   const log = getFilteredAuditLog();
-  const headers = ['Date', 'Action', 'Entité', 'Cible', 'Détails'];
-  const rows = log.map(e => [formatDateTime(e.date), e.action, e.entite, e.cible, e.details]);
+  const headers = ['Date', 'Action', 'Entité', 'Cible', 'Par', 'Détails'];
+  const rows = log.map(e => [formatDateTime(e.date), e.action, e.entite, e.cible, e.auteur || '', e.details]);
   exportRowsToCSV(headers, rows, 'journal-audit.csv');
   auditLogRepository.logAudit('Export', 'Journal d\'audit', `${log.length} événements`);
 }

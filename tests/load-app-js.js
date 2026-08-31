@@ -123,6 +123,10 @@ globalThis.__renderUserMenuPanel = renderUserMenuPanel;
 globalThis.__openGroupSummaryModal = openGroupSummaryModal;
 globalThis.__runGroupSummaryRefresh = runGroupSummaryRefresh;
 globalThis.__renderGroupSummaryResult = renderGroupSummaryResult;
+globalThis.__renderContratBadge = renderContratBadge;
+globalThis.__renderBreadcrumb = renderBreadcrumb;
+globalThis.__getEmployeeActivityHistory = getEmployeeActivityHistory;
+globalThis.__auditLogRepository = auditLogRepository;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -172,6 +176,10 @@ globalThis.__renderGroupSummaryResult = renderGroupSummaryResult;
     openGroupSummaryModal: sandbox.__openGroupSummaryModal,
     runGroupSummaryRefresh: sandbox.__runGroupSummaryRefresh,
     renderGroupSummaryResult: sandbox.__renderGroupSummaryResult,
+    renderContratBadge: sandbox.__renderContratBadge,
+    renderBreadcrumb: sandbox.__renderBreadcrumb,
+    getEmployeeActivityHistory: sandbox.__getEmployeeActivityHistory,
+    auditLogRepository: sandbox.__auditLogRepository,
   };
 }
 
