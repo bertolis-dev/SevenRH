@@ -15601,7 +15601,7 @@ function renderPlanningAstreintes() {
       ${canManage ? '<button type="button" class="btn btn-primary btn-sm" id="btn-add-astreinte">+ Ajouter une astreinte</button>' : ''}
     </div>
     <div class="card table-card">
-      ${rows.length === 0 ? '<div class="empty-state"><p>Aucune astreinte enregistrée.</p></div>' : `
+      ${rows.length === 0 ? `<div class="empty-state"><div class="empty-icon">${icon(ICONS.schedule, 22)}</div><p>Aucune astreinte enregistrée pour l'instant.</p>${canManage ? '<p class="text-muted">Ajoutez-en une pour suivre les périodes et les indemnités associées.</p>' : ''}</div>` : `
         <table class="table">
           <thead><tr><th>Salarié</th><th>Période</th><th>Indemnité</th><th>Interventions</th><th></th></tr></thead>
           <tbody>
@@ -18356,8 +18356,8 @@ function openEmployeeModal(id, prefill, candidatureId) {
                 <label for="f-horairesHebdo">Heures hebdomadaires</label>
                 <input class="input" type="text" inputmode="decimal" id="f-horairesHebdo" name="horairesHebdo" value="${escapeHtml(employee.horairesHebdo != null ? String(employee.horairesHebdo).replace('.', ',') : '')}" placeholder="35 ou 35,5">
               </div>
-              ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait)}
-              ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT)}
+              ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.')}
+              ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT, false, 'text', 'any', 'Jours de repos accordés en compensation d\'un temps de travail au-delà de 35h/semaine. Le mode de calcul (nombre de jours, méthode d\'acquisition) dépend de l\'accord d\'entreprise ou de la convention collective applicable.')}
             </div>
             <p class="text-muted" style="margin-top: 14px;">Horaires (identiques chaque jour travaillé) — utilisés par le Planning (§3).</p>
             <div class="form-grid">
@@ -18447,10 +18447,17 @@ function companyNameAutocompleteField(name, label, value, required, siretName, a
  * toute décimale (aucun message d'erreur applicatif, juste un blocage natif facile à manquer) — donc
  * "any" par défaut ici, jamais 1, puisqu'aucun des champs numériques du formulaire (montants,
  * pourcentages, heures...) n'a de raison métier d'interdire les décimales. */
-function textField(name, label, value, required, type = 'text', step = 'any') {
+/** §refonte "aide contextuelle" du 01/09/2026 : un "?" au survol (title natif, sans JS) plutôt qu'un
+ * <p class="form-hint"> permanent sous le champ — réservé aux champs dont le libellé seul ne suffit
+ * pas à comprendre l'effet (jargon RH/paie, ex. Forfait jours, Régime RTT), jamais systématique. */
+function fieldHelpIcon(text) {
+  return text ? `<span class="field-help" tabindex="0" title="${escapeHtml(text)}">?</span>` : '';
+}
+
+function textField(name, label, value, required, type = 'text', step = 'any', help) {
   return `
     <div class="form-field">
-      <label for="f-${name}">${escapeHtml(label)}${required ? ' *' : ''}</label>
+      <label for="f-${name}">${escapeHtml(label)}${required ? ' *' : ''}${fieldHelpIcon(help)}</label>
       <input class="input" type="${type}" id="f-${name}" name="${name}" value="${escapeHtml(value != null ? value : '')}" ${type === 'number' ? `step="${step}"` : ''} ${required ? 'required' : ''}>
     </div>
   `;
@@ -18460,7 +18467,7 @@ function textField(name, label, value, required, type = 'text', step = 'any') {
  * paramétrable a été renommée depuis), on l'ajoute quand même comme option sélectionnée
  * plutôt que de la laisser disparaître silencieusement — sinon un simple "Enregistrer"
  * sans toucher au champ écrase la donnée d'origine par une valeur vide. */
-function selectField(name, label, options, selectedValue, customOptions) {
+function selectField(name, label, options, selectedValue, customOptions, help) {
   const opts = customOptions || (options || []).map(o => ({ value: o, label: o }));
   const hasValue = selectedValue !== undefined && selectedValue !== null && selectedValue !== '';
   const matchesOption = opts.some(o => String(o.value) === String(selectedValue));
@@ -18469,7 +18476,7 @@ function selectField(name, label, options, selectedValue, customOptions) {
     : '';
   return `
     <div class="form-field">
-      <label for="f-${name}">${escapeHtml(label)}</label>
+      <label for="f-${name}">${escapeHtml(label)}${fieldHelpIcon(help)}</label>
       <select class="input" id="f-${name}" name="${name}">
         <option value="">—</option>
         ${staleOption}

@@ -411,6 +411,24 @@ p { margin: 0; line-height: 1.5; }
 }
 .form-hint .btn-link { font-size: 12px; text-decoration: underline; }
 
+/* §refonte "aide contextuelle" du 01/09/2026 : voir fieldHelpIcon (app.js) — un "?" discret plutôt
+   qu'un pavé de texte permanent, réservé aux champs vraiment complexes. */
+.field-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-muted-soft);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 5px;
+  cursor: help;
+  vertical-align: middle;
+}
+
 /* Console BERTOLIS (§9.6) — écran séparé de l'app-shell salarié, pas de sidebar. */
 .bertolis-topbar {
   height: var(--topbar-height);
