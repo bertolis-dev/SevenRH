@@ -1184,6 +1184,22 @@ async function analyzeTicket(ticketId) {
   return { success: true, analysis: data.analysis };
 }
 
+/** "Boussole" (roadmap différenciation #2) : question en langage naturel + instantané de données
+ * déjà calculées côté client (voir buildBoussoleContext, app.js) — jamais de requête SQL/outil côté
+ * serveur, voir le commentaire en tête de ask-boussole/index.ts pour le raisonnement de sécurité. */
+async function askBoussole(question, contextData) {
+  const { data, error } = await supabase.functions.invoke('ask-boussole', { body: { question, contextData } });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON, on garde le message par défaut */ }
+    return { success: false, error: message };
+  }
+  return { success: true, answer: data.answer };
+}
+
 /** Seul point d'accès de la console BERTOLIS aux tickets — CROSS-ENTREPRISES, donc jamais via RLS
  * (la console BERTOLIS n'a pas de compte Supabase Auth, voir data.js:BERTOLIS_TICKETS_SECRET). Le
  * secret est fourni par l'appelant (data.js/app.js, chargés APRÈS ce module — pas visible ici tant
@@ -1232,7 +1248,7 @@ window.SupabaseSync = {
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
-  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket,
+  pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,

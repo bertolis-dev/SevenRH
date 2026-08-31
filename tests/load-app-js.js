@@ -114,6 +114,9 @@ globalThis.__getFilteredExpenses = getFilteredExpenses;
 globalThis.__renderIdees = renderIdees;
 globalThis.__IDEE_STATUT_LABELS = IDEE_STATUT_LABELS;
 globalThis.__ideeRepository = ideeRepository;
+globalThis.__buildBoussoleContext = buildBoussoleContext;
+globalThis.__renderBoussole = renderBoussole;
+globalThis.__NAV_ITEMS = NAV_ITEMS;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -154,6 +157,9 @@ globalThis.__ideeRepository = ideeRepository;
     renderIdees: sandbox.__renderIdees,
     IDEE_STATUT_LABELS: sandbox.__IDEE_STATUT_LABELS,
     ideeRepository: sandbox.__ideeRepository,
+    buildBoussoleContext: sandbox.__buildBoussoleContext,
+    renderBoussole: sandbox.__renderBoussole,
+    NAV_ITEMS: sandbox.__NAV_ITEMS,
   };
 }
 

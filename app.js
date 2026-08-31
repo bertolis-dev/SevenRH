@@ -305,7 +305,8 @@ const ICONS = {
   medal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M9 4 7 10"/><path d="M15 4l2 6"/><path d="M10 15.5l1.5 1.5L14.5 13.5"/></svg>',
   thermometer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a2 2 0 0 0-2 2v9.5a4 4 0 1 0 4 0V5a2 2 0 0 0-2-2z"/><line x1="12" y1="7" x2="12" y2="13"/></svg>',
   trendingUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6 4 4 6-8"/><path d="M15 6h5v5"/></svg>',
-  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0c0 3.5 1 5.5 2 6.5H4c1-1 2-3 2-6.5z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>'
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0c0 3.5 1 5.5 2 6.5H4c1-1 2-3 2-6.5z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>',
+  compass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6z"/></svg>'
 };
 
 /** Encapsule une icône ICONS.xxx dans un span de taille fixe pour un usage EN LIGNE dans du texte
@@ -393,6 +394,10 @@ const NAV_ITEMS = [
   // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
   { key: 'tableau-compteurs', label: 'Tableau des compteurs', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'conges' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
+  // §"Boussole" (roadmap différenciation #2, 01/09/2026) : jamais 'manager' (l'instantané envoyé à
+  // l'IA couvre TOUTE l'entreprise, voir buildBoussoleContext — pas de sens à l'échelle d'une équipe,
+  // même raisonnement que renderRadarSeuilsCard/canSeeRegistrePersonnel).
+  { key: 'boussole', label: 'Boussole', icon: ICONS.compass, roles: ['rh', 'comptabilite', 'proprietaire'], group: 'equipe', module: 'rh' },
   // Retour utilisateur : plus qu'UNE seule entrée de menu par vue — "Planning équipe"/"Calendrier
   // équipe"/"Congés à valider"/"Télétravail à valider"/"Notes de frais à valider" pointaient déjà
   // vers exactement la même vue que leur pendant "Personnel", juste avec des navParams différents.
@@ -3646,6 +3651,11 @@ const HELP_CONTENT = {
     body: `<p>Tout salarié peut proposer une idée, que les autres votent. Le tableau est organisé en colonnes par statut (nouvelle, à l'étude, en cours, livrée, non retenue) : RH/Propriétaire font avancer une idée d'une colonne à l'autre pour que son suivi reste visible de tous jusqu'à sa livraison.</p>`,
     faq: [{ q: 'Peut-on retirer son vote ?', r: 'Oui, cliquez à nouveau sur le bouton de vote : il fonctionne comme un interrupteur, pas un vote définitif.' }]
   },
+  boussole: {
+    title: 'Boussole',
+    body: `<p>Posez une question en langage courant sur les données RH de votre entreprise (soldes de congés, notes de frais par service...) : la Boussole répond uniquement à partir de vos propres données Nexus, jamais d'une connaissance générale ou d'internet. Réservé à RH/Comptabilité/Propriétaire.</p>`,
+    faq: [{ q: 'La Boussole peut-elle se tromper ?', r: 'Oui, comme tout calcul assisté par IA : vérifiez une réponse avant toute décision importante, surtout si le chiffre vous surprend.' }]
+  },
   remuneration: {
     title: 'Rémunération',
     body: `<p>Vue consolidée des éléments de rémunération : salaire brut mensuel, heures supplémentaires saisies et leur suivi par rapport au contingent annuel (Paramètres), et solde de repos compensateur (voir la fiche salarié pour le détail et l'ajustement par salarié).</p>`,
@@ -4959,6 +4969,10 @@ function renderInner() {
     case 'idee-detail':
       root.innerHTML = renderIdeeDetail(state.currentIdeeId);
       bindIdeeDetailEvents();
+      break;
+    case 'boussole':
+      root.innerHTML = renderBoussole();
+      bindBoussoleEvents();
       break;
     case 'employee-detail':
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
@@ -8394,6 +8408,102 @@ function bindIdeeDetailEvents() {
       render();
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Vue : Boussole (roadmap différenciation #2, 01/09/2026) — assistant en langage naturel scopé
+// strictement aux données de l'entreprise (voir supabase/functions/ask-boussole/index.ts pour le
+// raisonnement de sécurité complet : aucun accès direct à la base côté IA, un instantané préparé ici
+// avec les mêmes fonctions de calcul que le reste de l'app, jamais une réimplémentation côté serveur).
+// ---------------------------------------------------------------------------
+
+/** Instantané des données RH de l'entreprise envoyé à la Boussole — volontairement compact (ni
+ * numéro de sécurité sociale, ni adresse, ni salaire : seulement ce qui sert à répondre aux questions
+ * types de ce pilote, congés et notes de frais) plutôt qu'un export complet de chaque salarié. */
+function buildBoussoleContext() {
+  const employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
+  const leaveTypesConge = allLeaveTypes.filter(t => t.categorie === 'conge' && t.actif);
+  const allRequests = leaveRepository.getAll();
+  const now = new Date();
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const notesFraisParService = {};
+  expenseRepository.getAll()
+    .filter(n => String(n.dateCreation || '').startsWith(monthStr))
+    .forEach(n => {
+      const employee = employeeRepository.getById(n.employeeId);
+      const service = (employee && employee.service) || 'Non renseigné';
+      notesFraisParService[service] = round2((notesFraisParService[service] || 0) + (n.montantTTC || 0));
+    });
+
+  return {
+    dateDuJour: toISODate(now),
+    salaries: employees.map(e => ({
+      nom: `${e.prenom} ${e.nom}`,
+      service: e.service || null,
+      typeContrat: e.typeContrat,
+      dateEmbauche: e.dateEmbauche,
+      soldesConges: leaveTypesConge.map(t => {
+        const balance = getLeaveBalance(e, t, allRequests, allLeaveTypes);
+        return { type: t.nom, joursDisponibles: balance.disponible === Infinity ? 'illimité' : balance.disponible };
+      })
+    })),
+    notesDeFraisMoisEnCours: { mois: monthStr, montantTTCParService: notesFraisParService }
+  };
+}
+
+function renderBoussole() {
+  const messages = state.boussoleMessages || [];
+  return `
+    <div class="view-header">
+      <h1>${icon(ICONS.compass, 20)} Boussole</h1>
+      <p class="view-subtitle">Posez une question sur les données RH de votre entreprise (congés, notes de frais...) — la Boussole ne répond qu'à partir de vos propres données, jamais d'internet.</p>
+    </div>
+    <div class="card">
+      <div id="boussole-messages" class="boussole-messages">
+        ${messages.length === 0 ? `<p class="text-muted">Exemples : « Qui a plus de 20 jours de congés payés disponibles ? », « Coût des notes de frais ce mois-ci par service ». </p>` : messages.map(m => `
+          <div class="boussole-message boussole-message-${m.role}">
+            <div class="boussole-message-bubble">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div>
+          </div>
+        `).join('')}
+        ${state.boussoleLoading ? `<div class="boussole-message boussole-message-assistant"><div class="boussole-message-bubble text-muted">La Boussole réfléchit...</div></div>` : ''}
+      </div>
+      <form id="boussole-form" class="boussole-form">
+        <input type="text" id="f-boussole-question" class="input" placeholder="Posez votre question..." autocomplete="off" ${state.boussoleLoading ? 'disabled' : ''}>
+        <button type="submit" class="btn btn-primary" ${state.boussoleLoading ? 'disabled' : ''}>Envoyer</button>
+      </form>
+      <p class="form-hint" style="margin-top:8px;">Réponses générées par IA à partir des données déjà présentes dans Nexus : à vérifier avant toute décision importante, comme n'importe quel calcul automatisé.</p>
+    </div>
+  `;
+}
+
+function bindBoussoleEvents() {
+  const form = document.getElementById('boussole-form');
+  if (!form) return;
+  const input = document.getElementById('f-boussole-question');
+  if (input) input.focus();
+
+  const messagesEl = document.getElementById('boussole-messages');
+  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  form.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const question = input.value.trim();
+    if (!question || state.boussoleLoading) return;
+    state.boussoleMessages = [...(state.boussoleMessages || []), { role: 'user', text: question }];
+    state.boussoleLoading = true;
+    render();
+
+    const context = buildBoussoleContext();
+    const result = await window.SupabaseSync.askBoussole(question, context);
+    state.boussoleLoading = false;
+    state.boussoleMessages = [...state.boussoleMessages, {
+      role: 'assistant',
+      text: result.success ? result.answer : (result.error || 'Erreur, réessayez.')
+    }];
+    render();
+  });
 }
 
 // ---------------------------------------------------------------------------
