@@ -6526,10 +6526,24 @@ function getTableauCompteursData() {
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveTypes = allLeaveTypes.filter(t => t.categorie === 'conge');
   const allRequests = leaveRepository.getAll();
-  const rows = employees.map(e => ({
-    employee: e,
-    balances: leaveTypes.map(t => getLeaveBalance(e, t, allRequests, allLeaveTypes)),
-  }));
+  // §correctif audit du 31/08/2026 (efficiency) : getLeaveBalance (et ses appels internes à
+  // calculateAcquisition/countSuspendedAcquisitionDays) commencent TOUS par filtrer allRequests sur
+  // r.employeeId === employee.id — passer la liste COMPLÈTE de l'entreprise à chaque appel fait
+  // rescanner tout l'historique de congés à chaque salarié × chaque type (O(salariés × types ×
+  // demandes)). Un regroupement par employeeId, fait une seule fois ici, rend ce filtre inutile à
+  // l'intérieur : chaque appel ne reçoit déjà plus que les demandes DE ce salarié.
+  const requestsByEmployeeId = new Map();
+  allRequests.forEach(r => {
+    if (!requestsByEmployeeId.has(r.employeeId)) requestsByEmployeeId.set(r.employeeId, []);
+    requestsByEmployeeId.get(r.employeeId).push(r);
+  });
+  const rows = employees.map(e => {
+    const employeeRequests = requestsByEmployeeId.get(e.id) || [];
+    return {
+      employee: e,
+      balances: leaveTypes.map(t => getLeaveBalance(e, t, employeeRequests, allLeaveTypes)),
+    };
+  });
 
   return { leaveTypes, rows };
 }
@@ -11789,8 +11803,30 @@ function buildCalendarSharedData(cells) {
   const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getAllPublicHolidays(y, settings));
+
+  // §correctif audit du 31/08/2026 (efficiency) : employees/leaveTypes étaient déjà récupérés une
+  // seule fois ici (voir commentaire ci-dessus), mais getCalendarDayInfo() les re-scanne ensuite en
+  // O(n) (.find()) PAR salarié/type référencé, à CHAQUE cellule (~42/mois) — et anniversaires/
+  // arrivées/départs re-scannaient les 300 salariés en entier, par cellule, alors que la date exacte
+  // recherchée change à chaque cellule. Des Maps construites une seule fois ici transforment ces
+  // lookups en O(1) par cellule au lieu de O(n).
+  const employeesById = new Map(employees.map(e => [e.id, e]));
+  const leaveTypesById = new Map(leaveTypes.map(t => [t.id, t]));
+  const anniversairesByMonthDay = new Map();
+  const arriveesByDate = new Map();
+  const departsByDate = new Map();
+  employees.forEach(e => {
+    if (e.dateNaissance) {
+      const key = e.dateNaissance.slice(5, 10);
+      (anniversairesByMonthDay.get(key) || anniversairesByMonthDay.set(key, []).get(key)).push(e);
+    }
+    if (e.dateEmbauche) (arriveesByDate.get(e.dateEmbauche) || arriveesByDate.set(e.dateEmbauche, []).get(e.dateEmbauche)).push(e);
+    if (e.dateDepart) (departsByDate.get(e.dateDepart) || departsByDate.set(e.dateDepart, []).get(e.dateDepart)).push(e);
+  });
+
   return {
     employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone: settings.schoolZone,
+    employeesById, leaveTypesById, anniversairesByMonthDay, arriveesByDate, departsByDate,
     // §sprint calendrier interactif : seule la vue personnelle (soi-même, jamais ambigu) autorise le
     // clic sur une case vide à créer une demande — voir renderCalendarCell/bindCalendrierEvents.
     vuePersonnelle: !hasWiderView || vuePersonnelle,
@@ -12076,25 +12112,26 @@ function buildMonthGridCells(year, month) {
 
 /** Agrège toutes les informations RH réelles concernant une date donnée, restreintes au périmètre visible par l'utilisateur courant. */
 function getCalendarDayInfo(dateStr, sharedData) {
-  const { employees, leaveTypes, leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone } = sharedData;
+  const { leaveRequests, teleworkRequests, schoolHolidays, publicHolidays, schoolZone,
+    employeesById, leaveTypesById, anniversairesByMonthDay, arriveesByDate, departsByDate } = sharedData;
 
   const conges = leaveRequests
     .filter(r => dateStr >= r.dateDebut && dateStr <= r.dateFin)
     .map(r => {
-      const emp = employees.find(e => e.id === r.employeeId);
-      const type = leaveTypes.find(t => t.id === r.typeId);
+      const emp = employeesById.get(r.employeeId);
+      const type = leaveTypesById.get(r.typeId);
       return emp && type ? { emp, type, statut: r.statut, demiJournee: r.demiJournee || null } : null;
     })
     .filter(Boolean);
 
-  const anniversaires = employees.filter(e => e.dateNaissance && e.dateNaissance.slice(5, 10) === dateStr.slice(5, 10));
-  const arrivees = employees.filter(e => e.dateEmbauche === dateStr);
-  const departs = employees.filter(e => e.dateDepart === dateStr);
+  const anniversaires = anniversairesByMonthDay.get(dateStr.slice(5, 10)) || [];
+  const arrivees = arriveesByDate.get(dateStr) || [];
+  const departs = departsByDate.get(dateStr) || [];
 
   const teletravail = teleworkRequests
     .filter(r => dateStr >= r.dateDebut && dateStr <= r.dateFin)
     .map(r => {
-      const emp = employees.find(e => e.id === r.employeeId);
+      const emp = employeesById.get(r.employeeId);
       return emp ? { emp, statut: r.statut } : null;
     })
     .filter(Boolean);
@@ -16757,22 +16794,39 @@ function getPaieAnomalies(year, month) {
   const congeTypesFinis = leaveTypes.filter(t => t.categorie === 'conge' && t.acquisition !== 'Illimitée');
   const validLeaveAndTeleworkRequests = validLeaveRequests.concat(validTeleworkRequests);
 
+  // §correctif audit du 31/08/2026 (efficiency) : les 3 lignes ci-dessous étaient chacune un
+  // .filter(r => r.employeeId === e.id) sur la liste COMPLÈTE de l'entreprise, refait à CHAQUE
+  // salarié (getLeaveBalance en plus rescanne pareil en interne, voir son commentaire) — un
+  // regroupement par employeeId une seule fois ici transforme ces scans répétés en lookups directs.
+  const groupByEmployeeId = (list) => {
+    const map = new Map();
+    list.forEach(r => {
+      if (!map.has(r.employeeId)) map.set(r.employeeId, []);
+      map.get(r.employeeId).push(r);
+    });
+    return map;
+  };
+  const allLeaveRequestsByEmployeeId = groupByEmployeeId(allLeaveRequests);
+  const validLeaveAndTeleworkRequestsByEmployeeId = groupByEmployeeId(validLeaveAndTeleworkRequests);
+  const validLeaveRequestsByEmployeeId = groupByEmployeeId(validLeaveRequests);
+
   const anomalies = [];
   employees.forEach(e => {
+    const employeeLeaveRequests = allLeaveRequestsByEmployeeId.get(e.id) || [];
     congeTypesFinis.forEach(t => {
-      const balance = getLeaveBalance(e, t, allLeaveRequests, leaveTypes, monthEnd);
+      const balance = getLeaveBalance(e, t, employeeLeaveRequests, leaveTypes, monthEnd);
       if (balance.disponible < 0) {
         anomalies.push({ severity: 'bloquante', type: 'compteur_negatif', employee: e, message: `Solde "${t.nom}" négatif : ${formatDurationFR(balance.disponible)}` });
       }
     });
 
-    validLeaveAndTeleworkRequests.filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
+    (validLeaveAndTeleworkRequestsByEmployeeId.get(e.id) || []).filter(r => overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
       if (!isWithinEmploymentPeriod(e, r.dateDebut, r.dateFin)) {
         anomalies.push({ severity: 'bloquante', type: 'absence_incoherente', employee: e, message: `Demande du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)} en dehors de la période contractuelle` });
       }
     });
 
-    validLeaveRequests.filter(r => r.employeeId === e.id && overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
+    (validLeaveRequestsByEmployeeId.get(e.id) || []).filter(r => overlapsMonth(r.dateDebut, r.dateFin)).forEach(r => {
       const type = leaveTypes.find(t => t.id === r.typeId);
       if (type && type.justificatifObligatoire && !r.justificatif) {
         anomalies.push({ severity: 'avertissement', type: 'justificatif_manquant', employee: e, message: `Justificatif manquant pour "${type.nom}" du ${formatDate(r.dateDebut)}` });

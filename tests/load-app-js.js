@@ -104,6 +104,10 @@ globalThis.__getUpcomingContractEnds = getUpcomingContractEnds;
 globalThis.__getUpcomingProbationEnds = getUpcomingProbationEnds;
 globalThis.__canManageDocumentsFor = canManageDocumentsFor;
 globalThis.__isManagerOfEmployee = isManagerOfEmployee;
+globalThis.__getCalendarDayInfo = getCalendarDayInfo;
+globalThis.__buildCalendarSharedData = buildCalendarSharedData;
+globalThis.__getTableauCompteursData = getTableauCompteursData;
+globalThis.__getPaieAnomalies = getPaieAnomalies;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -134,6 +138,10 @@ globalThis.__isManagerOfEmployee = isManagerOfEmployee;
     getUpcomingProbationEnds: sandbox.__getUpcomingProbationEnds,
     canManageDocumentsFor: sandbox.__canManageDocumentsFor,
     isManagerOfEmployee: sandbox.__isManagerOfEmployee,
+    getCalendarDayInfo: sandbox.__getCalendarDayInfo,
+    buildCalendarSharedData: sandbox.__buildCalendarSharedData,
+    getTableauCompteursData: sandbox.__getTableauCompteursData,
+    getPaieAnomalies: sandbox.__getPaieAnomalies,
   };
 }
 
