@@ -118,6 +118,11 @@ globalThis.__buildBoussoleContext = buildBoussoleContext;
 globalThis.__renderBoussole = renderBoussole;
 globalThis.__NAV_ITEMS = NAV_ITEMS;
 globalThis.__renderSidebar = renderSidebar;
+globalThis.__authRepository = authRepository;
+globalThis.__renderUserMenuPanel = renderUserMenuPanel;
+globalThis.__openGroupSummaryModal = openGroupSummaryModal;
+globalThis.__runGroupSummaryRefresh = runGroupSummaryRefresh;
+globalThis.__renderGroupSummaryResult = renderGroupSummaryResult;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -162,6 +167,11 @@ globalThis.__renderSidebar = renderSidebar;
     renderBoussole: sandbox.__renderBoussole,
     NAV_ITEMS: sandbox.__NAV_ITEMS,
     renderSidebar: sandbox.__renderSidebar,
+    authRepository: sandbox.__authRepository,
+    renderUserMenuPanel: sandbox.__renderUserMenuPanel,
+    openGroupSummaryModal: sandbox.__openGroupSummaryModal,
+    runGroupSummaryRefresh: sandbox.__runGroupSummaryRefresh,
+    renderGroupSummaryResult: sandbox.__renderGroupSummaryResult,
   };
 }
 

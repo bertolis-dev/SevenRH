@@ -3220,6 +3220,10 @@ function renderUserMenuPanel() {
   // entreprises sous UN seul compte (voir SAVED_ACCOUNTS_KEY, data.js). L'actif ne se réaffiche pas
   // dans sa propre liste de bascule.
   const otherAccounts = authRepository.getSavedAccounts().filter(a => a.id !== authRepository.getCurrentAccountId());
+  // §"Chaîne Multi-sociétés" (roadmap différenciation #5, 01/09/2026) : proposée seulement à qui a
+  // déjà une vision entreprise entière (même gate que canSeeRegistrePersonnel/Radar Seuils) — jamais
+  // à un manager/salarié qui aurait par coïncidence 2 comptes gardés en parallèle sur son appareil.
+  const canSeeGroupSummary = getVisibleEmployeeIdsForCurrentUser() === null && authRepository.getSavedAccounts().length >= 2;
 
   panel.innerHTML = `
     <div class="user-menu-header">
@@ -3242,6 +3246,7 @@ function renderUserMenuPanel() {
         </div>
       `).join('')}
     ` : ''}
+    ${canSeeGroupSummary ? `<button type="button" class="user-menu-item" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
     <div class="user-menu-divider"></div>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
@@ -3283,6 +3288,13 @@ function renderUserMenuPanel() {
     document.getElementById('user-menu-panel').classList.remove('open');
     openAddAccountFlow();
   });
+
+  if (canSeeGroupSummary) {
+    document.getElementById('btn-group-summary').addEventListener('click', () => {
+      document.getElementById('user-menu-panel').classList.remove('open');
+      openGroupSummaryModal();
+    });
+  }
 
   if (canGererParametres) {
     document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
@@ -3327,6 +3339,125 @@ function renderUserMenuPanel() {
     if (result.switchedTo) showApp();
     else showLogin();
   });
+}
+
+// ---------------------------------------------------------------------------
+// "Vue groupe" (roadmap différenciation #5, "Chaîne Multi-sociétés", 01/09/2026)
+// ---------------------------------------------------------------------------
+//
+// Le vrai changement d'architecture qu'impliquerait un "groupe multi-entités" au sens plein (un
+// utilisateur avec un accès simultané à plusieurs company_id, policies RLS à revoir) est hors de
+// portée d'une seule session — discuté avec Betty le 01/09/2026, marché non validé et risque de
+// sécurité (isolation entre entreprises) trop élevé pour être tenté sans une conception dédiée.
+//
+// En revanche, la bascule "sans ressaisie" demandée existe déjà INTÉGRALEMENT : les comptes gardés
+// en parallèle façon Gmail (SAVED_ACCOUNTS_KEY/switchToSavedAccount, demande du 21/08/2026) sont
+// justement conçus pour un même utilisateur avec un compte Supabase Auth distinct par entreprise,
+// chacune restant RLS-isolée normalement (aucune policy touchée ici). Cette modale ajoute la seule
+// pièce manquante — une vue consolidée — en RÉUTILISANT ce mécanisme tel quel : bascule brièvement,
+// séquentiellement, sur chaque compte déjà enregistré sur cet appareil, lit 3 chiffres déjà calculés
+// ailleurs dans l'app pour cette entreprise, puis revient SYSTÉMATIQUEMENT sur le compte d'origine
+// (succès ou échec de n'importe quel maillon). Explicitement PAS automatique à l'ouverture — un clic
+// explicite sur "Actualiser" — car basculer de session a un effet de bord réel documenté sur
+// switchToSavedAccount (tout autre onglet Nexus ouvert sur ce navigateur bascule aussi).
+function openGroupSummaryModal() {
+  const accounts = authRepository.getSavedAccounts();
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Vue groupe</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Consolide l'effectif actif, la masse salariale et les congés en attente de vos ${accounts.length} comptes enregistrés sur cet appareil.</p>
+        <p class="form-hint">L'actualisation bascule brièvement entre vos comptes puis revient sur celui-ci. Fermez vos autres onglets Nexus pendant l'opération pour éviter toute confusion.</p>
+        <button type="button" class="btn btn-primary" id="btn-refresh-group-summary">Actualiser les chiffres</button>
+        <div id="group-summary-content" style="margin-top:16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-refresh-group-summary').addEventListener('click', runGroupSummaryRefresh);
+}
+
+async function runGroupSummaryRefresh() {
+  const btn = document.getElementById('btn-refresh-group-summary');
+  const contentEl = document.getElementById('group-summary-content');
+  if (!btn || !contentEl) return; // la modale a pu être fermée entre-temps
+  btn.disabled = true;
+  btn.textContent = 'Actualisation en cours...';
+  contentEl.innerHTML = '<p class="text-muted">Actualisation en cours, ne fermez pas cette fenêtre...</p>';
+
+  const originalAccountId = authRepository.getCurrentAccountId();
+  const accounts = authRepository.getSavedAccounts();
+  const rows = [];
+
+  for (const account of accounts) {
+    const result = await authRepository.switchAccount(account.id);
+    if (!result.success) {
+      rows.push({ companyName: account.companyName || account.email, erreur: result.error });
+      continue;
+    }
+    const employees = employeeRepository.getAll().filter(e => !e.archive);
+    const actifs = employees.filter(e => e.statut === 'Actif');
+    const settings = settingsRepository.getSettings();
+    rows.push({
+      companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
+      effectifActif: actifs.length,
+      masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
+      congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
+    });
+  }
+
+  // Revient systématiquement sur le compte d'origine, quel que soit le résultat de chaque maillon —
+  // ne jamais laisser l'utilisateur sur un compte différent de celui d'où il a lancé l'actualisation.
+  if (originalAccountId) await authRepository.switchAccount(originalAccountId);
+  render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
+
+  renderGroupSummaryResult(rows);
+}
+
+function renderGroupSummaryResult(rows) {
+  const contentEl = document.getElementById('group-summary-content');
+  const btn = document.getElementById('btn-refresh-group-summary');
+  if (btn) { btn.disabled = false; btn.textContent = 'Actualiser les chiffres'; }
+  if (!contentEl) return; // la modale a pu être fermée pendant l'actualisation
+
+  const ok = rows.filter(r => !r.erreur);
+  const totalEffectif = ok.reduce((sum, r) => sum + (r.effectifActif || 0), 0);
+  const totalMasseSalariale = ok.some(r => r.masseSalariale !== null) ? round2(ok.reduce((sum, r) => sum + (r.masseSalariale || 0), 0)) : null;
+  const totalConges = ok.some(r => r.congesEnAttente !== null) ? ok.reduce((sum, r) => sum + (r.congesEnAttente || 0), 0) : null;
+
+  contentEl.innerHTML = `
+    <table class="table">
+      <thead><tr><th>Entreprise</th><th>Effectif actif</th><th>Masse salariale</th><th>Congés en attente</th></tr></thead>
+      <tbody>
+        ${rows.map(r => r.erreur ? `
+          <tr><td>${escapeHtml(r.companyName)}</td><td colspan="3" class="text-danger">${escapeHtml(r.erreur)}</td></tr>
+        ` : `
+          <tr>
+            <td>${escapeHtml(r.companyName)}</td>
+            <td>${r.effectifActif}</td>
+            <td>${r.masseSalariale !== null ? formatCurrencyFR(r.masseSalariale) : '—'}</td>
+            <td>${r.congesEnAttente !== null ? r.congesEnAttente : '—'}</td>
+          </tr>
+        `).join('')}
+        <tr style="font-weight:600;">
+          <td>Total groupe</td>
+          <td>${totalEffectif}</td>
+          <td>${totalMasseSalariale !== null ? formatCurrencyFR(totalMasseSalariale) : '—'}</td>
+          <td>${totalConges !== null ? totalConges : '—'}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
 }
 
 /** Droit d'accès/portabilité RGPD : export en libre-service de toutes les données personnelles
