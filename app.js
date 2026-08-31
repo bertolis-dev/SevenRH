@@ -9852,18 +9852,28 @@ function bindAbsencesHubEvents() {
 
 // ---- Sous-vue : Demandes ----
 
+// §correctif audit du 31/08/2026 (reuse) : getFilteredLeaveRequests/getFilteredTeleworkRequests/
+// getFilteredExpenses réimplémentaient chacune le même pipeline (portée de visibilité, puis filtres
+// depuis state.*Filters) — un futur correctif sur getVisibleEmployeeIdsForCurrentUser (règle
+// sensible, déjà corrigée plusieurs fois dans ce fichier) n'a désormais qu'un seul endroit à
+// toucher au lieu de 3. Comportement strictement inchangé : même ordre (portée, puis chaque filtre).
+function scopeToVisibleEmployees(list) {
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  return visibleIds === null ? list : list.filter(item => visibleIds.includes(item.employeeId));
+}
+
+function applyStateFilters(list, filters, fieldMap) {
+  return fieldMap.reduce((result, [filterKey, itemKey]) =>
+    filters[filterKey] ? result.filter(item => item[itemKey] === filters[filterKey]) : result, list);
+}
+
 function getFilteredLeaveRequests(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
-  let list = leaveRepository.getAll().filter(r => {
+  const list = leaveRepository.getAll().filter(r => {
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     return type && type.categorie === categorie;
   });
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  if (visibleIds !== null) list = list.filter(r => visibleIds.includes(r.employeeId));
-  if (filters.employeeId) list = list.filter(r => r.employeeId === filters.employeeId);
-  if (filters.typeId) list = list.filter(r => r.typeId === filters.typeId);
-  if (filters.statut) list = list.filter(r => r.statut === filters.statut);
-  return list;
+  return applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
 }
 
 // §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
@@ -15422,12 +15432,8 @@ function shiftPlanningMonth(delta) {
 // ---- Sous-vue : Demandes ----
 
 function getFilteredTeleworkRequests() {
-  let list = teleworkRepository.getAll();
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  if (visibleIds !== null) list = list.filter(r => visibleIds.includes(r.employeeId));
-  if (state.teletravailFilters.employeeId) list = list.filter(r => r.employeeId === state.teletravailFilters.employeeId);
-  if (state.teletravailFilters.statut) list = list.filter(r => r.statut === state.teletravailFilters.statut);
-  return list;
+  return applyStateFilters(scopeToVisibleEmployees(teleworkRepository.getAll()), state.teletravailFilters,
+    [['employeeId', 'employeeId'], ['statut', 'statut']]);
 }
 
 function renderTeletravailDemandes() {
@@ -15974,13 +15980,8 @@ function exportRowsToCSV(headers, rows, filename) {
 // ---------------------------------------------------------------------------
 
 function getFilteredExpenses() {
-  let list = expenseRepository.getAll();
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
-  if (visibleIds !== null) list = list.filter(n => visibleIds.includes(n.employeeId));
-  if (state.fraisFilters.employeeId) list = list.filter(n => n.employeeId === state.fraisFilters.employeeId);
-  if (state.fraisFilters.categorie) list = list.filter(n => n.categorie === state.fraisFilters.categorie);
-  if (state.fraisFilters.statut) list = list.filter(n => n.statut === state.fraisFilters.statut);
-  return list;
+  return applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
+    [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
 }
 
 function renderFrais() {

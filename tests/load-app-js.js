@@ -108,6 +108,9 @@ globalThis.__getCalendarDayInfo = getCalendarDayInfo;
 globalThis.__buildCalendarSharedData = buildCalendarSharedData;
 globalThis.__getTableauCompteursData = getTableauCompteursData;
 globalThis.__getPaieAnomalies = getPaieAnomalies;
+globalThis.__getFilteredLeaveRequests = getFilteredLeaveRequests;
+globalThis.__getFilteredTeleworkRequests = getFilteredTeleworkRequests;
+globalThis.__getFilteredExpenses = getFilteredExpenses;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -142,6 +145,9 @@ globalThis.__getPaieAnomalies = getPaieAnomalies;
     buildCalendarSharedData: sandbox.__buildCalendarSharedData,
     getTableauCompteursData: sandbox.__getTableauCompteursData,
     getPaieAnomalies: sandbox.__getPaieAnomalies,
+    getFilteredLeaveRequests: sandbox.__getFilteredLeaveRequests,
+    getFilteredTeleworkRequests: sandbox.__getFilteredTeleworkRequests,
+    getFilteredExpenses: sandbox.__getFilteredExpenses,
   };
 }
 
