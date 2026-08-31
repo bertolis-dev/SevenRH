@@ -81,7 +81,35 @@ async function run() {
     assert.ok(html.includes('Compte introuvable.'), 'le message d\'erreur du compte C doit rester visible');
   }
 
-  console.log('OK — vue-groupe.test.js (gating entreprise entière + 2 comptes, agrégation, retour systématique au compte d\'origine)');
+  // ---- §correctif audit du 31/08/2026 : le retour final vers le compte d'origine peut lui aussi
+  //      échouer (session expirée) — doit afficher une erreur explicite, jamais rendre le résultat
+  //      comme si de rien n'était (le risque étant de rester silencieusement sur une AUTRE entreprise). ----
+  {
+    sandbox.document.getElementById('modal-root').innerHTML =
+      '<button id="btn-refresh-group-summary"></button><div id="group-summary-content"></div>';
+
+    const switchCalls = [];
+    authRepository.getCurrentAccountId = () => 'compte-origine';
+    authRepository.getSavedAccounts = () => [
+      { id: 'compte-a', companyName: 'Entreprise A' },
+      { id: 'compte-origine', companyName: 'Entreprise Origine' }
+    ];
+    // 2 comptes -> boucle de 2 appels (compte-a, compte-origine) + 1 appel de retour explicite = 3
+    // appels au total. Seul ce 3e et dernier (le retour vers l'origine) doit échouer ici.
+    authRepository.switchAccount = async (accountId) => {
+      switchCalls.push(accountId);
+      if (switchCalls.length === 3) return { success: false, error: 'Session expirée.' };
+      return { success: true };
+    };
+
+    await runGroupSummaryRefresh();
+
+    const contentHtml = sandbox.document.getElementById('group-summary-content').innerHTML;
+    assert.ok(contentHtml.includes('impossible de revenir automatiquement'), 'un échec du retour vers le compte d\'origine doit afficher une erreur explicite');
+    assert.ok(!contentHtml.includes('Total groupe'), 'le tableau consolidé ne doit pas s\'afficher comme si de rien n\'était quand le retour à l\'origine a échoué');
+  }
+
+  console.log('OK — vue-groupe.test.js (gating entreprise entière + 2 comptes, agrégation, retour systématique au compte d\'origine, échec du retour signalé)');
 }
 
 run().catch((err) => {

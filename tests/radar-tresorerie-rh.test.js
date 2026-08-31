@@ -32,8 +32,12 @@ async function run() {
   const futurEmbauche = { ...company.employees[1], id: 'emp-embauche', dateEmbauche: shiftDaysISO(TODAY, 20), dateDepart: '', salaireBrutMensuel: 3000 };
   const futurDepart = { ...company.employees[2], id: 'emp-depart', dateEmbauche: shiftDaysISO(TODAY, -1000), dateDepart: shiftDaysISO(TODAY, 45), salaireBrutMensuel: 2000, compteurs: {} };
   const embaucheHorsHorizon = { ...company.employees[3], id: 'emp-hors-horizon', dateEmbauche: shiftDaysISO(TODAY, 120), dateDepart: '', salaireBrutMensuel: 5000 };
+  // §correctif audit du 31/08/2026 : un départ dont dateDepart EST le jour même (ni avant, ni après)
+  // ne doit jamais disparaître du radar — son indemnité compensatrice de congés payés non pris est
+  // une vraie sortie de trésorerie qui survient précisément ce jour-là.
+  const departAujourdhui = { ...company.employees[4], id: 'emp-depart-aujourdhui', dateEmbauche: shiftDaysISO(TODAY, -1000), dateDepart: TODAY, salaireBrutMensuel: 1800, compteurs: {} };
 
-  company.employees = [enPoste, futurEmbauche, futurDepart, embaucheHorsHorizon];
+  company.employees = [enPoste, futurEmbauche, futurDepart, embaucheHorsHorizon, departAujourdhui];
   DB.saveCurrentCompany(company);
 
   const radar = getRadarTresorerieRH(DB.getEmployees(), TODAY);
@@ -59,13 +63,23 @@ async function run() {
   // ---- Jamais au-delà de 90 jours ----
   assert.ok(!h90.evenements.some(e => e.employeeId === 'emp-hors-horizon'), 'une embauche à +120 jours ne doit jamais apparaître, même à l\'horizon le plus large (90 jours)');
 
+  // ---- Un départ dont dateDepart EST aujourd'hui doit produire son indemnité compensatrice, dès le
+  //      plus petit horizon (jamais d'impactMensuel : déjà reflété par son exclusion de coutMensuelActuel) ----
+  {
+    const indemniteAujourdhui = h30.evenements.find(e => e.type === 'indemnite_compensatrice' && e.employeeId === 'emp-depart-aujourdhui');
+    assert.ok(indemniteAujourdhui, 'un départ dont dateDepart est exactement aujourd\'hui doit générer son indemnité compensatrice, dès l\'horizon 30 jours');
+    assert.ok(indemniteAujourdhui.montantUnique > 0, 'l\'indemnité doit être un montant positif');
+    assert.ok(!h30.evenements.some(e => e.type === 'depart' && e.employeeId === 'emp-depart-aujourdhui'),
+      'un départ aujourd\'hui ne doit jamais produire un évènement "depart" avec impactMensuel (déjà reflété par l\'exclusion de coutMensuelActuel, l\'ajouter doublerait la baisse)');
+  }
+
   // ---- Aucun horizon ne duplique un évènement (cumulatif, pas de double comptage dans un même horizon) ----
   [h30, h60, h90].forEach(h => {
     const ids = h.evenements.map(e => `${e.type}-${e.employeeId}`);
     assert.strictEqual(new Set(ids).size, ids.length, 'aucun évènement ne doit apparaître deux fois dans le même horizon');
   });
 
-  console.log('OK — radar-tresorerie-rh.test.js (embauche/départ/indemnité compensatrice, horizons cumulatifs 30/60/90j, rien au-delà)');
+  console.log('OK — radar-tresorerie-rh.test.js (embauche/départ/indemnité compensatrice, horizons cumulatifs 30/60/90j, rien au-delà, départ le jour même couvert)');
 }
 
 run().catch((err) => {

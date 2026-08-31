@@ -3418,17 +3418,35 @@ async function runGroupSummaryRefresh() {
 
   // Revient systématiquement sur le compte d'origine, quel que soit le résultat de chaque maillon —
   // ne jamais laisser l'utilisateur sur un compte différent de celui d'où il a lancé l'actualisation.
-  if (originalAccountId) await authRepository.switchAccount(originalAccountId);
+  // §correctif audit du 31/08/2026 : le résultat de CE dernier switchAccount doit être vérifié comme
+  // n'importe quel autre de la boucle — un échec ici (session expirée/révoquée, réseau) laissait
+  // auparavant DB._currentAuthUserId/_companiesCache pointer sur le DERNIER compte de la boucle, avec
+  // un render() qui affichait ensuite silencieusement les données de cette autre entreprise comme si
+  // de rien n'était (aucune erreur visible) — un vrai risque d'exposition cross-entreprise, pas
+  // seulement un affichage incorrect. On alerte donc explicitement l'utilisateur si ce retour échoue.
+  let restoreError = null;
+  if (originalAccountId) {
+    const restoreResult = await authRepository.switchAccount(originalAccountId);
+    if (!restoreResult.success) restoreError = restoreResult.error;
+  }
   render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
 
-  renderGroupSummaryResult(rows);
+  renderGroupSummaryResult(rows, restoreError);
 }
 
-function renderGroupSummaryResult(rows) {
+function renderGroupSummaryResult(rows, restoreError) {
   const contentEl = document.getElementById('group-summary-content');
   const btn = document.getElementById('btn-refresh-group-summary');
   if (btn) { btn.disabled = false; btn.textContent = 'Actualiser les chiffres'; }
   if (!contentEl) return; // la modale a pu être fermée pendant l'actualisation
+
+  if (restoreError) {
+    contentEl.innerHTML = `
+      <p class="text-danger" style="font-weight:600;">Erreur : impossible de revenir automatiquement sur votre compte d'origine (${escapeHtml(restoreError)}).</p>
+      <p class="form-hint">Vérifiez avant de continuer sur quel compte vous êtes actuellement connecté (menu utilisateur en haut à droite) — reconnectez-vous avec votre mot de passe si nécessaire.</p>
+    `;
+    return;
+  }
 
   const ok = rows.filter(r => !r.erreur);
   const totalEffectif = ok.reduce((sum, r) => sum + (r.effectifActif || 0), 0);
@@ -8633,8 +8651,19 @@ function bindBoussoleEvents() {
     state.boussoleLoading = true;
     render();
 
-    const context = buildBoussoleContext();
-    const result = await window.SupabaseSync.askBoussole(question, context);
+    // §correctif audit du 31/08/2026 : askBoussole() ne rejette normalement jamais (erreurs HTTP/API
+    // déjà ramenées en {success:false}, voir askBoussole), mais un échec du réseau/DNS/CORS AVANT
+    // même la réponse fait rejeter la promesse de supabase.functions.invoke() elle-même (même limite
+    // que analyzeTicket/invokeBertolisTickets ailleurs dans ce fichier) — sans ce try/catch,
+    // state.boussoleLoading restait bloqué à `true` pour toujours (aucun code ne le remet à false),
+    // laissant "La Boussole réfléchit..." affiché et le formulaire désactivé en permanence.
+    let result;
+    try {
+      const context = buildBoussoleContext();
+      result = await window.SupabaseSync.askBoussole(question, context);
+    } catch (err) {
+      result = { success: false, error: 'Erreur de connexion, réessayez.' };
+    }
     state.boussoleLoading = false;
     state.boussoleMessages = [...state.boussoleMessages, {
       role: 'assistant',

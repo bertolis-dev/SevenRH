@@ -88,7 +88,22 @@ async function run() {
     assert.strictEqual(s11.courtDelaiApplicable, false, 'le franchissement récent (2-3 mois) ne doit pas hériter de l\'ancienneté d\'avant le creux');
   }
 
-  console.log('OK — radar-seuils-effectif.test.js (11/50/250, délais 12 mois et 5 ans, réinitialisation après un creux)');
+  // ---- §correctif audit du 31/08/2026 : la boucle ne doit JAMAIS dériver en traversant un mois
+  //      court (juin, 30 jours) — reculer depuis le curseur déjà clampé de l'itération précédente
+  //      (au lieu de toujours repartir de la date de référence d'origine) perdait le jour 31 pour
+  //      tous les mois suivants. Cas précis : embauche pile le 31 mai, référence le 31 août — la
+  //      boucle passe par juin (30, clampé chez les 2), puis DOIT retrouver le 31 mai exact (pas le
+  //      30) pour compter ce mois, sans quoi le salarié semble "pas encore embauché" un jour trop tôt. ----
+  {
+    const employees = makeEmployees(11, '2027-05-31');
+    const s11 = getSeuilsEffectifStatus(employees, '2027-08-31').find(s => s.seuil === 11);
+    assert.strictEqual(s11.franchi, true);
+    assert.strictEqual(s11.moisConsecutifs, 4,
+      `sans dérive de date, la boucle doit compter août/juillet/juin/mai (4 mois) avant de s'arrêter en avril (obtenu ${s11.moisConsecutifs})`);
+    assert.strictEqual(s11.depuisDate, '2027-05-31', 'depuisDate doit retomber exactement sur la date d\'embauche réelle (31 mai), jamais le 30');
+  }
+
+  console.log('OK — radar-seuils-effectif.test.js (11/50/250, délais 12 mois et 5 ans, réinitialisation après un creux, pas de dérive sur un mois court)');
 }
 
 run().catch((err) => {

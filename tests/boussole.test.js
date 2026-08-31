@@ -13,6 +13,8 @@
  * (gating actif) mais absente du rendu réel de la barre latérale (jamais cliquable).
  */
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
@@ -72,7 +74,19 @@ async function run() {
     assert.ok(!sidebarHtml.includes('Boussole'), 'la Boussole ne doit plus apparaître dans la barre latérale (désactivée), même pour RH');
   }
 
-  console.log('OK — boussole.test.js (nav réservée RH/Propriétaire/Comptabilité, instantané compact et sans champ sensible, écran rendu correctement, désactivation confirmée hors de la barre latérale)');
+  // ---- §correctif audit du 31/08/2026 : bindBoussoleEvents doit protéger l'appel askBoussole d'un
+  //      rejet de promesse (réseau/DNS/CORS), sinon state.boussoleLoading reste bloqué à `true` pour
+  //      toujours. Le gestionnaire de clic réel n'est pas déclenchable dans ce harnais vm (les
+  //      addEventListener y sont des no-op, voir load-app-js.js) — vérifié en direct dans le
+  //      navigateur ; ce test verrouille au moins la présence du garde-fou dans le code source. ----
+  {
+    const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+    const bindBody = appSource.slice(appSource.indexOf('function bindBoussoleEvents'), appSource.indexOf('function bindBoussoleEvents') + 1500);
+    assert.ok(/try\s*\{[\s\S]*askBoussole[\s\S]*\}\s*catch/.test(bindBody),
+      'l\'appel à askBoussole() doit être protégé par un try/catch, pour ne jamais bloquer state.boussoleLoading en cas de rejet réseau');
+  }
+
+  console.log('OK — boussole.test.js (nav réservée RH/Propriétaire/Comptabilité, instantané compact et sans champ sensible, écran rendu correctement, désactivation confirmée hors de la barre latérale, garde-fou réseau vérifié)');
 }
 
 run().catch((err) => {

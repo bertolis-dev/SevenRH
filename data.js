@@ -4858,6 +4858,18 @@ function getRadarTresorerieRH(employees, refDate) {
       if (montant > 0) evenements.push({ type: 'indemnite_compensatrice', employeeId: e.id, employee: `${e.prenom} ${e.nom}`, date: e.dateDepart, montantUnique: montant });
     });
 
+    // §correctif audit du 31/08/2026 : un départ dont dateDepart est EXACTEMENT aujourd'hui n'entrait
+    // dans aucun des deux filtres du fichier (déjà exclu de coutMensuelActuel via enPosteAujourdhui,
+    // qui exige dateDepart STRICTEMENT après aujourd'hui pour compter comme présent — et exclu ici
+    // par ce même `>` strict) : sa sortie de trésorerie ponctuelle (indemnité compensatrice de congés
+    // payés non pris) n'apparaissait donc jamais dans le radar, pas même le jour où elle survient. Pas
+    // d'impactMensuel ici (déjà pleinement reflété par l'exclusion dans coutMensuelActuel, l'ajouter
+    // ici doublerait la baisse) — seule l'indemnité, elle jamais comptée ailleurs, doit apparaître.
+    employees.filter(e => e.dateDepart === todayStr).forEach(e => {
+      const { montant } = calculateIndemniteCompensatrice(e, e.dateDepart);
+      if (montant > 0) evenements.push({ type: 'indemnite_compensatrice', employeeId: e.id, employee: `${e.prenom} ${e.nom}`, date: e.dateDepart, montantUnique: montant });
+    });
+
     evenements.sort((a, b) => a.date.localeCompare(b.date));
     const impactMensuelTotal = round2(evenements.reduce((sum, ev) => sum + (ev.impactMensuel || 0), 0));
     const sortiesPonctuelles = round2(evenements.reduce((sum, ev) => sum + (ev.montantUnique || 0), 0));
@@ -5008,11 +5020,16 @@ function getSeuilsEffectifStatus(employees, refDate) {
   return SEUILS_EFFECTIF.map(({ seuil, obligationsCourtDelai, obligationsLongDelai }) => {
     if (effectifActuel < seuil) return { seuil, franchi: false, effectifActuel };
 
+    // §correctif audit du 31/08/2026 : reculer via addMonths(curseur, -1) à partir du curseur DÉJÀ
+    // clampé (ex. 31 mai -> 30 avril) fait perdre le jour d'origine pour tous les mois suivants (30
+    // avril -> 30 mars au lieu de 31 mars, qui a pourtant 31 jours) — un décalage qui s'accumule à
+    // chaque mois court traversé (février, mois de 30 jours) et fausse progressivement la date
+    // d'échantillon. Repartir de `ref` à chaque itération (addMonths(ref, -moisConsecutifs)) élimine
+    // cette dérive : chaque mois est calculé indépendamment depuis la même date d'origine, jamais
+    // depuis un résultat déjà arrondi par l'itération précédente.
     let moisConsecutifs = 0;
-    let curseur = ref;
-    while (moisConsecutifs < 61 && getEffectifActifAt(employees, curseur) >= seuil) {
+    while (moisConsecutifs < 61 && getEffectifActifAt(employees, addMonths(ref, -moisConsecutifs)) >= seuil) {
       moisConsecutifs++;
-      curseur = addMonths(curseur, -1);
     }
 
     return {
