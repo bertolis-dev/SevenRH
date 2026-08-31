@@ -2454,7 +2454,7 @@ function renderBertolisConsole() {
     <header class="bertolis-topbar">
       <div class="login-logo">${NEXUS_LOGO_MARK} Nexus <span class="badge badge-info">Console BERTOLIS</span></div>
       <div>
-        <span class="text-muted">${escapeHtml(admin.prenom)} ${escapeHtml(admin.nom)}</span>
+        <span class="text-muted">${personNameHtml(admin)}</span>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-bertolis-logout" style="margin-left: 10px;">Déconnexion</button>
       </div>
     </header>
@@ -3213,7 +3213,7 @@ function renderUserMenuPanel() {
 
   panel.innerHTML = `
     <div class="user-menu-header">
-      <div class="user-menu-name">${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}</div>
+      <div class="user-menu-name">${personNameHtml(user)}</div>
       <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
       ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
@@ -3224,7 +3224,7 @@ function renderUserMenuPanel() {
           <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
             <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
             <span class="user-menu-account-info">
-              <span class="user-menu-account-name">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
+              <span class="user-menu-account-name">${personNameHtml(a)}</span>
               <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
             </span>
           </button>
@@ -4205,10 +4205,10 @@ function renderFavoritesDropdown(resultsBox) {
   resultsBox.innerHTML = `
     <div class="search-section-label">Favoris</div>
     ${favorites.map(e => `
-      <div class="search-result-item" data-favorite-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}">
+      <div class="search-result-item" data-favorite-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(e)}">
         <span class="search-result-icon">${ICONS.star}</span>
         <div>
-          <div class="search-result-label">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
+          <div class="search-result-label">${personNameHtml(e)}</div>
           <div class="search-result-sublabel">${escapeHtml(e.poste || '—')}</div>
         </div>
       </div>
@@ -5889,7 +5889,7 @@ function renderLongAbsenceSuspensionCard(items) {
         <div class="mini-list">
           ${items.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${escapeHtml(x.type.nom)}</span>
+              <span>${personNameHtml(x.employee)} · ${escapeHtml(x.type.nom)}</span>
               <span class="text-muted">${formatDurationFR(x.dureeJours)}${x.enCours ? ' · en cours' : ' · terminée'}</span>
             </div>
           `).join('')}
@@ -5907,7 +5907,7 @@ function renderContingentHeuresSupCard(items) {
         <div class="mini-list">
           ${items.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}</span>
+              <span>${personNameHtml(x.employee)}</span>
               <span class="text-muted${x.cumul >= x.contingent ? ' text-danger' : ''}">${formatNumberFR(x.cumul)} h / ${formatNumberFR(x.contingent)} h</span>
             </div>
           `).join('')}
@@ -6134,7 +6134,7 @@ function renderUpcomingBirthdaysCard(birthdays) {
         <div class="mini-list">
           ${birthdays.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}</span>
+              <span>${personNameHtml(x.employee)}</span>
               <span class="text-muted">${x.daysUntil === 0 ? `Aujourd'hui ${icon(ICONS.cake, 13)}` : formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
@@ -6152,7 +6152,7 @@ function renderUpcomingSeniorityCard(seniorityAnniversaries) {
         <div class="mini-list">
           ${seniorityAnniversaries.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${x.years} ans</span>
+              <span>${personNameHtml(x.employee)} · ${x.years} ans</span>
               <span class="text-muted">${x.daysUntil === 0 ? `Aujourd'hui ${icon(ICONS.medal, 13)}` : formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
@@ -6174,7 +6174,7 @@ function renderUpcomingEntretiensCard(entretiens, bilans) {
         <div class="mini-list">
           ${items.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)} · ${escapeHtml(x.label)}</span>
+              <span>${personNameHtml(x.employee)} · ${escapeHtml(x.label)}</span>
               <span class="${x.daysUntil < 0 ? 'text-danger' : 'text-muted'}">${x.daysUntil < 0 ? 'En retard · ' + formatDate(toISODate(x.next)) : formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
@@ -6192,7 +6192,7 @@ function renderUpcomingContractEndsCard(contractEnds) {
         <div class="mini-list">
           ${contractEnds.map(e => `
             <div class="mini-list-item">
-              <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} · ${escapeHtml(e.typeContrat)}</span>
+              <span>${personNameHtml(e)} · ${escapeHtml(e.typeContrat)}</span>
               <span class="text-muted">${formatDate(e.dateFinContrat)}</span>
             </div>
           `).join('')}
@@ -6213,7 +6213,7 @@ function renderUpcomingProbationEndsCard(probationEnds) {
         <div class="mini-list">
           ${probationEnds.map(e => `
             <div class="mini-list-item">
-              <span>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</span>
+              <span>${personNameHtml(e)}</span>
               <span class="text-muted">${formatDate(e.dateFinPeriodeEssai)}</span>
             </div>
           `).join('')}
@@ -6231,7 +6231,7 @@ function renderUpcomingVisitesMedicalesCard(visitesMedicales) {
         <div class="mini-list">
           ${visitesMedicales.map(x => `
             <div class="mini-list-item">
-              <span>${escapeHtml(x.employee.prenom)} ${escapeHtml(x.employee.nom)}${x.premiereVisite ? ' <span class="text-muted">(visite d\'embauche)</span>' : ''}</span>
+              <span>${personNameHtml(x.employee)}${x.premiereVisite ? ' <span class="text-muted">(visite d\'embauche)</span>' : ''}</span>
               <span class="text-muted${x.daysUntil < 0 ? ' text-danger' : ''}">${formatDate(toISODate(x.next))}</span>
             </div>
           `).join('')}
@@ -6301,7 +6301,7 @@ function renderPresenceCard() {
         <div class="mini-list">
           ${visibleRows.map(r => `
             <div class="mini-list-item">
-              <span>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</span>
+              <span>${personNameHtml(r.employee)}</span>
               <span class="badge badge-${r.status.level}">${escapeIcon(r.status.icon)} ${escapeHtml(r.status.label)}</span>
             </div>
           `).join('')}
@@ -6598,7 +6598,7 @@ function renderTableauCompteurs() {
               <tbody>
                 ${pageItems.map(row => `
                   <tr>
-                    <td>${escapeHtml(row.employee.prenom)} ${escapeHtml(row.employee.nom)}</td>
+                    <td>${personNameHtml(row.employee)}</td>
                     ${row.balances.map((b, i) => `<td style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
@@ -6640,12 +6640,12 @@ function bindTableauCompteursEvents() {
 
 function renderEmployeeRow(e) {
   return `
-    <tr class="table-row" data-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}">
+    <tr class="table-row" data-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(e)}">
       <td>
         <div class="employee-cell">
           ${renderAvatar(e)}
           <div>
-            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> ` : ''}${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</div>
+            <div class="employee-name">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> ` : ''}${personNameHtml(e)}</div>
             <div class="employee-matricule">${escapeHtml(e.matricule)}</div>
           </div>
         </div>
@@ -7373,10 +7373,10 @@ function renderOrgNode(employee, childrenOf) {
   const isCollapsed = state.orgCollapsedIds.has(employee.id);
   return `
     <li>
-      <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}">
+      <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(employee)}">
         ${hasChildren ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
         ${renderAvatar(employee)}
-        <div class="org-node-name">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</div>
+        <div class="org-node-name">${personNameHtml(employee)}</div>
         <div class="org-node-poste">${escapeHtml(employee.poste || '—')}</div>
         <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
       </div>
@@ -8539,7 +8539,7 @@ function renderEmployeeDetail(id) {
     <div class="detail-header card">
       ${renderAvatar(e)}
       <div class="detail-header-info">
-        <h1>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</h1>
+        <h1>${personNameHtml(e)}</h1>
         <p class="view-subtitle">${escapeHtml(e.poste || '—')} · ${escapeHtml(e.service || '—')}</p>
         <div class="badge-row">
           ${renderContratBadge(e.typeContrat)}
@@ -8768,7 +8768,7 @@ function openChangeRoleModal(employeeId) {
       </div>
       <form id="changer-role-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — rôle actuel : <strong>${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</strong>.</p>
+          <p class="text-muted">${personNameHtml(employee)} — rôle actuel : <strong>${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</strong>.</p>
           <div class="form-field">
             <label for="f-nouveau-role">Nouveau rôle *</label>
             <select class="input" id="f-nouveau-role" name="nouveauRole" required>
@@ -8829,7 +8829,7 @@ function openTransferProprietaireModal() {
               <label for="f-nouveau-proprietaire">Nouveau Propriétaire *</label>
               <select class="input" id="f-nouveau-proprietaire" name="nouveauProprietaire" required>
                 <option value="">—</option>
-                ${candidats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.prenom)} ${escapeHtml(c.nom)} (${escapeHtml(ROLE_LABELS[c.role] || c.role)})</option>`).join('')}
+                ${candidats.map(c => `<option value="${escapeHtml(c.id)}">${personNameHtml(c)} (${escapeHtml(ROLE_LABELS[c.role] || c.role)})</option>`).join('')}
               </select>
             </div>
             <div class="form-field" style="margin-top: 12px;">
@@ -8889,7 +8889,7 @@ function openForcerMotDePasseModal(employeeId) {
       </div>
       <form id="forcer-mdp-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — communiquez ce nouveau mot de passe au salarié par un autre moyen que cette application.</p>
+          <p class="text-muted">${personNameHtml(employee)} — communiquez ce nouveau mot de passe au salarié par un autre moyen que cette application.</p>
           <div class="form-field">
             <label for="f-nouveau-mdp">Nouveau mot de passe (6 caractères minimum) *</label>
             <input class="input" type="text" id="f-nouveau-mdp" name="nouveauMotDePasse" minlength="6" required>
@@ -8937,7 +8937,7 @@ function openCreerCompteConnexionModal(employeeId) {
       </div>
       <div class="modal-body">
         <p class="text-muted">
-          Un compte de connexion sera créé pour <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
+          Un compte de connexion sera créé pour <strong>${personNameHtml(employee)}</strong>
           (${escapeHtml(employee.email)}), avec un mot de passe temporaire généré automatiquement.
           Vous devrez le transmettre vous-même au salarié (oral, SMS...) ; il devra le changer dès sa première connexion.
         </p>
@@ -8975,7 +8975,7 @@ function showGeneratedPasswordModal(employee, password) {
         <h2>Compte créé</h2>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Communiquez ces identifiants à <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong> par un autre moyen que cette application. Ce mot de passe ne sera plus jamais affiché.</p>
+        <p class="text-muted">Communiquez ces identifiants à <strong>${personNameHtml(employee)}</strong> par un autre moyen que cette application. Ce mot de passe ne sera plus jamais affiché.</p>
         <div class="form-field">
           <label for="f-generated-email">Email</label>
           <input class="input" type="text" id="f-generated-email" readonly value="${escapeHtml(employee.email)}">
@@ -9190,7 +9190,7 @@ function openAjusterCompteurModal(employeeId, typeId) {
       </div>
       <form id="adjust-compteur-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
+          <p class="text-muted">${personNameHtml(employee)} — cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
           <div class="form-field">
             <label for="f-montant">Ajustement (jours, + ou -) *</label>
             <input class="input" type="number" id="f-montant" name="montant" step="0.5" value="${current}" required>
@@ -9311,7 +9311,7 @@ function openEmployeePrintModal(id) {
       <div class="modal-body">
         <div class="print-area print-document">
           <div class="print-header">
-            <h1>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</h1>
+            <h1>${personNameHtml(e)}</h1>
             <p class="text-muted">Matricule ${escapeHtml(e.matricule)} · Fiche générée le ${formatDate(toISODate(new Date()))}</p>
           </div>
 
@@ -9388,7 +9388,7 @@ function openAttestationEmployeurModal(id) {
           <h1>Attestation employeur</h1>
           <p>
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            atteste que ${escapeHtml(e.civilite)} ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
+            atteste que ${escapeHtml(e.civilite)} ${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
             est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(e.poste || '____________________')},
             sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
           </p>
@@ -9650,7 +9650,7 @@ function openCertificatTravailModal(id) {
           <h1>Certificat de travail</h1>
           <p>
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            certifie que ${escapeHtml(e.civilite)} ${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} a été employé(e) au sein de notre entreprise
+            certifie que ${escapeHtml(e.civilite)} ${personNameHtml(e)} a été employé(e) au sein de notre entreprise
             du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
             en qualité de ${escapeHtml(e.poste || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
           </p>
@@ -9909,7 +9909,7 @@ function renderCongesDemandes(categorie = 'conge') {
     <div class="toolbar card">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
-        ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+        ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
       </select>
       <select id="conges-filter-type" class="input">
         <option value="">Tous les types</option>
@@ -9968,7 +9968,7 @@ function renderLeaveRequestRow(r, selection) {
   return `
     <tr data-request-id="${r.id}">
       <td>${selectable ? `<input type="checkbox" class="conges-select-row" data-select-request="${r.id}" ${selection.has(r.id) ? 'checked' : ''} aria-label="Sélectionner cette demande">` : ''}</td>
-      <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+      <td>${personNameHtml(employee)}</td>
       <td><span class="badge badge-muted"><span class="type-swatch" style="background:${escapeHtml(type.couleur)}"></span>${escapeHtml(type.icone)} ${escapeHtml(type.nom)}</span></td>
       <td>${periode}</td>
       <td>${formatDurationFR(r.nbJours)}</td>
@@ -10188,7 +10188,7 @@ function openProlongerModal(requestId) {
       </div>
       <form id="prolonger-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} · ${escapeHtml(type.nom)} · actuellement jusqu'au ${formatDate(request.dateFin)}</p>
+          <p class="text-muted">${personNameHtml(employee)} · ${escapeHtml(type.nom)} · actuellement jusqu'au ${formatDate(request.dateFin)}</p>
           ${textField('nouvelleDateFin', 'Nouvelle date de fin', '', true, 'date')}
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-prolongation-justificatif">Nouveau justificatif (optionnel)</label>
@@ -10252,7 +10252,7 @@ function openRegulariserModal(requestId) {
       </div>
       <form id="regulariser-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
+          <p class="text-muted">${personNameHtml(employee)} — actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
           ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.actif ? t.nom : `${t.nom} (désactivé)` })))}
           <div class="form-grid" style="margin-top: 12px;">
             ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
@@ -10452,7 +10452,7 @@ function openLeaveAttestationModal(requestId) {
             <p class="text-muted">Émise le ${formatDate(toISODate(new Date()))}</p>
           </div>
           <p class="print-attestation-text">
-            Nexus atteste que <strong>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</strong>
+            Nexus atteste que <strong>${personNameHtml(employee)}</strong>
             (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(employee.poste || 'salarié·e')},
             a bénéficié d'un congé de type <strong>${escapeHtml(type.nom)}</strong> ${periode},
             soit ${formatNumberFR(r.nbJours)} jour${r.nbJours > 1 ? 's' : ''}.
@@ -10705,7 +10705,7 @@ function employeeFieldForRequest(presetEmployeeId, employees, kind = 'absence') 
       <input type="hidden" id="f-employeeId" name="employeeId" value="${escapeHtml(user.id)}">
       <div class="form-field">
         <label>Salarié</label>
-        <input class="input" type="text" value="${escapeHtml(user.prenom)} ${escapeHtml(user.nom)}" disabled>
+        <input class="input" type="text" value="${personNameHtml(user)}" disabled>
       </div>
     `;
   }
@@ -11629,7 +11629,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
           <div class="form-field" style="margin-top: 8px;">
             <label for="f-workflow-override-${i}">Étape ${i + 1} : ${escapeHtml(ROLE_LABELS[role] || role)}</label>
             <select class="input" multiple data-workflow-override-step="${i}" id="f-workflow-override-${i}" style="min-height: 70px;">
-              ${overrideEmployeeChoices.map(e => `<option value="${e.id}" ${(currentOverrides[String(i)] || []).includes(e.id) ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} (${escapeHtml(ROLE_LABELS[e.role] || e.role)})</option>`).join('')}
+              ${overrideEmployeeChoices.map(e => `<option value="${e.id}" ${(currentOverrides[String(i)] || []).includes(e.id) ? 'selected' : ''}>${personNameHtml(e)} (${escapeHtml(ROLE_LABELS[e.role] || e.role)})</option>`).join('')}
             </select>
           </div>
         `).join('')}
@@ -14519,7 +14519,7 @@ function renderParametresQualite() {
                 <strong>${escapeHtml(issue.label)}</strong>
               </div>
               <div class="quality-issue-employees">
-                ${issue.employees.map(e => `<button type="button" class="btn-link quality-issue-link" data-employee-id="${escapeHtml(e.id)}">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</button>`).join('')}
+                ${issue.employees.map(e => `<button type="button" class="btn-link quality-issue-link" data-employee-id="${escapeHtml(e.id)}">${personNameHtml(e)}</button>`).join('')}
               </div>
             </div>
           `).join('')}
@@ -14764,7 +14764,7 @@ function renderPlanningSemaine() {
               <tr class="planning-service-header"><td colspan="${weekDates.length + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
               ${g.employees.map(e => `
                 <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
+                  <td>${personNameHtml(e)}</td>
                   ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
                 </tr>
               `).join('')}
@@ -14802,7 +14802,7 @@ function renderPlanningMois() {
               <tr class="planning-service-header"><td colspan="${daysInMonth + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
               ${g.employees.map(e => `
                 <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
+                  <td>${personNameHtml(e)}</td>
                   ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
                 </tr>
               `).join('')}
@@ -14844,7 +14844,7 @@ function renderPlanningAnnee() {
               const total = monthCounts.reduce((a, b) => a + b, 0);
               return `
                 <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td>
+                  <td>${personNameHtml(e)}</td>
                   ${monthCounts.map(c => `<td>${c || ''}</td>`).join('')}
                   <td><strong>${total}</strong></td>
                 </tr>
@@ -14931,7 +14931,7 @@ function renderHorairesSemaine() {
                 <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
                 ${g.employees.map(e => `
                   <tr>
-                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                    <td>${personNameHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                     ${weekDates.map(d => {
                       const info = computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests);
                       return `<td class="planning-cell planning-${info.level}">${info.label}</td>`;
@@ -14983,12 +14983,12 @@ function renderHorairesJour() {
               <tr class="planning-service-header"><td colspan="4">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
               ${g.employees.map(e => {
                 const travaille = (e.joursTravailles || []).includes(weekday);
-                if (!travaille) return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
+                if (!travaille) return `<tr><td>${personNameHtml(e)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
                 const info = computeDailyHours(e, dateStr, leaveRequests, teleworkRequests);
-                if (info.level === 'leave') return `<tr><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td colspan="3">${icon(ICONS.sun, 14)} Congé</td></tr>`;
+                if (info.level === 'leave') return `<tr><td>${personNameHtml(e)}</td><td colspan="3">${icon(ICONS.sun, 14)} Congé</td></tr>`;
                 return `
                   <tr>
-                    <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}${info.level === 'remote' ? ' ' + icon(ICONS.laptop, 13) : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                    <td>${personNameHtml(e)}${info.level === 'remote' ? ' ' + icon(ICONS.laptop, 13) : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                     <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
                     <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
                     <td><strong>${formatNumberFR(info.heures)} h</strong></td>
@@ -15034,7 +15034,7 @@ function renderHorairesMois() {
               <tr class="planning-service-header"><td colspan="${daysInMonth + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
               ${g.employees.map(e => `
                 <tr>
-                  <td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                  <td>${personNameHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
                   ${Array.from({ length: daysInMonth }, (_, i) => {
                     const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
                     return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? icon(ICONS.sun, 12) : formatNumberFR(info.heures)}</td>`;
@@ -15056,7 +15056,7 @@ function openHorairesModal(employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Horaires — ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
+        <h2>Horaires — ${personNameHtml(employee)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="horaires-form">
@@ -15195,7 +15195,7 @@ function renderPlanningAstreintes() {
           <tbody>
             ${rows.map(({ employee, astreinte }) => `
               <tr>
-                <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+                <td>${personNameHtml(employee)}</td>
                 <td>${formatDate(astreinte.dateDebut)} → ${formatDate(astreinte.dateFin)}</td>
                 <td>${formatCurrencyFR(astreinte.indemniteMontant || 0)}</td>
                 <td>${(astreinte.interventions || []).length}</td>
@@ -15257,7 +15257,7 @@ function openAjouterAstreinteModal() {
             <label>Salarié</label>
             <select class="input" id="f-astreinte-employee" required>
               <option value="">Sélectionner...</option>
-              ${employees.map(e => `<option value="${e.id}">${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+              ${employees.map(e => `<option value="${e.id}">${personNameHtml(e)}</option>`).join('')}
             </select>
           </div>
           <div class="form-grid">
@@ -15307,7 +15307,7 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>Astreinte — ${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
+        <h2>Astreinte — ${personNameHtml(employee)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
@@ -15452,7 +15452,7 @@ function renderTeletravailDemandes() {
     <div class="toolbar card">
       <select id="tt-filter-employee" class="input">
         <option value="">Tous les salariés</option>
-        ${employees.map(e => `<option value="${e.id}" ${state.teletravailFilters.employeeId === e.id ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+        ${employees.map(e => `<option value="${e.id}" ${state.teletravailFilters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
       </select>
       <select id="tt-filter-statut" class="input">
         <option value="">Tous les statuts</option>
@@ -15483,7 +15483,7 @@ function renderTeleworkRequestRow(r) {
 
   return `
     <tr>
-      <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+      <td>${personNameHtml(employee)}</td>
       <td>${periode}</td>
       <td>${formatDurationFR(r.nbJours)}</td>
       <td>${renderRequestStatutBadge(r)}</td>
@@ -15875,7 +15875,7 @@ function renderTeletravailPlanning() {
 function renderPlanningRow(employee, weekDates, teleworkRequests, leaveRequests) {
   return `
     <tr>
-      <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+      <td>${personNameHtml(employee)}</td>
       ${weekDates.map(d => renderPlanningCell(employee, d, teleworkRequests, leaveRequests)).join('')}
     </tr>
   `;
@@ -16011,7 +16011,7 @@ function renderFrais() {
     <div class="toolbar card">
       <select id="frais-filter-employee" class="input">
         <option value="">Tous les salariés</option>
-        ${employees.map(e => `<option value="${e.id}" ${state.fraisFilters.employeeId === e.id ? 'selected' : ''}>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</option>`).join('')}
+        ${employees.map(e => `<option value="${e.id}" ${state.fraisFilters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
       </select>
       <select id="frais-filter-categorie" class="input">
         <option value="">Toutes les catégories</option>
@@ -16047,7 +16047,7 @@ function renderExpenseRow(n) {
 
   return `
     <tr>
-      <td>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</td>
+      <td>${personNameHtml(employee)}</td>
       <td>${formatDate(n.date)}</td>
       <td>${escapeHtml(n.categorie)}</td>
       <td>${escapeHtml(n.libelle)}</td>
@@ -16339,7 +16339,7 @@ function openExpenseDetailModal(id) {
       </div>
       <div class="modal-body">
         <div class="print-area">
-          <h2>${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)}</h2>
+          <h2>${personNameHtml(employee)}</h2>
           ${infoRow('Date', formatDate(n.date))}
           ${infoRow('Catégorie', n.categorie)}
           ${infoRow('Libellé', n.libelle)}
@@ -16596,7 +16596,7 @@ function renderTicketsEquipe() {
         <tbody>
           ${rows.map(r => `
             <tr>
-              <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
+              <td>${personNameHtml(r.employee)}</td>
               <td>${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
               <td>${formatCurrencyFR(r.result.montantTotal)}</td>
               <td>${formatCurrencyFR(r.result.partEmployeur)}</td>
@@ -16626,7 +16626,7 @@ function openCorrigerTicketsModal(employeeId) {
       </div>
       <form id="corriger-tickets-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.</p>
           <div class="form-field">
             <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
             <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
@@ -16920,7 +16920,7 @@ function renderExportPaiePreparationTab(rows) {
     <div class="card" style="margin-bottom: 12px;">
       <h3 style="margin-bottom: 8px;">${title} <span class="badge ${badgeClass}">${list.length}</span></h3>
       <ul class="anomaly-list">
-        ${list.map(a => `<li><strong>${escapeHtml(a.employee.prenom)} ${escapeHtml(a.employee.nom)}</strong> — ${escapeHtml(a.message)}</li>`).join('')}
+        ${list.map(a => `<li><strong>${personNameHtml(a.employee)}</strong> — ${escapeHtml(a.message)}</li>`).join('')}
       </ul>
     </div>
   `;
@@ -16959,7 +16959,7 @@ function renderExportPaiePreparationTab(rows) {
           <tbody>
             ${rows.map(r => `
               <tr>
-                <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
+                <td>${personNameHtml(r.employee)}</td>
                 <td>${formatDurationFR(r.congesPayesJours)}</td>
                 <td>${formatDurationFR(r.rttJours)}</td>
                 <td>${formatDurationFR(r.maladieJours)}</td>
@@ -17028,7 +17028,7 @@ function renderExportPaieExportTab(rows) {
             ${rows.map(r => `
               <tr>
                 <td>${escapeHtml(r.employee.matricule)}</td>
-                <td>${escapeHtml(r.employee.prenom)} ${escapeHtml(r.employee.nom)}</td>
+                <td>${personNameHtml(r.employee)}</td>
                 ${showColonne('conges') ? r.congesParType.map(j => `<td>${formatDurationFR(j)}</td>`).join('') : ''}
                 ${showColonne('teletravail') ? `<td>${formatDurationFR(r.teletravailJours)}</td>` : ''}
                 ${showColonne('tickets') ? `<td>${r.tickets.nbTickets}</td><td>${formatCurrencyFR(r.tickets.partSalarie)}</td>` : ''}
@@ -17181,7 +17181,7 @@ function openVariablesPaieModal(employeeId) {
       </div>
       <form id="variables-paie-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — primes, heures supplémentaires ou autre élément variable ponctuel pour ce mois (€). Remplace le montant précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} — primes, heures supplémentaires ou autre élément variable ponctuel pour ce mois (€). Remplace le montant précédemment saisi pour ce même mois.</p>
           <div class="form-field">
             <label for="f-montant">Montant (€) *</label>
             <input class="input" type="number" id="f-montant" name="montant" step="0.01" value="${current}" required>
@@ -17236,7 +17236,7 @@ function openHeuresSupModal(employeeId) {
       </div>
       <form id="heures-sup-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — nombre d'heures supplémentaires effectuées ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} — nombre d'heures supplémentaires effectuées ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
           <div class="form-field">
             <label for="f-heures">Heures supplémentaires (h) *</label>
             <input class="input" type="number" id="f-heures" name="heures" step="0.5" min="0" value="${current}" required>
@@ -17295,7 +17295,7 @@ function openReposCompensateurPrisModal(employeeId) {
       </div>
       <form id="repos-compensateur-form">
         <div class="modal-body">
-          <p class="text-muted">${escapeHtml(employee.prenom)} ${escapeHtml(employee.nom)} — nombre d'heures de repos compensateur prises ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} — nombre d'heures de repos compensateur prises ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
           <p class="form-hint">Solde disponible avant cette saisie : ${formatNumberFR(solde.solde)} h (${formatNumberFR(solde.credit)} h acquises − ${formatNumberFR(solde.pris)} h déjà prises, toutes années confondues).</p>
           <div class="form-field">
             <label for="f-heures">Heures prises (h) *</label>
@@ -17597,7 +17597,7 @@ function renderCandidaturesTable(candidatures) {
       <tbody>
         ${candidatures.map(c => `
           <tr>
-            <td>${escapeHtml(c.prenom)} ${escapeHtml(c.nom)}</td>
+            <td>${personNameHtml(c)}</td>
             <td>${escapeHtml(c.email)}${c.telephone ? `<br><span class="text-muted">${escapeHtml(c.telephone)}</span>` : ''}</td>
             <td>${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '<span class="text-muted">—</span>'}</td>
             <td>${formatDate(c.dateSoumission)}</td>
@@ -17706,7 +17706,7 @@ async function bindCandidatureDetailEvents(id) {
     <div class="card">
       <div class="view-header-row">
         <div>
-          <h2 style="margin-bottom: 4px;">${escapeHtml(candidature.prenom)} ${escapeHtml(candidature.nom)}</h2>
+          <h2 style="margin-bottom: 4px;">${personNameHtml(candidature)}</h2>
           <span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[candidature.statut] || 'badge-muted'}">${escapeHtml(CANDIDATURE_STATUT_LABELS[candidature.statut] || candidature.statut)}</span>
         </div>
       </div>
@@ -17765,7 +17765,7 @@ function openRejectCandidatureModal(candidature) {
   modalRoot.innerHTML = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Répondre à ${escapeHtml(candidature.prenom)} ${escapeHtml(candidature.nom)}</h2>
+        <h2>Répondre à ${personNameHtml(candidature)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="reject-candidature-form">
@@ -18298,5 +18298,13 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// §correctif audit du 31/08/2026 (reuse) : "${escapeHtml(x.prenom)} ${escapeHtml(x.nom)}" était
+// réécrit à la main une soixantaine de fois dans ce fichier (salarié, candidature, compte admin...),
+// contrairement aux autres formatages (dates, devises, pourcentages) qui passent déjà par un helper
+// central. Fonctionne pour toute entité {prenom, nom} — pas seulement un salarié.
+function personNameHtml(p) {
+  return `${escapeHtml(p.prenom)} ${escapeHtml(p.nom)}`;
 }
 
