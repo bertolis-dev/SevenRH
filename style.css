@@ -2692,6 +2692,17 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-hero-cta .btn { font-size: 15px; padding: 12px 24px; }
 
 .landing-hero-mock { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+/* §refonte "capture d'écran réelle" du 01/09/2026 : remplace le mockup HTML (chiffres/noms inventés)
+   par une vraie capture du produit — "l'interface réelle dès le premier scroll", pas une illustration
+   générique. Même traitement (cadre arrondi, ombre portée) que l'ancien .landing-mock-card. */
+.landing-hero-screenshot {
+  width: 100%;
+  max-width: 560px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  display: block;
+}
 .landing-mock-card {
   width: 100%;
   max-width: 420px;
