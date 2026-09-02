@@ -957,6 +957,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Paramètre les règles d'acquisition et de report, avec une vue d'ensemble par service." }
     ],
     related: [1, 6],
+    screenshot: 'landing-feature-conges.jpg',
     mock: {
       title: 'Congés & absences',
       kpis: [['18', 'Jours CP restants'], ['2', 'Demandes en attente'], ['5', 'Absents cette semaine']],
@@ -1020,6 +1021,7 @@ const LANDING_FEATURES = [
       { role: 'Comptabilité', text: "Reçoit un export prêt à intégrer, sans ressaisie." }
     ],
     related: [3, 4],
+    screenshot: 'landing-feature-paie.jpg',
     mock: {
       title: 'Préparation de paie',
       kpis: [['0', 'Anomalies détectées'], ['24', 'Salariés prêts'], ['15', 'Export le']],
@@ -1051,6 +1053,7 @@ const LANDING_FEATURES = [
       { role: 'Comptabilité', text: "Exporte les notes validées directement pour l'intégration comptable." }
     ],
     related: [2, 4],
+    screenshot: 'landing-feature-frais.jpg',
     mock: {
       title: 'Notes de frais',
       kpis: [['104,70 €', 'Ce mois-ci'], ['3', 'En attente'], ['0', 'Rejetées']],
@@ -1082,6 +1085,7 @@ const LANDING_FEATURES = [
     ],
     related: [0, 1],
     simulator: true,
+    screenshot: 'landing-feature-tickets.jpg',
     mock: {
       title: 'Tickets restaurant',
       kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
@@ -1112,6 +1116,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "N'a plus besoin de redessiner l'organigramme à chaque changement." }
     ],
     related: [6, 0],
+    screenshot: 'landing-feature-organigramme.jpg',
     mock: {
       title: 'Organigramme',
       kpis: [['4', 'Services'], ['6', 'Managers'], ['24', 'Salariés']],
@@ -1142,6 +1147,7 @@ const LANDING_FEATURES = [
       { role: 'Direction', text: "A la garantie que les documents obligatoires sont suivis, pas oubliés dans un tiroir." }
     ],
     related: [0, 5],
+    screenshot: 'landing-feature-documents.jpg',
     mock: {
       title: 'Documents RH',
       kpis: [['18', 'Documents ce mois'], ['3', 'Échéances proches'], ['0', 'Manquants']],
@@ -1172,6 +1178,7 @@ const LANDING_FEATURES = [
       { role: 'Direction', text: "A une vue d'ensemble du volume et du traitement des demandes internes." }
     ],
     related: [6, 0],
+    screenshot: 'landing-feature-support.jpg',
     mock: {
       title: 'Mes tickets',
       kpis: [['2', 'Ouverts'], ['5', 'Résolus ce mois'], ['4h', 'Délai moyen']],
@@ -1468,7 +1475,16 @@ function bindLandingNavMenuEvents() {
 
 /** Maquette stylisée (pas une vraie capture d'écran — voir aussi bindLandingHeroCarousel) réutilisée
  * pour donner un aperçu visuel concret à chaque page de fonctionnalité, plutôt qu'un mur de texte. */
-function renderMockCard(mock) {
+/** §refonte "capture d'écran réelle" du 01/09/2026 : une vraie capture (feature.screenshot, jeu de
+ * données de démonstration) remplace le mockup HTML inventé quand elle existe — même logique que le
+ * hero de la page d'accueil. "Planning & télétravail" n'a pas encore la sienne (rendu de tableau
+ * capturé vide via html2canvas malgré des données réelles présentes, cause non résolue) : garde son
+ * mockup d'origine plutôt qu'une capture cassée. */
+function renderMockCard(feature) {
+  if (feature.screenshot) {
+    return `<img class="landing-hero-screenshot" src="${escapeHtml(feature.screenshot)}" alt="${escapeHtml(feature.title)} dans Nexus" width="1280" height="760" loading="lazy">`;
+  }
+  const mock = feature.mock;
   return `
     <div class="landing-mock-card">
       <div class="landing-mock-header">
@@ -1521,7 +1537,7 @@ function renderFeatureDetailPage(index) {
             </div>
           </div>
           <div class="landing-hero-mock" aria-hidden="true">
-            ${renderMockCard(feature.mock)}
+            ${renderMockCard(feature)}
           </div>
         </div>
       </section>
