@@ -3404,51 +3404,89 @@ function openGroupSummaryModal() {
   document.getElementById('btn-refresh-group-summary').addEventListener('click', runGroupSummaryRefresh);
 }
 
+// §correctif audit du 01/09/2026 : drapeau au niveau module (pas juste btn.disabled, qui vit dans le
+// DOM de la modale) — fermer la modale pendant une actualisation puis la rouvrir crée un TOUT
+// NOUVEAU bouton, jamais désactivé, permettant de lancer une deuxième bascule de comptes pendant que
+// la première tourne encore en tâche de fond. Les deux finiraient par appeler switchAccount en
+// parallèle sur le même client Supabase partagé (voir commentaire de openAddAccountFlow) : le retour
+// au compte d'origine de l'une écraserait celui de l'autre, laissant l'utilisateur sur un compte
+// imprévisible. Ce drapeau bloque toute deuxième exécution tant que la première n'est pas terminée,
+// qu'elle ait réussi ou échoué (voir finally).
+let groupSummaryRefreshInFlight = false;
+
 async function runGroupSummaryRefresh() {
   const btn = document.getElementById('btn-refresh-group-summary');
   const contentEl = document.getElementById('group-summary-content');
   if (!btn || !contentEl) return; // la modale a pu être fermée entre-temps
+  if (groupSummaryRefreshInFlight) {
+    showToast('Une actualisation est déjà en cours : patientez qu\'elle se termine avant d\'en relancer une autre.', 'error');
+    return;
+  }
+  groupSummaryRefreshInFlight = true;
   btn.disabled = true;
   btn.textContent = 'Actualisation en cours...';
   contentEl.innerHTML = '<p class="text-muted">Actualisation en cours, ne fermez pas cette fenêtre...</p>';
 
-  const originalAccountId = authRepository.getCurrentAccountId();
-  const accounts = authRepository.getSavedAccounts();
-  const rows = [];
-
-  for (const account of accounts) {
-    const result = await authRepository.switchAccount(account.id);
-    if (!result.success) {
-      rows.push({ companyName: account.companyName || account.email, erreur: result.error });
-      continue;
+  try {
+    const originalAccountId = authRepository.getCurrentAccountId();
+    const allAccounts = authRepository.getSavedAccounts();
+    // §correctif audit du 01/09/2026 : 2 comptes gardés en parallèle peuvent pointer vers LA MÊME
+    // entreprise (ex. 2 rôles différents pour la même personne) — sans ce filtre, son effectif/sa
+    // masse salariale/ses congés en attente étaient comptés deux fois dans le total. companyId absent
+    // (comptes enregistrés avant ce correctif) : jamais traité comme un doublon, seule une
+    // correspondance explicite l'est.
+    const seenCompanyIds = new Set();
+    const accounts = [];
+    const skippedDuplicates = [];
+    for (const account of allAccounts) {
+      if (account.companyId && seenCompanyIds.has(account.companyId)) {
+        skippedDuplicates.push(account);
+        continue;
+      }
+      if (account.companyId) seenCompanyIds.add(account.companyId);
+      accounts.push(account);
     }
-    const employees = employeeRepository.getAll().filter(e => !e.archive);
-    const actifs = employees.filter(e => e.statut === 'Actif');
-    const settings = settingsRepository.getSettings();
-    rows.push({
-      companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
-      effectifActif: actifs.length,
-      masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
-      congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
+    const rows = [];
+
+    for (const account of accounts) {
+      const result = await authRepository.switchAccount(account.id);
+      if (!result.success) {
+        rows.push({ companyName: account.companyName || account.email, erreur: result.error });
+        continue;
+      }
+      const employees = employeeRepository.getAll().filter(e => !e.archive);
+      const actifs = employees.filter(e => e.statut === 'Actif');
+      const settings = settingsRepository.getSettings();
+      rows.push({
+        companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
+        effectifActif: actifs.length,
+        masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
+        congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
+      });
+    }
+    skippedDuplicates.forEach(account => {
+      rows.push({ companyName: `${account.companyName || account.email} (déjà compté ci-dessus)`, erreur: 'Même entreprise qu\'un autre compte gardé en parallèle, exclu du total pour ne pas le doubler.' });
     });
-  }
 
-  // Revient systématiquement sur le compte d'origine, quel que soit le résultat de chaque maillon —
-  // ne jamais laisser l'utilisateur sur un compte différent de celui d'où il a lancé l'actualisation.
-  // §correctif audit du 31/08/2026 : le résultat de CE dernier switchAccount doit être vérifié comme
-  // n'importe quel autre de la boucle — un échec ici (session expirée/révoquée, réseau) laissait
-  // auparavant DB._currentAuthUserId/_companiesCache pointer sur le DERNIER compte de la boucle, avec
-  // un render() qui affichait ensuite silencieusement les données de cette autre entreprise comme si
-  // de rien n'était (aucune erreur visible) — un vrai risque d'exposition cross-entreprise, pas
-  // seulement un affichage incorrect. On alerte donc explicitement l'utilisateur si ce retour échoue.
-  let restoreError = null;
-  if (originalAccountId) {
-    const restoreResult = await authRepository.switchAccount(originalAccountId);
-    if (!restoreResult.success) restoreError = restoreResult.error;
-  }
-  render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
+    // Revient systématiquement sur le compte d'origine, quel que soit le résultat de chaque maillon —
+    // ne jamais laisser l'utilisateur sur un compte différent de celui d'où il a lancé l'actualisation.
+    // §correctif audit du 31/08/2026 : le résultat de CE dernier switchAccount doit être vérifié comme
+    // n'importe quel autre de la boucle — un échec ici (session expirée/révoquée, réseau) laissait
+    // auparavant DB._currentAuthUserId/_companiesCache pointer sur le DERNIER compte de la boucle, avec
+    // un render() qui affichait ensuite silencieusement les données de cette autre entreprise comme si
+    // de rien n'était (aucune erreur visible) — un vrai risque d'exposition cross-entreprise, pas
+    // seulement un affichage incorrect. On alerte donc explicitement l'utilisateur si ce retour échoue.
+    let restoreError = null;
+    if (originalAccountId) {
+      const restoreResult = await authRepository.switchAccount(originalAccountId);
+      if (!restoreResult.success) restoreError = restoreResult.error;
+    }
+    render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
 
-  renderGroupSummaryResult(rows, restoreError);
+    renderGroupSummaryResult(rows, restoreError);
+  } finally {
+    groupSummaryRefreshInFlight = false;
+  }
 }
 
 function renderGroupSummaryResult(rows, restoreError) {
@@ -4240,7 +4278,12 @@ function getGlobalCommands(user) {
   return [
     {
       label: 'Ajouter un salarié', icon: ICONS.personPlus, keywords: ['nouveau salarié', 'embaucher', 'créer salarié'],
-      visible: () => hasPermission(user, PERMISSIONS.CREER_SALARIE),
+      // §correctif audit du 01/09/2026 : CREER_SALARIE seul ne suffit pas — l'entrée NAV_ITEMS
+      // 'employees' (baseNavItemsForRole) ignore complètement `roles` dès qu'un `permissions` est
+      // défini, et n'est réellement atteignable qu'avec VOIR_SALARIES ou VOIR_EQUIPE. Sans ce
+      // deuxième garde-fou, un salarié ayant reçu CREER_SALARIE seul (permissions individuelles)
+      // pouvait créer un salarié depuis la palette sans jamais pouvoir ouvrir l'écran Salariés.
+      visible: () => hasPermission(user, PERMISSIONS.CREER_SALARIE) && (hasPermission(user, PERMISSIONS.VOIR_SALARIES) || hasPermission(user, PERMISSIONS.VOIR_EQUIPE)),
       run: () => { navigateTo('employees'); openEmployeeModal(); }
     },
     {
@@ -11600,6 +11643,14 @@ async function submitLeaveRequestForm(evt) {
     return;
   }
 
+  // §correctif audit du 01/09/2026 : au-delà de ce point, plus aucune validation ne peut faire
+  // échouer l'envoi (voir plus bas, toujours suivi de closeModal()) — désactiver seulement ici,
+  // jamais plus tôt, pour ne jamais bloquer le bouton après un simple message d'erreur de saisie
+  // (ex. "Sélectionnez un salarié...") qui laisse l'utilisateur corriger et renvoyer. Sans ce
+  // garde-fou, un double-clic (ou un Entrée qui se déclenche deux fois) pendant l'appel réseau de
+  // resolveWorkflowWithFallback créait deux demandes identiques.
+  const submitBtn = evt.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   const createdRequest = await leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, nbJours,
     commentaire: formData.get('commentaire') || '',
@@ -16313,6 +16364,9 @@ async function submitTeleworkRequestForm(evt) {
     return;
   }
 
+  // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
+  const submitBtn = evt.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   const createdRequest = await teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
   finalizeDraftEdit();
@@ -16799,6 +16853,9 @@ async function submitExpenseForm(evt) {
     }
   }
 
+  // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
+  const submitBtn = evt.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
   const createdExpense = await expenseRepository.create({
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
     date: formData.get('date'),
@@ -18726,6 +18783,15 @@ function closeModal() {
   modalRoot.innerHTML = '';
   if (lastFocusedBeforeModal && document.contains(lastFocusedBeforeModal)) lastFocusedBeforeModal.focus();
   lastFocusedBeforeModal = null;
+  // §correctif audit du 01/09/2026 : chaque ouvreur de modale avec pièce jointe (openDocumentModal,
+  // openExpenseModal, openLeaveRequestModal, openProlongerModal...) réinitialise pendingAttachment à
+  // l'OUVERTURE, mais aucun ne le faisait à la fermeture — fermer une modale sans envoyer (croix,
+  // clic extérieur, Échap) laissait le fichier brut de pendingAttachmentFile en mémoire. La PROCHAINE
+  // modale à champ fichier facultatif, si son propre champ restait vide, uploadait alors ce fichier
+  // resté en mémoire et l'attachait à un tout autre enregistrement. Un seul point de remise à zéro ici
+  // couvre tous les ouvreurs, présents et futurs, plutôt que de dupliquer le reset dans chacun.
+  state.pendingAttachment = null;
+  state.pendingAttachmentFile = null;
 }
 
 // ---------------------------------------------------------------------------

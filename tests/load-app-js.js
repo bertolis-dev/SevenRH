@@ -128,6 +128,7 @@ globalThis.__renderContratBadge = renderContratBadge;
 globalThis.__renderBreadcrumb = renderBreadcrumb;
 globalThis.__getEmployeeActivityHistory = getEmployeeActivityHistory;
 globalThis.__auditLogRepository = auditLogRepository;
+globalThis.__PERMISSIONS = PERMISSIONS;
 globalThis.__getThemePreference = getThemePreference;
 globalThis.__applyThemePreference = applyThemePreference;
 globalThis.__performGlobalSearch = performGlobalSearch;
@@ -187,6 +188,7 @@ globalThis.__bulkSelection = bulkSelection;
     renderBreadcrumb: sandbox.__renderBreadcrumb,
     getEmployeeActivityHistory: sandbox.__getEmployeeActivityHistory,
     auditLogRepository: sandbox.__auditLogRepository,
+    PERMISSIONS: sandbox.__PERMISSIONS,
     getThemePreference: sandbox.__getThemePreference,
     applyThemePreference: sandbox.__applyThemePreference,
     performGlobalSearch: sandbox.__performGlobalSearch,

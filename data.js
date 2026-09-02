@@ -2899,6 +2899,11 @@ const DB = {
       prenom: employee ? employee.prenom : '',
       nom: employee ? employee.nom : '',
       companyName: (company && company.raisonSociale) || '',
+      // §correctif audit du 01/09/2026 : companyId (absent des comptes déjà enregistrés avant ce
+      // correctif, remplacé au prochain login/bascule) permet à la Vue groupe de repérer 2 comptes
+      // gardés en parallèle qui pointent en réalité vers LA MÊME entreprise (ex. 2 rôles différents
+      // de Betty sur Seven Sept) et de ne jamais compter 2 fois son effectif/sa masse salariale.
+      companyId: (company && company.id) || '',
       session: { access_token: session.access_token, refresh_token: session.refresh_token, expires_at: session.expires_at }
     };
     if (idx === -1) accounts.push(entry); else accounts[idx] = entry;
@@ -3863,7 +3868,14 @@ function isLeaveTypeEligibleForEmployee(employee, leaveType, categoriesSalarie) 
     switch (regle.critere) {
       case 'anciennete': {
         if (!employee.dateEmbauche) return false;
-        const years = (new Date() - new Date(employee.dateEmbauche)) / (365.25 * 86400000);
+        // §correctif audit du 01/09/2026 : recalculait "à la main" avec new Date(employee.dateEmbauche),
+        // qui parse une date "AAAA-MM-JJ" en minuit UTC (voir parseISODateLocal) — décalage silencieux
+        // d'quelques heures pour toute entreprise dans un fuseau différent (DOM-TOM notamment),
+        // donnant une éligibilité anticipée ou retardée d'anciennete autour de la date anniversaire.
+        // Réutilise désormais calculateAncienneteYears, la même fonction que le reste du fichier
+        // utilise déjà pour tout calcul d'ancienneté — jamais deux conventions différentes pour la
+        // même notion.
+        const years = calculateAncienneteYears(employee);
         return regle.operateur === '>=' ? years >= Number(regle.valeur) : years <= Number(regle.valeur);
       }
       case 'categorieSalarieId':

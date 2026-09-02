@@ -48,6 +48,8 @@ globalThis.__getConventionCollectiveIdccCode = getConventionCollectiveIdccCode;
 globalThis.__getEffectifActifAt = getEffectifActifAt;
 globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
 globalThis.__getRadarTresorerieRH = getRadarTresorerieRH;
+globalThis.__isLeaveTypeEligibleForEmployee = isLeaveTypeEligibleForEmployee;
+globalThis.__calculateAncienneteYears = calculateAncienneteYears;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -73,6 +75,8 @@ globalThis.__getRadarTresorerieRH = getRadarTresorerieRH;
     getEffectifActifAt: sandbox.__getEffectifActifAt,
     getSeuilsEffectifStatus: sandbox.__getSeuilsEffectifStatus,
     getRadarTresorerieRH: sandbox.__getRadarTresorerieRH,
+    isLeaveTypeEligibleForEmployee: sandbox.__isLeaveTypeEligibleForEmployee,
+    calculateAncienneteYears: sandbox.__calculateAncienneteYears,
   };
 }
 
