@@ -66,6 +66,26 @@ async function run() {
     assert.strictEqual(limited.length, 1, 'doit respecter la limite demandée');
   }
 
+  // ---- §correctif audit du 01/09/2026 : jamais de fuite vers un autre salarié dont le nom complet
+  //      contient celui-ci comme préfixe (nom composé) — un simple .includes() les confondait ----
+  {
+    const employee = DB.getEmployees().find(e => e.role !== 'rh');
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const fullName = `${employee.prenom} ${employee.nom}`;
+
+    DB.logAudit('Modification', 'Salarié', fullName);
+    // Nom composé qui commence PAR le nom de cet employé, mais désigne quelqu'un d'autre.
+    DB.logAudit('Régularisation congé', 'Congé', `${fullName}-Martin · CP → RTT · 12/08/2026`);
+    // Nom composé qui se TERMINE par le nom de cet employé, mais désigne quelqu'un d'autre.
+    DB.logAudit('Prolongation arrêt', 'Maladie', `Jean-${fullName} · Maladie · jusqu'au 20/08/2026`);
+
+    const history = getEmployeeActivityHistory(employee, 8);
+    assert.ok(history.some(h => h.cible === fullName), 'doit toujours retrouver la vraie entrée de ce salarié');
+    assert.ok(!history.some(h => h.cible.startsWith(`${fullName}-Martin`)), 'un nom composé qui COMMENCE par ce nom (ex. "-Martin") ne doit jamais être confondu avec ce salarié');
+    assert.ok(!history.some(h => h.cible.includes(`Jean-${fullName}`)), 'un nom composé qui SE TERMINE par ce nom ne doit jamais être confondu avec ce salarié');
+  }
+
   // ---- Mode sombre manuel : 'system' n'écrit rien (suit l'OS), 'light'/'dark' persistent et se relisent ----
   {
     assert.strictEqual(getThemePreference(), 'system', 'par défaut, sans réglage enregistré, doit suivre le système');

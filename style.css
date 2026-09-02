@@ -627,8 +627,14 @@ p { margin: 0; line-height: 1.5; }
    qui se valent toutes à l'œil. Réutilise §retour du 21/08/2026 (pas une couleur par carte) : ici ce
    n'est pas "une couleur pour CETTE carte" mais un second NIVEAU de carte, appliqué au même titre pour
    toutes les grilles KPI de l'appli. */
+/* §correctif audit du 01/09/2026 (mode sombre) : utilisait --color-primary/--color-primary-hover,
+   éclaircis exprès en mode sombre pour qu'un BOUTON ressorte d'une carte (voir plus bas) — mais ici
+   c'est le fond de LA carte elle-même, pas un bouton dessus. Le chiffre en or fixe (--landing-gold-300,
+   jamais retouché par thème) tombait donc à ~2.8:1 de contraste en mode sombre (mesuré), sous le
+   minimum WCAG. --landing-navy-700/900 (même dégradé que .dashboard-hero) ne changent eux jamais
+   selon le thème : contraste ~8:1 stable en clair ET en sombre. */
 .kpi-card-hero {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+  background: linear-gradient(135deg, var(--landing-navy-700), var(--landing-navy-900));
   border-color: transparent;
   grid-column: span 2;
 }

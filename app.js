@@ -8959,10 +8959,18 @@ function renderBreadcrumb(items) {
  * déjà, mais rien ne le rend visible directement sur la fiche concernée. cible (voir logAudit) est
  * un texte libre, pas une référence par id — filtre par correspondance de nom, comme la recherche
  * globale (performGlobalSearch) : accepté ici, une fiche reste consultable même sans cet historique
- * si jamais deux salariés partagent exactement le même nom complet. */
+ * si jamais deux salariés partagent exactement le même nom complet.
+ * §correctif audit du 01/09/2026 : un simple .includes() faisait fuiter l'activité d'un AUTRE salarié
+ * dès que son nom complet contenait celui-ci comme préfixe — ex. "Léa Dubois" retrouvait aussi les
+ * entrées de "Léa Dubois-Martin" (nom composé), un vrai risque de confidentialité dans une fiche RH
+ * (arrêts maladie, ajustements de compteurs, notes de frais...). Exige désormais une frontière de mot
+ * de part et d'autre du nom (jamais suivi/précédé d'une lettre ou d'un tiret) plutôt qu'une simple
+ * sous-chaîne. */
 function getEmployeeActivityHistory(employee, limit = 8) {
   const fullName = `${employee.prenom} ${employee.nom}`;
-  return auditLogRepository.getAuditLog().filter(entry => entry.cible && entry.cible.includes(fullName)).slice(0, limit);
+  const escaped = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const boundaryPattern = new RegExp(`(^|[^\\p{L}-])${escaped}([^\\p{L}-]|$)`, 'u');
+  return auditLogRepository.getAuditLog().filter(entry => entry.cible && boundaryPattern.test(entry.cible)).slice(0, limit);
 }
 
 function renderEmployeeActivityCard(employee) {
