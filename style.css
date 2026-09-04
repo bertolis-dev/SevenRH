@@ -2702,8 +2702,14 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* §refonte "capture d'écran réelle" du 01/09/2026 : remplace le mockup HTML (chiffres/noms inventés)
    par une vraie capture du produit — "l'interface réelle dès le premier scroll", pas une illustration
    générique. Même traitement (cadre arrondi, ombre portée) que l'ancien .landing-mock-card. */
+/* §correctif du 02/09/2026 : height: auto manquant — les attributs HTML width="1280" height="760"
+   (ajoutés pour réserver l'espace et éviter un saut de mise en page pendant le chargement) devenaient
+   la hauteur EFFECTIVEMENT appliquée dès que la largeur passait en pourcentage, écrasant le ratio
+   réel de l'image (1280x760, ~1.68:1) en un rendu étiré verticalement (mesuré : 546x760 affiché au
+   lieu de 546x324, hauteur bloquée à la valeur brute de l'attribut). */
 .landing-hero-screenshot {
   width: 100%;
+  height: auto;
   max-width: 560px;
   border-radius: var(--radius-lg);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
