@@ -9219,6 +9219,8 @@ function renderEmployeeDetail(id) {
         </details>
       </div>
 
+      ${renderEmployeeFraisCard(e, user)}
+
       ${renderTypesAbsenceCard(e, user)}
 
       ${renderConfidentialEmployeeCard(e, user)}
@@ -9239,6 +9241,48 @@ function renderEmployeeDetail(id) {
       ) : ''}
 
       ${hasPermission(user, PERMISSIONS.VOIR_JOURNAL_AUDIT) ? renderEmployeeActivityCard(e) : ''}
+    </div>
+  `;
+}
+
+/** §demande Betty du 04/09/2026 : la fiche salarié affichait déjà "Compteurs de congés" mais rien sur
+ * les notes de frais de ce salarié — même emplacement, même logique d'accès (soi-même ou
+ * VOIR_COMPTEURS, comme les compteurs de congés juste au-dessus — pas de permission dédiée "voir les
+ * notes de frais d'un tiers" dans le catalogue, VOIR_COMPTEURS joue déjà ce rôle pour ce type
+ * d'information personnelle/financière). Masquée entièrement (pas de carte vide) si l'entreprise n'a
+ * pas souscrit au module frais, ou si l'utilisateur n'a pas accès. */
+function renderEmployeeFraisCard(e, user) {
+  if (!hasModule('frais')) return '';
+  if (user.id !== e.id && !hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)) return '';
+  const expenses = expenseRepository.getAll().filter(n => n.employeeId === e.id).sort((a, b) => b.date.localeCompare(a.date));
+  const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
+  const enAttente = expenses.filter(n => n.statut === 'En attente').length;
+  return `
+    <div class="card">
+      <h2>Notes de frais</h2>
+      <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC${enAttente ? ` · ${enAttente} en attente` : ''}</p>
+      ${expenses.length === 0 ? '<p class="text-muted">Aucune note de frais enregistrée.</p>' : `
+        <details class="collapsible-panel">
+          <summary>Voir les notes de frais</summary>
+          <div style="overflow-x: auto;">
+            <table class="table">
+              <thead><tr><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant</th><th>Statut</th></tr></thead>
+              <tbody>
+                ${expenses.slice(0, 20).map(n => `
+                  <tr>
+                    <td>${formatDate(n.date)}</td>
+                    <td>${escapeHtml(n.categorie)}</td>
+                    <td>${escapeHtml(n.libelle)}</td>
+                    <td class="cell-numeric">${formatCurrencyFR(n.montantTTC)}</td>
+                    <td>${renderRequestStatutBadge(n)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${expenses.length > 20 ? `<p class="text-muted" style="margin-top: 8px;">${expenses.length - 20} note(s) supplémentaire(s), voir l'écran Notes de frais pour l'historique complet.</p>` : ''}
+        </details>
+      `}
     </div>
   `;
 }
