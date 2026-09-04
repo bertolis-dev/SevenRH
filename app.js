@@ -6848,6 +6848,24 @@ function getTableauCompteursData() {
 
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveTypes = allLeaveTypes.filter(t => t.categorie === 'conge');
+  // §demande Betty du 04/09/2026 : afficher clairement, une seule fois par type (pas répété à
+  // chaque ligne salarié), la période actuellement disponible et la période en cours d'acquisition
+  // — ces bornes ne dépendent QUE de dateClotureCompteur et de la date du jour, jamais du salarié,
+  // donc identiques pour toutes les lignes d'un même type (voir getLeaveBalance, data.js, qui fait
+  // le même calcul par salarié pour les besoins du solde chiffré).
+  const periodInfoByType = new Map();
+  leaveTypes.forEach(t => {
+    if (t.dateClotureCompteur) {
+      const current = getCompteurPeriodBounds(t.dateClotureCompteur, new Date());
+      const previous = getCompteurPeriodBounds(t.dateClotureCompteur, new Date(current.periodStart.getTime() - 86400000));
+      periodInfoByType.set(t.id, {
+        disponible: { debut: toISODate(previous.periodStart), fin: toISODate(previous.periodEnd) },
+        enCours: { debut: toISODate(current.periodStart), fin: toISODate(current.periodEnd) },
+      });
+    } else {
+      periodInfoByType.set(t.id, { anneeEnCours: new Date().getFullYear() });
+    }
+  });
   const allRequests = leaveRepository.getAll();
   // §correctif audit du 31/08/2026 (efficiency) : getLeaveBalance (et ses appels internes à
   // calculateAcquisition/countSuspendedAcquisitionDays) commencent TOUS par filtrer allRequests sur
@@ -6868,7 +6886,16 @@ function getTableauCompteursData() {
     };
   });
 
-  return { leaveTypes, rows };
+  return { leaveTypes, rows, periodInfoByType };
+}
+
+/** Ligne d'entête sous le nom d'un type de congé (Tableau des compteurs) : année en cours pour un
+ * type sans clôture (compteur ouvert en continu, jamais de "période en cours" distincte), ou les
+ * deux périodes (disponible/en cours d'acquisition) pour un type à clôture — cf. commentaire dans
+ * getTableauCompteursData sur pourquoi cette info est calculée une seule fois par type. */
+function renderTableauCompteursPeriodInfo(info) {
+  if (info.anneeEnCours) return `<div class="tc-header-period text-muted">Année ${info.anneeEnCours}</div>`;
+  return `<div class="tc-header-period text-muted">Dispo. ${formatDate(info.disponible.debut)} au ${formatDate(info.disponible.fin)}<br>En cours d'acquisition : ${formatDate(info.enCours.debut)} au ${formatDate(info.enCours.fin)}</div>`;
 }
 
 // §correctif retour QA du 27/08/2026 (point 1) : détail d'une cellule — solde disponible en avant,
@@ -6901,7 +6928,7 @@ function renderTableauCompteursCell(b) {
 }
 
 function renderTableauCompteurs() {
-  const { leaveTypes, rows } = getTableauCompteursData();
+  const { leaveTypes, rows, periodInfoByType } = getTableauCompteursData();
   const { pageItems, totalPages, page, pageStart } = paginate(rows, 'tableauCompteursPage');
 
   return `
@@ -6923,25 +6950,25 @@ function renderTableauCompteurs() {
               <thead>
                 <tr>
                   <th>Salarié</th>
-                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}</th>`).join('')}
+                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}${renderTableauCompteursPeriodInfo(periodInfoByType.get(t.id))}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
                 ${pageItems.map(row => `
                   <tr>
-                    <td>${personNameHtml(row.employee)}</td>
-                    ${row.balances.map((b, i) => `<td style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
+                    <td data-label="Salarié">${personNameHtml(row.employee)}</td>
+                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
               <tfoot>
                 <tr>
-                  <td><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
+                  <td data-label="Total"><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
                   ${leaveTypes.map((t, i) => {
                     const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
                     const hasIllimite = finiteValues.length < rows.length;
                     const total = finiteValues.reduce((sum, v) => sum + v, 0);
-                    return `<td style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
+                    return `<td data-label="${escapeHtml(t.nom)}" style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
                   }).join('')}
                 </tr>
               </tfoot>
@@ -15276,6 +15303,49 @@ function groupEmployeesByService(employees) {
     .map(service => ({ service, employees: groups[service] }));
 }
 
+/** §refonte planning du 04/09/2026 : même regroupement que groupEmployeesByService, avec un niveau de
+ * sous-groupe par équipe au sein de chaque service — réutilisé par toutes les vues du planning
+ * (Semaine/Mois/Année/Horaires) pour ne jamais diverger d'une vue à l'autre. Le sous-groupe "équipe"
+ * n'est affiché que si le service compte réellement plusieurs équipes distinctes ; sinon (personne
+ * n'a d'équipe renseignée dans ce service, ou une seule équipe couvre tout le monde) l'entête équipe
+ * serait une simple redite du nom du service, donc on la masque (voir usage dans renderPlanningGroupRows). */
+function groupEmployeesByServiceAndEquipe(employees) {
+  return groupEmployeesByService(employees).map(g => {
+    const equipeGroups = {};
+    g.employees.forEach(e => {
+      const key = e.equipe || 'Sans équipe';
+      (equipeGroups[key] = equipeGroups[key] || []).push(e);
+    });
+    const equipes = Object.keys(equipeGroups)
+      .sort((a, b) => (a === 'Sans équipe') - (b === 'Sans équipe') || a.localeCompare(b))
+      .map(equipe => ({ equipe, employees: equipeGroups[equipe] }));
+    return { service: g.service, employees: g.employees, equipes };
+  });
+}
+
+/** Rendu générique des lignes d'un tableau du planning, service par service puis équipe par équipe
+ * (voir groupEmployeesByServiceAndEquipe) : `renderRow(employee)` doit renvoyer le HTML complet d'une
+ * ou plusieurs lignes <tr> pour ce salarié, `colspan` doit couvrir toutes les colonnes du tableau
+ * (pour les lignes d'entête service/équipe), `renderServiceSummaryRow` est optionnel (ligne de total
+ * par service, ex. Horaires Semaine). */
+function renderPlanningGroupRows(employees, colspan, renderRow, renderServiceSummaryRow) {
+  return groupEmployeesByServiceAndEquipe(employees).map(g => `
+    <tr class="planning-service-header"><td colspan="${colspan}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
+    ${g.equipes.map(eq => `
+      ${g.equipes.length > 1 ? `<tr class="planning-equipe-header"><td colspan="${colspan}">${escapeHtml(eq.equipe)} <span class="text-muted">(${eq.employees.length})</span></td></tr>` : ''}
+      ${eq.employees.map(e => renderRow(e)).join('')}
+    `).join('')}
+    ${renderServiceSummaryRow ? renderServiceSummaryRow(g) : ''}
+  `).join('');
+}
+
+/** Nom + poste (si renseigné), utilisé dans le planning équipe pour identifier rapidement qui fait
+ * quoi (demande Betty du 04/09/2026) — pas utilisé partout (ex. listes de salariés) pour ne pas
+ * alourdir les écrans où le poste est déjà visible ailleurs. */
+function personNameWithPosteHtml(e) {
+  return `${personNameHtml(e)}${e.poste ? ` <span class="text-muted" style="font-size:12px;">${escapeHtml(e.poste)}</span>` : ''}`;
+}
+
 /** Sprint SIRH premium §3 : "modification par glisser-déposer" — une case de congé/télétravail
  * VALIDÉ (jamais une case en attente, ni "Présent"/"Non travaillé"/"Repos" : rien à déplacer) devient
  * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
@@ -15313,15 +15383,12 @@ function renderPlanningSemaine() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}</tr></thead>
           <tbody>
-            ${groupEmployeesByService(employees).map(g => `
-              <tr class="planning-service-header"><td colspan="${weekDates.length + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-              ${g.employees.map(e => `
-                <tr>
-                  <td>${personNameHtml(e)}</td>
-                  ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
-                </tr>
-              `).join('')}
-            `).join('')}
+            ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
+              <tr>
+                <td>${personNameWithPosteHtml(e)}</td>
+                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
+              </tr>
+            `)}
           </tbody>
         </table>
       `}
@@ -15351,15 +15418,12 @@ function renderPlanningMois() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
           <tbody>
-            ${groupEmployeesByService(employees).map(g => `
-              <tr class="planning-service-header"><td colspan="${daysInMonth + 1}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-              ${g.employees.map(e => `
-                <tr>
-                  <td>${personNameHtml(e)}</td>
-                  ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
-                </tr>
-              `).join('')}
-            `).join('')}
+            ${renderPlanningGroupRows(employees, daysInMonth + 1, e => `
+              <tr>
+                <td>${personNameWithPosteHtml(e)}</td>
+                ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
+              </tr>
+            `)}
           </tbody>
         </table>
       `}
@@ -15388,7 +15452,7 @@ function renderPlanningAnnee() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${MONTH_NAMES.map(m => `<th>${m.slice(0, 3)}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
-            ${employees.map(e => {
+            ${renderPlanningGroupRows(employees, MONTH_NAMES.length + 2, e => {
               const monthCounts = MONTH_NAMES.map((_, monthIndex) =>
                 leaveRequests
                   .filter(r => r.employeeId === e.id)
@@ -15397,12 +15461,12 @@ function renderPlanningAnnee() {
               const total = monthCounts.reduce((a, b) => a + b, 0);
               return `
                 <tr>
-                  <td>${personNameHtml(e)}</td>
+                  <td>${personNameWithPosteHtml(e)}</td>
                   ${monthCounts.map(c => `<td>${c || ''}</td>`).join('')}
                   <td><strong>${total}</strong></td>
                 </tr>
               `;
-            }).join('')}
+            })}
           </tbody>
         </table>
       `}
@@ -15461,7 +15525,6 @@ function renderHorairesSemaine() {
   const employees = getPlanningEmployees(toISODate(weekDates[0]), toISODate(weekDates[6]));
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
-  const groups = groupEmployeesByService(employees);
   const totalSemaine = (e) => weekDates.reduce((sum, d) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0);
 
   return `
@@ -15478,27 +15541,22 @@ function renderHorairesSemaine() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
-            ${groups.map(g => {
-              const serviceTotal = g.employees.reduce((sum, e) => sum + totalSemaine(e), 0);
-              return `
-                <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-                ${g.employees.map(e => `
-                  <tr>
-                    <td>${personNameHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
-                    ${weekDates.map(d => {
-                      const info = computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests);
-                      return `<td class="planning-cell planning-${info.level}">${info.label}</td>`;
-                    }).join('')}
-                    <td><strong>${formatNumberFR(totalSemaine(e))} h</strong></td>
-                  </tr>
-                `).join('')}
-                <tr class="planning-summary-row">
-                  <td>Total ${escapeHtml(g.service)}</td>
-                  ${weekDates.map(d => `<td>${formatNumberFR(g.employees.reduce((sum, e) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0))} h</td>`).join('')}
-                  <td><strong>${formatNumberFR(serviceTotal)} h</strong></td>
-                </tr>
-              `;
-            }).join('')}
+            ${renderPlanningGroupRows(employees, weekDates.length + 2, e => `
+              <tr>
+                <td>${personNameWithPosteHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                ${weekDates.map(d => {
+                  const info = computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests);
+                  return `<td class="planning-cell planning-${info.level}">${info.label}</td>`;
+                }).join('')}
+                <td><strong>${formatNumberFR(totalSemaine(e))} h</strong></td>
+              </tr>
+            `, g => `
+              <tr class="planning-summary-row">
+                <td>Total ${escapeHtml(g.service)}</td>
+                ${weekDates.map(d => `<td>${formatNumberFR(g.employees.reduce((sum, e) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0))} h</td>`).join('')}
+                <td><strong>${formatNumberFR(g.employees.reduce((sum, e) => sum + totalSemaine(e), 0))} h</strong></td>
+              </tr>
+            `)}
           </tbody>
         </table>
       `}
@@ -15516,7 +15574,6 @@ function renderHorairesJour() {
   const employees = getPlanningEmployees(dateStr, dateStr);
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
-  const groups = groupEmployeesByService(employees);
 
   return `
     <div class="view-header-row">
@@ -15532,23 +15589,20 @@ function renderHorairesJour() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th><th>Matin</th><th>Après-midi</th><th>Total</th></tr></thead>
           <tbody>
-            ${groups.map(g => `
-              <tr class="planning-service-header"><td colspan="4">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-              ${g.employees.map(e => {
-                const travaille = (e.joursTravailles || []).includes(weekday);
-                if (!travaille) return `<tr><td>${personNameHtml(e)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
-                const info = computeDailyHours(e, dateStr, leaveRequests, teleworkRequests);
-                if (info.level === 'leave') return `<tr><td>${personNameHtml(e)}</td><td colspan="3">${icon(ICONS.sun, 14)} Congé</td></tr>`;
-                return `
-                  <tr>
-                    <td>${personNameHtml(e)}${info.level === 'remote' ? ' ' + icon(ICONS.laptop, 13) : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
-                    <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
-                    <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
-                    <td><strong>${formatNumberFR(info.heures)} h</strong></td>
-                  </tr>
-                `;
-              }).join('')}
-            `).join('')}
+            ${renderPlanningGroupRows(employees, 4, e => {
+              const travaille = (e.joursTravailles || []).includes(weekday);
+              if (!travaille) return `<tr><td>${personNameWithPosteHtml(e)}</td><td colspan="3" class="text-muted">Non travaillé</td></tr>`;
+              const info = computeDailyHours(e, dateStr, leaveRequests, teleworkRequests);
+              if (info.level === 'leave') return `<tr><td>${personNameWithPosteHtml(e)}</td><td colspan="3">${icon(ICONS.sun, 14)} Congé</td></tr>`;
+              return `
+                <tr>
+                  <td>${personNameWithPosteHtml(e)}${info.level === 'remote' ? ' ' + icon(ICONS.laptop, 13) : ''} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                  <td>${escapeHtml(e.horaireMatinDebut || '—')} – ${escapeHtml(e.horaireMatinFin || '—')}</td>
+                  <td>${escapeHtml(e.horaireApresMidiDebut || '—')} – ${escapeHtml(e.horaireApresMidiFin || '—')}</td>
+                  <td><strong>${formatNumberFR(info.heures)} h</strong></td>
+                </tr>
+              `;
+            })}
           </tbody>
         </table>
       `}
@@ -15565,7 +15619,6 @@ function renderHorairesMois() {
   const employees = getPlanningEmployees(`${year}-${String(month + 1).padStart(2, '0')}-01`, toISODate(new Date(year, month, daysInMonth)));
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
-  const groups = groupEmployeesByService(employees);
   const totalMois = (e) => Array.from({ length: daysInMonth }, (_, i) =>
     computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests).heures).reduce((a, b) => a + b, 0);
 
@@ -15583,19 +15636,16 @@ function renderHorairesMois() {
         <table class="table planning-table">
           <thead><tr><th>Salarié</th>${Array.from({ length: daysInMonth }, (_, i) => `<th>${i + 1}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
-            ${groups.map(g => `
-              <tr class="planning-service-header"><td colspan="${daysInMonth + 2}">${escapeHtml(g.service)} <span class="text-muted">(${g.employees.length})</span></td></tr>
-              ${g.employees.map(e => `
-                <tr>
-                  <td>${personNameHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
-                  ${Array.from({ length: daysInMonth }, (_, i) => {
-                    const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
-                    return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? icon(ICONS.sun, 12) : formatNumberFR(info.heures)}</td>`;
-                  }).join('')}
-                  <td><strong>${formatNumberFR(totalMois(e))} h</strong></td>
-                </tr>
-              `).join('')}
-            `).join('')}
+            ${renderPlanningGroupRows(employees, daysInMonth + 2, e => `
+              <tr>
+                <td>${personNameWithPosteHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 13)}</button></td>
+                ${Array.from({ length: daysInMonth }, (_, i) => {
+                  const info = computeDailyHours(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests);
+                  return `<td class="planning-cell planning-${info.level}" style="font-size:11px;">${info.level === 'off' ? '—' : info.level === 'leave' ? icon(ICONS.sun, 12) : formatNumberFR(info.heures)}</td>`;
+                }).join('')}
+                <td><strong>${formatNumberFR(totalMois(e))} h</strong></td>
+              </tr>
+            `)}
           </tbody>
         </table>
       `}

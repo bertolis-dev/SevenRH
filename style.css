@@ -805,6 +805,41 @@ p { margin: 0; line-height: 1.5; }
 .tc-disponible { font-weight: 600; }
 .tc-periode, .tc-detail, .tc-en-cours { font-size: 12px; white-space: nowrap; }
 .tc-inactif { opacity: 0.55; }
+/* §demande Betty du 04/09/2026 : année/période affichées une seule fois par colonne (entête), pas
+   répétées à chaque salarié — voir renderTableauCompteursPeriodInfo (app.js). */
+.tc-header-period { font-size: 11px; font-weight: 400; white-space: normal; margin-top: 2px; }
+
+/* §demande Betty du 04/09/2026 : "il faut décaler pour voir toute la ligne" sur téléphone — le
+   Tableau des compteurs a autant de colonnes que de types de congé configurés (impossible à faire
+   tenir côte à côte sur un petit écran), donc en dessous de 860px chaque ligne <tr> devient une
+   carte empilée verticalement (1 bloc par type, précédé de son nom en étiquette) plutôt qu'une
+   ligne qu'il faut faire défiler horizontalement. */
+@media (max-width: 860px) {
+  .tc-table, .tc-table tbody, .tc-table tfoot, .tc-table tr, .tc-table td { display: block; width: 100%; }
+  .tc-table thead { display: none; }
+  .tc-table tr { border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); margin: 12px; padding: 12px 14px; }
+  .tc-table td { padding: 7px 0; text-align: left !important; border: none !important; white-space: normal; }
+  .tc-periode, .tc-detail, .tc-en-cours { white-space: normal; }
+  .tc-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--color-text-muted);
+    margin-bottom: 3px;
+  }
+  .tc-table td:first-child {
+    font-weight: 600;
+    font-size: 15px;
+    border-bottom: 1px solid var(--color-border) !important;
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+  }
+  .tc-table td:first-child::before { content: none; }
+  .tc-table tfoot tr { background: var(--color-muted-soft); }
+}
 
 .pagination-bar {
   display: flex;
@@ -1598,6 +1633,19 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* Sans ça, les lignes de regroupement par service (fond distinct) laissent transparaître ce fond
  * à travers la première colonne sticky, qui retomberait sinon sur le fond de carte par défaut. */
 .planning-scroll-card .planning-service-header td:first-child { background: var(--color-surface-alt, var(--color-muted-soft)); }
+
+/* §refonte planning du 04/09/2026 : sous-groupe équipe au sein d'un service (voir
+ * groupEmployeesByServiceAndEquipe, app.js) — même principe que .planning-service-header mais en
+ * retrait et sans fond plein, pour rester clairement subordonné au service au-dessus. */
+.planning-equipe-header td {
+  font-weight: 600;
+  font-size: 12px;
+  text-align: left;
+  padding-top: 8px;
+  padding-left: 22px;
+  color: var(--color-text-muted, var(--color-muted));
+}
+.planning-scroll-card .planning-equipe-header td:first-child { background: var(--color-surface); }
 .planning-scroll-card .planning-summary-row td:first-child { background: var(--color-muted-soft); }
 
 /* ---------------------------------------------------------------------
