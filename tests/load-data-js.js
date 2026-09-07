@@ -53,6 +53,9 @@ globalThis.__calculateAncienneteYears = calculateAncienneteYears;
 globalThis.__calculateIndemniteKilometrique = calculateIndemniteKilometrique;
 globalThis.__getKilometrageDejaDeclareAnnee = getKilometrageDejaDeclareAnnee;
 globalThis.__getBaremeKilometrique = getBaremeKilometrique;
+globalThis.__markExpensePaid = markExpensePaid;
+globalThis.__findDuplicateExpense = findDuplicateExpense;
+globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -83,6 +86,9 @@ globalThis.__getBaremeKilometrique = getBaremeKilometrique;
     calculateIndemniteKilometrique: sandbox.__calculateIndemniteKilometrique,
     getKilometrageDejaDeclareAnnee: sandbox.__getKilometrageDejaDeclareAnnee,
     getBaremeKilometrique: sandbox.__getBaremeKilometrique,
+    markExpensePaid: sandbox.__markExpensePaid,
+    findDuplicateExpense: sandbox.__findDuplicateExpense,
+    getExpenseRembourseDate: sandbox.__getExpenseRembourseDate,
   };
 }
 

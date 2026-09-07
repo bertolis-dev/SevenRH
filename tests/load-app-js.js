@@ -116,6 +116,17 @@ globalThis.__submitExpenseForm = submitExpenseForm;
 globalThis.__openExpenseModal = openExpenseModal;
 globalThis.__expenseRepository = expenseRepository;
 globalThis.__renderFrais = renderFrais;
+globalThis.__canSelfManagePendingExpense = canSelfManagePendingExpense;
+globalThis.__handleEditExpense = handleEditExpense;
+globalThis.__handleSelfCancelExpense = handleSelfCancelExpense;
+globalThis.__handleMarkExpensePaid = handleMarkExpensePaid;
+globalThis.__isJustificatifObligatoireForExpense = isJustificatifObligatoireForExpense;
+globalThis.__finalizeExpenseSubmit = finalizeExpenseSubmit;
+globalThis.__canExportCongesFraisMoisLeger = canExportCongesFraisMoisLeger;
+globalThis.__exportCongesFraisMoisCSV = exportCongesFraisMoisCSV;
+globalThis.__renderExpenseRow = renderExpenseRow;
+globalThis.__openConfirm = openConfirm;
+globalThis.__closeModal = closeModal;
 globalThis.__getFilteredLeaveRequests = getFilteredLeaveRequests;
 globalThis.__getFilteredTeleworkRequests = getFilteredTeleworkRequests;
 globalThis.__getFilteredExpenses = getFilteredExpenses;
@@ -183,6 +194,17 @@ globalThis.__bulkSelection = bulkSelection;
     openExpenseModal: sandbox.__openExpenseModal,
     expenseRepository: sandbox.__expenseRepository,
     renderFrais: sandbox.__renderFrais,
+    canSelfManagePendingExpense: sandbox.__canSelfManagePendingExpense,
+    handleEditExpense: sandbox.__handleEditExpense,
+    handleSelfCancelExpense: sandbox.__handleSelfCancelExpense,
+    handleMarkExpensePaid: sandbox.__handleMarkExpensePaid,
+    isJustificatifObligatoireForExpense: sandbox.__isJustificatifObligatoireForExpense,
+    finalizeExpenseSubmit: sandbox.__finalizeExpenseSubmit,
+    canExportCongesFraisMoisLeger: sandbox.__canExportCongesFraisMoisLeger,
+    exportCongesFraisMoisCSV: sandbox.__exportCongesFraisMoisCSV,
+    renderExpenseRow: sandbox.__renderExpenseRow,
+    openConfirm: sandbox.__openConfirm,
+    closeModal: sandbox.__closeModal,
     getFilteredLeaveRequests: sandbox.__getFilteredLeaveRequests,
     getFilteredTeleworkRequests: sandbox.__getFilteredTeleworkRequests,
     getFilteredExpenses: sandbox.__getFilteredExpenses,

@@ -486,6 +486,15 @@ const DEFAULT_SETTINGS = {
   matriculeAvecTiret: true,
   teletravailQuotaSemaine: 2,
   categoriesFrais: ['Transport', 'Repas', 'Hébergement', 'Fournitures', 'Kilométrique', 'Autre'],
+  // §retour Betty du 07/09/2026 (points 4/11/12) : réglages PAR CATÉGORIE de notes de frais — clé =
+  // nom de catégorie (chaîne de categoriesFrais), absent = aucune contrainte particulière.
+  //   justificatifObligatoire: bool — jamais de note sans pièce jointe pour cette catégorie.
+  //   seuilJustificatif: number|null — justificatif requis seulement au-delà de ce montant.
+  //   plafond: number|null — avertissement (jamais un blocage) à la saisie au-delà de ce montant.
+  //   tvaDeductible: bool (défaut true si absent) — simple indicateur, PAS une tentative d'encoder la
+  //   règle fiscale française réelle (carburant/réception/cadeaux ont des règles propres) : à
+  //   confirmer avec l'expert-comptable, comme les autres calculs légaux du fichier.
+  categoriesFraisConfig: {},
   ticketsValeurFaciale: 9,
   ticketsPartEmployeurPct: 60,
   ticketsInclureTeletravail: true,
@@ -4000,7 +4009,10 @@ function makeEmptyExpense() {
     etapeIndex: -1,
     historique: [],
     dateCreation: null,
-    dateModification: null
+    dateModification: null,
+    // §retour Betty du 07/09/2026 (point 7) : nul tant que personne n'a confirmé le paiement réel —
+    // voir markExpensePaid. "Remboursé" (statut) reste la fin du circuit de VALIDATION, pas du virement.
+    datePaiement: null
   };
 }
 
@@ -4342,6 +4354,18 @@ function advanceWorkflow(request, finalStatut, acteurRoleLabel) {
  * (dernière entrée d'historique commençant par "Remboursé"), jamais celui de la dépense elle-même.
  * Repli sur dateCreation pour une note auto-validée à la création (workflow vide, voir addExpense) —
  * aucune entrée "Remboursé" n'existe alors dans historique, mais elle est bien payable dès sa création. */
+/** §retour Betty du 07/09/2026 (point 10) : même salarié + même date + même montant + même
+ * catégorie, sans qu'un mot ne le signale — le module Congés vérifie bien le chevauchement de deux
+ * demandes (hasConflictingLeaveRequest), rien d'équivalent n'existait ici. Un AVERTISSEMENT à la
+ * saisie (jamais un blocage, voir submitExpenseForm) : deux frais identiques le même jour restent
+ * légitimes dans de rares cas. Exclut les notes déjà refusées/annulées, qui ne comptent plus.
+ */
+function findDuplicateExpense(employeeId, categorie, dateStr, montantTTC, allExpenses, excludeExpenseId) {
+  return allExpenses.find(e => e.id !== excludeExpenseId && e.employeeId === employeeId && e.categorie === categorie
+    && e.date === dateStr && Math.abs(e.montantTTC - montantTTC) < 0.01
+    && e.statut !== 'Refusé' && e.statut !== 'Annulé') || null;
+}
+
 function getExpenseRembourseDate(expense) {
   const entry = (expense.historique || []).slice().reverse().find(h => (h.action || '').startsWith('Remboursé'));
   return (entry && entry.date) || expense.dateCreation || expense.date || '';
@@ -4366,6 +4390,19 @@ function cancelRequest(request) {
   const historique = (request.historique || []).slice();
   historique.push({ date: new Date().toISOString(), action: 'Annulé' });
   return { statut: 'Annulé', historique };
+}
+
+/** §retour Betty du 07/09/2026 (point 7) : "Remboursé" n'est que la fin du CIRCUIT de validation
+ * (advanceWorkflow) — rien n'enregistrait quand l'argent avait RÉELLEMENT été viré au salarié,
+ * l'application affirmait donc un remboursement qui n'avait pas forcément eu lieu. datePaiement
+ * reste distinct du statut/de la date de validation (voir getExpenseRembourseDate, utilisée pour
+ * le rattachement au mois de paie — point 2 — qui reste sur la date de VALIDATION, pas de paiement :
+ * ce sont deux besoins différents). Action manuelle explicite, jamais automatique. */
+function markExpensePaid(expense) {
+  const historique = (expense.historique || []).slice();
+  const now = new Date().toISOString();
+  historique.push({ date: now, action: 'Marqué comme payé' });
+  return { datePaiement: now, historique };
 }
 
 /** Nombre de jours décomptés pour une période, selon les jours travaillés du salarié — ET les

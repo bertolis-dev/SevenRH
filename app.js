@@ -166,6 +166,7 @@ function getInitialViewState() {
     pendingAttachment: null,
     pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
     editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
+    editingExpenseId: null, // §retour Betty du 07/09/2026 (point 5) : note de frais en cours de correction par son auteur, avant toute validation
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
     parametresTab: 'listes',
@@ -176,7 +177,11 @@ function getInitialViewState() {
     teletravailFilters: { employeeId: '', statut: '' },
     teletravailPage: 1,
     teletravailWeekOffset: 0,
-    fraisFilters: { employeeId: '', categorie: '', statut: '' },
+    // §retour Betty du 07/09/2026 (point 13) : periode ('YYYY-MM', vide = pas de filtre) — pour
+    // clôturer un mois, il faut pouvoir s'y limiter, impossible jusqu'ici (seuls salarié/catégorie/
+    // statut existaient). Filtré à part de applyStateFilters (égalité stricte, ne convient pas à un
+    // préfixe de date), voir getFilteredExpenses.
+    fraisFilters: { employeeId: '', categorie: '', statut: '', periode: '' },
     fraisPage: 1,
     ticketsYear: new Date().getFullYear(),
     ticketsMonth: new Date().getMonth(),
@@ -14244,6 +14249,7 @@ function renderParametresListes() {
     <div class="settings-lists-grid">
       ${renderSettingsListCard({ key: 'categoriesFrais', label: 'Catégories de notes de frais' }, settings.categoriesFrais || [])}
     </div>
+    ${renderCategoriesFraisConfigCard(settings)}
     ` : ''}
 
     ${hasModule('planning') ? `
@@ -14299,6 +14305,43 @@ function renderParametresListes() {
  * accidentel) : seules les entrées ajoutées À LA MAIN (une convention manquante de ce catalogue)
  * restent supprimables. Sans effet sur les autres listes (readOnlyValues absent → comportement
  * strictement inchangé). */
+/** §retour Betty du 07/09/2026 (points 4/11/12) : réglages par catégorie de notes de frais —
+ * justificatif obligatoire (inconditionnel ou au-delà d'un seuil), plafond (avertissement, jamais un
+ * blocage, voir submitExpenseForm), TVA déductible (simple indicateur, pas une règle fiscale
+ * complète — voir categoriesFraisConfig, data.js). Carte séparée de la liste des catégories
+ * elle-même (renderSettingsListCard, chip-list simple) plutôt que de la transformer en objets, pour
+ * ne rien casser des écrans qui lisent encore categoriesFrais comme un tableau de chaînes. */
+function renderCategoriesFraisConfigCard(settings) {
+  const categories = settings.categoriesFrais || [];
+  if (categories.length === 0) return '';
+  const config = settings.categoriesFraisConfig || {};
+  return `
+    <div class="card">
+      <h2>Justificatif, plafond et TVA par catégorie</h2>
+      <p class="text-muted">Le plafond déclenche un avertissement à la saisie, jamais un blocage. La TVA déductible reste un simple indicateur, à confirmer avec votre expert-comptable : les règles réelles varient selon la nature exacte de la dépense.</p>
+      <div style="overflow-x: auto;">
+        <table class="table">
+          <thead><tr><th>Catégorie</th><th>Justificatif obligatoire</th><th>Obligatoire au-delà de (€)</th><th>Plafond, avertissement au-delà de (€)</th><th>TVA déductible</th></tr></thead>
+          <tbody>
+            ${categories.map(cat => {
+              const c = config[cat] || {};
+              return `
+                <tr>
+                  <td>${escapeHtml(cat)}</td>
+                  <td><input type="checkbox" data-cat-justif-obligatoire="${escapeHtml(cat)}" ${c.justificatifObligatoire ? 'checked' : ''}></td>
+                  <td><input class="input" type="number" min="0" step="0.01" style="width:110px;" data-cat-seuil-justif="${escapeHtml(cat)}" value="${c.seuilJustificatif != null ? c.seuilJustificatif : ''}" placeholder="Aucun"></td>
+                  <td><input class="input" type="number" min="0" step="0.01" style="width:110px;" data-cat-plafond="${escapeHtml(cat)}" value="${c.plafond != null ? c.plafond : ''}" placeholder="Aucun"></td>
+                  <td><input type="checkbox" data-cat-tva-deductible="${escapeHtml(cat)}" ${c.tvaDeductible !== false ? 'checked' : ''}></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderSettingsListCard(listDef, items, readOnlyValues) {
   return `
     <div class="card">
@@ -14446,6 +14489,29 @@ function bindChipListEvents() {
       render();
     });
   });
+
+  // §retour Betty du 07/09/2026 (points 4/11/12) : réglages par catégorie de notes de frais — un
+  // seul objet categoriesFraisConfig, une entrée créée/mise à jour à la volée par catégorie plutôt
+  // que préremplie pour toutes (une catégorie jamais réglée reste simplement absente de l'objet).
+  const updateCategorieFraisConfig = (cat, patch) => {
+    const settings = settingsRepository.getSettings();
+    settings.categoriesFraisConfig = settings.categoriesFraisConfig || {};
+    settings.categoriesFraisConfig[cat] = { ...(settings.categoriesFraisConfig[cat] || {}), ...patch };
+    settingsRepository.saveSettings(settings);
+    showToast('Réglage mis à jour.');
+  };
+  document.querySelectorAll('[data-cat-justif-obligatoire]').forEach(el => el.addEventListener('change', (e) => {
+    updateCategorieFraisConfig(el.dataset.catJustifObligatoire, { justificatifObligatoire: e.target.checked });
+  }));
+  document.querySelectorAll('[data-cat-seuil-justif]').forEach(el => el.addEventListener('change', (e) => {
+    updateCategorieFraisConfig(el.dataset.catSeuilJustif, { seuilJustificatif: e.target.value === '' ? null : Number(e.target.value) });
+  }));
+  document.querySelectorAll('[data-cat-plafond]').forEach(el => el.addEventListener('change', (e) => {
+    updateCategorieFraisConfig(el.dataset.catPlafond, { plafond: e.target.value === '' ? null : Number(e.target.value) });
+  }));
+  document.querySelectorAll('[data-cat-tva-deductible]').forEach(el => el.addEventListener('change', (e) => {
+    updateCategorieFraisConfig(el.dataset.catTvaDeductible, { tvaDeductible: e.target.checked });
+  }));
 }
 
 // ---- Sous-vue : Vacances scolaires ----
@@ -16666,8 +16732,10 @@ function exportRowsToCSV(headers, rows, filename) {
 // ---------------------------------------------------------------------------
 
 function getFilteredExpenses() {
-  return applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
+  const filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
     [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
+  const periode = state.fraisFilters.periode;
+  return periode ? filtered.filter(n => (n.date || '').startsWith(periode)) : filtered;
 }
 
 function renderFrais() {
@@ -16678,6 +16746,13 @@ function renderFrais() {
   // total inexploitable ("12 notes, 2 340 € TTC" ne voulait rien dire dès qu'un refus était mélangé
   // dedans) — seul ce qui reste réellement dû (en attente ou déjà remboursé) doit compter ici.
   const total = expenses.filter(n => n.statut !== 'Refusé' && n.statut !== 'Annulé').reduce((sum, n) => sum + n.montantTTC, 0);
+  // §retour Betty du 07/09/2026 (point 13) : voir séparément ce qui est en attente/remboursé/refusé,
+  // plutôt qu'un total unique qui mélange tout (voir aussi le correctif du point 6 juste au-dessus).
+  const STATUT_BADGE_CLASS = { 'En attente': 'warning', 'Remboursé': 'success', 'Refusé': 'muted', 'Annulé': 'muted' };
+  const totauxParStatut = ['En attente', 'Remboursé', 'Refusé', 'Annulé']
+    .map(statut => ({ statut, notes: expenses.filter(n => n.statut === statut) }))
+    .filter(t => t.notes.length > 0)
+    .map(t => ({ ...t, montant: t.notes.reduce((sum, n) => sum + n.montantTTC, 0) }));
   const { pageItems, totalPages, page, pageStart } = paginate(expenses, 'fraisPage');
   const user = authRepository.getCurrentUser();
   // §retour Betty du 07/09/2026 (point 8) : liste de rôles codée en dur remplacée par les mêmes
@@ -16691,10 +16766,14 @@ function renderFrais() {
     <div class="view-header view-header-row">
       <div>
         <h1>Notes de frais</h1>
-        <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC</p>
+        <p class="view-subtitle">
+          ${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC dû (en attente + remboursé)
+          ${totauxParStatut.map(t => ` · <span class="badge badge-${STATUT_BADGE_CLASS[t.statut]}">${escapeHtml(t.statut)} : ${t.notes.length} (${formatCurrencyFR(t.montant)})</span>`).join('')}
+        </p>
       </div>
       <div class="detail-header-actions">
         ${canValider ? `<button type="button" class="btn btn-secondary" id="btn-frais-a-valider">Voir les notes à valider</button>` : ''}
+        ${canExportCongesFraisMoisLeger(user) ? `<button type="button" class="btn btn-secondary" id="btn-export-conges-frais-leger" title="Congés payés, RTT et notes de frais remboursées du mois en cours, sans le module RH">Exporter congés + frais du mois</button>` : ''}
         <button class="btn btn-secondary" id="btn-export-frais">Exporter CSV</button>
         <button class="btn btn-primary" id="btn-new-expense">+ Nouvelle note</button>
       </div>
@@ -16715,6 +16794,7 @@ function renderFrais() {
         <option value="">Tous les statuts</option>
         ${['En attente', 'Remboursé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${state.fraisFilters.statut === s ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
+      <input class="input" type="month" id="frais-filter-periode" value="${escapeHtml(state.fraisFilters.periode)}" title="Filtrer par mois de la dépense">
     </div>
 
     <div class="card table-card">
@@ -16731,13 +16811,30 @@ function renderFrais() {
   `;
 }
 
+/** §retour Betty du 07/09/2026 (point 5) : un salarié ne pouvait ni corriger ni annuler sa propre
+ * note — il fallait attendre qu'un valideur la refuse, puis tout ressaisir, pour une simple erreur
+ * de montant. Restreint à AVANT toute validation (etapeIndex === 0, personne n'a encore agi dessus)
+ * pour ne jamais laisser un salarié modifier une note après qu'un valideur se soit déjà prononcé
+ * dessus — cette limite protège la validation déjà donnée, pas seulement l'auteur de la note. */
+function canSelfManagePendingExpense(expense, user) {
+  return Boolean(user) && expense.employeeId === user.id && expense.statut === 'En attente' && expense.etapeIndex === 0;
+}
+
 function renderExpenseRow(n) {
   const employee = employeeRepository.getById(n.employeeId);
   if (!employee) return '';
+  const user = authRepository.getCurrentUser();
+  const canSelfManage = canSelfManagePendingExpense(n, user);
 
   const actions = n.statut === 'En attente'
-    ? `${canActOnRequestFor(n, 'frais') ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button>` : ''}${canRefuserRequestFor(n, 'frais') ? `<button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : ''}`
-    : n.statut === 'Remboursé' && canManageRequestFor(n.employeeId, 'frais') ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : '';
+    ? `${canSelfManage ? `<button class="btn-link" data-edit-nf="${n.id}">Modifier</button><button class="btn-link btn-link-danger" data-self-cancel-nf="${n.id}">Annuler</button>` : ''}${canActOnRequestFor(n, 'frais') ? `<button class="btn-link" data-approve-nf="${n.id}">Valider</button>` : ''}${canRefuserRequestFor(n, 'frais') ? `<button class="btn-link btn-link-danger" data-refuse-nf="${n.id}">Refuser</button>` : ''}`
+    // §retour Betty du 07/09/2026 (point 7) : "Marquer comme payé" tant que le paiement réel n'a pas
+    // été confirmé — réservé à MARQUER_NOTE_REMBOURSEE, distinct de VALIDER_NOTE_FRAIS (qui a déjà
+    // fait son travail en amenant la note ici).
+    : n.statut === 'Remboursé' ? `
+        ${!n.datePaiement && hasPermission(user, PERMISSIONS.MARQUER_NOTE_REMBOURSEE) ? `<button class="btn-link" data-mark-paid-nf="${n.id}">Marquer comme payé</button>` : ''}
+        ${canManageRequestFor(n.employeeId, 'frais') ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : ''}
+      ` : '';
 
   return `
     <tr>
@@ -16746,7 +16843,7 @@ function renderExpenseRow(n) {
       <td>${escapeHtml(n.categorie)}</td>
       <td>${escapeHtml(n.libelle)}</td>
       <td class="cell-numeric">${formatCurrencyFR(n.montantTTC)}</td>
-      <td>${renderRequestStatutBadge(n)}</td>
+      <td>${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
         <button class="btn-link" data-history="${n.id}">Historique</button>
@@ -16759,6 +16856,8 @@ function renderExpenseRow(n) {
 function bindFraisEvents() {
   document.getElementById('btn-new-expense').addEventListener('click', () => openExpenseModal());
   document.getElementById('btn-export-frais').addEventListener('click', exportExpensesCSV);
+  const btnExportLeger = document.getElementById('btn-export-conges-frais-leger');
+  if (btnExportLeger) btnExportLeger.addEventListener('click', exportCongesFraisMoisCSV);
   bindDraftsCardEvents((draft) => openExpenseModal(undefined, draft));
 
   const btnAValider = document.getElementById('btn-frais-a-valider');
@@ -16785,6 +16884,11 @@ function bindFraisEvents() {
     state.fraisPage = 1;
     render();
   });
+  document.getElementById('frais-filter-periode').addEventListener('change', (e) => {
+    state.fraisFilters.periode = e.target.value;
+    state.fraisPage = 1;
+    render();
+  });
 
   const fraisPrevBtn = document.getElementById('btn-page-prev');
   if (fraisPrevBtn) fraisPrevBtn.addEventListener('click', () => { state.fraisPage -= 1; render(); });
@@ -16795,7 +16899,48 @@ function bindFraisEvents() {
   document.querySelectorAll('[data-approve-nf]').forEach(btn => btn.addEventListener('click', () => handleApproveExpense(btn.dataset.approveNf)));
   document.querySelectorAll('[data-refuse-nf]').forEach(btn => btn.addEventListener('click', () => handleRefuseExpense(btn.dataset.refuseNf)));
   document.querySelectorAll('[data-cancel-nf]').forEach(btn => btn.addEventListener('click', () => handleCancelExpense(btn.dataset.cancelNf)));
+  document.querySelectorAll('[data-edit-nf]').forEach(btn => btn.addEventListener('click', () => handleEditExpense(btn.dataset.editNf)));
+  document.querySelectorAll('[data-self-cancel-nf]').forEach(btn => btn.addEventListener('click', () => handleSelfCancelExpense(btn.dataset.selfCancelNf)));
+  document.querySelectorAll('[data-mark-paid-nf]').forEach(btn => btn.addEventListener('click', () => handleMarkExpensePaid(btn.dataset.markPaidNf)));
   bindHistoryButtons(expenseRepository);
+}
+
+function handleEditExpense(id) {
+  const expense = expenseRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!expense || !canSelfManagePendingExpense(expense, user)) { showToast('Action non autorisée.', 'error'); return; }
+  openExpenseModal(undefined, undefined, expense);
+}
+
+function handleSelfCancelExpense(id) {
+  const expense = expenseRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!expense || !canSelfManagePendingExpense(expense, user)) { showToast('Action non autorisée.', 'error'); return; }
+  openConfirm({
+    title: 'Annuler votre note de frais ?',
+    message: 'Cette note n\'a encore été validée par personne : elle sera annulée sans repasser par un refus.',
+    confirmLabel: 'Annuler la note',
+    danger: true,
+    onConfirm: () => {
+      expenseRepository.update(id, cancelRequest(expense));
+      auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
+      showToast('Note de frais annulée.');
+      render();
+    }
+  });
+}
+
+function handleMarkExpensePaid(id) {
+  const expense = expenseRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!expense || expense.statut !== 'Remboursé' || expense.datePaiement || !hasPermission(user, PERMISSIONS.MARQUER_NOTE_REMBOURSEE)) {
+    showToast('Action non autorisée.', 'error');
+    return;
+  }
+  expenseRepository.update(id, markExpensePaid(expense));
+  auditLogRepository.logAudit('Paiement', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
+  showToast('Note de frais marquée comme payée.');
+  render();
 }
 
 function handleApproveExpense(id) {
@@ -16851,9 +16996,15 @@ function exportExpensesCSV() {
   // le fichier n'est utilisable qu'à l'œil. La date de remboursement (vide tant que non remboursée)
   // réutilise getExpenseRembourseDate (data.js), la même donnée qui rattache désormais la note au
   // bon mois de paie (voir getPaieRows, point 2).
-  const headers = ['Matricule', 'Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Statut', 'Date de remboursement'];
+  // §retour Betty du 07/09/2026 (point 12) : indicateur de déductibilité par catégorie (simple
+  // indicateur, pas une règle fiscale complète — voir categoriesFraisConfig, data.js) séparé en
+  // colonne pour que le comptable distingue la TVA récupérable du reste sans recalculer à la main.
+  const settings = settingsRepository.getSettings();
+  const headers = ['Matricule', 'Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'TVA déductible', 'Montant TTC', 'Statut', 'Date de remboursement'];
   const rows = expenses.map(n => {
     const employee = employeeRepository.getById(n.employeeId);
+    const categorieConfig = (settings.categoriesFraisConfig || {})[n.categorie];
+    const tvaDeductible = !categorieConfig || categorieConfig.tvaDeductible !== false;
     return [
       employee ? employee.matricule : '—',
       employee ? `${employee.prenom} ${employee.nom}` : '—',
@@ -16862,6 +17013,7 @@ function exportExpensesCSV() {
       n.libelle,
       formatNumberFR(computeMontantHT(n.montantTTC, n.tauxTVA)),
       formatNumberFR(computeMontantTVA(n.montantTTC, n.tauxTVA)),
+      tvaDeductible ? 'Oui' : 'Non',
       formatNumberFR(n.montantTTC),
       n.statut,
       n.statut === 'Remboursé' ? formatDate(getExpenseRembourseDate(n)) : ''
@@ -16871,25 +17023,52 @@ function exportExpensesCSV() {
   auditLogRepository.logAudit('Export', 'Notes de frais', `${expenses.length} ligne${expenses.length > 1 ? 's' : ''}`);
 }
 
-// ---- Modale : Nouvelle note de frais ----
+/** Justificatif requis pour cette catégorie/montant — §retour Betty du 07/09/2026 (point 4).
+ * Absent de categoriesFraisConfig = jamais obligatoire, comme avant ce correctif. */
+function isJustificatifObligatoireForExpense(categorie, montantTTC, settings) {
+  const config = (settings.categoriesFraisConfig || {})[categorie];
+  if (!config) return false;
+  if (config.justificatifObligatoire) return true;
+  return config.seuilJustificatif != null && Number(montantTTC) > Number(config.seuilJustificatif);
+}
 
-function openExpenseModal(presetEmployeeId, draft) {
+// ---- Modale : Nouvelle note de frais / modification d'une note en attente (point 5) ----
+
+function openExpenseModal(presetEmployeeId, draft, editingExpense) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const settings = settingsRepository.getSettings();
-  const champs = (draft && draft.champs) || {};
+  // §retour Betty du 07/09/2026 (point 5) : en modification, les champs repartent de la note
+  // existante — jamais d'un brouillon (les deux mécanismes ne se recoupent jamais, une note déjà
+  // envoyée n'est plus un brouillon).
+  const champs = editingExpense
+    ? { employeeId: editingExpense.employeeId, categorie: editingExpense.categorie, date: editingExpense.date,
+        libelle: editingExpense.libelle, montantTTC: editingExpense.montantTTC, tauxTVA: editingExpense.tauxTVA,
+        distanceKm: editingExpense.kilometrage && editingExpense.kilometrage.distanceKm,
+        puissanceFiscale: editingExpense.kilometrage && editingExpense.kilometrage.puissanceFiscale,
+        commentaire: editingExpense.commentaire, justificatif: editingExpense.justificatif }
+    : (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
-  beginDraftEdit(draft);
+  state.editingExpenseId = editingExpense ? editingExpense.id : null;
+  if (!editingExpense) beginDraftEdit(draft);
+
+  const employeeField = editingExpense
+    // Modification toujours restreinte à SA PROPRE note (canSelfManagePendingExpense) — jamais de
+    // sélecteur ici, la réattribuer à quelqu'un d'autre lors d'une modification n'aurait pas de sens.
+    ? `<input type="hidden" id="f-employeeId" name="employeeId" value="${escapeHtml(champs.employeeId)}">
+       <div class="form-field"><label>Salarié</label><input class="input" type="text" value="${personNameHtml(authRepository.getCurrentUser())}" disabled></div>`
+    : employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees, 'frais');
+  const justificatifObligatoire = isJustificatifObligatoireForExpense(champs.categorie || settings.categoriesFrais[0], champs.montantTTC, settings);
 
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>Nouvelle note de frais</h2>
+        <h2>${editingExpense ? 'Modifier la note de frais' : 'Nouvelle note de frais'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="expense-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees, 'frais')}
+            ${employeeField}
             ${selectField('categorie', 'Catégorie', settings.categoriesFrais, champs.categorie || settings.categoriesFrais[0])}
             ${textField('date', 'Date de la dépense', champs.date || '', true, 'date')}
             ${textField('libelle', 'Libellé', champs.libelle || '', true)}
@@ -16916,15 +17095,15 @@ function openExpenseModal(presetEmployeeId, draft) {
             <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
           </div>
           <div class="form-field" style="margin-top: 14px;">
-            <label for="f-justificatif">Justificatif (optionnel)</label>
+            <label for="f-justificatif" id="expense-justificatif-label">Justificatif${justificatifObligatoire ? ' (obligatoire pour cette catégorie)' : ' (optionnel)'}</label>
             <input class="input" type="file" id="f-justificatif">
-            ${champs.justificatif ? `<p class="text-muted" style="margin-top:4px;">Fichier repris du brouillon : ${escapeHtml(champs.justificatif.nom)}</p>` : ''}
+            ${champs.justificatif ? `<p class="text-muted" style="margin-top:4px;">Fichier déjà associé : ${escapeHtml(champs.justificatif.nom)}</p>` : ''}
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-          <button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>
-          <button type="submit" class="btn btn-primary">Envoyer la note</button>
+          ${editingExpense ? '' : '<button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>'}
+          <button type="submit" class="btn btn-primary">${editingExpense ? 'Enregistrer les modifications' : 'Envoyer la note'}</button>
         </div>
       </form>
     </div>
@@ -16937,19 +17116,32 @@ function openExpenseModal(presetEmployeeId, draft) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('f-justificatif').addEventListener('change', handleAttachmentChange);
-  document.getElementById('f-categorie').addEventListener('change', updateExpenseCategoryFields);
+  document.getElementById('f-categorie').addEventListener('change', () => { updateExpenseCategoryFields(); updateExpenseJustificatifLabel(); });
   document.getElementById('f-distanceKm').addEventListener('input', updateExpenseKmHint);
   document.getElementById('f-puissanceFiscale').addEventListener('input', updateExpenseKmHint);
   // §retour Betty du 07/09/2026 : le cumul annuel dépend de l'année de la dépense — sans ce
   // listener, changer la date après avoir déjà saisi distance/puissance laissait l'aperçu affiché
   // sur le cumul de la mauvaise année.
   document.getElementById('f-date').addEventListener('change', updateExpenseKmHint);
+  // §retour Betty du 07/09/2026 (point 4) : le seuil de justificatif dépend du montant saisi — le
+  // libellé doit se mettre à jour en direct, pas seulement au chargement de la modale.
+  document.getElementById('f-montantTTC').addEventListener('input', updateExpenseJustificatifLabel);
   document.getElementById('expense-form').addEventListener('submit', submitExpenseForm);
-  document.getElementById('btn-save-draft').addEventListener('click', () => {
+  const saveDraftBtn = document.getElementById('btn-save-draft');
+  if (saveDraftBtn) saveDraftBtn.addEventListener('click', () => {
     saveDraftFromForm(document.getElementById('expense-form'), 'frais', { justificatif: state.pendingAttachment });
   });
 
   updateExpenseCategoryFields();
+}
+
+function updateExpenseJustificatifLabel() {
+  const label = document.getElementById('expense-justificatif-label');
+  if (!label) return;
+  const categorie = document.getElementById('f-categorie').value;
+  const montantTTC = document.getElementById('f-montantTTC') ? document.getElementById('f-montantTTC').value : 0;
+  const obligatoire = isJustificatifObligatoireForExpense(categorie, montantTTC, settingsRepository.getSettings());
+  label.textContent = `Justificatif${obligatoire ? ' (obligatoire pour cette catégorie)' : ' (optionnel)'}`;
 }
 
 function updateExpenseCategoryFields() {
@@ -16970,9 +17162,10 @@ function updateExpenseKmHint() {
   // §retour Betty du 07/09/2026 : l'aperçu affiché pendant la saisie doit refléter le VRAI montant
   // qui sera enregistré (calcul cumulatif annuel), pas un montant par trajet qui induirait le
   // salarié en erreur avant même l'envoi — voir calculateIndemniteKilometrique/submitExpenseForm.
+  // Exclut la note elle-même du cumul en mode modification (point 5), sinon elle se compterait deux fois.
   const employeeId = document.getElementById('f-employeeId').value;
   const dateStr = document.getElementById('f-date').value || toISODate(new Date());
-  const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll());
+  const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll(), state.editingExpenseId);
   const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
   hint.textContent = kmDejaDeclares > 0
     ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année, avant cette note).`
@@ -16984,6 +17177,7 @@ async function submitExpenseForm(evt) {
   const formData = new FormData(evt.target);
   const employeeId = formData.get('employeeId');
   const categorie = formData.get('categorie');
+  const isEditing = Boolean(state.editingExpenseId);
 
   if (!employeeId || !categorie) {
     showToast('Sélectionnez un salarié et une catégorie.', 'error');
@@ -17016,7 +17210,8 @@ async function submitExpenseForm(evt) {
     // §retour Betty du 07/09/2026 (point 1) : recalculé ici plutôt que de faire confiance au
     // montant affiché à l'écran au moment de la saisie — une autre note kilométrique a pu être
     // envoyée entre-temps (ex. deux onglets ouverts), le cumul doit être celui à l'instant de l'envoi.
-    const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll());
+    // Exclut la note elle-même en modification (point 5), sinon elle se compterait deux fois.
+    const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll(), state.editingExpenseId);
     montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
     tauxTVA = 0;
     kilometrage = { distanceKm, puissanceFiscale };
@@ -17029,20 +17224,87 @@ async function submitExpenseForm(evt) {
     }
   }
 
-  // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
-  const submitBtn = evt.target.querySelector('button[type="submit"]');
-  if (submitBtn) submitBtn.disabled = true;
-  const createdExpense = await expenseRepository.create({
+  const settings = settingsRepository.getSettings();
+  // §retour Betty du 07/09/2026 (point 4) : premier contrôle qu'attend un comptable — sans
+  // justificatif, la TVA n'est pas déductible.
+  if (isJustificatifObligatoireForExpense(categorie, montantTTC, settings) && !state.pendingAttachment) {
+    showToast(`Un justificatif est obligatoire pour la catégorie "${categorie}".`, 'error');
+    return;
+  }
+
+  const data = {
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
-    date: formData.get('date'),
+    date: dateDepense,
     libelle: formData.get('libelle'),
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
-  });
+  };
+  const submitBtn = evt.target.querySelector('button[type="submit"]');
+  // §retour Betty du 07/09/2026 (point 5) : capturé AVANT tout appel à openConfirm/closeModal, qui
+  // remet state.editingExpenseId à null (voir closeModal) avant même que onConfirm ne s'exécute —
+  // sans cette capture, confirmer un avertissement (doublon/plafond) sur une note en cours de
+  // modification l'aurait recréée comme une note NEUVE au lieu de la mettre à jour.
+  const editingExpenseId = state.editingExpenseId;
+
+  // §retour Betty du 07/09/2026 (points 10 et 11) : deux vérifications en AVERTISSEMENT, jamais en
+  // blocage — un doublon ou un dépassement de plafond restent parfois légitimes, mais ne doivent
+  // plus passer sans un mot. Exclut la note elle-même en modification.
+  const doublon = findDuplicateExpense(employeeId, categorie, dateDepense, montantTTC, expenseRepository.getAll(), editingExpenseId);
+  const categorieConfig = (settings.categoriesFraisConfig || {})[categorie];
+  const plafondDepasse = categorieConfig && categorieConfig.plafond != null && montantTTC > Number(categorieConfig.plafond);
+
+  if (doublon || plafondDepasse) {
+    const messages = [];
+    if (doublon) messages.push('Une note très similaire (même salarié, même date, même montant, même catégorie) existe déjà.');
+    if (plafondDepasse) messages.push(`Ce montant dépasse le plafond habituel de ${formatCurrencyFR(categorieConfig.plafond)} pour "${categorie}".`);
+    openConfirm({
+      title: isEditing ? 'Confirmer la modification ?' : 'Confirmer l\'envoi de cette note ?',
+      message: messages.join(' '),
+      confirmLabel: isEditing ? 'Enregistrer quand même' : 'Envoyer quand même',
+      onConfirm: () => finalizeExpenseSubmit(data, submitBtn, editingExpenseId)
+    });
+    return;
+  }
+
+  await finalizeExpenseSubmit(data, submitBtn, editingExpenseId);
+}
+
+/** Création OU modification (point 5) selon editingExpenseId — séparé de submitExpenseForm pour
+ * pouvoir être rappelé depuis la confirmation d'avertissement (doublon/plafond) sans reprendre la
+ * saisie depuis zéro. editingExpenseId est un PARAMÈTRE explicite, jamais relu depuis
+ * state.editingExpenseId ici : openConfirm ferme déjà la modale (donc remet ce state à null, voir
+ * closeModal) avant d'appeler onConfirm. */
+async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId) {
+  // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
+  if (submitBtn) submitBtn.disabled = true;
+
+  if (editingExpenseId) {
+    const id = editingExpenseId;
+    const original = expenseRepository.getById(id);
+    const historique = ((original && original.historique) || []).slice();
+    historique.push({ date: new Date().toISOString(), action: 'Modifiée par le demandeur' });
+    expenseRepository.update(id, {
+      categorie: data.categorie, kilometrage: data.kilometrage, montantTTC: data.montantTTC, tauxTVA: data.tauxTVA,
+      date: data.date, libelle: data.libelle, commentaire: data.commentaire, justificatif: data.justificatif, historique
+    });
+    uploadJustificatifBestEffort({
+      uploader: window.SupabaseSync.uploadJustificatifFile,
+      employeeId: data.employeeId, recordId: id, file: state.pendingAttachmentFile,
+      patcher: (justificatif) => expenseRepository.update(id, { justificatif })
+    });
+    auditLogRepository.logAudit('Modification', 'Note de frais', auditLabelForEmployee(data.employeeId), auditDetailsForActor());
+    showToast('Note de frais modifiée.');
+    state.editingExpenseId = null;
+    closeModal();
+    navigateTo('frais');
+    return;
+  }
+
+  const createdExpense = await expenseRepository.create(data);
 
   uploadJustificatifBestEffort({
     uploader: window.SupabaseSync.uploadJustificatifFile,
-    employeeId, recordId: createdExpense.id, file: state.pendingAttachmentFile,
+    employeeId: data.employeeId, recordId: createdExpense.id, file: state.pendingAttachmentFile,
     patcher: (justificatif) => expenseRepository.update(createdExpense.id, { justificatif })
   });
 
@@ -17503,6 +17765,34 @@ function getPaieRows(year, month) {
       reposCompensateurPrisHeures: (e.reposCompensateurPris && e.reposCompensateurPris[monthStr]) || 0
     };
   });
+}
+
+/** §retour Betty du 07/09/2026 (point 14) : verrou commercial signalé — un client abonné à Congés ET
+ * Notes de frais produit déjà cette donnée chez nous mais doit payer le module RH pour la sortir
+ * vers sa paie. Plutôt que de retirer la restriction sur "Préparation de paie" (qui agrège AUSSI des
+ * données propres au module RH — salaire, heures sup, indemnités, complétude du dossier), cet export
+ * séparé et volontairement léger réutilise getPaieRows (mêmes calculs, aucune duplication) mais
+ * n'expose QUE les colonnes congés/frais — jamais les colonnes RH — et n'exige donc jamais le module
+ * RH. Gated sur voirSalaries (vision entreprise) plutôt que le rôle : cohérent avec le reste du
+ * fichier, qui ne code plus de rôle en dur (voir le correctif du point 8 juste au-dessus).
+ */
+function canExportCongesFraisMoisLeger(user) {
+  return hasPermission(user, PERMISSIONS.VOIR_SALARIES) && !hasModule('rh') && (hasModule('conges') || hasModule('frais'));
+}
+
+function exportCongesFraisMoisCSV() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const rows = getPaieRows(year, month);
+  const headers = ['Matricule', 'Nom', 'Prénom', 'Congés payés (jours)', 'RTT (jours)', 'Notes de frais remboursées (€)'];
+  const data = rows.map(r => [
+    r.employee.matricule, r.employee.nom, r.employee.prenom,
+    formatNumberFR(r.congesPayesJours), formatNumberFR(r.rttJours), formatNumberFR(r.notesRembourser)
+  ]);
+  exportRowsToCSV(headers, data, `conges-frais-${MONTH_NAMES[month]}-${year}.csv`);
+  auditLogRepository.logAudit('Export', 'Congés + Notes de frais (export léger)', `${rows.length} ligne${rows.length > 1 ? 's' : ''} — ${MONTH_NAMES[month]} ${year}`);
+  showToast('Export téléchargé.');
 }
 
 /** Sprint SIRH premium §6 : anomalies à vérifier avant de lancer l'export paie du mois — Bloquantes
@@ -18968,6 +19258,10 @@ function closeModal() {
   // couvre tous les ouvreurs, présents et futurs, plutôt que de dupliquer le reset dans chacun.
   state.pendingAttachment = null;
   state.pendingAttachmentFile = null;
+  // §retour Betty du 07/09/2026 (point 5) : même raisonnement que pendingAttachment ci-dessus —
+  // fermer la modale d'édition d'une note (croix, Échap) sans envoyer ne doit jamais laisser la
+  // PROCHAINE ouverture de "Nouvelle note" repartir en mode modification par erreur.
+  state.editingExpenseId = null;
 }
 
 // ---------------------------------------------------------------------------

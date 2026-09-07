@@ -109,11 +109,11 @@ async function run() {
       { id: 'nf-4', employeeId: salarie.id, categorie: 'Repas', date: '2026-01-08', libelle: 'D', montantTTC: 777, tauxTVA: 10, statut: 'Annulé', workflow: [], etapeIndex: -1, historique: [{ date: '2026-01-08T10:00:00.000Z', action: 'Note créée' }], dateCreation: '2026-01-08T10:00:00.000Z', dateModification: '2026-01-08T10:00:00.000Z', kilometrage: null, justificatif: null, commentaire: '' },
     ];
     DB.saveCurrentCompany(company);
-    state.fraisFilters = { employeeId: '', categorie: '', statut: '' };
+    state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' };
     state.fraisPage = 1;
 
     const html = renderFrais();
-    const subtitle = (html.match(/<p class="view-subtitle">([^<]*)<\/p>/) || [])[1] || '';
+    const subtitle = (html.match(/<p class="view-subtitle">([\s\S]*?)<\/p>/) || [])[1] || '';
     assert.ok(subtitle.includes('4 notes'), 'les 4 notes doivent toutes apparaître dans le compte (filtre inchangé)');
     assert.ok(subtitle.includes('150,00'), `le total affiché doit être 150 € (100 remboursé + 50 en attente), jamais 1926 € (avec le refusé et l'annulé mélangés) — sous-titre obtenu : "${subtitle}"`);
     assert.ok(!subtitle.includes('1 926') && !subtitle.includes('1926'), 'le total ne doit jamais inclure les notes Refusé/Annulé');
@@ -144,7 +144,156 @@ async function run() {
     assert.ok(renderFrais().includes('Voir les notes à valider'), 'un manager (controlerNoteFrais par défaut) doit toujours voir le bouton, comme avant');
   }
 
-  console.log('OK — frais-fixes-07-09.test.js (barème kilométrique cumulatif annuel, note validée tardivement rattachée au bon mois de paie, total exact, bouton de validation par permission)');
+  // ---- Point 4 : justificatif obligatoire par catégorie, inconditionnel ou au-delà d'un seuil. ----
+  {
+    const { isJustificatifObligatoireForExpense } = loadAppJs();
+    const settings = { categoriesFraisConfig: {
+      Hébergement: { justificatifObligatoire: true },
+      Repas: { seuilJustificatif: 50 },
+    } };
+    assert.strictEqual(isJustificatifObligatoireForExpense('Hébergement', 5, settings), true, 'catégorie marquée obligatoire : toujours requis, quel que soit le montant');
+    assert.strictEqual(isJustificatifObligatoireForExpense('Repas', 30, settings), false, 'sous le seuil : pas obligatoire');
+    assert.strictEqual(isJustificatifObligatoireForExpense('Repas', 60, settings), true, 'au-delà du seuil : obligatoire');
+    assert.strictEqual(isJustificatifObligatoireForExpense('Transport', 1000, settings), false, 'catégorie absente de la config : jamais obligatoire (comportement inchangé avant ce correctif)');
+  }
+
+  // ---- Point 5 : le salarié peut corriger/annuler sa propre note tant que personne ne l'a
+  //      validée — jamais après, jamais la note d'un autre. ----
+  {
+    const { DB, sandbox, canSelfManagePendingExpense, handleEditExpense, handleSelfCancelExpense } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const salarie = DB.getEmployees().find(e => e.role === 'salarie');
+    const autre = DB.getEmployees().find(e => e.role === 'manager');
+    DB._currentEmployeeId = salarie.id;
+
+    const notePendante = { id: 'nf-a', employeeId: salarie.id, statut: 'En attente', etapeIndex: 0 };
+    const noteEnCoursDeValidation = { id: 'nf-b', employeeId: salarie.id, statut: 'En attente', etapeIndex: 1 };
+    const noteAutrui = { id: 'nf-c', employeeId: autre.id, statut: 'En attente', etapeIndex: 0 };
+    const user = DB.getCurrentUser();
+
+    assert.strictEqual(canSelfManagePendingExpense(notePendante, user), true, 'sa propre note, jamais encore touchée par un valideur : modifiable/annulable');
+    assert.strictEqual(canSelfManagePendingExpense(noteEnCoursDeValidation, user), false, 'une étape de validation déjà franchie protège la note, même pour son auteur');
+    assert.strictEqual(canSelfManagePendingExpense(noteAutrui, user), false, 'jamais la note d\'un autre salarié');
+
+    // handleEditExpense/handleSelfCancelExpense doivent refuser (toast) les cas interdits — capturé
+    // en remplaçant showToast plutôt que de lire le DOM (le stub de toast-root n'implémente pas
+    // appendChild, utilisé par la vraie fonction).
+    const company = DB.getCurrentCompany();
+    company.expenses = [notePendante, noteEnCoursDeValidation, noteAutrui];
+    DB.saveCurrentCompany(company);
+    let toastMessages = [];
+    sandbox.showToast = (msg) => toastMessages.push(msg);
+    handleEditExpense('nf-c'); // note d'autrui
+    assert.ok(toastMessages.some(m => m.includes('non autorisée')), 'handleEditExpense doit refuser la note d\'un autre salarié');
+    toastMessages = [];
+    handleSelfCancelExpense('nf-b'); // déjà en cours de validation
+    assert.ok(toastMessages.some(m => m.includes('non autorisée')), 'handleSelfCancelExpense doit refuser une note déjà touchée par un valideur');
+  }
+
+  // ---- Point 7 : "Remboursé" (fin du circuit de validation) reste distinct du paiement réel —
+  //      markExpensePaid enregistre une date de paiement séparée, jamais automatique. ----
+  {
+    const { markExpensePaid } = loadDataJs();
+    const expense = { historique: [{ date: '2026-01-01T00:00:00.000Z', action: 'Note créée' }] };
+    const patch = markExpensePaid(expense);
+    assert.ok(patch.datePaiement, 'markExpensePaid doit renseigner une date de paiement');
+    assert.ok(patch.historique.some(h => h.action === 'Marqué comme payé'), 'l\'action doit être tracée dans l\'historique');
+
+    const { DB, sandbox, handleMarkExpensePaid, PERMISSIONS } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    // MARQUER_NOTE_REMBOURSEE est accordée par défaut à Comptabilité (qui gère les vrais paiements),
+    // PAS à RH (qui valide la légitimité de la dépense) — séparation des tâches déjà voulue par le
+    // catalogue de permissions (DEFAULT_ROLE_PERMISSIONS, data.js), pas une omission de ce correctif.
+    const comptable = DB.getEmployees().find(e => e.role === 'comptabilite');
+    DB._currentEmployeeId = comptable.id;
+    const company = DB.getCurrentCompany();
+    company.expenses = [{ id: 'nf-payee', employeeId: comptable.id, statut: 'Remboursé', datePaiement: null, historique: [], montantTTC: 10 }];
+    DB.saveCurrentCompany(company);
+    handleMarkExpensePaid('nf-payee');
+    assert.ok(DB.getExpenses().find(n => n.id === 'nf-payee').datePaiement, 'la note doit porter une date de paiement après l\'action');
+
+    // RH, elle, n'a PAS cette permission par défaut : ne doit jamais pouvoir l'appeler.
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const company2 = DB.getCurrentCompany();
+    company2.expenses = [{ id: 'nf-payee-2', employeeId: comptable.id, statut: 'Remboursé', datePaiement: null, historique: [], montantTTC: 10 }];
+    DB.saveCurrentCompany(company2);
+    handleMarkExpensePaid('nf-payee-2');
+    assert.strictEqual(DB.getExpenses().find(n => n.id === 'nf-payee-2').datePaiement, null, 'un rôle sans la permission ne doit jamais pouvoir marquer une note comme payée');
+  }
+
+  // ---- Point 10 : détection de doublon (même salarié/date/montant/catégorie), en excluant les
+  //      notes déjà refusées/annulées et la note elle-même (cas d'une modification). ----
+  {
+    const { findDuplicateExpense } = loadDataJs();
+    const notes = [
+      { id: 'nf-1', employeeId: 'e1', categorie: 'Repas', date: '2026-01-05', montantTTC: 20, statut: 'En attente' },
+      { id: 'nf-2', employeeId: 'e1', categorie: 'Repas', date: '2026-01-05', montantTTC: 999, statut: 'Refusé' },
+    ];
+    assert.strictEqual(findDuplicateExpense('e1', 'Repas', '2026-01-05', 20, notes), notes[0], 'un doublon actif (même salarié/date/montant/catégorie) doit être détecté');
+    assert.strictEqual(findDuplicateExpense('e1', 'Repas', '2026-01-05', 999, notes), null, 'une note Refusée ne doit jamais compter comme doublon actif');
+    assert.strictEqual(findDuplicateExpense('e1', 'Repas', '2026-01-05', 20, notes, 'nf-1'), null, 'exclure la note elle-même (cas d\'une modification) ne doit pas se signaler comme son propre doublon');
+  }
+
+  // ---- Point 13 : filtre par période + totaux par statut, séparés du total dû unique (point 6). ----
+  {
+    const { DB, sandbox, renderFrais, state } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const salarie = DB.getEmployees().find(e => e.role === 'salarie');
+    const company = DB.getCurrentCompany();
+    company.expenses = [
+      { id: 'nf-jan', employeeId: salarie.id, categorie: 'Repas', date: '2026-01-05', libelle: 'A', montantTTC: 20, tauxTVA: 10, statut: 'Remboursé', workflow: [], etapeIndex: -1, historique: [{ date: '2026-01-05T10:00:00.000Z', action: 'Note créée' }], dateCreation: '2026-01-05T10:00:00.000Z', dateModification: '2026-01-05T10:00:00.000Z', kilometrage: null, justificatif: null, commentaire: '' },
+      { id: 'nf-fev', employeeId: salarie.id, categorie: 'Repas', date: '2026-02-05', libelle: 'B', montantTTC: 30, tauxTVA: 10, statut: 'Refusé', workflow: [], etapeIndex: -1, historique: [{ date: '2026-02-05T10:00:00.000Z', action: 'Note créée' }], dateCreation: '2026-02-05T10:00:00.000Z', dateModification: '2026-02-05T10:00:00.000Z', kilometrage: null, justificatif: null, commentaire: '' },
+    ];
+    DB.saveCurrentCompany(company);
+    state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '2026-01' };
+    state.fraisPage = 1;
+
+    const html = renderFrais();
+    const subtitle = (html.match(/<p class="view-subtitle">([\s\S]*?)<\/p>/) || [])[1] || '';
+    assert.ok(subtitle.includes('1 note'), 'le filtre période=2026-01 ne doit garder que la note de janvier');
+    assert.ok(subtitle.includes('Remboursé : 1'), 'les totaux par statut doivent apparaître à côté du total dû');
+    assert.ok(!html.includes('>B<'), 'la note de février (hors période filtrée) ne doit pas apparaître dans le tableau');
+  }
+
+  // ---- Point 14 : export léger congés + frais, accessible sans le module RH. ----
+  {
+    const { DB, sandbox, canExportCongesFraisMoisLeger, exportCongesFraisMoisCSV, PERMISSIONS } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const user = DB.getCurrentUser();
+
+    // §hasModule (app.js) ne restreint qu'en offre 'a_la_carte' — l'entreprise de démo par défaut a
+    // toutes les options, il faut simuler explicitement un client qui n'a PAS souscrit au module RH.
+    const company = DB.getCurrentCompany();
+    company.abonnement.offre = 'a_la_carte';
+    company.abonnement.modules = [{ key: 'conges' }, { key: 'frais' }];
+    DB.saveCurrentCompany(company);
+
+    assert.strictEqual(canExportCongesFraisMoisLeger(user), true, 'un RH avec voirSalaries, abonné congés+frais mais pas RH, doit voir l\'export léger');
+
+    let captured = null;
+    sandbox.exportRowsToCSV = (headers, rows, filename) => { captured = { headers, filename, rowCount: rows.length }; };
+    exportCongesFraisMoisCSV();
+    assert.ok(captured, 'exportCongesFraisMoisCSV doit produire un export');
+    assert.strictEqual(captured.headers.length, 6, `l'export léger doit avoir exactement 6 colonnes (Matricule, Nom, Prénom, congés payés, RTT, notes de frais) — obtenu : ${JSON.stringify(captured.headers)}`);
+    assert.ok(captured.headers.includes('Matricule'), 'colonne Matricule attendue');
+    assert.ok(captured.headers.some(h => h.includes('Congés payés')), 'colonne congés payés attendue');
+    assert.ok(captured.headers.some(h => h.includes('Notes de frais')), 'colonne notes de frais attendue');
+    const forbiddenRhColumns = ['Salaire', 'Heures supplémentaires', 'Variables', 'Repos compensateur', 'Tickets'];
+    forbiddenRhColumns.forEach(forbidden => {
+      assert.ok(!captured.headers.some(h => h.includes(forbidden)), `l'export léger ne doit jamais exposer de colonne RH ("${forbidden}") — obtenu : ${JSON.stringify(captured.headers)}`);
+    });
+  }
+
+  console.log('OK — frais-fixes-07-09.test.js (points 1,2,3,4,5,6,7,8,9,10,13,14 vérifiés)');
 }
 
 run().catch((err) => {
