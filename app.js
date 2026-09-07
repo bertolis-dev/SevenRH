@@ -2385,9 +2385,18 @@ function renderSyncFailureBanner() {
     banner.innerHTML = '';
     return;
   }
+  // §retour Betty du 07/09/2026 : le message d'erreur exact n'était visible que dans la console
+  // développeur (inaccessible sans savoir l'ouvrir) — affiché ici en clair pour pouvoir le copier/le
+  // transmettre sans outils techniques. Un seul message affiché même si plusieurs écritures sont en
+  // attente (le premier suffit à orienter le diagnostic, pas besoin d'un mur de texte).
+  const details = DB.getPendingSyncDetails(companyId);
+  const firstError = details.length && details[0].lastError;
   banner.style.display = 'flex';
   banner.innerHTML = `
-    <span>${icon(ICONS.warningTriangle, 14)} ${count} modification${count > 1 ? 's' : ''} non synchronisée${count > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+    <div>
+      <span>${icon(ICONS.warningTriangle, 14)} ${count} modification${count > 1 ? 's' : ''} non synchronisée${count > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
+      ${firstError ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">Détail : ${escapeHtml(firstError)}</div>` : ''}
+    </div>
     <button type="button" class="btn btn-sm" id="btn-retry-sync">Réessayer maintenant</button>
   `;
   const retryBtn = document.getElementById('btn-retry-sync');

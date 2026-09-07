@@ -1089,6 +1089,17 @@ const DB = {
     return company ? Object.keys(company).length : 0;
   },
 
+  /** §retour Betty du 07/09/2026 : le détail de l'erreur (lastError, déjà stocké par
+   * _markPendingSync) n'était visible que dans la console développeur (console.error dans
+   * _pushInBackground) — inaccessible à qui ne sait pas l'ouvrir. Exposé ici pour que
+   * renderSyncFailureBanner (app.js) puisse l'afficher directement dans l'interface. */
+  getPendingSyncDetails(companyId) {
+    if (!this._pendingSync) this._loadPendingSync();
+    const company = this._pendingSync[companyId];
+    if (!company) return [];
+    return Object.entries(company).map(([sectionKey, info]) => ({ sectionKey, ...info }));
+  },
+
   /** Rejoue toutes les écritures en attente pour cette entreprise, dans l'ordre (jamais en
    * parallèle : une mise à jour ne doit jamais dépasser une insertion encore en attente pour la
    * MÊME ligne). Appelé au chargement de l'app, à la reconnexion réseau (voir bindGlobalEvents,

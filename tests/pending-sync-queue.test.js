@@ -166,7 +166,28 @@ async function run() {
     assert.strictEqual(result.resolved, 1, 'une ligne disparue localement ne doit jamais bloquer la file (rien à envoyer = succès)');
   }
 
-  console.log('OK — pending-sync-queue.test.js (persistance, reprise à l\'état actuel, delete, 23505, ligne disparue)');
+  // ---- 5. getPendingSyncDetails : le message d'erreur exact doit être exploitable côté interface
+  //      (retour Betty du 07/09/2026 — invisible jusqu'ici sans ouvrir la console développeur). ----
+  {
+    const { sandbox, DB } = loadDataJs();
+    DB.init();
+    const company = DB.getCurrentCompany();
+    sandbox.window.SupabaseSync = new Proxy({}, {
+      get(target, prop) {
+        if (prop !== 'pushAuditLogEntry') return async () => ({ success: true });
+        return async () => { throw new Error("Could not find the 'auteur' column of 'audit_log' in the schema cache"); };
+      },
+    });
+
+    DB.logAudit('Création', 'Demande de congé', 'Sarah Benali · Congés payés');
+    await new Promise(r => setTimeout(r, 10));
+    const details = DB.getPendingSyncDetails(company.id);
+    assert.strictEqual(details.length, 1, 'un échec doit produire exactement un détail exploitable');
+    assert.ok(details[0].sectionKey.startsWith('auditLogEntry:'), 'le detail doit identifier la nature de l\'écriture en échec');
+    assert.ok(details[0].lastError.includes('auteur'), 'le message d\'erreur exact doit être conservé tel quel, pas remplacé par un texte générique');
+  }
+
+  console.log('OK — pending-sync-queue.test.js (persistance, reprise à l\'état actuel, delete, 23505, ligne disparue, détail d\'erreur exploitable)');
 }
 
 run().catch((err) => {
