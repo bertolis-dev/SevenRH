@@ -116,6 +116,24 @@ globalThis.__submitExpenseForm = submitExpenseForm;
 globalThis.__openExpenseModal = openExpenseModal;
 globalThis.__expenseRepository = expenseRepository;
 globalThis.__renderFrais = renderFrais;
+globalThis.__renderAbsencesHub = renderAbsencesHub;
+globalThis.__teleworkRepository = teleworkRepository;
+globalThis.__leaveRepository = leaveRepository;
+globalThis.__renderDashboardActionCenter = renderDashboardActionCenter;
+globalThis.__renderCalendrierValidationsCard = renderCalendrierValidationsCard;
+globalThis.__exportTicketsCSV = exportTicketsCSV;
+globalThis.__getTicketsRows = getTicketsRows;
+globalThis.__canSelfCancelPendingRequest = canSelfCancelPendingRequest;
+globalThis.__handleSelfCancelLeaveRequest = handleSelfCancelLeaveRequest;
+globalThis.__handleEditTelework = handleEditTelework;
+globalThis.__handleSelfCancelTelework = handleSelfCancelTelework;
+globalThis.__submitTeleworkRequestForm = submitTeleworkRequestForm;
+globalThis.__openTeleworkRequestModal = openTeleworkRequestModal;
+globalThis.__renderTeletravailDemandes = renderTeletravailDemandes;
+globalThis.__documentRepository = documentRepository;
+globalThis.__entretienRepository = entretienRepository;
+globalThis.__openPlanEntretienModal = openPlanEntretienModal;
+globalThis.__openDocumentModal = openDocumentModal;
 globalThis.__canSelfManagePendingExpense = canSelfManagePendingExpense;
 globalThis.__handleEditExpense = handleEditExpense;
 globalThis.__handleSelfCancelExpense = handleSelfCancelExpense;
@@ -194,6 +212,24 @@ globalThis.__bulkSelection = bulkSelection;
     openExpenseModal: sandbox.__openExpenseModal,
     expenseRepository: sandbox.__expenseRepository,
     renderFrais: sandbox.__renderFrais,
+    renderAbsencesHub: sandbox.__renderAbsencesHub,
+    teleworkRepository: sandbox.__teleworkRepository,
+    leaveRepository: sandbox.__leaveRepository,
+    renderDashboardActionCenter: sandbox.__renderDashboardActionCenter,
+    renderCalendrierValidationsCard: sandbox.__renderCalendrierValidationsCard,
+    exportTicketsCSV: sandbox.__exportTicketsCSV,
+    getTicketsRows: sandbox.__getTicketsRows,
+    canSelfCancelPendingRequest: sandbox.__canSelfCancelPendingRequest,
+    handleSelfCancelLeaveRequest: sandbox.__handleSelfCancelLeaveRequest,
+    handleEditTelework: sandbox.__handleEditTelework,
+    handleSelfCancelTelework: sandbox.__handleSelfCancelTelework,
+    submitTeleworkRequestForm: sandbox.__submitTeleworkRequestForm,
+    openTeleworkRequestModal: sandbox.__openTeleworkRequestModal,
+    renderTeletravailDemandes: sandbox.__renderTeletravailDemandes,
+    documentRepository: sandbox.__documentRepository,
+    entretienRepository: sandbox.__entretienRepository,
+    openPlanEntretienModal: sandbox.__openPlanEntretienModal,
+    openDocumentModal: sandbox.__openDocumentModal,
     canSelfManagePendingExpense: sandbox.__canSelfManagePendingExpense,
     handleEditExpense: sandbox.__handleEditExpense,
     handleSelfCancelExpense: sandbox.__handleSelfCancelExpense,

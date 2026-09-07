@@ -167,6 +167,7 @@ function getInitialViewState() {
     pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
     editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
     editingExpenseId: null, // §retour Betty du 07/09/2026 (point 5) : note de frais en cours de correction par son auteur, avant toute validation
+    editingTeleworkRequestId: null, // §tour de bugs du 07/09/2026 : même principe pour le télétravail
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
     parametresTab: 'listes',
@@ -3218,7 +3219,10 @@ function renderUserMenuPanel() {
   // SaaS (Stripe lui-même, GitHub, Notion, Slack...) placent la facturation : toujours visible en
   // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
   const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
-  const canGererParametres = ['rh', 'proprietaire'].includes(user.role) && hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
+  // §tour de bugs du 07/09/2026 : le rôle codé en dur annulait toute surcharge individuelle
+  // gererParametres accordée à un manager/salarié/comptable — hasPermission() suffit déjà seul,
+  // exactement comme ensureDefaultLeaveTypesBackfilled (data.js) le fait pour cette même permission.
+  const canGererParametres = hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
   // §correctif audit du 23/08/2026 (§5) : le transfert de propriété n'est proposé qu'au Propriétaire
   // actuel lui-même (seul habilité côté serveur, transfer_proprietaire) — jamais sur la fiche de
   // quelqu'un d'autre, voir renderCompteCard/openChangeRoleModal qui n'offrent plus ce rôle du tout.
@@ -5620,6 +5624,13 @@ function renderDashboardActionCenter(employees, employeeIds) {
   // comptabilité (qui tombe aussi sur renderDashboardRH) n'a ni ces écrans ni ces entrées sidebar
   // (§5), un item cliquable ici la ramènerait juste vers le dashboard sans rien ouvrir.
   const managesEquipe = [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role);
+  // §tour de bugs du 07/09/2026 : gate SÉPARÉ pour les raccourcis "à valider" (congés/télétravail),
+  // qui sont fonctionnellement identiques au bouton déjà corrigé sur renderAbsencesHub — un manager
+  // valide via son étape de workflow (pas une permission globale, voir DEFAULT_ROLE_PERMISSIONS),
+  // mais une permission validerAbsence accordée individuellement doit aussi faire apparaître ces
+  // raccourcis. managesEquipe reste inchangé pour la ligne "contrats à échéance" plus bas, qui est
+  // une visibilité d'équipe, pas une action de validation.
+  const canValiderAbsences = user.role === ROLES.MANAGER || hasPermission(user, PERMISSIONS.VALIDER_ABSENCE);
   // "En attente", éventuellement restreint à l'équipe visible (employeeIds) — même filtre répété
   // pour congés/télétravail/frais, factorisé une seule fois ici.
   const pendingFor = (repo) => {
@@ -5629,7 +5640,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
 
   const items = [];
 
-  if (managesEquipe) {
+  if (canValiderAbsences) {
     // §correctif audit du 23/08/2026 (§4, brique 2) : chaque item du centre d'action pointe vers un
     // écran potentiellement bloqué par module (offre à la carte) — ne le fait apparaître (et ne
     // compte les demandes en attente) que si le module correspondant est souscrit.
@@ -5641,6 +5652,8 @@ function renderDashboardActionCenter(employees, employeeIds) {
       const teletravailEnAttente = pendingFor(teleworkRepository);
       if (teletravailEnAttente.length) items.push({ icon: ICONS.laptop, label: `${teletravailEnAttente.length} demande${teletravailEnAttente.length > 1 ? 's' : ''} de télétravail à valider`, nav: 'absences', navParams: NAVPARAMS_TELETRAVAIL_A_VALIDER });
     }
+  }
+  if (managesEquipe) {
     // §correctif retour QA du 27/08/2026 (point 2) : cette ligne n'était pas conditionnée au module
     // rh, contrairement aux 6 autres lignes de ce même bloc (ex. congés/planning juste au-dessus) —
     // une entreprise sans le module rh voyait quand même les fins de contrat au Centre d'action.
@@ -7977,21 +7990,36 @@ function openDocumentModal(employeeId) {
       return;
     }
     const formData = new FormData(evt.target);
-    const createdDocument = documentRepository.create({
-      employeeId,
-      categorie: formData.get('categorie'),
-      nom: formData.get('nom'),
-      dateExpiration: formData.get('dateExpiration') || '',
-      fichier: state.pendingAttachment
-    });
-    uploadJustificatifBestEffort({
-      uploader: window.SupabaseSync.uploadEmployeeDocumentFile,
-      employeeId, recordId: createdDocument.id, file: state.pendingAttachmentFile,
-      patcher: (fichier) => documentRepository.update(createdDocument.id, { fichier })
-    });
-    showToast('Document ajouté.');
-    closeModal();
-    navigateTo('employee-detail', { currentEmployeeId: employeeId });
+    const categorie = formData.get('categorie');
+    const nom = formData.get('nom');
+    const finalizeAddDocument = () => {
+      const createdDocument = documentRepository.create({
+        employeeId, categorie, nom,
+        dateExpiration: formData.get('dateExpiration') || '',
+        fichier: state.pendingAttachment
+      });
+      uploadJustificatifBestEffort({
+        uploader: window.SupabaseSync.uploadEmployeeDocumentFile,
+        employeeId, recordId: createdDocument.id, file: state.pendingAttachmentFile,
+        patcher: (fichier) => documentRepository.update(createdDocument.id, { fichier })
+      });
+      showToast('Document ajouté.');
+      closeModal();
+      navigateTo('employee-detail', { currentEmployeeId: employeeId });
+    };
+    // §tour de bugs du 07/09/2026 : détection de doublon (même salarié/catégorie/nom), en
+    // avertissement plutôt qu'un blocage — même principe que Notes de frais/Entretiens.
+    const doublon = documentRepository.getForEmployee(employeeId).find(d => d.categorie === categorie && d.nom === nom);
+    if (doublon) {
+      openConfirm({
+        title: 'Confirmer l\'ajout ?',
+        message: 'Un document du même nom existe déjà dans cette catégorie pour ce salarié.',
+        confirmLabel: 'Ajouter quand même',
+        onConfirm: finalizeAddDocument
+      });
+      return;
+    }
+    finalizeAddDocument();
   });
 }
 
@@ -8443,16 +8471,38 @@ function openPlanEntretienModal() {
     evt.preventDefault();
     const datePrevue = document.getElementById('f-entretien-date').value;
     if (!datePrevue) return;
-    entretienRepository.create({
-      employeeId: document.getElementById('f-entretien-employee').value,
-      type: document.getElementById('f-entretien-type').value,
-      datePrevue,
-      heurePrevue: document.getElementById('f-entretien-heure').value,
-      objectifs: document.getElementById('f-entretien-objectifs').value.trim()
-    });
-    closeModal();
-    showToast('Entretien planifié.');
-    if (state.view === 'entretiens') render();
+    // §tour de bugs du 07/09/2026 : aucun contrôle n'existait sur la date prévue (une convocation
+    // dans le passé était acceptée), contrairement au module congés qui vérifie déjà ce genre de
+    // choses sur ses propres dates.
+    if (datePrevue < toISODate(new Date())) {
+      showToast('La date prévue ne peut pas être dans le passé.', 'error');
+      return;
+    }
+    const employeeId = document.getElementById('f-entretien-employee').value;
+    const type = document.getElementById('f-entretien-type').value;
+    const finalizePlanEntretien = () => {
+      entretienRepository.create({
+        employeeId, type, datePrevue,
+        heurePrevue: document.getElementById('f-entretien-heure').value,
+        objectifs: document.getElementById('f-entretien-objectifs').value.trim()
+      });
+      closeModal();
+      showToast('Entretien planifié.');
+      if (state.view === 'entretiens') render();
+    };
+    // §tour de bugs du 07/09/2026 : détection de doublon (même salarié/type/date), en avertissement
+    // plutôt qu'un blocage — même principe que la détection déjà ajoutée sur Notes de frais.
+    const doublon = entretienRepository.getAll().find(e => e.employeeId === employeeId && e.type === type && e.datePrevue === datePrevue);
+    if (doublon) {
+      openConfirm({
+        title: 'Confirmer la planification ?',
+        message: 'Un entretien du même type est déjà prévu pour ce salarié à cette date.',
+        confirmLabel: 'Planifier quand même',
+        onConfirm: finalizePlanEntretien
+      });
+      return;
+    }
+    finalizePlanEntretien();
   });
 }
 
@@ -10433,7 +10483,18 @@ function bindEmployeeDetailEvents() {
  * (pas un doublon : le Planning hebdomadaire n'existe pas pour Congés/Absences). */
 function renderAbsencesHub() {
   const user = authRepository.getCurrentUser();
-  const canValider = ['manager', 'rh', 'proprietaire'].includes(user.role);
+  // §tour de bugs du 07/09/2026 : même défaut que celui corrigé sur Notes de frais (point 8) —
+  // liste de rôles codée en dur, une permission validerAbsence/refuserAbsence/annulerAbsence
+  // accordée individuellement à un salarié/comptabilité n'affichait jamais ce bouton. 'manager' reste
+  // un test de RÔLE (pas hasPermission) : un manager valide via son étape de workflow nommée par
+  // salarié (isCurrentWorkflowStepFor), jamais via une permission globale — voir canActOnRequestFor
+  // et son commentaire sur DEFAULT_ROLE_PERMISSIONS ("VALIDER_ABSENCE n'est pas accordée au manager
+  // par défaut"). Ce bouton reste un raccourci général (pas lié à UNE demande précise), donc "tout
+  // manager" reste la meilleure approximation possible ici, comme avant ce correctif.
+  const canValider = user.role === ROLES.MANAGER
+    || hasPermission(user, PERMISSIONS.VALIDER_ABSENCE)
+    || hasPermission(user, PERMISSIONS.REFUSER_ABSENCE)
+    || hasPermission(user, PERMISSIONS.ANNULER_ABSENCE);
   const TABS = {
     conges: { label: 'Congés', subtitle: 'Demandes de congés payés, RTT, ancienneté...', btnId: 'btn-conges-a-valider' },
     autres: { label: 'Absences', subtitle: 'Maladie, événements familiaux et autres absences paramétrables', btnId: 'btn-autres-absences-a-valider' },
@@ -10472,7 +10533,12 @@ function renderAbsencesHubTeletravail() {
 }
 
 function bindAbsencesHubEvents() {
-  const tab = state.absencesHubTab || 'conges';
+  // §tour de bugs du 07/09/2026 : bug préexistant repéré en testant le télétravail — ce calcul ne
+  // reproduisait pas le repli sur 'conges' de renderAbsencesHub quand l'onglet demandé n'existe pas
+  // (télétravail sans module planning souscrit). Le contenu réellement affiché tombait alors sur
+  // Congés, mais ce binder tentait quand même de brancher les événements du télétravail sur des
+  // éléments DOM qui n'existaient pas — plantage total de l'écran (filet de sécurité render()).
+  const tab = (state.absencesHubTab === 'teletravail' && !hasModule('planning')) ? 'conges' : (state.absencesHubTab || 'conges');
 
   document.querySelectorAll('[data-absences-hub-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -10735,11 +10801,24 @@ function canManageRequestFor(employeeId, domain = 'absence') {
   return false;
 }
 
+/** §tour de bugs du 07/09/2026 : même correctif que canSelfManagePendingExpense (Notes de frais,
+ * point 5 du retour Betty) — un demandeur peut annuler SA PROPRE demande (congé ou télétravail,
+ * même forme de requête) tant qu'AUCUNE étape de validation n'a encore été franchie (etapeIndex
+ * === 0), jamais après. Générique aux deux domaines car ils partagent exactement la même forme
+ * (employeeId/statut/etapeIndex) — contrairement aux notes de frais, la correction de contenu
+ * (dates/type) n'est pas ajoutée ici pour les congés (formulaire nettement plus complexe : type,
+ * demi-journée simple/multi, justificatif) — seule l'ANNULATION est couverte pour l'instant. */
+function canSelfCancelPendingRequest(request, user) {
+  return Boolean(user) && request.employeeId === user.id && request.statut === 'En attente' && request.etapeIndex === 0;
+}
+
 function renderRequestActions(r, type) {
+  const user = authRepository.getCurrentUser();
   const historyBtn = `<button class="btn-link" data-history="${r.id}">Historique</button>`;
   if (r.statut === 'En attente') {
     return `
       ${historyBtn}
+      ${canSelfCancelPendingRequest(r, user) ? `<button class="btn-link btn-link-danger" data-self-cancel="${r.id}">Annuler</button>` : ''}
       ${canActOnRequestFor(r) ? `<button class="btn-link" data-approve="${r.id}">Valider</button>` : ''}
       ${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse="${r.id}">Refuser</button>` : ''}
     `;
@@ -11026,6 +11105,9 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   document.querySelectorAll('[data-cancel]').forEach(btn => {
     btn.addEventListener('click', () => handleCancelRequest(btn.dataset.cancel));
   });
+  document.querySelectorAll('[data-self-cancel]').forEach(btn => {
+    btn.addEventListener('click', () => handleSelfCancelLeaveRequest(btn.dataset.selfCancel));
+  });
   document.querySelectorAll('[data-attestation]').forEach(btn => {
     btn.addEventListener('click', () => openLeaveAttestationModal(btn.dataset.attestation));
   });
@@ -11214,6 +11296,27 @@ function handleCancelRequest(id) {
   openConfirm({
     title: 'Annuler cette demande ?',
     message: 'Les jours seront recrédités sur le compteur du salarié.',
+    confirmLabel: 'Annuler la demande',
+    danger: true,
+    onConfirm: () => {
+      leaveRepository.update(id, cancelRequest(request));
+      auditLogRepository.logAudit('Annulation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
+      showToast('Demande annulée.');
+      render();
+    }
+  });
+}
+
+/** §tour de bugs du 07/09/2026 (point 5, même famille que Notes de frais) : le demandeur annule
+ * SA PROPRE demande encore en attente, avant toute validation — jamais besoin d'attendre un refus
+ * pour une simple erreur, mais protégé dès qu'une étape a été franchie (canSelfCancelPendingRequest). */
+function handleSelfCancelLeaveRequest(id) {
+  const request = leaveRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!request || !canSelfCancelPendingRequest(request, user)) { showToast('Action non autorisée.', 'error'); return; }
+  openConfirm({
+    title: 'Annuler votre demande ?',
+    message: 'Cette demande n\'a encore été validée par personne : elle sera annulée sans repasser par un refus.',
     confirmLabel: 'Annuler la demande',
     danger: true,
     onConfirm: () => {
@@ -12422,15 +12525,21 @@ const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
  * vue personnelle. Mêmes navParams que le Centre d'action (§7)/les raccourcis sidebar (§5) — un seul
  * endroit où ces filtres sont définis (NAVPARAMS_*). */
 function renderCalendrierValidationsCard(user) {
-  if (![ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role)) return '';
+  // §tour de bugs du 07/09/2026 : liste de rôles codée en dur remplacée par les mêmes permissions
+  // que canActOnRequestFor pour chaque domaine — un comptable avec validerNoteFrais accordée
+  // individuellement (il n'a que controlerNoteFrais par défaut) ne voyait jamais cette carte, alors
+  // qu'il peut basculer en vue "Moi" et devrait bien voir ses notes de frais à valider.
+  const canValiderAbsences = user.role === ROLES.MANAGER || hasPermission(user, PERMISSIONS.VALIDER_ABSENCE);
+  const canValiderFrais = hasPermission(user, PERMISSIONS.VALIDER_NOTE_FRAIS) || hasPermission(user, PERMISSIONS.CONTROLER_NOTE_FRAIS);
+  if (!canValiderAbsences && !canValiderFrais) return '';
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const pendingFor = (repo) => {
     const list = repo.getAll().filter(r => r.statut === 'En attente');
     return visibleIds ? list.filter(r => visibleIds.includes(r.employeeId)) : list;
   };
-  const congesEnAttente = pendingFor(leaveRepository).length;
-  const teletravailEnAttente = pendingFor(teleworkRepository).length;
-  const fraisEnAttente = pendingFor(expenseRepository).length;
+  const congesEnAttente = canValiderAbsences ? pendingFor(leaveRepository).length : 0;
+  const teletravailEnAttente = canValiderAbsences ? pendingFor(teleworkRepository).length : 0;
+  const fraisEnAttente = canValiderFrais ? pendingFor(expenseRepository).length : 0;
   if (!congesEnAttente && !teletravailEnAttente && !fraisEnAttente) return '';
 
   const item = (count, label, nav, navParams) => !count ? '' : `
@@ -14280,6 +14389,11 @@ function renderParametresListes() {
           <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
         </div>
       </div>
+      <!-- §tour de bugs du 07/09/2026 : le plafond d'exonération URSSAF n'était vérifié QUE dans le
+           simulateur public de la page d'accueil (valeurs de démonstration), jamais avec les vrais
+           réglages de l'entreprise qui alimentent calculateTicketsRestaurant (data.js) — une
+           entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
+      <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
     </div>
     ` : ''}
 
@@ -14409,6 +14523,24 @@ function bindParametresListesEvents() {
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
+  // §tour de bugs du 07/09/2026 : avertissement (jamais un blocage, même principe que les plafonds
+  // par catégorie de Notes de frais) si les VRAIS réglages dépassent le plafond d'exonération URSSAF.
+  const ticketsValeurEl = document.getElementById('f-tickets-valeur');
+  const ticketsPartEl = document.getElementById('f-tickets-part');
+  if (ticketsValeurEl && ticketsPartEl) {
+    const updateTicketsUrssafNote = () => {
+      const note = document.getElementById('tickets-urssaf-note');
+      const valeurFaciale = Number(ticketsValeurEl.value) || 0;
+      const partEmployeurPct = Number(ticketsPartEl.value) || 0;
+      const partEmployeurParTicket = round2(valeurFaciale * partEmployeurPct / 100);
+      note.innerHTML = partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026
+        ? `${icon(ICONS.warningTriangle, 14)} Avec ces réglages, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre, au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`
+        : `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre, dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}).`;
+    };
+    ticketsValeurEl.addEventListener('input', updateTicketsUrssafNote);
+    ticketsPartEl.addEventListener('input', updateTicketsUrssafNote);
+    updateTicketsUrssafNote();
+  }
   bindCheckboxField('f-masse-salariale', 'masseSalarialeActivee', 'Réglage mis à jour.');
   bindCheckboxField('f-suivi-genre', 'suiviGenreActive', 'Réglage mis à jour.');
   bindCheckboxField('f-suivi-age', 'suiviAgeActive', 'Réglage mis à jour.');
@@ -16224,10 +16356,13 @@ function renderTeletravailDemandes() {
 function renderTeleworkRequestRow(r) {
   const employee = employeeRepository.getById(r.employeeId);
   if (!employee) return '';
+  const user = authRepository.getCurrentUser();
 
   const periode = r.dateDebut === r.dateFin ? formatDate(r.dateDebut) : `${formatDate(r.dateDebut)} → ${formatDate(r.dateFin)}`;
   const actions = r.statut === 'En attente'
-    ? `${canActOnRequestFor(r) ? `<button class="btn-link" data-approve-tt="${r.id}">Valider</button>` : ''}${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse-tt="${r.id}">Refuser</button>` : ''}`
+    // §tour de bugs du 07/09/2026 (point 5) : même correctif que Notes de frais — le demandeur peut
+    // corriger/annuler sa propre demande tant qu'aucun valideur n'a encore agi dessus.
+    ? `${canSelfCancelPendingRequest(r, user) ? `<button class="btn-link" data-edit-tt="${r.id}">Modifier</button><button class="btn-link btn-link-danger" data-self-cancel-tt="${r.id}">Annuler</button>` : ''}${canActOnRequestFor(r) ? `<button class="btn-link" data-approve-tt="${r.id}">Valider</button>` : ''}${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse-tt="${r.id}">Refuser</button>` : ''}`
     : r.statut === 'Validé' && canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel-tt="${r.id}">Annuler</button>` : '';
 
   return `
@@ -16267,7 +16402,34 @@ function bindTeletravailDemandesEvents() {
   document.querySelectorAll('[data-approve-tt]').forEach(btn => btn.addEventListener('click', () => handleApproveTelework(btn.dataset.approveTt)));
   document.querySelectorAll('[data-refuse-tt]').forEach(btn => btn.addEventListener('click', () => handleRefuseTelework(btn.dataset.refuseTt)));
   document.querySelectorAll('[data-cancel-tt]').forEach(btn => btn.addEventListener('click', () => handleCancelTelework(btn.dataset.cancelTt)));
+  document.querySelectorAll('[data-edit-tt]').forEach(btn => btn.addEventListener('click', () => handleEditTelework(btn.dataset.editTt)));
+  document.querySelectorAll('[data-self-cancel-tt]').forEach(btn => btn.addEventListener('click', () => handleSelfCancelTelework(btn.dataset.selfCancelTt)));
   bindHistoryButtons(teleworkRepository);
+}
+
+function handleEditTelework(id) {
+  const request = teleworkRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!request || !canSelfCancelPendingRequest(request, user)) { showToast('Action non autorisée.', 'error'); return; }
+  openTeleworkRequestModal(undefined, undefined, undefined, request);
+}
+
+function handleSelfCancelTelework(id) {
+  const request = teleworkRepository.getById(id);
+  const user = authRepository.getCurrentUser();
+  if (!request || !canSelfCancelPendingRequest(request, user)) { showToast('Action non autorisée.', 'error'); return; }
+  openConfirm({
+    title: 'Annuler votre demande de télétravail ?',
+    message: 'Cette demande n\'a encore été validée par personne : elle sera annulée sans repasser par un refus.',
+    confirmLabel: 'Annuler la demande',
+    danger: true,
+    onConfirm: () => {
+      teleworkRepository.update(id, cancelRequest(request));
+      auditLogRepository.logAudit('Annulation', 'Demande de télétravail', auditLabelForEmployee(request.employeeId), auditDetailsForActor());
+      showToast('Demande annulée.');
+      render();
+    }
+  });
 }
 
 function handleApproveTelework(id) {
@@ -16323,25 +16485,38 @@ function handleCancelTelework(id) {
  * congés/absences, une demande de télétravail n'a pas de notion de demi-journée dans ce modèle
  * (champ absent de makeEmptyTeleworkRequest) — pas ajouté ici pour ne pas étendre le modèle de
  * données au-delà de ce qui est demandé. */
-function openTeleworkRequestModal(presetEmployeeId, draft, presetDate) {
+function openTeleworkRequestModal(presetEmployeeId, draft, presetDate, editingRequest) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
-  const champs = (draft && draft.champs) || {};
-  if (!draft && presetDate) {
+  // §tour de bugs du 07/09/2026 (point 5, même famille que Notes de frais) : en modification, les
+  // champs repartent de la demande existante, jamais d'un brouillon (les deux mécanismes ne se
+  // recoupent jamais, une demande déjà envoyée n'est plus un brouillon).
+  const champs = editingRequest
+    ? { employeeId: editingRequest.employeeId, dateDebut: editingRequest.dateDebut, dateFin: editingRequest.dateFin, commentaire: editingRequest.commentaire }
+    : (draft && draft.champs) || {};
+  if (!draft && !editingRequest && presetDate) {
     champs.dateDebut = presetDate;
     champs.dateFin = presetDate;
   }
-  beginDraftEdit(draft);
+  state.editingTeleworkRequestId = editingRequest ? editingRequest.id : null;
+  if (!editingRequest) beginDraftEdit(draft);
+
+  const employeeField = editingRequest
+    // Modification toujours restreinte à SA PROPRE demande (canSelfCancelPendingRequest côté
+    // autorisation) — jamais de sélecteur, la réattribuer à quelqu'un d'autre n'aurait pas de sens.
+    ? `<input type="hidden" id="f-employeeId" name="employeeId" value="${escapeHtml(champs.employeeId)}">
+       <div class="form-field"><label>Salarié</label><input class="input" type="text" value="${personNameHtml(authRepository.getCurrentUser())}" disabled></div>`
+    : employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees);
 
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>Nouvelle demande de télétravail</h2>
+        <h2>${editingRequest ? 'Modifier la demande de télétravail' : 'Nouvelle demande de télétravail'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="telework-request-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${employeeFieldForRequest(presetEmployeeId || champs.employeeId, employees)}
+            ${employeeField}
             ${textField('dateDebut', 'Date de début', champs.dateDebut || '', true, 'date')}
             ${textField('dateFin', 'Date de fin', champs.dateFin || '', true, 'date')}
           </div>
@@ -16353,8 +16528,8 @@ function openTeleworkRequestModal(presetEmployeeId, draft, presetDate) {
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-          <button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>
-          <button type="submit" class="btn btn-primary">Envoyer la demande</button>
+          ${editingRequest ? '' : '<button type="button" class="btn btn-secondary" id="btn-save-draft">Enregistrer comme brouillon</button>'}
+          <button type="submit" class="btn btn-primary">${editingRequest ? 'Enregistrer les modifications' : 'Envoyer la demande'}</button>
         </div>
       </form>
     </div>
@@ -16367,7 +16542,8 @@ function openTeleworkRequestModal(presetEmployeeId, draft, presetDate) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('telework-request-form').addEventListener('submit', submitTeleworkRequestForm);
-  document.getElementById('btn-save-draft').addEventListener('click', () => {
+  const saveDraftBtn = document.getElementById('btn-save-draft');
+  if (saveDraftBtn) saveDraftBtn.addEventListener('click', () => {
     saveDraftFromForm(document.getElementById('telework-request-form'), 'teletravail');
   });
 
@@ -16536,7 +16712,26 @@ async function submitTeleworkRequestForm(evt) {
     return;
   }
 
+  // §tour de bugs du 07/09/2026 : mêmes contrôles que submitLeaveRequestForm, absents ici jusqu'à
+  // présent — un salarié pouvait poser du télétravail dans le passé, ou en dehors de sa période
+  // d'emploi (avant son embauche, après son départ). Le déplacement par glisser-déposer d'une
+  // demande déjà validée (moveTeleworkRequest) applique déjà cette règle ; la création initiale ne
+  // l'appliquait pas, malgré un commentaire affirmant à tort qu'elles partageaient les mêmes règles.
+  if (authRepository.getCurrentUser().role === ROLES.SALARIE && dateDebut < toISODate(new Date())) {
+    showToast('Vous ne pouvez pas saisir une absence dont la date de début est déjà passée.', 'error');
+    return;
+  }
+
   const employee = employeeRepository.getById(employeeId);
+  if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+    showToast(`La date de début ne peut pas être avant la date d'embauche (${formatDate(employee.dateEmbauche)}).`, 'error');
+    return;
+  }
+  if (employee.dateDepart && dateFin > employee.dateDepart) {
+    showToast(`La date de fin ne peut pas être après la date de départ (${formatDate(employee.dateDepart)}).`, 'error');
+    return;
+  }
+
   const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settingsRepository.getSettings());
 
   if (nbJours <= 0) {
@@ -16555,14 +16750,30 @@ async function submitTeleworkRequestForm(evt) {
     showToast('Ce salarié a déjà une demande de congé/absence active sur cette période.', 'error');
     return;
   }
-  if (hasActiveRequestOverlap(teleworkRepository.getAll(), employeeId, dateDebut, dateFin)) {
+  // §tour de bugs du 07/09/2026 (point 5) : exclut la demande elle-même en modification, sinon elle
+  // se signalerait comme son propre chevauchement — même principe que moveTeleworkRequest ci-dessus.
+  if (hasActiveRequestOverlap(teleworkRepository.getAll(), employeeId, dateDebut, dateFin, state.editingTeleworkRequestId)) {
     showToast('Ce salarié a déjà une autre demande de télétravail active sur cette période.', 'error');
     return;
   }
 
-  // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
   const submitBtn = evt.target.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
+
+  if (state.editingTeleworkRequestId) {
+    const id = state.editingTeleworkRequestId;
+    const original = teleworkRepository.getById(id);
+    const historique = ((original && original.historique) || []).slice();
+    historique.push({ date: new Date().toISOString(), action: 'Modifiée par le demandeur' });
+    teleworkRepository.update(id, { dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '', historique });
+    auditLogRepository.logAudit('Modification', 'Demande de télétravail', auditLabelForEmployee(employeeId), auditDetailsForActor());
+    showToast('Demande de télétravail modifiée.');
+    state.editingTeleworkRequestId = null;
+    closeModal();
+    navigateTo('absences', { absencesHubTab: 'teletravail', teletravailTab: 'demandes' });
+    return;
+  }
+
   const createdRequest = await teleworkRepository.create({ employeeId, dateDebut, dateFin, nbJours, commentaire: formData.get('commentaire') || '' });
 
   finalizeDraftEdit();
@@ -17628,9 +17839,12 @@ function openCorrigerTicketsModal(employeeId) {
             <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
             <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
           </div>
+          <!-- §tour de bugs du 07/09/2026 : motif rendu obligatoire — cette correction touche
+               directement la paie (calculateTicketsRestaurant) et était jusqu'ici enregistrable
+               sans aucune justification textuelle, alors que qui/quand l'étaient déjà (logAudit). -->
           <div class="form-field" style="margin-top: 12px;">
-            <label for="f-motif">Motif</label>
-            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. jour férié local non reconnu">
+            <label for="f-motif">Motif *</label>
+            <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. jour férié local non reconnu" required>
           </div>
         </div>
         <div class="modal-footer">
@@ -17650,7 +17864,10 @@ function openCorrigerTicketsModal(employeeId) {
   document.getElementById('corriger-tickets-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const delta = document.getElementById('f-delta').value;
-    const motif = document.getElementById('f-motif').value;
+    const motif = document.getElementById('f-motif').value.trim();
+    // §tour de bugs du 07/09/2026 : ne fait pas confiance au seul `required` HTML (contournable en
+    // modifiant le DOM), même principe défensif qu'ailleurs dans le fichier.
+    if (!motif) { showToast('Indiquez un motif pour cette correction.', 'error'); return; }
     const result = employeeRepository.ajusterTickets(employeeId, year, month, delta, motif);
     if (!result.success) { showToast(result.error, 'error'); return; }
     showToast('Correction enregistrée.');
@@ -17687,8 +17904,12 @@ function shiftTicketsMonth(delta) {
 
 function exportTicketsCSV() {
   const rows = getTicketsRows();
-  const headers = ['Salarié', 'Tickets', 'Montant total', 'Part employeur', 'Part salarié'];
+  // §tour de bugs du 07/09/2026 : matricule manquant, même remarque que pour l'export Notes de
+  // frais déjà corrigé — sans lui, un rapprochement comptable ne se fait qu'à l'œil par nom (risque
+  // d'homonymes/changement de nom).
+  const headers = ['Matricule', 'Salarié', 'Tickets', 'Montant total', 'Part employeur', 'Part salarié'];
   const data = rows.map(r => [
+    r.employee.matricule,
     `${r.employee.prenom} ${r.employee.nom}`,
     r.result.nbTickets,
     formatNumberFR(r.result.montantTotal),
@@ -19262,6 +19483,7 @@ function closeModal() {
   // fermer la modale d'édition d'une note (croix, Échap) sans envoyer ne doit jamais laisser la
   // PROCHAINE ouverture de "Nouvelle note" repartir en mode modification par erreur.
   state.editingExpenseId = null;
+  state.editingTeleworkRequestId = null;
 }
 
 // ---------------------------------------------------------------------------
