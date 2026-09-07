@@ -109,6 +109,13 @@ globalThis.__getCalendarDayInfo = getCalendarDayInfo;
 globalThis.__buildCalendarSharedData = buildCalendarSharedData;
 globalThis.__getTableauCompteursData = getTableauCompteursData;
 globalThis.__getPaieAnomalies = getPaieAnomalies;
+globalThis.__getPaieRows = getPaieRows;
+globalThis.__getExpensePayableMonthKey = getExpensePayableMonthKey;
+globalThis.__updateExpenseKmHint = updateExpenseKmHint;
+globalThis.__submitExpenseForm = submitExpenseForm;
+globalThis.__openExpenseModal = openExpenseModal;
+globalThis.__expenseRepository = expenseRepository;
+globalThis.__renderFrais = renderFrais;
 globalThis.__getFilteredLeaveRequests = getFilteredLeaveRequests;
 globalThis.__getFilteredTeleworkRequests = getFilteredTeleworkRequests;
 globalThis.__getFilteredExpenses = getFilteredExpenses;
@@ -169,6 +176,13 @@ globalThis.__bulkSelection = bulkSelection;
     buildCalendarSharedData: sandbox.__buildCalendarSharedData,
     getTableauCompteursData: sandbox.__getTableauCompteursData,
     getPaieAnomalies: sandbox.__getPaieAnomalies,
+    getPaieRows: sandbox.__getPaieRows,
+    getExpensePayableMonthKey: sandbox.__getExpensePayableMonthKey,
+    updateExpenseKmHint: sandbox.__updateExpenseKmHint,
+    submitExpenseForm: sandbox.__submitExpenseForm,
+    openExpenseModal: sandbox.__openExpenseModal,
+    expenseRepository: sandbox.__expenseRepository,
+    renderFrais: sandbox.__renderFrais,
     getFilteredLeaveRequests: sandbox.__getFilteredLeaveRequests,
     getFilteredTeleworkRequests: sandbox.__getFilteredTeleworkRequests,
     getFilteredExpenses: sandbox.__getFilteredExpenses,

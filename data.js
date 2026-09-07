@@ -4053,9 +4053,14 @@ function computeMontantTVA(montantTTC, tauxTVA) {
 }
 
 /**
- * Barème kilométrique officiel (voitures), par tranche de puissance fiscale et de distance
- * annuelle. Stocké comme donnée paramétrable — le barème est republié chaque année par
- * l'administration fiscale et n'est donc jamais codé en dur dans le calcul lui-même.
+ * Barème kilométrique officiel VOITURES, par tranche de puissance fiscale et de distance annuelle.
+ * §retour Betty du 07/09/2026 : ce commentaire affirmait à tort que le barème était "une donnée
+ * paramétrable" — il est en réalité codé en dur ici, sans réglage possible ni année de référence
+ * enregistrée quelque part, alors qu'il est republié chaque année par l'administration fiscale
+ * (barème actuel : revenus 2025/imposition 2026). Ne couvre pas non plus la majoration de 20 % pour
+ * les véhicules électriques, ni les barèmes distincts deux-roues/cyclomoteurs. Rendre ceci
+ * réellement paramétrable (par année, par motorisation) est un chantier à part, pas fait ici —
+ * seul le calcul CUMULATIF annuel (voir calculateIndemniteKilometrique) a été corrigé ce jour-là.
  */
 function getBaremeKilometrique() {
   return [
@@ -4067,13 +4072,41 @@ function getBaremeKilometrique() {
   ];
 }
 
-/** Calcule l'indemnité kilométrique due pour une distance et une puissance fiscale données. */
-function calculateIndemniteKilometrique(distanceKm, puissanceFiscale) {
+/** §retour Betty du 07/09/2026 (point 1, le plus sérieux des défauts frais) : le barème fiscal
+ * s'applique aux kilomètres parcourus DANS L'ANNÉE, pas trajet par trajet — trois notes de 2500 km
+ * chacune (7500 km au total) ne doivent pas être 3 fois calculées comme "moins de 5000 km" (tranche 1
+ * la plus avantageuse à tort), le total réel dépasse cette tranche dès la 3ᵉ. La fonction du barème
+ * (bareme ci-dessous) renvoie déjà, par construction officielle, l'indemnité TOTALE due pour une
+ * distance cumulée donnée (pas un taux marginal) — l'indemnité d'UNE note est donc la différence entre
+ * le barème appliqué au cumul APRÈS cette note et le cumul AVANT (voir getKilometrageDejaDeclareAnnee).
+ * Cette différence télescope correctement en somme sur l'année quel que soit l'ordre de saisie des
+ * notes (bareme(k1) + [bareme(k1+k2)-bareme(k1)] + ... = bareme(total)) — aucune note déjà
+ * enregistrée n'a donc besoin d'être réécrite rétroactivement quand une nouvelle fait franchir une
+ * tranche, contrairement à un barème appliqué naïvement note par note. */
+function calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares) {
   const tier = getBaremeKilometrique().find(b => puissanceFiscale <= b.cvMax) || getBaremeKilometrique().slice(-1)[0];
-  const d = Number(distanceKm) || 0;
-  if (d <= 5000) return round2(d * tier.tranche1);
-  if (d <= 20000) return round2(d * tier.tranche2Coef + tier.tranche2Fixe);
-  return round2(d * tier.tranche3);
+  const bareme = (d) => {
+    if (d <= 0) return 0;
+    if (d <= 5000) return d * tier.tranche1;
+    if (d <= 20000) return d * tier.tranche2Coef + tier.tranche2Fixe;
+    return d * tier.tranche3;
+  };
+  const avant = Math.max(0, Number(kmDejaDeclares) || 0);
+  const apres = avant + (Number(distanceKm) || 0);
+  return round2(bareme(apres) - bareme(avant));
+}
+
+/** Kilomètres déjà déclarés par ce salarié sur l'année civile de `dateStr` (hors notes refusées/
+ * annulées, qui n'ont jamais réellement consommé de tranche) — sert de point de départ au calcul
+ * cumulatif ci-dessus. `excludeExpenseId` exclut la note elle-même si on recalcule une note déjà
+ * enregistrée (jamais le cas aujourd'hui à la création, utile si une modification est ajoutée plus tard). */
+function getKilometrageDejaDeclareAnnee(employeeId, dateStr, allExpenses, excludeExpenseId) {
+  const year = (dateStr || '').slice(0, 4);
+  if (!year) return 0;
+  return allExpenses
+    .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique' && e.id !== excludeExpenseId
+      && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
+    .reduce((sum, e) => sum + ((e.kilometrage && Number(e.kilometrage.distanceKm)) || 0), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -4299,6 +4332,23 @@ function advanceWorkflow(request, finalStatut, acteurRoleLabel) {
   // cette dernière validation dans l'historique.
   historique.push({ date: now, action: roleActuel ? `${finalStatut} (par ${roleActuel})` : finalStatut });
   return { statut: finalStatut, etapeIndex: -1, historique };
+}
+
+/** §retour Betty du 07/09/2026 (point 2, l'autre défaut qui touche l'argent) : une note de frais
+ * rattachée au mois de sa DATE DE DÉPENSE (plutôt qu'au mois où elle devient réellement payable,
+ * c'est-à-dire validée) disparaît de la paie si elle a été validée après la clôture de son propre
+ * mois — exactement le même défaut déjà corrigé côté congés à cheval sur deux mois. Le mois de paie
+ * d'une note "Remboursé" doit donc être celui où advanceWorkflow l'a fait basculer à ce statut
+ * (dernière entrée d'historique commençant par "Remboursé"), jamais celui de la dépense elle-même.
+ * Repli sur dateCreation pour une note auto-validée à la création (workflow vide, voir addExpense) —
+ * aucune entrée "Remboursé" n'existe alors dans historique, mais elle est bien payable dès sa création. */
+function getExpenseRembourseDate(expense) {
+  const entry = (expense.historique || []).slice().reverse().find(h => (h.action || '').startsWith('Remboursé'));
+  return (entry && entry.date) || expense.dateCreation || expense.date || '';
+}
+
+function getExpensePayableMonthKey(expense) {
+  return getExpenseRembourseDate(expense).slice(0, 7);
 }
 
 /** Refus/annulation génériques, communs aux congés et au télétravail (même forme de demande). */

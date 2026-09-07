@@ -16674,10 +16674,18 @@ function renderFrais() {
   const employees = getScopedEmployeesForFilters();
   const settings = settingsRepository.getSettings();
   const expenses = getFilteredExpenses();
-  const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
+  // §retour Betty du 07/09/2026 (point 6) : additionner aussi les notes Refusé/Annulé rendait ce
+  // total inexploitable ("12 notes, 2 340 € TTC" ne voulait rien dire dès qu'un refus était mélangé
+  // dedans) — seul ce qui reste réellement dû (en attente ou déjà remboursé) doit compter ici.
+  const total = expenses.filter(n => n.statut !== 'Refusé' && n.statut !== 'Annulé').reduce((sum, n) => sum + n.montantTTC, 0);
   const { pageItems, totalPages, page, pageStart } = paginate(expenses, 'fraisPage');
   const user = authRepository.getCurrentUser();
-  const canValider = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
+  // §retour Betty du 07/09/2026 (point 8) : liste de rôles codée en dur remplacée par les mêmes
+  // permissions que canActOnRequestFor/canRefuserRequestFor (VALIDER_NOTE_FRAIS pour RH/Propriétaire,
+  // CONTROLER_NOTE_FRAIS pour Manager/Comptabilité) — une permission accordée individuellement à un
+  // salarié qui n'a normalement pas ce droit lui affiche désormais bien le bouton, comme partout
+  // ailleurs dans l'application.
+  const canValider = hasPermission(user, PERMISSIONS.VALIDER_NOTE_FRAIS) || hasPermission(user, PERMISSIONS.CONTROLER_NOTE_FRAIS);
 
   return `
     <div class="view-header view-header-row">
@@ -16838,10 +16846,16 @@ function handleCancelExpense(id) {
 
 function exportExpensesCSV() {
   const expenses = getFilteredExpenses();
-  const headers = ['Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Statut'];
+  // §retour Betty du 07/09/2026 (point 9) : ni matricule ni date de remboursement — même remarque
+  // que pour l'export des congés, le matricule est la clé de rapprochement avec la paie, sans lui
+  // le fichier n'est utilisable qu'à l'œil. La date de remboursement (vide tant que non remboursée)
+  // réutilise getExpenseRembourseDate (data.js), la même donnée qui rattache désormais la note au
+  // bon mois de paie (voir getPaieRows, point 2).
+  const headers = ['Matricule', 'Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Statut', 'Date de remboursement'];
   const rows = expenses.map(n => {
     const employee = employeeRepository.getById(n.employeeId);
     return [
+      employee ? employee.matricule : '—',
       employee ? `${employee.prenom} ${employee.nom}` : '—',
       n.date,
       n.categorie,
@@ -16849,7 +16863,8 @@ function exportExpensesCSV() {
       formatNumberFR(computeMontantHT(n.montantTTC, n.tauxTVA)),
       formatNumberFR(computeMontantTVA(n.montantTTC, n.tauxTVA)),
       formatNumberFR(n.montantTTC),
-      n.statut
+      n.statut,
+      n.statut === 'Remboursé' ? formatDate(getExpenseRembourseDate(n)) : ''
     ];
   });
   exportRowsToCSV(headers, rows, 'notes-de-frais.csv');
@@ -16925,6 +16940,10 @@ function openExpenseModal(presetEmployeeId, draft) {
   document.getElementById('f-categorie').addEventListener('change', updateExpenseCategoryFields);
   document.getElementById('f-distanceKm').addEventListener('input', updateExpenseKmHint);
   document.getElementById('f-puissanceFiscale').addEventListener('input', updateExpenseKmHint);
+  // §retour Betty du 07/09/2026 : le cumul annuel dépend de l'année de la dépense — sans ce
+  // listener, changer la date après avoir déjà saisi distance/puissance laissait l'aperçu affiché
+  // sur le cumul de la mauvaise année.
+  document.getElementById('f-date').addEventListener('change', updateExpenseKmHint);
   document.getElementById('expense-form').addEventListener('submit', submitExpenseForm);
   document.getElementById('btn-save-draft').addEventListener('click', () => {
     saveDraftFromForm(document.getElementById('expense-form'), 'frais', { justificatif: state.pendingAttachment });
@@ -16948,7 +16967,16 @@ function updateExpenseKmHint() {
     hint.textContent = 'Renseignez la distance et la puissance fiscale pour calculer l\'indemnité.';
     return;
   }
-  hint.textContent = `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(calculateIndemniteKilometrique(distanceKm, puissanceFiscale))}`;
+  // §retour Betty du 07/09/2026 : l'aperçu affiché pendant la saisie doit refléter le VRAI montant
+  // qui sera enregistré (calcul cumulatif annuel), pas un montant par trajet qui induirait le
+  // salarié en erreur avant même l'envoi — voir calculateIndemniteKilometrique/submitExpenseForm.
+  const employeeId = document.getElementById('f-employeeId').value;
+  const dateStr = document.getElementById('f-date').value || toISODate(new Date());
+  const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll());
+  const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
+  hint.textContent = kmDejaDeclares > 0
+    ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année, avant cette note).`
+    : `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)}`;
 }
 
 async function submitExpenseForm(evt) {
@@ -16962,6 +16990,20 @@ async function submitExpenseForm(evt) {
     return;
   }
 
+  // §retour Betty du 07/09/2026 (point 3) : aucun contrôle n'existait sur la date de la dépense —
+  // une dépense datée dans le futur ou antérieure à l'embauche du salarié était acceptée telle
+  // quelle, alors que le module Congés vérifie déjà ce genre de choses sur ses propres dates.
+  const dateDepense = formData.get('date');
+  const employeeForDate = employeeRepository.getById(employeeId);
+  if (dateDepense > toISODate(new Date())) {
+    showToast('La date de la dépense ne peut pas être dans le futur.', 'error');
+    return;
+  }
+  if (employeeForDate && employeeForDate.dateEmbauche && dateDepense < employeeForDate.dateEmbauche) {
+    showToast(`La date de la dépense ne peut pas être antérieure à la date d'embauche (${formatDate(employeeForDate.dateEmbauche)}).`, 'error');
+    return;
+  }
+
   let montantTTC, tauxTVA, kilometrage = null;
 
   if (categorie === 'Kilométrique') {
@@ -16971,7 +17013,11 @@ async function submitExpenseForm(evt) {
       showToast('Renseignez une distance et une puissance fiscale valides (supérieures à 0).', 'error');
       return;
     }
-    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale);
+    // §retour Betty du 07/09/2026 (point 1) : recalculé ici plutôt que de faire confiance au
+    // montant affiché à l'écran au moment de la saisie — une autre note kilométrique a pu être
+    // envoyée entre-temps (ex. deux onglets ouverts), le cumul doit être celui à l'instant de l'envoi.
+    const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll());
+    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
     tauxTVA = 0;
     kilometrage = { distanceKm, puissanceFiscale };
   } else {
@@ -17433,7 +17479,7 @@ function getPaieRows(year, month) {
       .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, false, year, month, e, settings), 0);
 
     const notesRembourser = expenses
-      .filter(n => n.employeeId === e.id && n.date.startsWith(monthStr))
+      .filter(n => n.employeeId === e.id && getExpensePayableMonthKey(n) === monthStr)
       .reduce((sum, n) => sum + n.montantTTC, 0);
 
     return {

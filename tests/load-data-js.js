@@ -50,6 +50,9 @@ globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
 globalThis.__getRadarTresorerieRH = getRadarTresorerieRH;
 globalThis.__isLeaveTypeEligibleForEmployee = isLeaveTypeEligibleForEmployee;
 globalThis.__calculateAncienneteYears = calculateAncienneteYears;
+globalThis.__calculateIndemniteKilometrique = calculateIndemniteKilometrique;
+globalThis.__getKilometrageDejaDeclareAnnee = getKilometrageDejaDeclareAnnee;
+globalThis.__getBaremeKilometrique = getBaremeKilometrique;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -77,6 +80,9 @@ globalThis.__calculateAncienneteYears = calculateAncienneteYears;
     getRadarTresorerieRH: sandbox.__getRadarTresorerieRH,
     isLeaveTypeEligibleForEmployee: sandbox.__isLeaveTypeEligibleForEmployee,
     calculateAncienneteYears: sandbox.__calculateAncienneteYears,
+    calculateIndemniteKilometrique: sandbox.__calculateIndemniteKilometrique,
+    getKilometrageDejaDeclareAnnee: sandbox.__getKilometrageDejaDeclareAnnee,
+    getBaremeKilometrique: sandbox.__getBaremeKilometrique,
   };
 }
 
