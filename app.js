@@ -3282,7 +3282,18 @@ function renderUserMenuPanel() {
   document.querySelectorAll('[data-switch-account]').forEach(row => {
     row.addEventListener('click', async () => {
       row.disabled = true;
-      const result = await authRepository.switchAccount(row.dataset.switchAccount);
+      // §correctif retour Betty du 07/09/2026 : filet de sécurité supplémentaire ICI en plus de
+      // celui déjà posé dans DB.switchToSavedAccount — une exception qui échapperait malgré tout
+      // (ex. window.SupabaseSync.switchToSession lui-même en erreur réseau) ne doit jamais laisser
+      // ce bouton dans un état muet (row.disabled resté true, aucun message, menu qui semble figé).
+      let result;
+      try {
+        result = await authRepository.switchAccount(row.dataset.switchAccount);
+      } catch (err) {
+        showToast(`Bascule de compte interrompue (${(err && err.message) || err}). Vérifiez sur quel compte vous êtes connecté(e) avant de continuer.`, 'error');
+        renderUserMenuPanel();
+        return;
+      }
       if (!result.success) {
         showToast(result.error, 'error');
         renderUserMenuPanel();
@@ -3457,21 +3468,33 @@ async function runGroupSummaryRefresh() {
     }
     const rows = [];
 
+    // §correctif retour Betty du 07/09/2026 : switchAccount() peut LEVER une exception (pas
+    // seulement renvoyer { success: false }) si l'hydratation de l'entreprise cible échoue après
+    // que la session Supabase a déjà basculé (hydrateCurrentCompanyWithMigrations, data.js) — un
+    // réseau instable pendant CETTE étape précise suffit. Sans ce try/catch, une telle exception
+    // interrompait toute la boucle AVANT d'atteindre le retour au compte d'origine plus bas :
+    // l'utilisateur restait alors silencieusement connecté sur l'entreprise d'un AUTRE compte, sans
+    // aucun message, jusqu'à ce qu'une action normale (ex. poser un congé) échoue de façon opaque
+    // ("new row violates row-level security policy") sans lien apparent avec la Vue groupe.
     for (const account of accounts) {
-      const result = await authRepository.switchAccount(account.id);
-      if (!result.success) {
-        rows.push({ companyName: account.companyName || account.email, erreur: result.error });
-        continue;
+      try {
+        const result = await authRepository.switchAccount(account.id);
+        if (!result.success) {
+          rows.push({ companyName: account.companyName || account.email, erreur: result.error });
+          continue;
+        }
+        const employees = employeeRepository.getAll().filter(e => !e.archive);
+        const actifs = employees.filter(e => e.statut === 'Actif');
+        const settings = settingsRepository.getSettings();
+        rows.push({
+          companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
+          effectifActif: actifs.length,
+          masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
+          congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
+        });
+      } catch (err) {
+        rows.push({ companyName: account.companyName || account.email, erreur: (err && err.message) || String(err) });
       }
-      const employees = employeeRepository.getAll().filter(e => !e.archive);
-      const actifs = employees.filter(e => e.statut === 'Actif');
-      const settings = settingsRepository.getSettings();
-      rows.push({
-        companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
-        effectifActif: actifs.length,
-        masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
-        congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
-      });
     }
     skippedDuplicates.forEach(account => {
       rows.push({ companyName: `${account.companyName || account.email} (déjà compté ci-dessus)`, erreur: 'Même entreprise qu\'un autre compte gardé en parallèle, exclu du total pour ne pas le doubler.' });
@@ -3487,8 +3510,12 @@ async function runGroupSummaryRefresh() {
     // seulement un affichage incorrect. On alerte donc explicitement l'utilisateur si ce retour échoue.
     let restoreError = null;
     if (originalAccountId) {
-      const restoreResult = await authRepository.switchAccount(originalAccountId);
-      if (!restoreResult.success) restoreError = restoreResult.error;
+      try {
+        const restoreResult = await authRepository.switchAccount(originalAccountId);
+        if (!restoreResult.success) restoreError = restoreResult.error;
+      } catch (err) {
+        restoreError = (err && err.message) || String(err);
+      }
     }
     render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
 

@@ -2952,14 +2952,30 @@ const DB = {
   async switchToSavedAccount(accountId) {
     const target = this.getSavedAccounts().find(a => a.id === accountId);
     if (!target) return { success: false, error: 'Compte introuvable.' };
+    // §correctif retour Betty du 07/09/2026 : la session Supabase (auth.uid(), utilisée par TOUTES
+    // les policies RLS) bascule DÈS la ligne suivante — this._currentEmployeeId/_companiesCache,
+    // eux, ne sont mis à jour qu'à la toute fin, en cas de succès complet. Entre les deux, si
+    // hydrateCurrentCompanyWithMigrations échoue (renvoie rien, OU lève une exception réseau), la
+    // session réelle reste sur le NOUVEAU compte alors que l'écran continue d'afficher l'ANCIEN —
+    // sans ce garde-fou, l'utilisateur restait silencieusement connecté sur le mauvais compte
+    // jusqu'à ce qu'une action normale (ex. poser un congé) échoue avec une erreur RLS opaque, sans
+    // lien apparent avec un changement de compte fait parfois bien plus tôt.
+    const previousAccountId = this._currentAuthUserId;
     const switchResult = await window.SupabaseSync.switchToSession(target.session);
     if (!switchResult.success) {
       this.removeSavedAccount(accountId);
       return { success: false, error: 'Cette session a expiré. Reconnectez ce compte avec son mot de passe.' };
     }
-    const company = await hydrateCurrentCompanyWithMigrations();
+    let company;
+    try {
+      company = await hydrateCurrentCompanyWithMigrations();
+    } catch (err) {
+      await this._restoreSessionAfterFailedSwitch(previousAccountId);
+      return { success: false, error: `Bascule interrompue (${(err && err.message) || err}) — vous restez connecté(e) sur votre compte précédent.` };
+    }
     if (!company) {
       this.removeSavedAccount(accountId);
+      await this._restoreSessionAfterFailedSwitch(previousAccountId);
       return { success: false, error: 'Aucun salarié associé à ce compte.' };
     }
     this._currentEmployeeId = company._currentEmployeeId;
@@ -2969,6 +2985,18 @@ const DB = {
     const employee = this.getEmployeeById(this._currentEmployeeId);
     this.logAudit('Connexion', 'Session', `${employee.prenom} ${employee.nom} (${ROLE_LABELS[employee.role] || employee.role})`);
     return { success: true, employee };
+  },
+
+  /** Best-effort : ramène la session Supabase réelle sur le compte précédent quand une bascule a
+   * échoué APRÈS que la session ait déjà changé (voir switchToSavedAccount ci-dessus). Si cette
+   * restauration elle-même échoue (compte précédent introuvable, session elle aussi périmée), on ne
+   * fait rien de plus — le message d'erreur déjà renvoyé à l'appelant invite de toute façon à
+   * vérifier le compte actif, jamais un échec silencieux total. */
+  async _restoreSessionAfterFailedSwitch(previousAccountId) {
+    if (!previousAccountId) return;
+    const previous = this.getSavedAccounts().find(a => a.id === previousAccountId);
+    if (!previous) return;
+    try { await window.SupabaseSync.switchToSession(previous.session); } catch (err) { /* best-effort */ }
   },
 
   /** Vide le cache de l'entreprise, en mémoire ET sur disque (correctif de la revue du 23/08/2026).

@@ -109,7 +109,36 @@ async function run() {
     assert.ok(!contentHtml.includes('Total groupe'), 'le tableau consolidé ne doit pas s\'afficher comme si de rien n\'était quand le retour à l\'origine a échoué');
   }
 
-  console.log('OK — vue-groupe.test.js (gating entreprise entière + 2 comptes, agrégation, retour systématique au compte d\'origine, échec du retour signalé)');
+  // ---- §correctif retour Betty du 07/09/2026 : switchAccount() peut LEVER une exception (pas
+  //      seulement renvoyer { success: false }) si l'hydratation échoue après que la session ait
+  //      déjà basculé — sans garde-fou, ceci interrompait toute la boucle AVANT le retour au compte
+  //      d'origine, laissant l'utilisateur silencieusement sur le mauvais compte. ----
+  {
+    sandbox.document.getElementById('modal-root').innerHTML =
+      '<button id="btn-refresh-group-summary"></button><div id="group-summary-content"></div>';
+
+    const switchCalls = [];
+    authRepository.getCurrentAccountId = () => 'compte-origine';
+    authRepository.getSavedAccounts = () => [
+      { id: 'compte-a', companyName: 'Entreprise A (lève une exception)' },
+      { id: 'compte-origine', companyName: 'Entreprise Origine' }
+    ];
+    authRepository.switchAccount = async (accountId) => {
+      switchCalls.push(accountId);
+      if (accountId === 'compte-a') throw new Error('mock : réseau interrompu pendant l\'hydratation');
+      return { success: true };
+    };
+
+    await runGroupSummaryRefresh();
+
+    assert.deepStrictEqual(switchCalls, ['compte-a', 'compte-origine', 'compte-origine'],
+      'une exception sur un compte de la boucle ne doit jamais empêcher le retour explicite au compte d\'origine à la fin');
+    const contentHtml = sandbox.document.getElementById('group-summary-content').innerHTML;
+    assert.ok(contentHtml.includes('réseau interrompu'), 'le message de l\'exception doit être affiché comme n\'importe quelle autre erreur de compte');
+    assert.ok(contentHtml.includes('Total groupe'), 'le reste du groupe doit rester consultable malgré l\'exception d\'un seul compte');
+  }
+
+  console.log('OK — vue-groupe.test.js (gating entreprise entière + 2 comptes, agrégation, retour systématique au compte d\'origine, échec du retour signalé, exception pendant la boucle)');
 }
 
 run().catch((err) => {
