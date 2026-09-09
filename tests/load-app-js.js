@@ -171,7 +171,6 @@ globalThis.__performGlobalSearch = performGlobalSearch;
 globalThis.__getGlobalCommands = getGlobalCommands;
 globalThis.__renderCongesDemandes = renderCongesDemandes;
 globalThis.__bulkSelection = bulkSelection;
-globalThis.__renderCalendarDayTeamRoster = renderCalendarDayTeamRoster;
 globalThis.__renderCalendrier = renderCalendrier;
 globalThis.__renderCalendarCell = renderCalendarCell;
 globalThis.__openCalendarDayModal = openCalendarDayModal;
@@ -279,7 +278,6 @@ globalThis.__renderNotifPanel = renderNotifPanel;
     getGlobalCommands: sandbox.__getGlobalCommands,
     renderCongesDemandes: sandbox.__renderCongesDemandes,
     bulkSelection: sandbox.__bulkSelection,
-    renderCalendarDayTeamRoster: sandbox.__renderCalendarDayTeamRoster,
     renderCalendrier: sandbox.__renderCalendrier,
     renderCalendarCell: sandbox.__renderCalendarCell,
     openCalendarDayModal: sandbox.__openCalendarDayModal,

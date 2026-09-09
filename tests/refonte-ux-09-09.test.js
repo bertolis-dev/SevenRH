@@ -1,14 +1,12 @@
 /**
- * Seven RH — refonte pratique du 09/09/2026 : liste de changements demandée par Betty (pas de
- * nouvelle fonctionnalité, uniquement de l'existant amélioré/corrigé) + le regroupement service/
- * équipe du calendrier équipe, redemandé spécifiquement ce jour-là (même principe que celui déjà
- * livré pour le Planning le 04/09/2026, voir renderPlanningGroupRows).
- *
- * Ce fichier couvre : le roster "Équipe" du calendrier (tous les salariés, triés service puis
- * équipe, poste affiché), les heures visibles directement dans le Planning Semaine (fusion avec
- * l'onglet Horaires), l'alignement des couleurs congé/télétravail entre Planning et Calendrier, le
- * format carte mobile généralisé (Salariés/Congés/Notes de frais), le popover "Filtres" généralisé
- * sur mobile (Salariés/Congés/Organigramme), le sommaire cliquable du formulaire salarié, et la
+ * Seven RH — refonte pratique du 09/09/2026, en plusieurs vagues au fil des retours de Betty dans la
+ * même journée. Ce fichier couvre : le planning des absences façon Gantt du Calendrier (une barre
+ * par congé/télétravail, colorée par type, regroupée par service comme le Planning), le design
+ * "carte" du Planning Semaine (avatar, plage horaire réelle sur chaque jour travaillé, colonne
+ * Total, bandeau de service marine — inspiré d'Agendrix mais SANS sa palette par poste), la
+ * cohérence des couleurs congé/télétravail entre Planning et Calendrier, le format carte mobile
+ * généralisé (Salariés/Congés/Télétravail/Notes de frais), le popover "Filtres" généralisé sur
+ * mobile (Salariés/Congés/Organigramme), le sommaire cliquable du formulaire salarié, et la
  * pagination du panneau de notifications (remplace l'ancien plafond fixe).
  */
 const assert = require('assert');
@@ -17,64 +15,55 @@ const path = require('path');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  // ---- Calendrier équipe : roster complet trié service -> équipe, poste à côté du nom ----
+  // ---- Calendrier des absences (vue équipe/entreprise) : un planning façon Gantt, une barre par
+  //      congé/télétravail colorée par TYPE (couleur déjà configurable en Paramètres, pas une
+  //      nouvelle palette), regroupé par service comme le Planning — retour Betty du 09/09/2026
+  //      ("fais un calendrier dans ce style [...] pour chaque congé une couleur"). Remplace le
+  //      roster-en-modale d'un essai précédent (devenu inatteignable : la vue équipe n'affiche plus
+  //      la grille de jours cliquable, ce planning répond déjà "qui est là" sans clic). ----
   {
-    const { DB, sandbox, buildCalendarSharedData, renderCalendarDayTeamRoster, renderCalendarCell, renderCalendrier, openCalendarDayModal, state } = loadAppJs();
+    const { DB, sandbox, renderCalendrier, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     state.calendrierVue = 'entreprise';
+    state.calendarYear = 2026;
+    state.calendarMonth = 8; // septembre (0-indexé)
+    state.calendarServiceFilter = '';
 
     const company = DB.getCurrentCompany();
     const salaries = company.employees.filter(e => e.role === 'salarie');
     assert.ok(salaries.length >= 2, 'préalable du scénario : au moins 2 salariés dans le jeu de démonstration');
-    const toutesLesJournees = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
     const [e1, e2] = salaries;
-    Object.assign(e1, { service: 'Ventes', equipe: 'Nord', poste: 'Commercial', joursTravailles: toutesLesJournees });
-    Object.assign(e2, { service: 'Ventes', equipe: 'Sud', poste: 'Commercial senior', joursTravailles: toutesLesJournees });
+    e1.service = 'Ventes';
+    e2.service = 'Ventes';
+    const leaveTypes = DB.getLeaveTypes();
+    const typeA = leaveTypes[0];
+    typeA.couleur = '#e91e63';
+    company.leaveRequests = [
+      // Absence de 3 jours consécutifs -> doit devenir UNE seule barre (colspan="3"), pas 3 cases.
+      { id: 'lr-1', employeeId: e1.id, typeId: typeA.id, dateDebut: '2026-09-08', dateFin: '2026-09-10', nbJours: 3, statut: 'Validé', etapeIndex: 1, workflow: ['manager'], historique: [], demiJournee: null }
+    ];
+    company.teleworkRequests = [
+      { id: 'tt-1', employeeId: e2.id, dateDebut: '2026-09-15', dateFin: '2026-09-15', nbJours: 1, statut: 'Validé', etapeIndex: 1, workflow: ['manager'], historique: [], commentaire: '' }
+    ];
     DB.saveCurrentCompany(company);
 
-    const dateStr = '2026-09-09';
-    const sharedData = buildCalendarSharedData([{ date: new Date(2026, 8, 9) }]);
-    assert.strictEqual(sharedData.vuePersonnelle, false, 'un RH démarre en vue entreprise, jamais personnelle par défaut');
+    const html = renderCalendrier();
+    assert.ok(html.includes('absence-cal-table'), 'la vue équipe/entreprise doit afficher le planning des absences façon Gantt');
+    assert.ok(!html.includes('calendar-grid-header'), 'l\'ancienne grille mensuelle (jour par jour) ne doit plus apparaître en vue équipe/entreprise');
+    assert.ok(html.includes('colspan="3"'), 'une absence de 3 jours consécutifs doit être UNE seule barre continue (colspan), pas 3 cases séparées');
+    assert.ok(html.includes(`background:${typeA.couleur}`), 'la barre de congé doit reprendre EXACTEMENT la couleur configurée pour ce type (Paramètres > Types d\'absences), pas une teinte imposée');
+    assert.ok(html.includes('absence-cal-bar-telework'), 'le télétravail doit apparaître comme une barre à part, avec l\'accent marine déjà utilisé pour lui ailleurs');
+    assert.ok(html.includes('Tous les services'), 'un filtre service doit être disponible, comme dans le modèle envoyé');
 
-    const rosterHtml = renderCalendarDayTeamRoster(dateStr, sharedData);
-    assert.ok(rosterHtml.includes('Ventes'), 'le service doit apparaître comme en-tête de groupe');
-    assert.ok(rosterHtml.includes('Nord') && rosterHtml.includes('Sud'), 'les deux équipes du même service doivent apparaître, chacune sous son propre sous-groupe');
-    assert.ok(rosterHtml.includes('Commercial senior'), 'le poste doit être affiché à côté du nom (personNameWithPosteHtml, déjà utilisé par le Planning)');
-    assert.ok(rosterHtml.indexOf('Nord') < rosterHtml.indexOf('Sud'), 'les équipes doivent être triées alphabétiquement au sein du service');
-    assert.ok(rosterHtml.includes('Présent'), 'un salarié qui travaille ce jour-là (2026-09-09 est un mercredi, présent dans joursTravailles) et n\'a ni congé ni télétravail doit apparaître "Présent"');
-
-    // §correctif associé : avant, en vue équipe/entreprise, une case du calendrier SANS badge
-    // (aucune absence/anniversaire/arrivée/départ/férié ce jour-là) n'était pas cliquable du tout —
-    // rendant le nouveau roster "Équipe" inatteignable les jours "normaux", pourtant les plus
-    // fréquents. Une case du mois affiché doit désormais toujours être cliquable en vue élargie.
-    const cellHtml = renderCalendarCell({ date: new Date(2026, 8, 9), inMonth: true }, sharedData);
-    assert.ok(cellHtml.includes('calendar-cell-clickable') && cellHtml.includes('data-calendar-day='),
-      'en vue équipe/entreprise, un jour sans aucun badge doit rester cliquable pour consulter le roster de l\'équipe');
-
-    // Bout en bout : le roster n'apparaît que dans la modale de détail d'un jour en vue équipe/entreprise.
-    openCalendarDayModal(dateStr);
-    const modalHtmlEquipe = sandbox.document.getElementById('modal-root').innerHTML;
-    assert.ok(modalHtmlEquipe.includes('Équipe'), 'la modale de détail d\'un jour doit inclure le roster "Équipe" en vue élargie');
-    assert.ok(modalHtmlEquipe.includes('Commercial senior'), 'le poste doit être visible directement dans la modale');
-
+    // Vue personnelle : le planning des absences (multi-salarié) n'a pas de sens pour une seule
+    // personne — l'ancienne grille mensuelle doit rester inchangée là.
     state.calendrierVue = 'personnel';
-    openCalendarDayModal(dateStr);
-    const modalHtmlPersonnel = sandbox.document.getElementById('modal-root').innerHTML;
-    assert.ok(!modalHtmlPersonnel.includes('Équipe'), 'en vue personnelle, jamais de roster multi-salarié — une seule personne (soi) concernée');
-
-    // §retour Betty du 09/09/2026 ("le calendrier n'a pas du tout changé") : la grille du mois n'a en
-    // effet pas changé visuellement — le vrai changement (roster complet) n'était visible qu'en
-    // cliquant sur un jour, sans aucun indice. Un repère textuel rend le changement visible sans clic,
-    // uniquement en vue équipe/entreprise (la vue personnelle n'a pas changé, pas besoin de repère).
-    state.calendrierVue = 'entreprise';
-    const calendrierHtmlEquipe = renderCalendrier();
-    assert.ok(calendrierHtmlEquipe.includes("Cliquez sur un jour pour voir toute l'équipe"), 'un repère visible doit signaler le nouveau roster en vue équipe/entreprise');
-    state.calendrierVue = 'personnel';
-    const calendrierHtmlPersonnel = renderCalendrier();
-    assert.ok(!calendrierHtmlPersonnel.includes("Cliquez sur un jour pour voir toute l'équipe"), 'en vue personnelle (inchangée), pas de repère à afficher');
+    const htmlPersonnel = renderCalendrier();
+    assert.ok(!htmlPersonnel.includes('absence-cal-table'), 'en vue personnelle, le planning des absences (multi-salarié) ne doit pas apparaître');
+    assert.ok(htmlPersonnel.includes('calendar-grid-header'), 'en vue personnelle, la grille mensuelle habituelle doit rester en place');
   }
 
   // ---- Planning : la vue Semaine affiche la vraie plage horaire (modifiable) SUR CHAQUE JOUR
@@ -118,10 +107,31 @@ async function run() {
   //      possible pour une couleur réellement calculée dans ce bac à sable). ----
   {
     const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
-    assert.ok(/\.planning-leave\s*\{\s*background:\s*var\(--color-success-soft\)/.test(css),
-      'planning-leave (congé) doit utiliser le même vert que .legend-conge/.calendar-badge-conge du Calendrier');
-    assert.ok(/\.planning-remote\s*\{\s*background:\s*var\(--color-primary-soft\)/.test(css),
-      'planning-remote (télétravail) doit utiliser le même accent marine que .legend-teletravail/.calendar-badge-teletravail du Calendrier');
+    // §demande Betty du 09/09/2026 ("style Agendrix") : ces couleurs vivent désormais sur la carte
+    // .planning-shift-* (voir renderPlanningStatusCell) plutôt que directement sur .planning-leave/
+    // .planning-remote appliquées à la cellule entière — mêmes teintes, nouveau sélecteur.
+    assert.ok(/\.planning-shift-leave\s*\{\s*background:\s*var\(--color-success-soft\)/.test(css),
+      'planning-shift-leave (congé) doit utiliser le même vert que .legend-conge/.calendar-badge-conge du Calendrier');
+    assert.ok(/\.planning-shift-remote\s*\{\s*background:\s*var\(--color-primary-soft\)/.test(css),
+      'planning-shift-remote (télétravail) doit utiliser le même accent marine que .legend-teletravail/.calendar-badge-teletravail du Calendrier');
+  }
+
+  // ---- Design "carte" du Planning (style Agendrix, sans reprendre sa palette par poste) ----
+  {
+    const { DB, sandbox, renderPlanningSemaine, state } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    state.planningVue = 'equipe';
+    state.planningWeekOffset = 0;
+    state.planningFilters = { service: '' };
+
+    const html = renderPlanningSemaine();
+    assert.ok(html.includes('planning-shift-card'), 'chaque jour occupé doit être présenté comme une petite carte, pas un simple aplat de couleur sur toute la cellule');
+    assert.ok(html.includes('planning-employee-cell') && html.includes('avatar'), 'l\'avatar du salarié doit apparaître à côté de son nom, comme dans le modèle envoyé');
+    assert.ok(html.includes('<th>Total</th>') && html.includes('planning-total-cell'), 'une colonne "Total" hebdomadaire doit exister, comme dans le modèle envoyé');
+    assert.ok(!/tag-color-\d|avatar-color-\d/.test(html.match(/planning-shift-card[\s\S]*?<\/div>/)?.[0] || ''), 'aucune couleur par poste/service ne doit être introduite (palette bleu marine + or conservée, contrairement au modèle envoyé)');
   }
 
   // ---- Tableaux en carte sur mobile, généralisés au-delà du seul Tableau des compteurs ----
@@ -247,7 +257,7 @@ async function run() {
     assert.ok(panelHtml.includes('id="btn-page-next"'), 'un vrai contrôle de pagination doit être présent');
   }
 
-  console.log('OK — refonte-ux-09-09.test.js (roster équipe calendrier, heures Planning Semaine, couleurs congé/télétravail alignées, tableaux carte mobile généralisés, popover filtres généralisé, sommaire formulaire salarié, pagination notifications)');
+  console.log('OK — refonte-ux-09-09.test.js (planning des absences Gantt du calendrier, design carte du Planning Semaine, couleurs congé/télétravail alignées, tableaux carte mobile généralisés, popover filtres généralisé, sommaire formulaire salarié, pagination notifications)');
 }
 
 run().catch((err) => {

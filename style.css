@@ -1622,26 +1622,33 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .planning-cell { font-size: 16px; }
 .planning-cell svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
-.planning-off { color: var(--color-text-muted); font-size: 13px; }
-/* §demande Betty du 09/09/2026 (cohérence visuelle) : ces trois teintes reprennent désormais
-   EXACTEMENT celles déjà utilisées par le Calendrier pour les mêmes concepts (.legend-conge/
-   .calendar-badge-conge = succès/vert, .legend-teletravail/.calendar-badge-teletravail = accent
-   marine) — avant ce correctif, le vert signifiait "congé" dans le Calendrier mais "présent" dans le
-   Planning, une même couleur portant deux sens opposés selon l'écran. C'est le Planning qui a été
-   aligné sur le Calendrier (pas l'inverse) : le Calendrier jongle déjà avec davantage de catégories
-   (anniversaire/arrivée/départ/férié/vacances, absentes du Planning) et son propre code couleur est
-   déjà réfléchi pour ne jamais se chevaucher en son sein (voir commentaire sur .calendar-badge-arrivee
-   plus haut) — le réaligner lui aurait recréé les mêmes chevauchements ailleurs. "Présent" récupère
-   la teinte info (bleu clair), non utilisée par le Calendrier, donc sans nouveau conflit introduit. */
-.planning-leave { background: var(--color-success-soft); }
-.planning-remote { background: var(--color-primary-soft); }
-.planning-office { background: var(--color-info-soft); }
+.planning-off-dash { color: var(--color-text-muted); font-size: 13px; }
 
-/* §retour Betty du 09/09/2026 (deuxième passe) : "il faut qu'il y ait les horaires pour chaque
-   jour" — la plage horaire ("09:00-12:00 · 13:00-17:00") s'affiche donc sous l'icône de chaque case
-   travaillée de la semaine (voir renderPlanningStatusCell, showHoraires), pas seulement une fois
-   à côté du nom comme dans un essai intermédiaire. */
-.planning-cell-horaires { font-size: 10.5px; color: var(--color-text-muted); margin-top: 2px; line-height: 1.3; }
+/* §demande Betty du 09/09/2026 ("change le design du planning, style Agendrix") : chaque jour occupé
+   devient une petite carte (fond + accent gauche + coins arrondis, voir renderPlanningStatusCell)
+   plutôt qu'un aplat de couleur sur toute la cellule — plus proche visuellement du modèle envoyé,
+   SANS reprendre sa palette "une couleur par poste" (repoussée deux fois déjà sur ce projet, voir
+   seven_rh_design_palette_rule) : ces trois teintes restent EXACTEMENT celles du Calendrier pour les
+   mêmes concepts (.legend-conge/.calendar-badge-conge = succès/vert, .legend-teletravail/
+   .calendar-badge-teletravail = accent marine, "présent" = info/bleu clair, non utilisé par le
+   Calendrier). */
+.planning-shift-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 6px 4px;
+}
+.planning-shift-leave { background: var(--color-success-soft); border-left-color: var(--color-success); }
+.planning-shift-remote { background: var(--color-primary-soft); border-left-color: var(--color-primary); }
+.planning-shift-office { background: var(--color-info-soft); border-left-color: var(--color-info); }
+.planning-shift-pending { opacity: 0.6; border-left-style: dashed; }
+.planning-shift-caption { font-size: 10.5px; color: var(--color-text-muted); line-height: 1.3; }
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }
@@ -1654,14 +1661,60 @@ textarea.input { resize: vertical; font-family: inherit; }
   border-top: 2px solid var(--color-border);
 }
 
-/* Sprint SIRH premium §2 : regroupement automatique du planning par service */
-.planning-service-header td {
-  background: var(--color-surface-alt, var(--color-muted-soft));
+/* §demande Betty du 09/09/2026 ("calendrier des absences", façon Gantt) : une barre continue par
+   congé/télétravail (voir renderAbsenceCalendarRow, colspan) plutôt qu'une case par jour — chaque
+   type de congé garde SA PROPRE couleur déjà configurée (Paramètres > Types d'absences,
+   type.couleur, appliquée en style inline), le télétravail garde l'accent marine unique déjà utilisé
+   partout ailleurs pour lui (jamais une nouvelle couleur par service/poste). */
+.absence-cal-table th, .absence-cal-table td { padding: 8px 6px; min-width: 34px; }
+.absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 16px 22px; min-width: 0; }
+.absence-cal-table th.weekend, .absence-cal-cell.weekend { background: var(--color-muted-soft); }
+.absence-cal-table th.today { color: var(--color-primary-text); font-weight: 700; }
+.absence-cal-cell.today { box-shadow: inset 0 0 0 1px var(--color-primary-soft); }
+.absence-cal-bar-cell { padding: 4px !important; }
+.absence-cal-bar {
+  width: 100%;
+  min-height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
   font-weight: 600;
+  padding: 4px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.absence-cal-bar-telework { background: var(--color-primary); }
+.absence-cal-bar-pending { opacity: 0.55; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 6px, transparent 6px 12px); }
+
+.absence-cal-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+.absence-cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-muted); }
+.absence-cal-legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.absence-cal-legend-telework { background: var(--color-primary); }
+
+/* §demande Betty du 09/09/2026 : avatar + total hebdomadaire, comme le modèle Agendrix (photo/
+   initiales à gauche du nom, colonne "Total" à droite de la semaine) — même avatar déjà utilisé
+   partout ailleurs dans l'appli (renderAvatar), même calcul que le total de service (computeDailyHours). */
+.planning-employee-cell { display: flex; align-items: center; gap: 10px; }
+.planning-employee-info { display: flex; flex-direction: column; gap: 2px; }
+.planning-total-cell { white-space: nowrap; }
+
+/* §demande Betty du 09/09/2026 : bandeau plein (au lieu d'un simple fond gris discret) pour chaque
+   groupe de service, comme les bandes colorées du modèle Agendrix — une seule teinte (marine) pour
+   tous les services plutôt qu'une couleur différente par service, qui contreviendrait à la palette
+   de l'appli. */
+.planning-service-header td {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
   font-size: 13px;
   text-align: left;
-  padding-top: 10px;
+  padding: 10px 22px;
 }
+.planning-service-header .text-muted { color: rgba(255, 255, 255, 0.75); }
 
 /* §4 (reprise) : grilles Planning/Horaires/Télétravail — beaucoup de colonnes (jours d'un mois) et
  * potentiellement beaucoup de lignes (salariés) ; sans repère fixe, on perd de vue à qui/quel jour
@@ -1687,9 +1740,9 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* La cellule d'angle (coin haut-gauche) doit rester au-dessus des deux autres groupes de cellules sticky. */
 .planning-scroll-card .planning-table thead th:first-child { z-index: 4; }
 
-/* Sans ça, les lignes de regroupement par service (fond distinct) laissent transparaître ce fond
- * à travers la première colonne sticky, qui retomberait sinon sur le fond de carte par défaut. */
-.planning-scroll-card .planning-service-header td:first-child { background: var(--color-surface-alt, var(--color-muted-soft)); }
+/* Sans ça, les lignes de regroupement par service (bandeau marine) laisseraient transparaître le
+ * fond de carte par défaut à travers la première colonne sticky, cassant le bandeau en deux teintes. */
+.planning-scroll-card .planning-service-header td:first-child { background: var(--color-primary); }
 
 /* §refonte planning du 04/09/2026 : sous-groupe équipe au sein d'un service (voir
  * groupEmployeesByServiceAndEquipe, app.js) — même principe que .planning-service-header mais en

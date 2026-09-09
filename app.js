@@ -170,6 +170,7 @@ function getInitialViewState() {
     editingTeleworkRequestId: null, // §tour de bugs du 07/09/2026 : même principe pour le télétravail
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
+    calendarServiceFilter: '', // §demande Betty du 09/09/2026 : filtre service de la vue "Calendrier des absences" (renderAbsenceCalendarBoard)
     parametresTab: 'listes',
     parametresTypesCategorie: 'conge', // Sprint SIRH premium §1 : sous-onglet de Paramètres > Types d'absences
     absencesHubTab: 'conges', // 'conges' | 'autres' | 'teletravail' — voir renderAbsencesHub
@@ -12767,26 +12768,129 @@ function renderCalendrier() {
 
     ${hasWiderView && state.calendrierVue === 'personnel' ? renderCalendrierValidationsCard(user) : ''}
 
-    <!-- §retour Betty du 09/09/2026 ("le calendrier n'a pas du tout changé") : la grille elle-même
-         est effectivement restée identique — le changement (roster complet de l'équipe, trié
-         service/équipe, poste affiché) vit dans le détail d'un jour, jusqu'ici accessible seulement
-         via un clic sans aucune indication visuelle. Ce repère rend le changement visible sans avoir
-         à cliquer pour le découvrir ; jamais affiché en vue personnelle (le clic y sert à CRÉER une
-         demande, comportement inchangé et déjà connu). -->
-    ${!sharedData.vuePersonnelle ? `<p class="text-muted" style="margin-bottom: 10px;">${icon(ICONS.calendar, 13)} Cliquez sur un jour pour voir toute l'équipe (triée par service et équipe) et son statut ce jour-là.</p>` : ''}
-
-    <div class="card calendar-card">
-      <div class="calendar-grid calendar-grid-header">
-        ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
+    ${!sharedData.vuePersonnelle ? renderAbsenceCalendarBoard(sharedData) : `
+      <div class="card calendar-card">
+        <div class="calendar-grid calendar-grid-header">
+          ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
+        </div>
+        <div class="calendar-grid">
+          ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
+        </div>
       </div>
-      <div class="calendar-grid">
-        ${cells.map(cell => renderCalendarCell(cell, sharedData)).join('')}
-      </div>
-    </div>
 
-    ${renderCalendarFilterBar()}
-    ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">${icon(ICONS.calendar, 14)} Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
+      ${renderCalendarFilterBar()}
+      ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">${icon(ICONS.calendar, 14)} Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
+    `}
   `;
+}
+
+/** §demande Betty du 09/09/2026 ("fais un calendrier dans ce style", capture d'un "Calendrier des
+ * absences" façon Gantt : une ligne par salarié, une colonne par jour, des barres colorées par type
+ * de congé) : remplace la grille mensuelle en vue équipe/entreprise (une grille de jours n'a de sens
+ * que pour UN salarié à la fois — c'est justement pourquoi la vue personnelle la garde inchangée
+ * ci-dessus). "Une couleur par congé" ne contrevient PAS à la règle bleu marine + or de l'appli :
+ * chaque type de congé a déjà sa propre couleur configurable (Paramètres > Types d'absences,
+ * type.couleur, déjà utilisée comme pastille dans la liste des demandes) — cet écran réutilise cette
+ * donnée existante, il n'invente aucune nouvelle palette catégorielle. Le télétravail (pas un "congé",
+ * pas de couleur configurable par type) garde l'accent marine déjà utilisé partout ailleurs pour lui.
+ * Regroupement par service : même bandeau que le Planning (renderPlanningGroupRows/.planning-service-header)
+ * pour une identité visuelle cohérente entre les deux écrans. */
+function renderAbsenceCalendarBoard(sharedData) {
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = toISODate(new Date());
+  let employees = sharedData.employees;
+  if (state.calendarServiceFilter) employees = employees.filter(e => e.service === state.calendarServiceFilter);
+  const leaveRequests = sharedData.leaveRequests;
+  const teleworkRequests = sharedData.teleworkRequests;
+  const leaveTypesById = sharedData.leaveTypesById;
+
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const dayMeta = (day) => {
+    const date = new Date(year, month, day);
+    const dateStr = toISODate(date);
+    return { dateStr, isWeekend: [0, 6].includes(date.getDay()), isToday: dateStr === todayStr };
+  };
+
+  return `
+    <div class="toolbar card">
+      <select id="absence-cal-filter-service" class="input">
+        <option value="">Tous les services</option>
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.calendarServiceFilter === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="absence-cal-legend">
+      ${leaveTypeRepository.getLeaveTypes().map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
+      <span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>
+    </div>
+    <div class="card table-card planning-scroll-card">
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table absence-cal-table">
+          <thead>
+            <tr>
+              <th>Salarié</th>
+              ${days.map(day => { const m = dayMeta(day); return `<th class="${m.isWeekend ? 'weekend' : ''}${m.isToday ? ' today' : ''}">${day}</th>`; }).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${renderPlanningGroupRows(employees, days.length + 1, e => `
+              <tr>
+                <td>${personNameWithPosteHtml(e)}</td>
+                ${renderAbsenceCalendarRow(e, days, dayMeta, leaveRequests, teleworkRequests, leaveTypesById)}
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+/** Découpe le mois en segments consécutifs (même congé/télétravail, ou "rien") pour un salarié —
+ * un segment de plusieurs jours devient UNE cellule `colspan` avec une barre continue, plutôt qu'une
+ * icône répétée jour par jour comme le Planning (ce qui serait illisible pour une absence de 2 semaines). */
+function computeAbsenceCalendarSegments(employee, days, leaveRequests, teleworkRequests) {
+  const segments = [];
+  let current = null;
+  days.forEach(day => {
+    const dateStr = toISODate(new Date(day.year, day.month, day.day));
+    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const telework = !leave && teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const key = leave ? `leave:${leave.id}` : telework ? `telework:${telework.id}` : null;
+    if (current && current.key === key) {
+      current.days += 1;
+    } else {
+      if (current) segments.push(current);
+      current = { key, days: 1, leave, telework };
+    }
+  });
+  if (current) segments.push(current);
+  return segments;
+}
+
+function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, teleworkRequests, leaveTypesById) {
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+  const days = dayNumbers.map(day => ({ day, year, month }));
+  const segments = computeAbsenceCalendarSegments(employee, days, leaveRequests, teleworkRequests);
+
+  let dayIndex = 0;
+  return segments.map(seg => {
+    const segDays = dayNumbers.slice(dayIndex, dayIndex + seg.days);
+    dayIndex += seg.days;
+    if (!seg.key) {
+      return segDays.map(day => { const m = dayMeta(day); return `<td class="absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}"></td>`; }).join('');
+    }
+    if (seg.leave) {
+      const type = leaveTypesById.get(seg.leave.typeId);
+      const pending = seg.leave.statut !== 'Validé';
+      const label = type ? type.nom : 'Congé';
+      return `<td colspan="${seg.days}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}">${seg.days > 1 ? escapeHtml(label) : ''}</div></td>`;
+    }
+    const pending = seg.telework.statut !== 'Validé';
+    return `<td colspan="${seg.days}" class="absence-cal-bar-cell"><div class="absence-cal-bar absence-cal-bar-telework${pending ? ' absence-cal-bar-pending' : ''}" title="Télétravail${pending ? ' (en attente)' : ''}">${seg.days > 1 ? 'Télétravail' : ''}</div></td>`;
+  }).join('');
 }
 
 // §correctif audit du 31/08/2026 : bindCalendrierEvents() ré-attachait un listener 'click' sur
@@ -12845,6 +12949,14 @@ function bindCalendrierEvents() {
       }
     });
   });
+
+  const serviceFilter = document.getElementById('absence-cal-filter-service');
+  if (serviceFilter) {
+    serviceFilter.addEventListener('change', (e) => {
+      state.calendarServiceFilter = e.target.value;
+      render();
+    });
+  }
 }
 
 /** Extrait de bindCalendrierEvents : le contenu du popover Filtres est régénéré à chaque ouverture
@@ -13023,14 +13135,11 @@ function renderCalendarCell(cell, sharedData) {
   // §sprint calendrier interactif : un jour sans absence, en vue personnelle (jamais en vue
   // équipe/entreprise — une case y mélange plusieurs salariés, sans salarié cible évident), devient
   // cliquable pour CRÉER une demande plutôt que pour consulter — voir bindCalendrierEvents.
+  // §demande Betty du 09/09/2026 : renderCalendarCell n'est plus appelée qu'en vue personnelle
+  // (l'équipe/entreprise affiche désormais renderAbsenceCalendarBoard, un vrai planning façon Gantt,
+  // voir renderCalendrier) — sharedData.vuePersonnelle vaut donc toujours true ici.
   const isCreateTarget = sharedData.vuePersonnelle && cell.inMonth && !hasAbsence;
-  // §demande Betty du 09/09/2026 : le roster "Équipe" (renderCalendarDayTeamRoster, voir
-  // openCalendarDayModal) répond à "qui est présent ce jour-là", une question qui a justement le
-  // plus de sens un jour SANS badge (rien de particulier ne signalait ce jour comme consultable
-  // avant ce correctif — en vue équipe/entreprise, un jour sans absence n'était même pas cliquable,
-  // rendant ce nouveau roster inatteignable les jours "normaux", pourtant les plus fréquents).
-  const isRosterTarget = !sharedData.vuePersonnelle && cell.inMonth;
-  const isClickable = hasContent || isCreateTarget || isRosterTarget;
+  const isClickable = hasContent || isCreateTarget;
 
   return `
     <div class="${classes.join(' ')}${isClickable ? ' calendar-cell-clickable' : ''}"
@@ -13054,40 +13163,14 @@ function calendarBadge(category, icon, names, pending = false) {
   `;
 }
 
-/** §demande Betty du 09/09/2026 : "tous les utilisateurs triés par service et équipe, poste à côté du
- * nom" — déjà construit pour le Planning (groupEmployeesByServiceAndEquipe/personNameWithPosteHtml/
- * getStatusForDate, définies plus bas dans ce fichier mais hoistées comme toute déclaration
- * `function`), réutilisé ici tel quel pour ne jamais faire diverger les deux écrans. `sharedData`
- * vient de buildCalendarSharedData : `employees` y est déjà restreint au bon périmètre (équipe d'un
- * manager, entreprise entière pour RH/Propriétaire/Comptabilité — jamais un salarié, qui n'a pas
- * cette vue élargie). */
-function renderCalendarDayTeamRoster(dateStr, sharedData) {
-  const groups = groupEmployeesByServiceAndEquipe(sharedData.employees);
-  if (groups.length === 0) return '';
-  return `
-    <div style="margin-bottom: 14px;">
-      <div class="search-section-label" style="padding-left: 0;">Équipe</div>
-      <div class="mini-list">
-        ${groups.map(g => `
-          <div class="mini-list-group-label">${escapeHtml(g.service)}</div>
-          ${g.equipes.map(eq => `
-            ${g.equipes.length > 1 ? `<div class="mini-list-group-label mini-list-group-sub">${escapeHtml(eq.equipe)}</div>` : ''}
-            ${eq.employees.map(e => {
-              const status = getStatusForDate(e, dateStr, sharedData.leaveRequests, sharedData.teleworkRequests);
-              return `<div class="mini-list-item"><span>${personNameWithPosteHtml(e)}</span><span class="text-muted" title="${escapeHtml(status.title)}">${escapeIcon(status.icon)} ${escapeHtml(status.title)}</span></div>`;
-            }).join('')}
-          `).join('')}
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
 /** Sprint SIRH premium §4 (reprise) : détail complet d'un jour du calendrier, dans une modale plutôt
  * qu'au survol (.calendar-tooltip) — accessible au clavier/tactile, et lisible même quand plusieurs
  * catégories d'évènements se superposent le même jour (un badge par catégorie devient vite illisible
  * une fois qu'il y a beaucoup de monde). Recalcule son propre `sharedData` (une seule date, donc bon
- * marché) via buildCalendarSharedData plutôt que de dépendre d'un état capturé au rendu précédent. */
+ * marché) via buildCalendarSharedData plutôt que de dépendre d'un état capturé au rendu précédent.
+ * §demande Betty du 09/09/2026 : n'est plus appelée qu'en vue personnelle — la vue équipe/entreprise
+ * affiche désormais renderAbsenceCalendarBoard (un vrai planning façon Gantt, toute l'équipe déjà
+ * visible sans avoir à cliquer sur un jour), voir renderCalendrier. */
 function openCalendarDayModal(dateStr) {
   // §correctif bug sweep 19/08/2026 : new Date(dateStr) traitait cette date pure comme un
   // horodatage UTC — dans un fuseau derrière UTC, le 1er janvier retombait sur le 31 décembre
@@ -13096,26 +13179,14 @@ function openCalendarDayModal(dateStr) {
   const sharedData = buildCalendarSharedData([{ date: parseISODateLocal(dateStr) }]);
   const info = getCalendarDayInfo(dateStr, sharedData);
 
-  // §demande Betty du 09/09/2026 : en vue équipe/entreprise, le détail d'un jour ne listait que les
-  // salariés ayant un événement ce jour-là (congé/télétravail) — impossible de voir "toute l'équipe"
-  // d'un coup d'œil, ni qui est simplement présent. En vue personnelle, la liste "Congés / absences"/
-  // "Télétravail" ne concerne de toute façon que l'utilisateur courant (voir buildCalendarSharedData) :
-  // inutile d'y afficher un roster d'une seule personne, l'ancien affichage reste donc inchangé.
-  const equipeRosterHtml = !sharedData.vuePersonnelle ? renderCalendarDayTeamRoster(dateStr, sharedData) : '';
-
   // §refonte identité 20/08/2026 : items porte désormais {icon, text} séparément plutôt qu'une
   // seule chaîne concaténée — text.icone (congé) peut être un emoji choisi librement par un RH
   // (donnée utilisateur, toujours échappée via escapeIcon), à ne jamais mélanger dans la même
   // chaîne qu'une icône ICONS.xxx de confiance (SVG, jamais échappée) sous peine de casser l'une
   // des deux en forçant un traitement unique.
   const sections = [
-    // Congés/télétravail ne sont plus listés ici en vue équipe/entreprise (voir equipeRosterHtml
-    // ci-dessus, qui couvre déjà chaque salarié avec son statut du jour) — seulement en vue
-    // personnelle, où ces deux sections ne concernent que l'utilisateur courant.
-    ...(sharedData.vuePersonnelle ? [
-      { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
-      { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) }
-    ] : []),
+    { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
     { label: 'Anniversaires', items: info.anniversaires.map(e => ({ icon: ICONS.cake, text: `${e.prenom} ${e.nom}` })) },
     { label: 'Arrivées', items: info.arrivees.map(e => ({ icon: ICONS.rocket, text: `${e.prenom} ${e.nom}` })) },
     { label: 'Départs', items: info.departs.map(e => ({ icon: ICONS.exitDoor, text: `${e.prenom} ${e.nom}` })) }
@@ -13130,8 +13201,7 @@ function openCalendarDayModal(dateStr) {
       <div class="modal-body">
         ${info.ferie ? `<span class="badge badge-danger" style="margin-bottom: 10px;">${escapeHtml(info.ferie.label)}</span>` : ''}
         ${info.vacances ? `<span class="badge badge-info" style="margin-bottom: 10px;">${icon(ICONS.backpack, 14)} ${escapeHtml(info.vacances.nom)}</span>` : ''}
-        ${equipeRosterHtml}
-        ${sections.length === 0 && !equipeRosterHtml ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
+        ${sections.length === 0 ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
           <div style="margin-bottom: 14px;">
             <div class="search-section-label" style="padding-left: 0;">${escapeHtml(s.label)}</div>
             <div class="mini-list">
@@ -15720,26 +15790,45 @@ function personNameWithPosteHtml(e) {
  * VALIDÉ (jamais une case en attente, ni "Présent"/"Non travaillé"/"Repos" : rien à déplacer) devient
  * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
  * n'a pas besoin d'avoir un statut particulier — la validation métier existante, réutilisée telle
- * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair). */
-/** §retour Betty du 09/09/2026 (deux allers-retours) : d'abord "pas le nombre d'heures mais d'une
+ * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair).
+ *
+ * §retour Betty du 09/09/2026 (deux allers-retours) : d'abord "pas le nombre d'heures mais d'une
  * telle heure à une autre, qui est modifiable", puis "il faut qu'il y ait les horaires pour chaque
- * jour" — un essai intermédiaire affichait la plage une seule fois par ligne (à côté du nom) plutôt
- * que sur chaque jour, jugé insuffisant. `showHoraires` affiche donc la vraie plage horaire
- * (formatHorairesRange) sous l'icône de CHAQUE jour travaillé (présent ou télétravail — jamais un
- * jour de congé ou non travaillé, qui n'a pas d'horaires) : oui, c'est la même plage répétée sur
- * chaque case, puisque les horaires d'un salarié sont identiques chaque jour travaillé
- * (computeDailyHours) — ce n'est pas dupliqué par erreur, c'est explicitement ce qui a été demandé.
- * Seule la vue Semaine l'active (voir renderPlanningSemaine) : la vue Mois compte ~30 colonnes déjà
- * étroites, y ajouter du texte la rendrait illisible. */
+ * jour" — `showHoraires` affiche donc la vraie plage horaire (formatHorairesRange) sous l'icône de
+ * CHAQUE jour travaillé, jamais un jour de congé ou non travaillé. Seule la vue Semaine l'active
+ * (voir renderPlanningSemaine) : la vue Mois compte ~30 colonnes déjà étroites, y ajouter du texte
+ * la rendrait illisible.
+ *
+ * §demande Betty du 09/09/2026 ("change le design du planning, style Agendrix") : chaque jour occupé
+ * (congé/télétravail/présent) devient une petite carte (fond + accent de couleur à gauche + coins
+ * arrondis) au lieu d'un simple aplat de couleur sur toute la cellule — mêmes trois couleurs
+ * sémantiques qu'avant (jamais une couleur par service/poste, contrairement au modèle envoyé : la
+ * palette bleu marine + or de l'appli reste la même, voir seven_rh_design_palette_rule). La légende
+ * (icône + texte) tient dans la carte plutôt qu'à plat dans la cellule, pour un rendu plus proche
+ * d'un vrai planning visuel. Un jour de congé affiche aussi son type en légende (ex. "Congés payés"),
+ * pas seulement l'icône — la carte serait sinon vide de texte, contrairement aux jours travaillés. */
 function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests, showHoraires = false) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
-  const showRange = showHoraires && (status.level === 'office' || status.level === 'remote');
-  return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}"
+  // showHoraires gate aussi la légende congé (pas seulement horaires/télétravail) : en vue Mois
+  // (~30 colonnes déjà étroites), un texte de légende sur un seul jour élargirait sa colonne et
+  // désaligner toute la grille par rapport aux autres jours — mieux vaut l'icône seule partout,
+  // cohérent avec le choix déjà fait de ne pas afficher les horaires en Mois.
+  const caption = !showHoraires ? ''
+    : status.level === 'leave' ? status.title
+    : (status.level === 'office' || status.level === 'remote') ? formatHorairesRange(employee)
+    : '';
+  const card = status.level === 'off' ? `<span class="planning-off-dash">—</span>` : `
+    <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
+      <div class="planning-shift-icon">${escapeIcon(status.icon)}</div>
+      ${caption ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div>` : ''}
+    </div>
+  `;
+  return `<td class="planning-cell"
     title="${escapeHtml(status.title)}"
     data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
     ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
-  >${escapeIcon(status.icon)}${showRange ? `<div class="planning-cell-horaires">${escapeHtml(formatHorairesRange(employee))}</div>` : ''}</td>`;
+  >${card}</td>`;
 }
 
 function formatHorairesRange(employee) {
@@ -15767,13 +15856,20 @@ function renderPlanningSemaine() {
     </div>
     <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
-        <table class="table planning-table">
-          <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}</tr></thead>
+        <table class="table planning-table planning-table-cards">
+          <thead><tr><th>Salarié</th>${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}<th>Total</th></tr></thead>
           <tbody>
-            ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
+            ${renderPlanningGroupRows(employees, weekDates.length + 2, e => `
               <tr>
-                <td>${personNameWithPosteHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button></td>
+                <td class="planning-employee-cell">
+                  ${renderAvatar(e)}
+                  <div class="planning-employee-info">
+                    ${personNameWithPosteHtml(e)}
+                    <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button>
+                  </div>
+                </td>
                 ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
+                <td class="planning-total-cell"><strong>${formatNumberFR(weekDates.reduce((sum, d) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0))} h</strong></td>
               </tr>
             `)}
           </tbody>
