@@ -33,7 +33,7 @@
        le choix déjà fait pour Manrope (police de la landing), qui évite justement d'envoyer l'IP des
        visiteurs à Google à chaque visite. Un correctif du 01/09/2026 a supprimé la dépendance Google
        Fonts posée plus tôt dans la même refonte, repérée en découvrant cette règle déjà en place. -->
-  <link rel="stylesheet" href="style.css?v=20260909o">
+  <link rel="stylesheet" href="style.css?v=20260909p">
 </head>
 <body>
   <div id="landing-root" style="display: none;"></div>
@@ -69,6 +69,10 @@
           <div id="global-search-results" class="search-results"></div>
         </div>
         <div class="topbar-user">
+          <!-- §demande Betty du 09/09/2026 : après un déploiement, la page ne se met à jour qu'au
+               prochain rechargement complet (pas de mécanisme de mise à jour auto pour une SPA sans
+               framework) — un bouton dédié évite de chercher F5/l'icône de rechargement du navigateur. -->
+          <button class="btn-icon" id="btn-reload-app" title="Recharger la page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 5"/><path d="M20 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 19"/><path d="M4 21v-4h4"/></svg></button>
           <button class="btn-icon" id="btn-help" title="Aide sur cet écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><line x1="12" y1="16.5" x2="12" y2="16.6"/></svg></button>
           <div class="notif-wrapper">
             <button class="btn-icon notif-bell" id="btn-notifications" title="Notifications">
@@ -91,17 +95,17 @@
   <div id="modal-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="supabase-client.js?v=20260909o"></script>
-  <script src="qrcode.js?v=20260909o"></script>
+  <script type="module" src="supabase-client.js?v=20260909p"></script>
+  <script src="qrcode.js?v=20260909p"></script>
   <!-- §correctif audit du 23/08/2026 (2.7) : xlsx.full.min.js (~930 Ko) n'est plus chargé ici en
        statique pour tout le monde — voir loadXLSXLibrary() (app.js), qui l'injecte à la demande,
        seulement quand Exporter/Importer Excel est réellement utilisé (rôle RH/Propriétaire/Manager,
        page Salariés). -->
-  <script src="data.js?v=20260909o"></script>
-  <script src="app.js?v=20260909o"></script>
+  <script src="data.js?v=20260909p"></script>
+  <script src="app.js?v=20260909p"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260909o'));
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js?v=20260909p'));
     }
   </script>
 </body>

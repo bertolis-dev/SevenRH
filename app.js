@@ -3969,6 +3969,7 @@ function openHelpModal() {
 
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
+  document.getElementById('btn-reload-app').addEventListener('click', () => window.location.reload());
 
   // Menu mobile "☰" (demande du 17/08/2026) — même patron ouverture/fermeture que
   // .notif-wrapper/.user-menu-wrapper (bindNotificationEvents/bindUserMenuEvents) : bouton statique
