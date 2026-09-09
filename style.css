@@ -1637,9 +1637,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-remote { background: var(--color-primary-soft); }
 .planning-office { background: var(--color-info-soft); }
 
-/* §demande Betty du 09/09/2026 : horaires visibles directement dans la vue Semaine du planning (voir
-   renderPlanningStatusCell, showHours) sans ouvrir l'onglet séparé "Horaires". */
-.planning-cell-hours { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+/* §retour Betty du 09/09/2026 : plage horaire ("09:00-12:00 · 13:00-17:00") affichée une seule fois
+   sous le nom, à côté du crayon d'édition (voir formatHorairesRange/openHorairesModal, app.js) —
+   plutôt qu'un total d'heures calculé répété dans chaque case de la semaine (retiré). */
+.planning-row-horaires { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }

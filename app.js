@@ -12767,6 +12767,14 @@ function renderCalendrier() {
 
     ${hasWiderView && state.calendrierVue === 'personnel' ? renderCalendrierValidationsCard(user) : ''}
 
+    <!-- §retour Betty du 09/09/2026 ("le calendrier n'a pas du tout changé") : la grille elle-même
+         est effectivement restée identique — le changement (roster complet de l'équipe, trié
+         service/équipe, poste affiché) vit dans le détail d'un jour, jusqu'ici accessible seulement
+         via un clic sans aucune indication visuelle. Ce repère rend le changement visible sans avoir
+         à cliquer pour le découvrir ; jamais affiché en vue personnelle (le clic y sert à CRÉER une
+         demande, comportement inchangé et déjà connu). -->
+    ${!sharedData.vuePersonnelle ? `<p class="text-muted" style="margin-bottom: 10px;">${icon(ICONS.calendar, 13)} Cliquez sur un jour pour voir toute l'équipe (triée par service et équipe) et son statut ce jour-là.</p>` : ''}
+
     <div class="card calendar-card">
       <div class="calendar-grid calendar-grid-header">
         ${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join('')}
@@ -15713,21 +15721,26 @@ function personNameWithPosteHtml(e) {
  * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
  * n'a pas besoin d'avoir un statut particulier — la validation métier existante, réutilisée telle
  * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair). */
-/** `showHours` (§demande Betty du 09/09/2026, "pouvoir voir les horaires" directement dans le
- * planning au lieu de l'onglet séparé "Horaires") : ajoute le total d'heures du jour sous l'icône,
- * réutilisant computeDailyHours (même calcul que l'onglet Horaires, jamais dupliqué). Seule la vue
- * Semaine l'active (voir renderPlanningSemaine) — la vue Mois compte ~30 colonnes déjà étroites, y
- * ajouter du texte la rendrait illisible ; l'onglet Horaires garde tout son intérêt pour le détail
- * matin/après-midi (Jour) et les totaux par service (Semaine/Mois), non répétés ici. */
-function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests, showHours = false) {
+function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
-  const hours = showHours && status.level !== 'off' ? computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) : null;
   return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}"
     title="${escapeHtml(status.title)}"
     data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
     ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
-  >${escapeIcon(status.icon)}${hours && hours.heures ? `<div class="planning-cell-hours">${formatNumberFR(hours.heures)} h</div>` : ''}</td>`;
+  >${escapeIcon(status.icon)}</td>`;
+}
+
+/** §retour Betty du 09/09/2026 : "pas le nombre d'heures mais d'une telle heure à une autre, qui est
+ * modifiable" — un premier essai affichait un total d'heures calculé sous chaque case (retiré ci-
+ * dessus). Les horaires d'un salarié sont identiques chaque jour travaillé (voir computeDailyHours) :
+ * les répéter dans les 5 cases de la semaine n'aurait apporté aucune information supplémentaire par
+ * rapport à les afficher une seule fois, à côté de son nom — exactement là où se trouvait déjà le
+ * crayon d'édition dans l'onglet Horaires (openHorairesModal), désormais réutilisé ici directement. */
+function formatHorairesRange(employee) {
+  const matin = employee.horaireMatinDebut && employee.horaireMatinFin ? `${employee.horaireMatinDebut}-${employee.horaireMatinFin}` : null;
+  const apresMidi = employee.horaireApresMidiDebut && employee.horaireApresMidiFin ? `${employee.horaireApresMidiDebut}-${employee.horaireApresMidiFin}` : null;
+  return [matin, apresMidi].filter(Boolean).join(' · ');
 }
 
 function renderPlanningSemaine() {
@@ -15754,8 +15767,8 @@ function renderPlanningSemaine() {
           <tbody>
             ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
               <tr>
-                <td>${personNameWithPosteHtml(e)}</td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
+                <td>${personNameWithPosteHtml(e)}<div class="planning-row-horaires">${escapeHtml(formatHorairesRange(e))} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button></div></td>
+                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
               </tr>
             `)}
           </tbody>
@@ -16095,12 +16108,17 @@ function bindPlanningEvents() {
     document.getElementById('btn-planning-week-next').addEventListener('click', () => { state.planningWeekOffset += 1; render(); });
     document.getElementById('btn-planning-week-today').addEventListener('click', () => { state.planningWeekOffset = 0; render(); });
   }
+  // §retour Betty du 09/09/2026 : le crayon "Modifier les horaires" vit désormais aussi dans la vue
+  // Semaine principale (renderPlanningSemaine), pas seulement dans l'onglet Horaires — lié
+  // inconditionnellement plutôt que dans le seul bloc `if (state.planningView === 'horaires')`
+  // ci-dessous, sans risque : document.querySelectorAll ne renvoie simplement rien là où le bouton
+  // n'est pas rendu.
+  document.querySelectorAll('[data-edit-horaires]').forEach(btn => {
+    btn.addEventListener('click', () => openHorairesModal(btn.dataset.editHoraires));
+  });
   if (state.planningView === 'horaires') {
     document.querySelectorAll('[data-horaires-view]').forEach(btn => {
       btn.addEventListener('click', () => { state.horairesView = btn.dataset.horairesView; render(); });
-    });
-    document.querySelectorAll('[data-edit-horaires]').forEach(btn => {
-      btn.addEventListener('click', () => openHorairesModal(btn.dataset.editHoraires));
     });
     if (state.horairesView === 'jour') {
       document.getElementById('btn-horaires-day-prev').addEventListener('click', () => { state.horairesDay = toISODate(addDays(new Date(state.horairesDay), -1)); render(); });

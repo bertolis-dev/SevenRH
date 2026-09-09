@@ -19,7 +19,7 @@ const { loadAppJs } = require('./load-app-js');
 async function run() {
   // ---- Calendrier équipe : roster complet trié service -> équipe, poste à côté du nom ----
   {
-    const { DB, sandbox, buildCalendarSharedData, renderCalendarDayTeamRoster, renderCalendarCell, openCalendarDayModal, state } = loadAppJs();
+    const { DB, sandbox, buildCalendarSharedData, renderCalendarDayTeamRoster, renderCalendarCell, renderCalendrier, openCalendarDayModal, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -64,11 +64,23 @@ async function run() {
     openCalendarDayModal(dateStr);
     const modalHtmlPersonnel = sandbox.document.getElementById('modal-root').innerHTML;
     assert.ok(!modalHtmlPersonnel.includes('Équipe'), 'en vue personnelle, jamais de roster multi-salarié — une seule personne (soi) concernée');
+
+    // §retour Betty du 09/09/2026 ("le calendrier n'a pas du tout changé") : la grille du mois n'a en
+    // effet pas changé visuellement — le vrai changement (roster complet) n'était visible qu'en
+    // cliquant sur un jour, sans aucun indice. Un repère textuel rend le changement visible sans clic,
+    // uniquement en vue équipe/entreprise (la vue personnelle n'a pas changé, pas besoin de repère).
+    state.calendrierVue = 'entreprise';
+    const calendrierHtmlEquipe = renderCalendrier();
+    assert.ok(calendrierHtmlEquipe.includes("Cliquez sur un jour pour voir toute l'équipe"), 'un repère visible doit signaler le nouveau roster en vue équipe/entreprise');
+    state.calendrierVue = 'personnel';
+    const calendrierHtmlPersonnel = renderCalendrier();
+    assert.ok(!calendrierHtmlPersonnel.includes("Cliquez sur un jour pour voir toute l'équipe"), 'en vue personnelle (inchangée), pas de repère à afficher');
   }
 
-  // ---- Planning : heures visibles directement dans la vue Semaine (fusion avec l'onglet Horaires) ----
+  // ---- Planning : la vue Semaine affiche la plage horaire réelle (modifiable), pas un total
+  //      calculé — retour Betty du 09/09/2026 sur un premier essai (nombre d'heures par case). ----
   {
-    const { DB, sandbox, renderPlanningSemaine, state } = loadAppJs();
+    const { DB, sandbox, renderPlanningSemaine, formatHorairesRange, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -86,9 +98,12 @@ async function run() {
     });
     DB.saveCurrentCompany(company);
 
+    assert.strictEqual(formatHorairesRange(salarie), '09:00-12:00 · 13:00-17:00');
+
     const html = renderPlanningSemaine();
-    assert.ok(html.includes('planning-cell-hours'), 'les heures du jour doivent être visibles directement dans la vue Semaine, sans ouvrir l\'onglet séparé "Horaires"');
-    assert.ok(html.includes('7,00 h'), '9h-12h + 13h-17h = 7h attendues pour une journée complète travaillée');
+    assert.ok(!html.includes('planning-cell-hours'), 'un total d\'heures calculé ne doit plus apparaître dans les cases (rejeté par Betty)');
+    assert.ok(html.includes('09:00-12:00 · 13:00-17:00'), 'la vraie plage horaire du salarié doit être visible, une seule fois (identique chaque jour travaillé), pas recalculée par case');
+    assert.ok(html.includes(`data-edit-horaires="${salarie.id}"`), 'le crayon "Modifier les horaires" (déjà utilisé par l\'onglet Horaires) doit être atteignable directement depuis la vue Semaine principale');
   }
 
   // ---- Cohérence visuelle : congé/télétravail utilisent désormais EXACTEMENT la même couleur dans

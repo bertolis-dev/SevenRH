@@ -172,9 +172,11 @@ globalThis.__getGlobalCommands = getGlobalCommands;
 globalThis.__renderCongesDemandes = renderCongesDemandes;
 globalThis.__bulkSelection = bulkSelection;
 globalThis.__renderCalendarDayTeamRoster = renderCalendarDayTeamRoster;
+globalThis.__renderCalendrier = renderCalendrier;
 globalThis.__renderCalendarCell = renderCalendarCell;
 globalThis.__openCalendarDayModal = openCalendarDayModal;
 globalThis.__renderPlanningSemaine = renderPlanningSemaine;
+globalThis.__formatHorairesRange = formatHorairesRange;
 globalThis.__groupEmployeesByServiceAndEquipe = groupEmployeesByServiceAndEquipe;
 globalThis.__personNameWithPosteHtml = personNameWithPosteHtml;
 globalThis.__renderEmployeesList = renderEmployeesList;
@@ -278,9 +280,11 @@ globalThis.__renderNotifPanel = renderNotifPanel;
     renderCongesDemandes: sandbox.__renderCongesDemandes,
     bulkSelection: sandbox.__bulkSelection,
     renderCalendarDayTeamRoster: sandbox.__renderCalendarDayTeamRoster,
+    renderCalendrier: sandbox.__renderCalendrier,
     renderCalendarCell: sandbox.__renderCalendarCell,
     openCalendarDayModal: sandbox.__openCalendarDayModal,
     renderPlanningSemaine: sandbox.__renderPlanningSemaine,
+    formatHorairesRange: sandbox.__formatHorairesRange,
     groupEmployeesByServiceAndEquipe: sandbox.__groupEmployeesByServiceAndEquipe,
     personNameWithPosteHtml: sandbox.__personNameWithPosteHtml,
     renderEmployeesList: sandbox.__renderEmployeesList,
