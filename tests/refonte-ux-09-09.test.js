@@ -105,7 +105,7 @@ async function run() {
 
   // ---- Tableaux en carte sur mobile, généralisés au-delà du seul Tableau des compteurs ----
   {
-    const { DB, sandbox, renderEmployeesList, renderCongesDemandes, renderFrais, state } = loadAppJs();
+    const { DB, sandbox, renderEmployeesList, renderCongesDemandes, renderFrais, renderTeletravailDemandes, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -132,6 +132,18 @@ async function run() {
     state.fraisPage = 1;
     const htmlFrais = renderFrais();
     assert.ok(htmlFrais.includes('table mobile-cards'), 'Notes de frais : la table doit porter la classe mobile-cards');
+
+    // §oubli repéré en vérifiant l'affichage mobile le 09/09/2026 : l'onglet "Télétravail" de ce
+    // même écran fusionné "Congés & absences" avait été laissé de côté lors de la généralisation du
+    // format carte — seul son voisin "Congés" l'avait reçu, incohérence visible en changeant simplement
+    // d'onglet sur le même écran.
+    company.teleworkRequests = [{ id: 'tt-x', employeeId: salarie.id, dateDebut: '2026-06-01', dateFin: '2026-06-01', nbJours: 1, statut: 'En attente', etapeIndex: 0, workflow: ['manager'], historique: [], commentaire: '' }];
+    DB.saveCurrentCompany(company);
+    state.teletravailFilters = { employeeId: '', statut: '' };
+    state.teletravailPage = 1;
+    const htmlTeletravail = renderTeletravailDemandes();
+    assert.ok(htmlTeletravail.includes('table mobile-cards'), 'Télétravail (même écran que Congés & absences) : la table doit elle aussi porter la classe mobile-cards');
+    assert.ok(htmlTeletravail.includes('data-toggle-filters="teletravail-filters"'), 'Télétravail : bouton de repli des filtres présent, comme sur Congés');
   }
 
   // ---- Popover "Filtres" généralisé sur mobile (repose sur le même mécanisme que le Calendrier) ----

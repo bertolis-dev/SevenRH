@@ -16421,7 +16421,8 @@ function renderTeletravailDemandes() {
 
     ${renderDraftsCard('teletravail')}
 
-    <div class="toolbar card">
+    ${renderFilterToggleBar('teletravail-filters', [state.teletravailFilters.employeeId, state.teletravailFilters.statut].filter(Boolean).length)}
+    <div class="toolbar card toolbar-collapsible" id="teletravail-filters">
       <select id="tt-filter-employee" class="input">
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${state.teletravailFilters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
@@ -16434,7 +16435,7 @@ function renderTeletravailDemandes() {
 
     <div class="card table-card">
       ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.laptop}</div><p>Aucune demande de télétravail.</p></div>` : `
-        <table class="table">
+        <table class="table mobile-cards">
           <thead><tr><th>Salarié</th><th>Période</th><th>Jours</th><th>Statut</th><th></th></tr></thead>
           <tbody>${pageItems.map(renderTeleworkRequestRow).join('')}</tbody>
         </table>
@@ -16458,10 +16459,10 @@ function renderTeleworkRequestRow(r) {
 
   return `
     <tr>
-      <td>${personNameHtml(employee)}</td>
-      <td>${periode}</td>
-      <td>${formatDurationFR(r.nbJours)}</td>
-      <td>${renderRequestStatutBadge(r)}</td>
+      <td class="row-title" data-label="Salarié">${personNameHtml(employee)}</td>
+      <td data-label="Période">${periode}</td>
+      <td data-label="Jours">${formatDurationFR(r.nbJours)}</td>
+      <td data-label="Statut">${renderRequestStatutBadge(r)}</td>
       <td class="table-actions">
         <button class="btn-link" data-history="${r.id}">Historique</button>
         ${actions}
@@ -16471,6 +16472,7 @@ function renderTeleworkRequestRow(r) {
 }
 
 function bindTeletravailDemandesEvents() {
+  bindFilterToggleButtons();
   document.getElementById('btn-new-telework-request').addEventListener('click', () => openTeleworkRequestModal());
   bindDraftsCardEvents((draft) => openTeleworkRequestModal(undefined, draft));
 
