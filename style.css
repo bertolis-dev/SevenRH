@@ -210,7 +210,11 @@ p { margin: 0; line-height: 1.5; }
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-muted);
+  /* §retour Betty du 09/09/2026 ("les boutons à gauche, mets les écritures en plus foncé") :
+     --color-text-muted (gris moyen) manquait de contraste sur le fond quasi-blanc de la sidebar —
+     --color-text (quasi noir en clair, quasi blanc en sombre) reste la couleur de texte "normale"
+     utilisée partout ailleurs dans l'appli, jamais un gris fixe qui resterait clair en mode sombre. */
+  color: var(--color-text);
   cursor: pointer;
   text-align: left;
   transition: background-color 0.15s ease, color 0.15s ease;
