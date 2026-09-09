@@ -15721,22 +15721,27 @@ function personNameWithPosteHtml(e) {
  * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
  * n'a pas besoin d'avoir un statut particulier — la validation métier existante, réutilisée telle
  * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair). */
-function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
+/** §retour Betty du 09/09/2026 (deux allers-retours) : d'abord "pas le nombre d'heures mais d'une
+ * telle heure à une autre, qui est modifiable", puis "il faut qu'il y ait les horaires pour chaque
+ * jour" — un essai intermédiaire affichait la plage une seule fois par ligne (à côté du nom) plutôt
+ * que sur chaque jour, jugé insuffisant. `showHoraires` affiche donc la vraie plage horaire
+ * (formatHorairesRange) sous l'icône de CHAQUE jour travaillé (présent ou télétravail — jamais un
+ * jour de congé ou non travaillé, qui n'a pas d'horaires) : oui, c'est la même plage répétée sur
+ * chaque case, puisque les horaires d'un salarié sont identiques chaque jour travaillé
+ * (computeDailyHours) — ce n'est pas dupliqué par erreur, c'est explicitement ce qui a été demandé.
+ * Seule la vue Semaine l'active (voir renderPlanningSemaine) : la vue Mois compte ~30 colonnes déjà
+ * étroites, y ajouter du texte la rendrait illisible. */
+function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests, showHoraires = false) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
+  const showRange = showHoraires && (status.level === 'office' || status.level === 'remote');
   return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}"
     title="${escapeHtml(status.title)}"
     data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
     ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
-  >${escapeIcon(status.icon)}</td>`;
+  >${escapeIcon(status.icon)}${showRange ? `<div class="planning-cell-horaires">${escapeHtml(formatHorairesRange(employee))}</div>` : ''}</td>`;
 }
 
-/** §retour Betty du 09/09/2026 : "pas le nombre d'heures mais d'une telle heure à une autre, qui est
- * modifiable" — un premier essai affichait un total d'heures calculé sous chaque case (retiré ci-
- * dessus). Les horaires d'un salarié sont identiques chaque jour travaillé (voir computeDailyHours) :
- * les répéter dans les 5 cases de la semaine n'aurait apporté aucune information supplémentaire par
- * rapport à les afficher une seule fois, à côté de son nom — exactement là où se trouvait déjà le
- * crayon d'édition dans l'onglet Horaires (openHorairesModal), désormais réutilisé ici directement. */
 function formatHorairesRange(employee) {
   const matin = employee.horaireMatinDebut && employee.horaireMatinFin ? `${employee.horaireMatinDebut}-${employee.horaireMatinFin}` : null;
   const apresMidi = employee.horaireApresMidiDebut && employee.horaireApresMidiFin ? `${employee.horaireApresMidiDebut}-${employee.horaireApresMidiFin}` : null;
@@ -15767,8 +15772,8 @@ function renderPlanningSemaine() {
           <tbody>
             ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
               <tr>
-                <td>${personNameWithPosteHtml(e)}<div class="planning-row-horaires">${escapeHtml(formatHorairesRange(e))} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button></div></td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
+                <td>${personNameWithPosteHtml(e)} <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button></td>
+                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
               </tr>
             `)}
           </tbody>

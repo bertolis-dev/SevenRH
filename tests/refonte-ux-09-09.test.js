@@ -77,8 +77,10 @@ async function run() {
     assert.ok(!calendrierHtmlPersonnel.includes("Cliquez sur un jour pour voir toute l'équipe"), 'en vue personnelle (inchangée), pas de repère à afficher');
   }
 
-  // ---- Planning : la vue Semaine affiche la plage horaire réelle (modifiable), pas un total
-  //      calculé — retour Betty du 09/09/2026 sur un premier essai (nombre d'heures par case). ----
+  // ---- Planning : la vue Semaine affiche la vraie plage horaire (modifiable) SUR CHAQUE JOUR
+  //      travaillé — retour Betty du 09/09/2026 en deux temps : d'abord "pas le nombre d'heures
+  //      mais d'une telle heure à une autre", puis "il faut qu'il y ait les horaires pour chaque
+  //      jour" (un essai intermédiaire ne l'affichait qu'une fois, à côté du nom). ----
   {
     const { DB, sandbox, renderPlanningSemaine, formatHorairesRange, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
@@ -91,19 +93,23 @@ async function run() {
 
     const company = DB.getCurrentCompany();
     const salarie = company.employees.find(e => e.role === 'salarie');
+    // Plage volontairement distincte des horaires par défaut du jeu de démonstration (souvent
+    // partagés par plusieurs salariés) : un simple .includes() sur toute la page compterait aussi
+    // les lignes d'autres salariés portant la même plage par coïncidence.
     Object.assign(salarie, {
       joursTravailles: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
-      horaireMatinDebut: '09:00', horaireMatinFin: '12:00',
-      horaireApresMidiDebut: '13:00', horaireApresMidiFin: '17:00'
+      horaireMatinDebut: '08:15', horaireMatinFin: '12:15',
+      horaireApresMidiDebut: '14:00', horaireApresMidiFin: '18:00'
     });
     DB.saveCurrentCompany(company);
 
-    assert.strictEqual(formatHorairesRange(salarie), '09:00-12:00 · 13:00-17:00');
+    assert.strictEqual(formatHorairesRange(salarie), '08:15-12:15 · 14:00-18:00');
 
     const html = renderPlanningSemaine();
     assert.ok(!html.includes('planning-cell-hours'), 'un total d\'heures calculé ne doit plus apparaître dans les cases (rejeté par Betty)');
-    assert.ok(html.includes('09:00-12:00 · 13:00-17:00'), 'la vraie plage horaire du salarié doit être visible, une seule fois (identique chaque jour travaillé), pas recalculée par case');
-    assert.ok(html.includes(`data-edit-horaires="${salarie.id}"`), 'le crayon "Modifier les horaires" (déjà utilisé par l\'onglet Horaires) doit être atteignable directement depuis la vue Semaine principale');
+    const occurrences = html.split('08:15-12:15 · 14:00-18:00').length - 1;
+    assert.strictEqual(occurrences, 7, 'la plage horaire doit apparaître sur CHAQUE jour travaillé (les 7 jours ici, joursTravailles couvrant toute la semaine), pas une seule fois à côté du nom');
+    assert.ok(html.includes(`data-edit-horaires="${salarie.id}"`), 'le crayon "Modifier les horaires" reste atteignable (à côté du nom) même si la plage est désormais répétée par jour');
   }
 
   // ---- Cohérence visuelle : congé/télétravail utilisent désormais EXACTEMENT la même couleur dans
