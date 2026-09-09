@@ -15904,10 +15904,15 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
     : status.level === 'leave' ? status.title
     : (status.level === 'office' || status.level === 'remote') ? formatHorairesRange(employee)
     : '';
+  // §retour Betty du 09/09/2026 ("enlève les icônes au-dessus des horaires, rends les horaires plus
+  // jolies") : quand une légende texte existe (horaires en vue Semaine, ou titre du congé), elle
+  // remplace l'icône plutôt que de s'ajouter en dessous — l'icône ne reste que quand il n'y a rien
+  // d'autre à afficher (vue Mois, sans horaires), pour ne jamais laisser une carte totalement vide.
   const card = status.level === 'off' ? `<span class="planning-off-dash">—</span>` : `
     <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
-      <div class="planning-shift-icon">${escapeIcon(status.icon)}</div>
-      ${caption ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div>` : ''}
+      ${caption
+        ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div>`
+        : `<div class="planning-shift-icon">${escapeIcon(status.icon)}</div>`}
     </div>
   `;
   return `<td class="planning-cell"
