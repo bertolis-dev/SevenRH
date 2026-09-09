@@ -14704,21 +14704,37 @@ function renderCategoriesFraisConfigCard(settings) {
   `;
 }
 
+// §retour Betty du 09/09/2026 ("dans paramètres les conventions collectives fais un panneau
+// déroulant") : le catalogue officiel (IDCC_CONVENTIONS) fait environ 180 entrées, toutes affichées
+// à plat en permanence — de loin la plus longue carte de l'écran. Repliée par défaut derrière un
+// <details>/<summary> (même patron que "Voir le détail des compteurs"/"Voir les notes de frais",
+// voir renderEmployeeDetail), identifiée via `readOnlyValues` puisque seule la carte Conventions
+// collectives passe ce paramètre — les autres listes (Postes, Statuts pro, ...), bien plus courtes,
+// restent affichées normalement. Le formulaire d'ajout reste TOUJOURS visible, hors du panneau
+// repliable, pour ajouter une convention manquante sans avoir à tout déplier.
 function renderSettingsListCard(listDef, items, readOnlyValues) {
+  const chipList = `
+    <div class="chip-list">
+      ${items.map((item, i) => {
+        const readOnly = readOnlyValues && readOnlyValues.has(item);
+        return `
+        <span class="chip">
+          ${escapeHtml(item)}
+          ${readOnly ? '' : `<button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>`}
+        </span>
+      `; }).join('')}
+    </div>
+  `;
   return `
     <div class="card">
       <h2>${escapeHtml(listDef.label)}</h2>
-      ${readOnlyValues ? `<p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici : ajoutez seulement une convention qui en serait absente.</p>` : ''}
-      <div class="chip-list">
-        ${items.map((item, i) => {
-          const readOnly = readOnlyValues && readOnlyValues.has(item);
-          return `
-          <span class="chip">
-            ${escapeHtml(item)}
-            ${readOnly ? '' : `<button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>`}
-          </span>
-        `; }).join('')}
-      </div>
+      ${readOnlyValues ? `
+        <p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici : ajoutez seulement une convention qui en serait absente.</p>
+        <details class="collapsible-panel">
+          <summary>Voir la liste (${items.length})</summary>
+          ${chipList}
+        </details>
+      ` : chipList}
       <form class="chip-add-form" data-list-key="${listDef.key}">
         <input type="text" class="input" placeholder="${readOnlyValues ? 'Ajouter une convention absente de la liste...' : 'Ajouter un élément...'}" required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
