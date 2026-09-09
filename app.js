@@ -12852,29 +12852,62 @@ function renderAbsenceCalendarBoard(sharedData) {
 /** Découpe le mois en segments consécutifs (même congé/télétravail, ou "rien") pour un salarié —
  * un segment de plusieurs jours devient UNE cellule `colspan` avec une barre continue, plutôt qu'une
  * icône répétée jour par jour comme le Planning (ce qui serait illisible pour une absence de 2 semaines). */
-/** §retour Betty du 09/09/2026 : "ne fais pas une ligne remplie, juste les cases" — une absence de
- * plusieurs jours n'est plus fusionnée en une seule barre continue (colspan) mais reste plusieurs
- * cases individuelles, chacune coloriée par le type de congé, pour ne jamais casser la grille en
- * damier déjà demandée ("des cases pour chaque jour"). Le nom du type ne tient plus dans une case
- * étroite : il reste consultable au survol (title), comme les statuts du Planning. */
+/** §retour Betty du 09/09/2026, en deux temps : "ne fais pas une ligne remplie, juste les cases" a
+ * d'abord fait passer chaque jour d'une absence en case individuelle (colonne par colonne), puis
+ * "remets la ligne [...] mais fais des cases différentes pour mieux voir le début et la fin" —
+ * l'absence redevient donc UNE seule barre continue (colspan, voir computeAbsenceCalendarSegments)
+ * pour l'effet "ligne" demandé, mais son PREMIER et DERNIER jour affichent chacun le quantième
+ * (ex. "8" / "11") en gras à l'extrémité correspondante de la barre, pour lever toute ambiguïté sur
+ * la date exacte de début/fin sans avoir à compter les cases ni survoler au clavier/souris — un vrai
+ * gain de lisibilité, pas juste un habillage. Le nom du type reste centré, tronqué si la barre est
+ * trop étroite pour tout afficher (voir .absence-cal-bar-label, text-overflow). */
+function computeAbsenceCalendarSegments(employee, dayNumbers, year, month, leaveRequests, teleworkRequests) {
+  const segments = [];
+  let current = null;
+  dayNumbers.forEach(day => {
+    const dateStr = toISODate(new Date(year, month, day));
+    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const telework = !leave && teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const key = leave ? `leave:${leave.id}` : telework ? `telework:${telework.id}` : null;
+    if (current && current.key === key) {
+      current.days.push(day);
+    } else {
+      if (current) segments.push(current);
+      current = { key, days: [day], leave, telework };
+    }
+  });
+  if (current) segments.push(current);
+  return segments;
+}
+
 function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, teleworkRequests, leaveTypesById) {
   const year = state.calendarYear;
   const month = state.calendarMonth;
-  return dayNumbers.map(day => {
-    const dateStr = toISODate(new Date(year, month, day));
-    const m = dayMeta(day);
-    const baseClass = `absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}`;
-    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    const telework = !leave && teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    if (!leave && !telework) return `<td class="${baseClass}"></td>`;
-    if (leave) {
-      const type = leaveTypesById.get(leave.typeId);
-      const pending = leave.statut !== 'Validé';
-      const label = type ? type.nom : 'Congé';
-      return `<td class="${baseClass} absence-cal-day-filled${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}"></td>`;
+  const segments = computeAbsenceCalendarSegments(employee, dayNumbers, year, month, leaveRequests, teleworkRequests);
+
+  return segments.map(seg => {
+    if (!seg.key) {
+      return seg.days.map(day => { const m = dayMeta(day); return `<td class="absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}"></td>`; }).join('');
     }
-    const pending = telework.statut !== 'Validé';
-    return `<td class="${baseClass} absence-cal-day-filled absence-cal-bar-telework${pending ? ' absence-cal-bar-pending' : ''}" title="Télétravail${pending ? ' (en attente)' : ''}"></td>`;
+    const startDay = seg.days[0];
+    const endDay = seg.days[seg.days.length - 1];
+    const multiDay = seg.days.length > 1;
+    if (seg.leave) {
+      const type = leaveTypesById.get(seg.leave.typeId);
+      const pending = seg.leave.statut !== 'Validé';
+      const label = type ? type.nom : 'Congé';
+      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}, du ${startDay} au ${endDay}${pending ? ' (en attente)' : ''}">
+        ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}</span>` : ''}
+        <span class="absence-cal-bar-label">${escapeHtml(label)}</span>
+        ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}</span>` : ''}
+      </div></td>`;
+    }
+    const pending = seg.telework.statut !== 'Validé';
+    return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar absence-cal-bar-telework${pending ? ' absence-cal-bar-pending' : ''}" title="Télétravail, du ${startDay} au ${endDay}${pending ? ' (en attente)' : ''}">
+      ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}</span>` : ''}
+      <span class="absence-cal-bar-label">Télétravail</span>
+      ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}</span>` : ''}
+    </div></td>`;
   }).join('');
 }
 

@@ -1665,18 +1665,35 @@ textarea.input { resize: vertical; font-family: inherit; }
    couleur déjà configurée (Paramètres > Types d'absences, type.couleur, appliquée en style inline),
    le télétravail garde l'accent marine unique déjà utilisé partout ailleurs pour lui (jamais une
    nouvelle couleur par service/poste).
-   §retour Betty du 09/09/2026, en trois temps : "fais des cases", puis "des cases pour chaque jour"
-   (bordure collapsée trop discrète → `border-spacing`, chaque jour séparé par un vrai espace), puis
-   "quand il y a un congé [...] ne fais pas une ligne remplie, juste les cases" — une absence de
-   plusieurs jours n'est donc plus une seule barre fusionnée (colspan) mais reste des cases
-   individuelles coloriées (voir renderAbsenceCalendarRow), pour ne jamais casser le damier. */
+   §retour Betty du 09/09/2026, en plusieurs temps : "fais des cases", puis "des cases pour chaque
+   jour" (bordure collapsée trop discrète → `border-spacing`, chaque jour séparé par un vrai espace),
+   puis "ne fais pas une ligne remplie, juste les cases" (chaque jour en case individuelle), puis
+   enfin "remets la ligne [...] mais fais des cases différentes pour mieux voir le début et la fin" —
+   dernier état : une seule barre continue par absence (colspan, voir computeAbsenceCalendarSegments/
+   renderAbsenceCalendarRow), avec le quantième affiché en gras à chaque extrémité pour lever toute
+   ambiguïté sur la date exacte de début/fin. */
 .absence-cal-table { border-collapse: separate; border-spacing: 3px; }
 .absence-cal-table th, .absence-cal-table td { padding: 8px 6px; min-width: 34px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 16px 22px; min-width: 0; }
 .absence-cal-table th.weekend, .absence-cal-cell.weekend { background: var(--color-muted-soft); }
 .absence-cal-table th.today { color: var(--color-primary-text); font-weight: 700; }
 .absence-cal-cell.today { box-shadow: inset 0 0 0 1px var(--color-primary-soft); }
-.absence-cal-day-filled { border-color: transparent; }
+.absence-cal-bar-cell { border-color: transparent !important; padding: 4px !important; }
+.absence-cal-bar {
+  width: 100%;
+  min-height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+}
+.absence-cal-bar-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: center; }
+.absence-cal-bar-edge { flex-shrink: 0; font-weight: 700; opacity: 0.9; }
 .absence-cal-bar-telework { background: var(--color-primary); }
 .absence-cal-bar-pending { opacity: 0.55; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 6px, transparent 6px 12px); }
 
