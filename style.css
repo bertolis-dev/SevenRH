@@ -770,12 +770,16 @@ p { margin: 0; line-height: 1.5; }
 /* §demande Betty du 09/09/2026 : repli en popover d'une toolbar de filtres à plusieurs champs, sur
    mobile uniquement — voir renderFilterToggleBar (app.js). Le bouton n'existe visuellement qu'en
    dessous de 860px ; au-dessus, la toolbar garde son affichage habituel quel que soit `.open`. */
-.filter-toggle-btn { display: none; margin-bottom: 10px; }
+.filter-toggle-btn { display: none; margin-bottom: 10px; margin-right: 10px; }
 @media (max-width: 860px) {
   .filter-toggle-btn { display: inline-flex; }
   .toolbar.toolbar-collapsible { display: none; }
   .toolbar.toolbar-collapsible.open { display: flex; }
 }
+/* §amélioration du 09/09/2026 : "Réinitialiser les filtres" — visible sur desktop ET mobile dès
+   qu'au moins un filtre est actif (contrairement au bouton "Filtres" ci-dessus, réservé au mobile),
+   pour vider tous les champs d'un coup plutôt qu'un par un (voir FILTER_RESET_HANDLERS, app.js). */
+.filter-reset-link { display: inline-block; margin-bottom: 10px; }
 
 .form-section {
   border: none;
@@ -2423,6 +2427,17 @@ textarea.input { resize: vertical; font-family: inherit; }
 .notif-tabs .tab { padding: 8px 10px; font-size: 13px; }
 
 .notif-list { padding: 4px 0; }
+
+/* §amélioration du 09/09/2026 : en-tête de groupe par jour relatif (Aujourd'hui/Hier/...), voir
+   getNotifDayGroupLabel (app.js) — repère de balayage rapide, pas un élément cliquable. */
+.notif-day-group {
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
 
 .notif-item {
   display: flex;

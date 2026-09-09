@@ -4920,6 +4920,20 @@ function bindNotificationEvents() {
   });
 }
 
+/** §amélioration du 09/09/2026 (inspirée des pratiques courantes de centre de notifications SaaS :
+ * regrouper par jour relatif plutôt qu'une liste plate, pour un balayage visuel plus rapide) —
+ * "Aujourd'hui"/"Hier" restent les repères les plus lus en un coup d'œil, au-delà on bascule sur des
+ * tranches plus larges pour ne pas multiplier les en-têtes sur un historique ancien. */
+function getNotifDayGroupLabel(dateIso) {
+  const date = new Date(dateIso);
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+  if (diffDays <= 0) return "Aujourd'hui";
+  if (diffDays === 1) return 'Hier';
+  if (diffDays <= 7) return 'Cette semaine';
+  return 'Plus ancien';
+}
+
 function renderNotifPanel() {
   const panel = document.getElementById('notif-panel');
   const all = getVisibleNotificationsForCurrentUser();
@@ -4931,6 +4945,14 @@ function renderNotifPanel() {
   // (paginate/renderPaginationControls, LIST_PAGE_SIZE pages de 20) plutôt qu'un plafond dur.
   const { pageItems: list, totalPages, page, pageStart } = paginate(filtered, 'notifPage');
 
+  let lastGroup = null;
+  const itemsHtml = list.map(n => {
+    const group = getNotifDayGroupLabel(n.date);
+    const header = group !== lastGroup ? `<div class="notif-day-group">${escapeHtml(group)}</div>` : '';
+    lastGroup = group;
+    return header + renderNotifItem(n);
+  }).join('');
+
   panel.innerHTML = `
     <div class="notif-header">
       <div class="tabs notif-tabs">
@@ -4941,7 +4963,7 @@ function renderNotifPanel() {
       ${state.notifTab !== 'archivees' ? `<button class="btn-link" id="btn-mark-all-read">Tout marquer lu</button>` : ''}
     </div>
     <div class="notif-list">
-      ${list.length === 0 ? `<div class="search-empty">Rien à signaler ici.</div>` : list.map(renderNotifItem).join('')}
+      ${list.length === 0 ? `<div class="search-empty">Rien à signaler ici.</div>` : itemsHtml}
     </div>
     ${renderPaginationControls(page, totalPages, pageStart, list.length, filtered.length)}
   `;
@@ -6822,7 +6844,7 @@ function renderEmployeesList() {
       </div>
     ` : ''}
 
-    ${renderFilterToggleBar('employees-filters', [state.search, state.filters.etablissementId, state.filters.service, state.filters.statutContrat, state.filters.statut, state.filters.favorisOnly].filter(Boolean).length)}
+    ${renderFilterToggleBar('employees-filters', [state.search, state.filters.etablissementId, state.filters.service, state.filters.statutContrat, state.filters.statut, state.filters.favorisOnly].filter(Boolean).length, 'employees')}
     <div class="toolbar card toolbar-collapsible" id="employees-filters">
       <input type="text" id="filter-search" class="input" placeholder="Rechercher un nom, un poste, un matricule..." value="${escapeHtml(state.search)}">
       <select id="filter-etablissement" class="input">
@@ -7766,7 +7788,7 @@ function renderOrganigramme() {
       <h1>Organigramme</h1>
       <p class="view-subtitle">${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}</p>
     </div>
-    ${renderFilterToggleBar('org-filters', [f.search, f.etablissementId, f.service, f.equipe].filter(Boolean).length)}
+    ${renderFilterToggleBar('org-filters', [f.search, f.etablissementId, f.service, f.equipe].filter(Boolean).length, 'organigramme')}
     <div class="toolbar card toolbar-collapsible" id="org-filters">
       <input type="text" id="org-filter-search" class="input" placeholder="Rechercher une personne..." value="${escapeHtml(f.search)}">
       <select id="org-filter-etablissement" class="input">
@@ -10627,6 +10649,13 @@ function renderCongesDemandes(categorie = 'conge') {
   // déjà (statut différent, ou hors de portée de canActOnRequestFor) n'aurait aucun effet au clic.
   const selectablePageItems = pageItems.filter(r => r.statut === 'En attente' && canActOnRequestFor(r));
   const selectedCount = selection.size;
+  // §amélioration du 09/09/2026 (empty states plus utiles, inspiré des pratiques d'onboarding SaaS) :
+  // "aucune demande ne correspond à ces filtres" induisait en erreur quand il n'y avait tout
+  // simplement AUCUNE demande créée pour l'instant (pas un souci de filtre à ajuster) — un cas
+  // fréquent pour une entreprise qui démarre sur ce module.
+  const emptyStateMessage = Object.values(filters).some(Boolean)
+    ? 'Aucune demande ne correspond à ces filtres.'
+    : `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant. Utilisez le bouton "+ Nouvelle demande" ci-dessus pour créer la première.`;
 
   return `
     <div class="view-header-row">
@@ -10642,7 +10671,7 @@ function renderCongesDemandes(categorie = 'conge') {
 
     ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
 
-    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut].filter(Boolean).length)}
+    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
     <div class="toolbar card toolbar-collapsible" id="conges-filters">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -10667,7 +10696,7 @@ function renderCongesDemandes(categorie = 'conge') {
     ` : ''}
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>Aucune demande ne correspond à ces filtres.</p></div>` : `
+      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
         <table class="table mobile-cards">
           <thead>
             <tr>
@@ -12670,9 +12699,12 @@ function bindMoiEquipeToggleEvents() {
  * desktop (au-dessus de 860px), ce bouton reste invisible (voir .filter-toggle-btn) et la barre de
  * filtres s'affiche normalement, comportement strictement inchangé. `targetId` doit être l'id du
  * conteneur `.toolbar.card.toolbar-collapsible` à replier/déplier ; `activeCount` (filtres non vides)
- * donne un repère sans avoir à ouvrir le panneau, même principe que "X filtres actifs" ailleurs. */
-function renderFilterToggleBar(targetId, activeCount) {
-  return `<button type="button" class="btn btn-secondary btn-sm filter-toggle-btn" data-toggle-filters="${targetId}">Filtres${activeCount ? ` (${activeCount})` : ''}</button>`;
+ * donne un repère sans avoir à ouvrir le panneau, même principe que "X filtres actifs" ailleurs.
+ * `resetKey` (optionnel) affiche en plus un lien "Réinitialiser" — visible sur desktop ET mobile,
+ * contrairement au bouton "Filtres" lui-même — qui vide tous les champs d'un coup (voir
+ * FILTER_RESET_HANDLERS/bindResetFiltersButtons) plutôt que de les effacer un par un. */
+function renderFilterToggleBar(targetId, activeCount, resetKey) {
+  return `<button type="button" class="btn btn-secondary btn-sm filter-toggle-btn" data-toggle-filters="${targetId}">Filtres${activeCount ? ` (${activeCount})` : ''}</button>${activeCount && resetKey ? `<button type="button" class="btn-link filter-reset-link" data-reset-filters="${resetKey}">Réinitialiser les filtres</button>` : ''}`;
 }
 
 function bindFilterToggleButtons() {
@@ -12680,6 +12712,29 @@ function bindFilterToggleButtons() {
     btn.addEventListener('click', () => {
       const target = document.getElementById(btn.dataset.toggleFilters);
       if (target) target.classList.toggle('open');
+    });
+  });
+  // §amélioration du 09/09/2026 : le lien "Réinitialiser les filtres" (voir renderFilterToggleBar)
+  // vit toujours à côté du bouton "Filtres" — un seul binder suffit pour les deux, jamais désynchronisés.
+  bindResetFiltersButtons();
+}
+
+/** Réinitialise TOUS les champs d'un coup plutôt qu'un par un — mêmes valeurs par défaut que
+ * getInitialViewState (jamais dupliquées à la main pour ne pas risquer de diverger). */
+const FILTER_RESET_HANDLERS = {
+  employees: () => { state.search = ''; state.filters = { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false }; state.employeesPage = 1; },
+  conges: () => { state.congesFilters = { employeeId: '', typeId: '', statut: '' }; state.congesPage = 1; },
+  'autres-absences': () => { state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '' }; state.autresAbsencesPage = 1; },
+  teletravail: () => { state.teletravailFilters = { employeeId: '', statut: '' }; state.teletravailPage = 1; },
+  frais: () => { state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' }; state.fraisPage = 1; },
+  organigramme: () => { state.organigrammeFilters = { search: '', etablissementId: '', service: '', equipe: '' }; }
+};
+
+function bindResetFiltersButtons() {
+  document.querySelectorAll('[data-reset-filters]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const handler = FILTER_RESET_HANDLERS[btn.dataset.resetFilters];
+      if (handler) { handler(); render(); }
     });
   });
 }
@@ -16549,6 +16604,12 @@ function renderTeletravailDemandes() {
   const employees = getScopedEmployeesForFilters();
   const requests = getFilteredTeleworkRequests();
   const { pageItems, totalPages, page, pageStart } = paginate(requests, 'teletravailPage');
+  // §amélioration du 09/09/2026 : même distinction que Congés (voir renderCongesDemandes) — "aucune
+  // demande de télétravail" prêtait déjà à confusion, laissant croire que le module n'a jamais servi
+  // même quand un filtre écarte simplement tout le monde.
+  const emptyStateMessage = Object.values(state.teletravailFilters).some(Boolean)
+    ? 'Aucune demande ne correspond à ces filtres.'
+    : 'Aucune demande de télétravail pour l\'instant. Utilisez le bouton "+ Nouvelle demande" ci-dessus pour créer la première.';
 
   return `
     <div class="view-header-row">
@@ -16558,7 +16619,7 @@ function renderTeletravailDemandes() {
 
     ${renderDraftsCard('teletravail')}
 
-    ${renderFilterToggleBar('teletravail-filters', [state.teletravailFilters.employeeId, state.teletravailFilters.statut].filter(Boolean).length)}
+    ${renderFilterToggleBar('teletravail-filters', [state.teletravailFilters.employeeId, state.teletravailFilters.statut].filter(Boolean).length, 'teletravail')}
     <div class="toolbar card toolbar-collapsible" id="teletravail-filters">
       <select id="tt-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -16571,7 +16632,7 @@ function renderTeletravailDemandes() {
     </div>
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.laptop}</div><p>Aucune demande de télétravail.</p></div>` : `
+      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.laptop}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
         <table class="table mobile-cards">
           <thead><tr><th>Salarié</th><th>Période</th><th>Jours</th><th>Statut</th><th></th></tr></thead>
           <tbody>${pageItems.map(renderTeleworkRequestRow).join('')}</tbody>
@@ -17202,6 +17263,12 @@ function renderFrais() {
   // salarié qui n'a normalement pas ce droit lui affiche désormais bien le bouton, comme partout
   // ailleurs dans l'application.
   const canValider = hasPermission(user, PERMISSIONS.VALIDER_NOTE_FRAIS) || hasPermission(user, PERMISSIONS.CONTROLER_NOTE_FRAIS);
+  // §amélioration du 09/09/2026 : même distinction que Congés/Télétravail (voir renderCongesDemandes)
+  // — "aucune note ne correspond à ces filtres" prêtait à confusion quand il n'y a simplement AUCUNE
+  // note créée pour l'instant.
+  const emptyStateMessage = Object.values(state.fraisFilters).some(Boolean)
+    ? 'Aucune note de frais ne correspond à ces filtres.'
+    : 'Aucune note de frais pour l\'instant. Utilisez le bouton "+ Nouvelle note" ci-dessus pour créer la première.';
 
   return `
     <div class="view-header view-header-row">
@@ -17239,7 +17306,7 @@ function renderFrais() {
     </div>
 
     <div class="card table-card">
-      ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucune note de frais ne correspond à ces filtres.</p></div>` : `
+      ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
         <table class="table mobile-cards">
           <thead>
             <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
