@@ -1,7 +1,7 @@
 /**
  * Seven RH — refonte pratique du 09/09/2026, en plusieurs vagues au fil des retours de Betty dans la
- * même journée. Ce fichier couvre : le planning des absences façon Gantt du Calendrier (une barre
- * par congé/télétravail, colorée par type, regroupée par service comme le Planning), le design
+ * même journée. Ce fichier couvre : le planning des absences en cases du Calendrier (une case par
+ * jour, coloriée par type de congé/télétravail, regroupée par service comme le Planning), le design
  * "carte" du Planning Semaine (avatar, plage horaire réelle sur chaque jour travaillé, colonne
  * Total, bandeau de service marine — inspiré d'Agendrix mais SANS sa palette par poste), la
  * cohérence des couleurs congé/télétravail entre Planning et Calendrier, le format carte mobile
@@ -15,12 +15,16 @@ const path = require('path');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  // ---- Calendrier des absences (vue équipe/entreprise) : un planning façon Gantt, une barre par
-  //      congé/télétravail colorée par TYPE (couleur déjà configurable en Paramètres, pas une
-  //      nouvelle palette), regroupé par service comme le Planning — retour Betty du 09/09/2026
-  //      ("fais un calendrier dans ce style [...] pour chaque congé une couleur"). Remplace le
-  //      roster-en-modale d'un essai précédent (devenu inatteignable : la vue équipe n'affiche plus
-  //      la grille de jours cliquable, ce planning répond déjà "qui est là" sans clic). ----
+  // ---- Calendrier des absences (vue équipe/entreprise) : un planning en cases par jour, chaque
+  //      case coloriée par TYPE de congé (couleur déjà configurable en Paramètres, pas une nouvelle
+  //      palette), regroupé par service comme le Planning — retour Betty du 09/09/2026 en plusieurs
+  //      temps : "fais un calendrier dans ce style [...] pour chaque congé une couleur", "fais des
+  //      cases", puis "quand il y a un congé [...] ne fais pas une ligne remplie, juste les cases" —
+  //      un essai intermédiaire fusionnait une absence de plusieurs jours en une seule barre
+  //      continue (colspan), rejeté au profit de cases individuelles pour ne jamais casser le
+  //      damier. Remplace aussi le roster-en-modale d'un essai précédent (devenu inatteignable : la
+  //      vue équipe n'affiche plus la grille de jours cliquable, ce planning répond déjà "qui est
+  //      là" sans clic). ----
   {
     const { DB, sandbox, renderCalendrier, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
@@ -42,7 +46,8 @@ async function run() {
     const typeA = leaveTypes[0];
     typeA.couleur = '#e91e63';
     company.leaveRequests = [
-      // Absence de 3 jours consécutifs -> doit devenir UNE seule barre (colspan="3"), pas 3 cases.
+      // Absence de 3 jours consécutifs -> doit rester 3 cases individuelles coloriées, jamais une
+      // seule barre fusionnée (colspan).
       { id: 'lr-1', employeeId: e1.id, typeId: typeA.id, dateDebut: '2026-09-08', dateFin: '2026-09-10', nbJours: 3, statut: 'Validé', etapeIndex: 1, workflow: ['manager'], historique: [], demiJournee: null }
     ];
     company.teleworkRequests = [
@@ -51,11 +56,13 @@ async function run() {
     DB.saveCurrentCompany(company);
 
     const html = renderCalendrier();
-    assert.ok(html.includes('absence-cal-table'), 'la vue équipe/entreprise doit afficher le planning des absences façon Gantt');
+    assert.ok(html.includes('absence-cal-table'), 'la vue équipe/entreprise doit afficher le planning des absences en cases');
     assert.ok(!html.includes('calendar-grid-header'), 'l\'ancienne grille mensuelle (jour par jour) ne doit plus apparaître en vue équipe/entreprise');
-    assert.ok(html.includes('colspan="3"'), 'une absence de 3 jours consécutifs doit être UNE seule barre continue (colspan), pas 3 cases séparées');
-    assert.ok(html.includes(`background:${typeA.couleur}`), 'la barre de congé doit reprendre EXACTEMENT la couleur configurée pour ce type (Paramètres > Types d\'absences), pas une teinte imposée');
-    assert.ok(html.includes('absence-cal-bar-telework'), 'le télétravail doit apparaître comme une barre à part, avec l\'accent marine déjà utilisé pour lui ailleurs');
+    assert.ok(!html.includes('colspan="3"') && !html.includes('colspan=\"3\"'), 'une absence de plusieurs jours ne doit plus être fusionnée en une seule barre (colspan) — rejeté par Betty');
+    // 4 occurrences attendues : 3 cases (une par jour de l'absence) + 1 pastille de légende pour ce type.
+    const filledOccurrences = html.split(`background:${typeA.couleur}`).length - 1;
+    assert.strictEqual(filledOccurrences, 4, 'les 3 jours de l\'absence doivent apparaître comme 3 cases individuelles coloriées (+ 1 pastille de légende), chacune reprenant EXACTEMENT la couleur configurée pour ce type (Paramètres > Types d\'absences)');
+    assert.ok(html.includes('absence-cal-bar-telework'), 'le télétravail doit apparaître comme une case à part, avec l\'accent marine déjà utilisé pour lui ailleurs');
     assert.ok(html.includes('Tous les services'), 'un filtre service doit être disponible, comme dans le modèle envoyé');
 
     // Vue personnelle : le planning des absences (multi-salarié) n'a pas de sens pour une seule
@@ -257,7 +264,7 @@ async function run() {
     assert.ok(panelHtml.includes('id="btn-page-next"'), 'un vrai contrôle de pagination doit être présent');
   }
 
-  console.log('OK — refonte-ux-09-09.test.js (planning des absences Gantt du calendrier, design carte du Planning Semaine, couleurs congé/télétravail alignées, tableaux carte mobile généralisés, popover filtres généralisé, sommaire formulaire salarié, pagination notifications)');
+  console.log('OK — refonte-ux-09-09.test.js (planning des absences en cases du calendrier, design carte du Planning Semaine, couleurs congé/télétravail alignées, tableaux carte mobile généralisés, popover filtres généralisé, sommaire formulaire salarié, pagination notifications)');
 }
 
 run().catch((err) => {

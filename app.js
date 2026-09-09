@@ -12785,14 +12785,16 @@ function renderCalendrier() {
 }
 
 /** §demande Betty du 09/09/2026 ("fais un calendrier dans ce style", capture d'un "Calendrier des
- * absences" façon Gantt : une ligne par salarié, une colonne par jour, des barres colorées par type
- * de congé) : remplace la grille mensuelle en vue équipe/entreprise (une grille de jours n'a de sens
- * que pour UN salarié à la fois — c'est justement pourquoi la vue personnelle la garde inchangée
- * ci-dessus). "Une couleur par congé" ne contrevient PAS à la règle bleu marine + or de l'appli :
- * chaque type de congé a déjà sa propre couleur configurable (Paramètres > Types d'absences,
- * type.couleur, déjà utilisée comme pastille dans la liste des demandes) — cet écran réutilise cette
- * donnée existante, il n'invente aucune nouvelle palette catégorielle. Le télétravail (pas un "congé",
- * pas de couleur configurable par type) garde l'accent marine déjà utilisé partout ailleurs pour lui.
+ * absences" : une ligne par salarié, une colonne par jour, des cases colorées par type de congé) :
+ * remplace la grille mensuelle en vue équipe/entreprise (une grille de jours n'a de sens que pour UN
+ * salarié à la fois — c'est justement pourquoi la vue personnelle la garde inchangée ci-dessus).
+ * "Une couleur par congé" ne contrevient PAS à la règle bleu marine + or de l'appli : chaque type de
+ * congé a déjà sa propre couleur configurable (Paramètres > Types d'absences, type.couleur, déjà
+ * utilisée comme pastille dans la liste des demandes) — cet écran réutilise cette donnée existante,
+ * il n'invente aucune nouvelle palette catégorielle. Le télétravail (pas un "congé", pas de couleur
+ * configurable par type) garde l'accent marine déjà utilisé partout ailleurs pour lui. Une absence de
+ * plusieurs jours reste plusieurs cases individuelles coloriées (jamais fusionnées en une seule
+ * barre continue façon Gantt — un essai en ce sens a été rejeté par Betty, "juste les cases").
  * Regroupement par service : même bandeau que le Planning (renderPlanningGroupRows/.planning-service-header)
  * pour une identité visuelle cohérente entre les deux écrans. */
 function renderAbsenceCalendarBoard(sharedData) {
@@ -12850,46 +12852,29 @@ function renderAbsenceCalendarBoard(sharedData) {
 /** Découpe le mois en segments consécutifs (même congé/télétravail, ou "rien") pour un salarié —
  * un segment de plusieurs jours devient UNE cellule `colspan` avec une barre continue, plutôt qu'une
  * icône répétée jour par jour comme le Planning (ce qui serait illisible pour une absence de 2 semaines). */
-function computeAbsenceCalendarSegments(employee, days, leaveRequests, teleworkRequests) {
-  const segments = [];
-  let current = null;
-  days.forEach(day => {
-    const dateStr = toISODate(new Date(day.year, day.month, day.day));
-    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    const telework = !leave && teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    const key = leave ? `leave:${leave.id}` : telework ? `telework:${telework.id}` : null;
-    if (current && current.key === key) {
-      current.days += 1;
-    } else {
-      if (current) segments.push(current);
-      current = { key, days: 1, leave, telework };
-    }
-  });
-  if (current) segments.push(current);
-  return segments;
-}
-
+/** §retour Betty du 09/09/2026 : "ne fais pas une ligne remplie, juste les cases" — une absence de
+ * plusieurs jours n'est plus fusionnée en une seule barre continue (colspan) mais reste plusieurs
+ * cases individuelles, chacune coloriée par le type de congé, pour ne jamais casser la grille en
+ * damier déjà demandée ("des cases pour chaque jour"). Le nom du type ne tient plus dans une case
+ * étroite : il reste consultable au survol (title), comme les statuts du Planning. */
 function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, teleworkRequests, leaveTypesById) {
   const year = state.calendarYear;
   const month = state.calendarMonth;
-  const days = dayNumbers.map(day => ({ day, year, month }));
-  const segments = computeAbsenceCalendarSegments(employee, days, leaveRequests, teleworkRequests);
-
-  let dayIndex = 0;
-  return segments.map(seg => {
-    const segDays = dayNumbers.slice(dayIndex, dayIndex + seg.days);
-    dayIndex += seg.days;
-    if (!seg.key) {
-      return segDays.map(day => { const m = dayMeta(day); return `<td class="absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}"></td>`; }).join('');
-    }
-    if (seg.leave) {
-      const type = leaveTypesById.get(seg.leave.typeId);
-      const pending = seg.leave.statut !== 'Validé';
+  return dayNumbers.map(day => {
+    const dateStr = toISODate(new Date(year, month, day));
+    const m = dayMeta(day);
+    const baseClass = `absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}`;
+    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const telework = !leave && teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    if (!leave && !telework) return `<td class="${baseClass}"></td>`;
+    if (leave) {
+      const type = leaveTypesById.get(leave.typeId);
+      const pending = leave.statut !== 'Validé';
       const label = type ? type.nom : 'Congé';
-      return `<td colspan="${seg.days}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}">${seg.days > 1 ? escapeHtml(label) : ''}</div></td>`;
+      return `<td class="${baseClass} absence-cal-day-filled${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}"></td>`;
     }
-    const pending = seg.telework.statut !== 'Validé';
-    return `<td colspan="${seg.days}" class="absence-cal-bar-cell"><div class="absence-cal-bar absence-cal-bar-telework${pending ? ' absence-cal-bar-pending' : ''}" title="Télétravail${pending ? ' (en attente)' : ''}">${seg.days > 1 ? 'Télétravail' : ''}</div></td>`;
+    const pending = telework.statut !== 'Validé';
+    return `<td class="${baseClass} absence-cal-day-filled absence-cal-bar-telework${pending ? ' absence-cal-bar-pending' : ''}" title="Télétravail${pending ? ' (en attente)' : ''}"></td>`;
   }).join('');
 }
 
@@ -13136,8 +13121,8 @@ function renderCalendarCell(cell, sharedData) {
   // équipe/entreprise — une case y mélange plusieurs salariés, sans salarié cible évident), devient
   // cliquable pour CRÉER une demande plutôt que pour consulter — voir bindCalendrierEvents.
   // §demande Betty du 09/09/2026 : renderCalendarCell n'est plus appelée qu'en vue personnelle
-  // (l'équipe/entreprise affiche désormais renderAbsenceCalendarBoard, un vrai planning façon Gantt,
-  // voir renderCalendrier) — sharedData.vuePersonnelle vaut donc toujours true ici.
+  // (l'équipe/entreprise affiche désormais renderAbsenceCalendarBoard, le planning des absences en
+  // cases, voir renderCalendrier) — sharedData.vuePersonnelle vaut donc toujours true ici.
   const isCreateTarget = sharedData.vuePersonnelle && cell.inMonth && !hasAbsence;
   const isClickable = hasContent || isCreateTarget;
 
@@ -13169,8 +13154,8 @@ function calendarBadge(category, icon, names, pending = false) {
  * une fois qu'il y a beaucoup de monde). Recalcule son propre `sharedData` (une seule date, donc bon
  * marché) via buildCalendarSharedData plutôt que de dépendre d'un état capturé au rendu précédent.
  * §demande Betty du 09/09/2026 : n'est plus appelée qu'en vue personnelle — la vue équipe/entreprise
- * affiche désormais renderAbsenceCalendarBoard (un vrai planning façon Gantt, toute l'équipe déjà
- * visible sans avoir à cliquer sur un jour), voir renderCalendrier. */
+ * affiche désormais renderAbsenceCalendarBoard (le planning des absences en cases, toute l'équipe
+ * déjà visible sans avoir à cliquer sur un jour), voir renderCalendrier. */
 function openCalendarDayModal(dateStr) {
   // §correctif bug sweep 19/08/2026 : new Date(dateStr) traitait cette date pure comme un
   // horodatage UTC — dans un fuseau derrière UTC, le 1er janvier retombait sur le 31 décembre
