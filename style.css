@@ -36,6 +36,11 @@
   --login-card-border: rgba(23, 40, 77, 0.65);
   --color-text: #1a1d24;
   --color-text-muted: #6b7280;
+  /* §retour Betty du 09/09/2026, en deux temps : --color-text (quasi noir, léger reflet bleuté) a
+     d'abord remplacé --color-text-muted sur le menu latéral, jugé encore trop clair — un noir neutre
+     dédié, sans le moindre reflet de couleur, pour le texte qui doit vraiment "sauter aux yeux". En
+     mode sombre, retombe sur --color-text (déjà clair, voir les blocs de thème plus bas). */
+  --color-text-strong: #000000;
   --color-primary: var(--landing-navy-700);
   --color-primary-hover: var(--landing-navy-900);
   --color-primary-soft: #eaeef5;
@@ -210,11 +215,12 @@ p { margin: 0; line-height: 1.5; }
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
-  /* §retour Betty du 09/09/2026 ("les boutons à gauche, mets les écritures en plus foncé") :
-     --color-text-muted (gris moyen) manquait de contraste sur le fond quasi-blanc de la sidebar —
-     --color-text (quasi noir en clair, quasi blanc en sombre) reste la couleur de texte "normale"
-     utilisée partout ailleurs dans l'appli, jamais un gris fixe qui resterait clair en mode sombre. */
-  color: var(--color-text);
+  /* §retour Betty du 09/09/2026, en deux temps : "mets les écritures en plus foncé" — d'abord passé
+     de --color-text-muted (gris moyen) à --color-text (quasi noir), jugé encore trop clair (léger
+     reflet bleuté) — --color-text-strong (noir neutre pur en clair, voir :root) va plus loin sans
+     retomber sur un gris fixe qui resterait clair en mode sombre (adapté dans les deux blocs de
+     thème sombre). */
+  color: var(--color-text-strong);
   cursor: pointer;
   text-align: left;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -3494,6 +3500,7 @@ textarea.input { resize: vertical; font-family: inherit; }
     --login-card-border: rgba(74, 114, 173, 0.5);
     --color-text: #f2f3f5;
     --color-text-muted: #9aa0ab;
+    --color-text-strong: var(--color-text);
     /* §refonte identité 20/08/2026 : la teinte marine claire suffit en fond de bouton en mode clair
        (contraste énorme avec le texte blanc), mais en mode sombre elle se confond presque avec les
        cartes (--color-surface, elle-même déjà très sombre — mesuré : à peine 1.1:1 de différence).
@@ -3537,6 +3544,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   --login-card-border: rgba(74, 114, 173, 0.5);
   --color-text: #f2f3f5;
   --color-text-muted: #9aa0ab;
+  --color-text-strong: var(--color-text);
   --color-primary: #4a72ad;
   --color-primary-hover: #3a5a8f;
   --color-primary-soft: #192134;
