@@ -1693,9 +1693,12 @@ textarea.input { resize: vertical; font-family: inherit; }
    dernier état : une seule barre continue par absence (colspan, voir computeAbsenceCalendarSegments/
    renderAbsenceCalendarRow), avec le quantième affiché en gras à chaque extrémité pour lever toute
    ambiguïté sur la date exacte de début/fin. */
-.absence-cal-table { border-collapse: separate; border-spacing: 3px; }
-.absence-cal-table th, .absence-cal-table td { padding: 8px 6px; min-width: 34px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
-.absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 16px 22px; min-width: 0; }
+/* §retour Betty du 09/09/2026 ("fais les cases un peu moins grandes") : padding/min-width réduits
+   d'un cran (8px 6px/34px → 6px 4px/26px) — juste assez pour resserrer la grille, sans revenir à la
+   bordure collapsée quasi invisible du tout premier essai. */
+.absence-cal-table { border-collapse: separate; border-spacing: 2px; }
+.absence-cal-table th, .absence-cal-table td { padding: 6px 4px; min-width: 26px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 12px 18px; min-width: 0; }
 .absence-cal-table th.weekend, .absence-cal-cell.weekend { background: var(--color-muted-soft); }
 .absence-cal-table th.today { color: var(--color-primary-text); font-weight: 700; }
 .absence-cal-cell.today { box-shadow: inset 0 0 0 1px var(--color-primary-soft); }
