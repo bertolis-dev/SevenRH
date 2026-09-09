@@ -5005,6 +5005,7 @@ function renderNotifItem(n) {
         <div class="notif-date">${formatDateTime(n.date)}</div>
       </div>
       <div class="notif-actions">
+        ${n.lu ? `<button class="btn-icon" data-notif-mark-unread="${n.id}" title="Marquer comme non lu">${icon(ICONS.bell, 13)}</button>` : ''}
         ${n.archive
           ? `<button class="btn-icon" data-notif-unarchive="${n.id}" title="Désarchiver">${icon(ICONS.undo, 13)}</button>`
           : `<button class="btn-icon" data-notif-archive="${n.id}" title="Archiver">${icon(ICONS.archive, 13)}</button>`}
@@ -5038,6 +5039,18 @@ function bindNotifItemEvents() {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       notificationRepository.setNotificationArchived(el.dataset.notifUnarchive, false);
+      updateNotifBadge();
+      renderNotifPanel();
+    });
+  });
+
+  // §amélioration du 09/09/2026 (pratique courante des centres de notifications SaaS : "donner un
+  // moyen facile de remarquer non lu ce qui vaut la peine d'y revenir") — jusqu'ici, une notification
+  // ouverte passait "lue" définitivement, sans retour possible pour la retrouver dans l'onglet "Non lues".
+  document.querySelectorAll('[data-notif-mark-unread]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notificationRepository.markNotificationRead(el.dataset.notifMarkUnread, false);
       updateNotifBadge();
       renderNotifPanel();
     });

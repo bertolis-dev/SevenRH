@@ -183,6 +183,7 @@ globalThis.__renderOrganigramme = renderOrganigramme;
 globalThis.__openEmployeeModal = openEmployeeModal;
 globalThis.__renderNotifPanel = renderNotifPanel;
 globalThis.__getNotifDayGroupLabel = getNotifDayGroupLabel;
+globalThis.__notificationRepository = notificationRepository;
 globalThis.__FILTER_RESET_HANDLERS = FILTER_RESET_HANDLERS;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
@@ -292,6 +293,7 @@ globalThis.__FILTER_RESET_HANDLERS = FILTER_RESET_HANDLERS;
     openEmployeeModal: sandbox.__openEmployeeModal,
     renderNotifPanel: sandbox.__renderNotifPanel,
     getNotifDayGroupLabel: sandbox.__getNotifDayGroupLabel,
+    notificationRepository: sandbox.__notificationRepository,
     FILTER_RESET_HANDLERS: sandbox.__FILTER_RESET_HANDLERS,
   };
 }
