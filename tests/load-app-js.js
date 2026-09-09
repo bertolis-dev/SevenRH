@@ -171,6 +171,16 @@ globalThis.__performGlobalSearch = performGlobalSearch;
 globalThis.__getGlobalCommands = getGlobalCommands;
 globalThis.__renderCongesDemandes = renderCongesDemandes;
 globalThis.__bulkSelection = bulkSelection;
+globalThis.__renderCalendarDayTeamRoster = renderCalendarDayTeamRoster;
+globalThis.__renderCalendarCell = renderCalendarCell;
+globalThis.__openCalendarDayModal = openCalendarDayModal;
+globalThis.__renderPlanningSemaine = renderPlanningSemaine;
+globalThis.__groupEmployeesByServiceAndEquipe = groupEmployeesByServiceAndEquipe;
+globalThis.__personNameWithPosteHtml = personNameWithPosteHtml;
+globalThis.__renderEmployeesList = renderEmployeesList;
+globalThis.__renderOrganigramme = renderOrganigramme;
+globalThis.__openEmployeeModal = openEmployeeModal;
+globalThis.__renderNotifPanel = renderNotifPanel;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -267,6 +277,16 @@ globalThis.__bulkSelection = bulkSelection;
     getGlobalCommands: sandbox.__getGlobalCommands,
     renderCongesDemandes: sandbox.__renderCongesDemandes,
     bulkSelection: sandbox.__bulkSelection,
+    renderCalendarDayTeamRoster: sandbox.__renderCalendarDayTeamRoster,
+    renderCalendarCell: sandbox.__renderCalendarCell,
+    openCalendarDayModal: sandbox.__openCalendarDayModal,
+    renderPlanningSemaine: sandbox.__renderPlanningSemaine,
+    groupEmployeesByServiceAndEquipe: sandbox.__groupEmployeesByServiceAndEquipe,
+    personNameWithPosteHtml: sandbox.__personNameWithPosteHtml,
+    renderEmployeesList: sandbox.__renderEmployeesList,
+    renderOrganigramme: sandbox.__renderOrganigramme,
+    openEmployeeModal: sandbox.__openEmployeeModal,
+    renderNotifPanel: sandbox.__renderNotifPanel,
   };
 }
 

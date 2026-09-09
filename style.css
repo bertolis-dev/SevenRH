@@ -767,6 +767,16 @@ p { margin: 0; line-height: 1.5; }
 
 .toolbar .input:first-child { flex: 1; min-width: 220px; }
 
+/* §demande Betty du 09/09/2026 : repli en popover d'une toolbar de filtres à plusieurs champs, sur
+   mobile uniquement — voir renderFilterToggleBar (app.js). Le bouton n'existe visuellement qu'en
+   dessous de 860px ; au-dessus, la toolbar garde son affichage habituel quel que soit `.open`. */
+.filter-toggle-btn { display: none; margin-bottom: 10px; }
+@media (max-width: 860px) {
+  .filter-toggle-btn { display: inline-flex; }
+  .toolbar.toolbar-collapsible { display: none; }
+  .toolbar.toolbar-collapsible.open { display: flex; }
+}
+
 .form-section {
   border: none;
   padding: 0;
@@ -809,18 +819,21 @@ p { margin: 0; line-height: 1.5; }
    répétées à chaque salarié — voir renderTableauCompteursPeriodInfo (app.js). */
 .tc-header-period { font-size: 11px; font-weight: 400; white-space: normal; margin-top: 2px; }
 
-/* §demande Betty du 04/09/2026 : "il faut décaler pour voir toute la ligne" sur téléphone — le
-   Tableau des compteurs a autant de colonnes que de types de congé configurés (impossible à faire
-   tenir côte à côte sur un petit écran), donc en dessous de 860px chaque ligne <tr> devient une
-   carte empilée verticalement (1 bloc par type, précédé de son nom en étiquette) plutôt qu'une
-   ligne qu'il faut faire défiler horizontalement. */
+/* §demande Betty du 04/09/2026 puis généralisation du 09/09/2026 : "il faut décaler pour voir toute
+   la ligne" sur téléphone — au départ réservé au Tableau des compteurs (.tc-table), ce mécanisme de
+   carte empilée (1 bloc par colonne, précédé de son nom en étiquette) est désormais partagé par
+   toute table qui porte la classe `mobile-cards` (Salariés, Congés & absences, Notes de frais,
+   Tickets restaurant équipe — voir app.js) plutôt que de le réserver à un seul écran. La cellule
+   "titre" de la carte (nom du salarié en général) porte la classe `row-title` — jamais une simple
+   convention ":first-child", qui casserait dès qu'une colonne technique (case à cocher de sélection
+   en masse) précède la vraie colonne d'identification. */
 @media (max-width: 860px) {
-  .tc-table, .tc-table tbody, .tc-table tfoot, .tc-table tr, .tc-table td { display: block; width: 100%; }
-  .tc-table thead { display: none; }
-  .tc-table tr { border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); margin: 12px; padding: 12px 14px; }
-  .tc-table td { padding: 7px 0; text-align: left !important; border: none !important; white-space: normal; }
+  .table.mobile-cards, .table.mobile-cards tbody, .table.mobile-cards tfoot, .table.mobile-cards tr, .table.mobile-cards td { display: block; width: 100%; }
+  .table.mobile-cards thead { display: none; }
+  .table.mobile-cards tr { border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); margin: 12px; padding: 12px 14px; }
+  .table.mobile-cards td { padding: 7px 0; text-align: left !important; border: none !important; white-space: normal; }
   .tc-periode, .tc-detail, .tc-en-cours { white-space: normal; }
-  .tc-table td[data-label]::before {
+  .table.mobile-cards td[data-label]::before {
     content: attr(data-label);
     display: block;
     font-size: 11px;
@@ -830,15 +843,18 @@ p { margin: 0; line-height: 1.5; }
     color: var(--color-text-muted);
     margin-bottom: 3px;
   }
-  .tc-table td:first-child {
+  .table.mobile-cards td.row-title {
     font-weight: 600;
     font-size: 15px;
     border-bottom: 1px solid var(--color-border) !important;
     padding-bottom: 10px;
     margin-bottom: 4px;
   }
-  .tc-table td:first-child::before { content: none; }
-  .tc-table tfoot tr { background: var(--color-muted-soft); }
+  .table.mobile-cards td.row-title::before { content: none; }
+  .table.mobile-cards tfoot tr { background: var(--color-muted-soft); }
+  /* Case à cocher de sélection en masse (Congés & absences) : fonctionnalité desktop, retirée sur
+     mobile plutôt que de laisser une case orpheline sans étiquette en tête de carte. */
+  .table.mobile-cards td.table-select-cell { display: none; }
 }
 
 .pagination-bar {
@@ -1168,6 +1184,23 @@ p { margin: 0; line-height: 1.5; }
 
 .modal-body a { color: var(--color-primary-text); }
 
+/* §demande Betty du 09/09/2026 : sommaire cliquable en haut du formulaire salarié (4-5 sections) —
+   voir renderEmployeeFormSummary (app.js). Collé en haut de .modal-body (son propre conteneur de
+   défilement, voir ci-dessus) pour rester accessible même après avoir défilé vers une section basse. */
+.form-summary-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  position: sticky;
+  top: -22px;
+  margin: -22px -22px 18px;
+  padding: 10px 22px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  z-index: 1;
+}
+.form-summary-nav .btn-link { padding: 2px 0; }
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -1240,6 +1273,14 @@ p { margin: 0; line-height: 1.5; }
 
 .tab:hover { color: var(--color-text); }
 .tab.active { color: var(--color-primary-text); border-bottom-color: var(--color-primary-text); }
+
+/* §demande Betty du 09/09/2026 : un second niveau d'onglets (Télétravail → Demandes/Planning, Horaires
+   → Jour/Semaine/Mois) sous un premier niveau (Congés & absences → Congés/Absences/Télétravail,
+   Planning → Semaine/Mois/Année/Horaires/Astreintes) se distinguait mal du premier — mêmes taille et
+   poids visuel, aucun repère de hiérarchie. Plus petit et plus discret, jamais un menu déroulant
+   (réservé à un vrai grand nombre d'onglets, voir .parametres-tab-select ci-dessous : ici 2-3 sous-
+   onglets seulement, une rangée compacte reste plus rapide qu'un select). */
+.tabs.tabs-sub .tab { padding: 6px 10px; font-size: 12.5px; }
 
 /* Repli mobile pour les écrans à beaucoup d'onglets (Paramètres, 12+) — voir @media 860px. Caché
    par défaut : le bouton .tab classique reste le contrôle normal sur desktop. */
@@ -1582,9 +1623,23 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-cell { font-size: 16px; }
 .planning-cell svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
 .planning-off { color: var(--color-text-muted); font-size: 13px; }
-.planning-leave { background: var(--color-warning-soft); }
-.planning-remote { background: var(--color-info-soft); }
-.planning-office { background: var(--color-success-soft); }
+/* §demande Betty du 09/09/2026 (cohérence visuelle) : ces trois teintes reprennent désormais
+   EXACTEMENT celles déjà utilisées par le Calendrier pour les mêmes concepts (.legend-conge/
+   .calendar-badge-conge = succès/vert, .legend-teletravail/.calendar-badge-teletravail = accent
+   marine) — avant ce correctif, le vert signifiait "congé" dans le Calendrier mais "présent" dans le
+   Planning, une même couleur portant deux sens opposés selon l'écran. C'est le Planning qui a été
+   aligné sur le Calendrier (pas l'inverse) : le Calendrier jongle déjà avec davantage de catégories
+   (anniversaire/arrivée/départ/férié/vacances, absentes du Planning) et son propre code couleur est
+   déjà réfléchi pour ne jamais se chevaucher en son sein (voir commentaire sur .calendar-badge-arrivee
+   plus haut) — le réaligner lui aurait recréé les mêmes chevauchements ailleurs. "Présent" récupère
+   la teinte info (bleu clair), non utilisée par le Calendrier, donc sans nouveau conflit introduit. */
+.planning-leave { background: var(--color-success-soft); }
+.planning-remote { background: var(--color-primary-soft); }
+.planning-office { background: var(--color-info-soft); }
+
+/* §demande Betty du 09/09/2026 : horaires visibles directement dans la vue Semaine du planning (voir
+   renderPlanningStatusCell, showHours) sans ouvrir l'onglet séparé "Horaires". */
+.planning-cell-hours { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }
@@ -1910,6 +1965,23 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .mini-list-item:last-child { border-bottom: none; }
+
+.mini-list-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 10px 0 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.mini-list-group-label:first-child { margin-top: 0; }
+.mini-list-group-sub {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  padding-left: 12px;
+  font-size: 12.5px;
+}
 
 /* §refonte "chargement unifié" du 01/09/2026 : remplace les "Chargement..." en texte brut par un
    effet de balayage, cohérent partout (une seule animation, voir renderSkeletonLines, app.js). */

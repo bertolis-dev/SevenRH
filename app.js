@@ -190,6 +190,7 @@ function getInitialViewState() {
     mesTicketsYear: new Date().getFullYear(),
     mesTicketsMonth: new Date().getMonth(),
     notifTab: 'non-lues',
+    notifPage: 1,
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
     paieTab: 'preparation', // Sprint SIRH premium §6 : préparation/anomalies affichée par défaut, avant l'export
@@ -4908,6 +4909,7 @@ function bindNotificationEvents() {
       panel.classList.remove('open');
       return;
     }
+    state.notifPage = 1;
     renderNotifPanel();
     panel.classList.add('open');
   });
@@ -4917,15 +4919,16 @@ function bindNotificationEvents() {
   });
 }
 
-const NOTIF_PANEL_LIMIT = 50;
-
 function renderNotifPanel() {
   const panel = document.getElementById('notif-panel');
   const all = getVisibleNotificationsForCurrentUser();
   const filtered = state.notifTab === 'archivees' ? all.filter(n => n.archive)
     : state.notifTab === 'toutes' ? all.filter(n => !n.archive)
     : all.filter(n => !n.archive && !n.lu);
-  const list = filtered.slice(0, NOTIF_PANEL_LIMIT);
+  // §demande Betty du 09/09/2026 : remplace le plafond fixe ("affichage limité aux 50 plus
+  // récentes", sans aucun moyen d'aller plus loin) par la même pagination que le reste de l'app
+  // (paginate/renderPaginationControls, LIST_PAGE_SIZE pages de 20) plutôt qu'un plafond dur.
+  const { pageItems: list, totalPages, page, pageStart } = paginate(filtered, 'notifPage');
 
   panel.innerHTML = `
     <div class="notif-header">
@@ -4938,14 +4941,15 @@ function renderNotifPanel() {
     </div>
     <div class="notif-list">
       ${list.length === 0 ? `<div class="search-empty">Rien à signaler ici.</div>` : list.map(renderNotifItem).join('')}
-      ${filtered.length > list.length ? `<p class="text-muted" style="padding: 10px 16px; font-size: 12px;">Affichage limité aux ${list.length} plus récentes (${filtered.length} au total).</p>` : ''}
     </div>
+    ${renderPaginationControls(page, totalPages, pageStart, list.length, filtered.length)}
   `;
 
   panel.querySelectorAll('[data-notif-tab]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       state.notifTab = btn.dataset.notifTab;
+      state.notifPage = 1;
       renderNotifPanel();
     });
   });
@@ -4959,6 +4963,11 @@ function renderNotifPanel() {
       renderNotifPanel();
     });
   }
+
+  const prevBtn = document.getElementById('btn-page-prev');
+  if (prevBtn) prevBtn.addEventListener('click', (e) => { e.stopPropagation(); state.notifPage--; renderNotifPanel(); });
+  const nextBtn = document.getElementById('btn-page-next');
+  if (nextBtn) nextBtn.addEventListener('click', (e) => { e.stopPropagation(); state.notifPage++; renderNotifPanel(); });
 
   bindNotifItemEvents();
 }
@@ -6812,7 +6821,8 @@ function renderEmployeesList() {
       </div>
     ` : ''}
 
-    <div class="toolbar card">
+    ${renderFilterToggleBar('employees-filters', [state.search, state.filters.etablissementId, state.filters.service, state.filters.statutContrat, state.filters.statut, state.filters.favorisOnly].filter(Boolean).length)}
+    <div class="toolbar card toolbar-collapsible" id="employees-filters">
       <input type="text" id="filter-search" class="input" placeholder="Rechercher un nom, un poste, un matricule..." value="${escapeHtml(state.search)}">
       <select id="filter-etablissement" class="input">
         <option value="">Tous les établissements</option>
@@ -6836,7 +6846,7 @@ function renderEmployeesList() {
 
     <div class="card table-card">
       ${visible.length === 0 ? renderEmptyState() : `
-        <table class="table">
+        <table class="table mobile-cards">
           <thead>
             <tr>
               <th data-sort="nom">Salarié</th>
@@ -7000,7 +7010,7 @@ function renderTableauCompteurs() {
       <div class="card table-card">
         ${rows.length === 0 ? renderEmptyState() : `
           <div style="overflow-x: auto;">
-            <table class="table tc-table">
+            <table class="table tc-table mobile-cards">
               <thead>
                 <tr>
                   <th>Salarié</th>
@@ -7010,14 +7020,14 @@ function renderTableauCompteurs() {
               <tbody>
                 ${pageItems.map(row => `
                   <tr>
-                    <td data-label="Salarié">${personNameHtml(row.employee)}</td>
+                    <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
                     ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
               <tfoot>
                 <tr>
-                  <td data-label="Total"><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
+                  <td data-label="Total" class="row-title"><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
                   ${leaveTypes.map((t, i) => {
                     const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
                     const hasIllimite = finiteValues.length < rows.length;
@@ -7053,7 +7063,7 @@ function bindTableauCompteursEvents() {
 function renderEmployeeRow(e) {
   return `
     <tr class="table-row" data-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(e)}">
-      <td>
+      <td class="row-title" data-label="Salarié">
         <div class="employee-cell">
           ${renderAvatar(e)}
           <div>
@@ -7062,11 +7072,11 @@ function renderEmployeeRow(e) {
           </div>
         </div>
       </td>
-      <td>${escapeHtml(e.poste || '—')}</td>
-      <td>${escapeHtml(e.service || '—')}</td>
-      <td>${renderContratBadge(e.typeContrat)}</td>
-      <td>${calculateAnciennete(e.dateEmbauche)}</td>
-      <td>${renderStatutBadge(e.statut)}</td>
+      <td data-label="Poste">${escapeHtml(e.poste || '—')}</td>
+      <td data-label="Service">${escapeHtml(e.service || '—')}</td>
+      <td data-label="Contrat">${renderContratBadge(e.typeContrat)}</td>
+      <td data-label="Ancienneté">${calculateAnciennete(e.dateEmbauche)}</td>
+      <td data-label="Statut">${renderStatutBadge(e.statut)}</td>
     </tr>
   `;
 }
@@ -7591,6 +7601,7 @@ function renderEmptyState() {
 }
 
 function bindEmployeesListEvents() {
+  bindFilterToggleButtons();
   const searchInput = document.getElementById('filter-search');
   searchInput.addEventListener('input', (e) => {
     state.search = e.target.value;
@@ -7754,7 +7765,8 @@ function renderOrganigramme() {
       <h1>Organigramme</h1>
       <p class="view-subtitle">${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}</p>
     </div>
-    <div class="toolbar card">
+    ${renderFilterToggleBar('org-filters', [f.search, f.etablissementId, f.service, f.equipe].filter(Boolean).length)}
+    <div class="toolbar card toolbar-collapsible" id="org-filters">
       <input type="text" id="org-filter-search" class="input" placeholder="Rechercher une personne..." value="${escapeHtml(f.search)}">
       <select id="org-filter-etablissement" class="input">
         <option value="">Tous les établissements</option>
@@ -7798,6 +7810,7 @@ function renderOrgNode(employee, childrenOf) {
 }
 
 function bindOrganigrammeEvents() {
+  bindFilterToggleButtons();
   document.querySelectorAll('[data-org-employee]').forEach(node => {
     node.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: node.dataset.orgEmployee }));
   });
@@ -10524,7 +10537,7 @@ function renderAbsencesHub() {
 
 function renderAbsencesHubTeletravail() {
   return `
-    <div class="tabs" style="margin-bottom: 14px;">
+    <div class="tabs tabs-sub" style="margin-bottom: 14px;">
       <button class="tab ${state.teletravailTab === 'demandes' ? 'active' : ''}" data-teletravail-tab="demandes">Demandes</button>
       <button class="tab ${state.teletravailTab === 'planning' ? 'active' : ''}" data-teletravail-tab="planning">Planning</button>
     </div>
@@ -10628,7 +10641,8 @@ function renderCongesDemandes(categorie = 'conge') {
 
     ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
 
-    <div class="toolbar card">
+    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut].filter(Boolean).length)}
+    <div class="toolbar card toolbar-collapsible" id="conges-filters">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
@@ -10653,7 +10667,7 @@ function renderCongesDemandes(categorie = 'conge') {
 
     <div class="card table-card">
       ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>Aucune demande ne correspond à ces filtres.</p></div>` : `
-        <table class="table">
+        <table class="table mobile-cards">
           <thead>
             <tr>
               <th>${selectablePageItems.length ? `<input type="checkbox" id="conges-select-all" ${selectablePageItems.every(r => selection.has(r.id)) ? 'checked' : ''} aria-label="Tout sélectionner">` : ''}</th>
@@ -10689,12 +10703,12 @@ function renderLeaveRequestRow(r, selection) {
 
   return `
     <tr data-request-id="${r.id}">
-      <td>${selectable ? `<input type="checkbox" class="conges-select-row" data-select-request="${r.id}" ${selection.has(r.id) ? 'checked' : ''} aria-label="Sélectionner cette demande">` : ''}</td>
-      <td>${personNameHtml(employee)}</td>
-      <td><span class="badge badge-muted"><span class="type-swatch" style="background:${escapeHtml(type.couleur)}"></span>${escapeHtml(type.icone)} ${escapeHtml(type.nom)}</span></td>
-      <td>${periode}</td>
-      <td>${formatDurationFR(r.nbJours)}</td>
-      <td>${renderRequestStatutBadge(r)}</td>
+      <td class="table-select-cell">${selectable ? `<input type="checkbox" class="conges-select-row" data-select-request="${r.id}" ${selection.has(r.id) ? 'checked' : ''} aria-label="Sélectionner cette demande">` : ''}</td>
+      <td class="row-title" data-label="Salarié">${personNameHtml(employee)}</td>
+      <td data-label="Type"><span class="badge badge-muted"><span class="type-swatch" style="background:${escapeHtml(type.couleur)}"></span>${escapeHtml(type.icone)} ${escapeHtml(type.nom)}</span></td>
+      <td data-label="Période">${periode}</td>
+      <td data-label="Jours">${formatDurationFR(r.nbJours)}</td>
+      <td data-label="Statut">${renderRequestStatutBadge(r)}</td>
       <td class="table-actions">${renderRequestActions(r, type)}</td>
     </tr>
   `;
@@ -11071,6 +11085,7 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
 
+  bindFilterToggleButtons();
   document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
   document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
   bindDraftsCardEvents((draft) => openLeaveRequestModal(undefined, categorie, draft));
@@ -12647,6 +12662,27 @@ function bindMoiEquipeToggleEvents() {
   });
 }
 
+/** §demande Betty du 09/09/2026 : sur mobile, une barre de filtres à plusieurs champs (Salariés,
+ * Congés & absences, Organigramme) s'empilait verticalement avant même de voir un résultat — repris
+ * du même principe que le popover "Filtres" du Calendrier, mais plus simple ici (pas de contenu
+ * distinct à régénérer : ce sont les mêmes champs qu'en desktop, juste repliés par défaut). En
+ * desktop (au-dessus de 860px), ce bouton reste invisible (voir .filter-toggle-btn) et la barre de
+ * filtres s'affiche normalement, comportement strictement inchangé. `targetId` doit être l'id du
+ * conteneur `.toolbar.card.toolbar-collapsible` à replier/déplier ; `activeCount` (filtres non vides)
+ * donne un repère sans avoir à ouvrir le panneau, même principe que "X filtres actifs" ailleurs. */
+function renderFilterToggleBar(targetId, activeCount) {
+  return `<button type="button" class="btn btn-secondary btn-sm filter-toggle-btn" data-toggle-filters="${targetId}">Filtres${activeCount ? ` (${activeCount})` : ''}</button>`;
+}
+
+function bindFilterToggleButtons() {
+  document.querySelectorAll('[data-toggle-filters]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.toggleFilters);
+      if (target) target.classList.toggle('open');
+    });
+  });
+}
+
 /** Catalogue des catégories filtrables du calendrier (légende + filtres cliquables, §sprint
  * calendrier légende/filtres) — une seule source de vérité pour le libellé, l'icône et la classe de
  * couleur, réutilisée à la fois par la légende et par les badges de case pour rester cohérentes. */
@@ -12980,7 +13016,13 @@ function renderCalendarCell(cell, sharedData) {
   // équipe/entreprise — une case y mélange plusieurs salariés, sans salarié cible évident), devient
   // cliquable pour CRÉER une demande plutôt que pour consulter — voir bindCalendrierEvents.
   const isCreateTarget = sharedData.vuePersonnelle && cell.inMonth && !hasAbsence;
-  const isClickable = hasContent || isCreateTarget;
+  // §demande Betty du 09/09/2026 : le roster "Équipe" (renderCalendarDayTeamRoster, voir
+  // openCalendarDayModal) répond à "qui est présent ce jour-là", une question qui a justement le
+  // plus de sens un jour SANS badge (rien de particulier ne signalait ce jour comme consultable
+  // avant ce correctif — en vue équipe/entreprise, un jour sans absence n'était même pas cliquable,
+  // rendant ce nouveau roster inatteignable les jours "normaux", pourtant les plus fréquents).
+  const isRosterTarget = !sharedData.vuePersonnelle && cell.inMonth;
+  const isClickable = hasContent || isCreateTarget || isRosterTarget;
 
   return `
     <div class="${classes.join(' ')}${isClickable ? ' calendar-cell-clickable' : ''}"
@@ -13004,6 +13046,35 @@ function calendarBadge(category, icon, names, pending = false) {
   `;
 }
 
+/** §demande Betty du 09/09/2026 : "tous les utilisateurs triés par service et équipe, poste à côté du
+ * nom" — déjà construit pour le Planning (groupEmployeesByServiceAndEquipe/personNameWithPosteHtml/
+ * getStatusForDate, définies plus bas dans ce fichier mais hoistées comme toute déclaration
+ * `function`), réutilisé ici tel quel pour ne jamais faire diverger les deux écrans. `sharedData`
+ * vient de buildCalendarSharedData : `employees` y est déjà restreint au bon périmètre (équipe d'un
+ * manager, entreprise entière pour RH/Propriétaire/Comptabilité — jamais un salarié, qui n'a pas
+ * cette vue élargie). */
+function renderCalendarDayTeamRoster(dateStr, sharedData) {
+  const groups = groupEmployeesByServiceAndEquipe(sharedData.employees);
+  if (groups.length === 0) return '';
+  return `
+    <div style="margin-bottom: 14px;">
+      <div class="search-section-label" style="padding-left: 0;">Équipe</div>
+      <div class="mini-list">
+        ${groups.map(g => `
+          <div class="mini-list-group-label">${escapeHtml(g.service)}</div>
+          ${g.equipes.map(eq => `
+            ${g.equipes.length > 1 ? `<div class="mini-list-group-label mini-list-group-sub">${escapeHtml(eq.equipe)}</div>` : ''}
+            ${eq.employees.map(e => {
+              const status = getStatusForDate(e, dateStr, sharedData.leaveRequests, sharedData.teleworkRequests);
+              return `<div class="mini-list-item"><span>${personNameWithPosteHtml(e)}</span><span class="text-muted" title="${escapeHtml(status.title)}">${escapeIcon(status.icon)} ${escapeHtml(status.title)}</span></div>`;
+            }).join('')}
+          `).join('')}
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 /** Sprint SIRH premium §4 (reprise) : détail complet d'un jour du calendrier, dans une modale plutôt
  * qu'au survol (.calendar-tooltip) — accessible au clavier/tactile, et lisible même quand plusieurs
  * catégories d'évènements se superposent le même jour (un badge par catégorie devient vite illisible
@@ -13017,14 +13088,26 @@ function openCalendarDayModal(dateStr) {
   const sharedData = buildCalendarSharedData([{ date: parseISODateLocal(dateStr) }]);
   const info = getCalendarDayInfo(dateStr, sharedData);
 
+  // §demande Betty du 09/09/2026 : en vue équipe/entreprise, le détail d'un jour ne listait que les
+  // salariés ayant un événement ce jour-là (congé/télétravail) — impossible de voir "toute l'équipe"
+  // d'un coup d'œil, ni qui est simplement présent. En vue personnelle, la liste "Congés / absences"/
+  // "Télétravail" ne concerne de toute façon que l'utilisateur courant (voir buildCalendarSharedData) :
+  // inutile d'y afficher un roster d'une seule personne, l'ancien affichage reste donc inchangé.
+  const equipeRosterHtml = !sharedData.vuePersonnelle ? renderCalendarDayTeamRoster(dateStr, sharedData) : '';
+
   // §refonte identité 20/08/2026 : items porte désormais {icon, text} séparément plutôt qu'une
   // seule chaîne concaténée — text.icone (congé) peut être un emoji choisi librement par un RH
   // (donnée utilisateur, toujours échappée via escapeIcon), à ne jamais mélanger dans la même
   // chaîne qu'une icône ICONS.xxx de confiance (SVG, jamais échappée) sous peine de casser l'une
   // des deux en forçant un traitement unique.
   const sections = [
-    { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
-    { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    // Congés/télétravail ne sont plus listés ici en vue équipe/entreprise (voir equipeRosterHtml
+    // ci-dessus, qui couvre déjà chaque salarié avec son statut du jour) — seulement en vue
+    // personnelle, où ces deux sections ne concernent que l'utilisateur courant.
+    ...(sharedData.vuePersonnelle ? [
+      { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+      { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) }
+    ] : []),
     { label: 'Anniversaires', items: info.anniversaires.map(e => ({ icon: ICONS.cake, text: `${e.prenom} ${e.nom}` })) },
     { label: 'Arrivées', items: info.arrivees.map(e => ({ icon: ICONS.rocket, text: `${e.prenom} ${e.nom}` })) },
     { label: 'Départs', items: info.departs.map(e => ({ icon: ICONS.exitDoor, text: `${e.prenom} ${e.nom}` })) }
@@ -13039,7 +13122,8 @@ function openCalendarDayModal(dateStr) {
       <div class="modal-body">
         ${info.ferie ? `<span class="badge badge-danger" style="margin-bottom: 10px;">${escapeHtml(info.ferie.label)}</span>` : ''}
         ${info.vacances ? `<span class="badge badge-info" style="margin-bottom: 10px;">${icon(ICONS.backpack, 14)} ${escapeHtml(info.vacances.nom)}</span>` : ''}
-        ${sections.length === 0 ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
+        ${equipeRosterHtml}
+        ${sections.length === 0 && !equipeRosterHtml ? '<p class="text-muted">Rien de particulier à signaler ce jour-là.</p>' : sections.map(s => `
           <div style="margin-bottom: 14px;">
             <div class="search-section-label" style="padding-left: 0;">${escapeHtml(s.label)}</div>
             <div class="mini-list">
@@ -15629,14 +15713,21 @@ function personNameWithPosteHtml(e) {
  * la SOURCE d'un glisser ; TOUTE case du même salarié est une cible de dépôt valide (la case cible
  * n'a pas besoin d'avoir un statut particulier — la validation métier existante, réutilisée telle
  * quelle via bindPlanningDragEvents, refuse déjà les dates invalides avec un message clair). */
-function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests) {
+/** `showHours` (§demande Betty du 09/09/2026, "pouvoir voir les horaires" directement dans le
+ * planning au lieu de l'onglet séparé "Horaires") : ajoute le total d'heures du jour sous l'icône,
+ * réutilisant computeDailyHours (même calcul que l'onglet Horaires, jamais dupliqué). Seule la vue
+ * Semaine l'active (voir renderPlanningSemaine) — la vue Mois compte ~30 colonnes déjà étroites, y
+ * ajouter du texte la rendrait illisible ; l'onglet Horaires garde tout son intérêt pour le détail
+ * matin/après-midi (Jour) et les totaux par service (Semaine/Mois), non répétés ici. */
+function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests, showHours = false) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
+  const hours = showHours && status.level !== 'off' ? computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) : null;
   return `<td class="planning-cell planning-${status.level}${status.pending ? ' planning-pending' : ''}"
     title="${escapeHtml(status.title)}"
     data-drop-employee="${employee.id}" data-drop-date="${dateStr}"
     ${draggable ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${dateStr}"` : ''}
-  >${escapeIcon(status.icon)}</td>`;
+  >${escapeIcon(status.icon)}${hours && hours.heures ? `<div class="planning-cell-hours">${formatNumberFR(hours.heures)} h</div>` : ''}</td>`;
 }
 
 function renderPlanningSemaine() {
@@ -15664,7 +15755,7 @@ function renderPlanningSemaine() {
             ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
               <tr>
                 <td>${personNameWithPosteHtml(e)}</td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests)).join('')}
+                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
               </tr>
             `)}
           </tbody>
@@ -15789,7 +15880,7 @@ function computeDailyHours(employee, dateStr, leaveRequests, teleworkRequests) {
  * planning d'absences, qui restent inchangés). */
 function renderPlanningHoraires() {
   return `
-    <div class="tabs" style="margin-bottom: 12px;">
+    <div class="tabs tabs-sub" style="margin-bottom: 12px;">
       <button class="tab ${state.horairesView === 'jour' ? 'active' : ''}" data-horaires-view="jour">Jour</button>
       <button class="tab ${state.horairesView === 'mois' ? 'active' : ''}" data-horaires-view="mois">Mois</button>
       <button class="tab ${state.horairesView !== 'jour' && state.horairesView !== 'mois' ? 'active' : ''}" data-horaires-view="semaine">Semaine</button>
@@ -17010,7 +17101,7 @@ function renderFrais() {
 
     <div class="card table-card">
       ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucune note de frais ne correspond à ces filtres.</p></div>` : `
-        <table class="table">
+        <table class="table mobile-cards">
           <thead>
             <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
           </thead>
@@ -17049,12 +17140,12 @@ function renderExpenseRow(n) {
 
   return `
     <tr>
-      <td>${personNameHtml(employee)}</td>
-      <td>${formatDate(n.date)}</td>
-      <td>${escapeHtml(n.categorie)}</td>
-      <td>${escapeHtml(n.libelle)}</td>
-      <td class="cell-numeric">${formatCurrencyFR(n.montantTTC)}</td>
-      <td>${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}</td>
+      <td class="row-title" data-label="Salarié">${personNameHtml(employee)}</td>
+      <td data-label="Date">${formatDate(n.date)}</td>
+      <td data-label="Catégorie">${escapeHtml(n.categorie)}</td>
+      <td data-label="Libellé">${escapeHtml(n.libelle)}</td>
+      <td class="cell-numeric" data-label="Montant TTC">${formatCurrencyFR(n.montantTTC)}</td>
+      <td data-label="Statut">${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
         <button class="btn-link" data-history="${n.id}">Historique</button>
@@ -17799,16 +17890,16 @@ function renderTicketsEquipe() {
     </div>
 
     <div class="card table-card">
-      <table class="table">
+      <table class="table mobile-cards">
         <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
-              <td>${personNameHtml(r.employee)}</td>
-              <td class="cell-numeric">${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
-              <td class="cell-numeric">${formatCurrencyFR(r.result.montantTotal)}</td>
-              <td class="cell-numeric">${formatCurrencyFR(r.result.partEmployeur)}</td>
-              <td class="cell-numeric">${formatCurrencyFR(r.result.partSalarie)}</td>
+              <td class="row-title" data-label="Salarié">${personNameHtml(r.employee)}</td>
+              <td class="cell-numeric" data-label="Tickets">${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
+              <td class="cell-numeric" data-label="Montant total">${formatCurrencyFR(r.result.montantTotal)}</td>
+              <td class="cell-numeric" data-label="Part employeur">${formatCurrencyFR(r.result.partEmployeur)}</td>
+              <td class="cell-numeric" data-label="Part salarié">${formatCurrencyFR(r.result.partSalarie)}</td>
               ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
@@ -18732,7 +18823,7 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
   if (!user || user.role !== ROLES.PROPRIETAIRE) return '';
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
-    <fieldset class="form-section">
+    <fieldset class="form-section" id="employee-form-section-confidentiel">
       <legend>Confidentiel</legend>
       <div class="form-grid">
         ${settings.masseSalarialeActivee ? textField('salaireBrutMensuel', 'Salaire brut mensuel (€)', employee.salaireBrutMensuel, false, 'number') : ''}
@@ -19083,6 +19174,36 @@ function openRejectCandidatureModal(candidature) {
   });
 }
 
+/** §demande Betty du 09/09/2026 : le formulaire salarié (4-5 sections) reste un seul long
+ * défilement — sans le redécouper en étapes (perdrait la vue d'ensemble et la possibilité de
+ * corriger un champ d'une section précédente sans revenir en arrière), un sommaire cliquable en
+ * haut de la modale permet de sauter directement à une section plutôt que de tout dérouler à la
+ * main. `hasConfidentiel` : la section "Confidentiel" n'existe pas pour tout le monde (voir
+ * renderConfidentialEmployeeFieldset) — inutile de proposer un lien mort vers une section absente. */
+function renderEmployeeFormSummary(hasConfidentiel) {
+  const sections = [
+    { id: 'employee-form-section-identite', label: 'Identité' },
+    { id: 'employee-form-section-contrat', label: 'Contrat & poste' },
+    { id: 'employee-form-section-temps', label: 'Temps de travail' },
+    { id: 'employee-form-section-statut', label: 'Statut' },
+    ...(hasConfidentiel ? [{ id: 'employee-form-section-confidentiel', label: 'Confidentiel' }] : [])
+  ];
+  return `
+    <div class="form-summary-nav">
+      ${sections.map(s => `<button type="button" class="btn-link" data-scroll-to-section="${s.id}">${escapeHtml(s.label)}</button>`).join('')}
+    </div>
+  `;
+}
+
+function bindFormSummaryNav() {
+  document.querySelectorAll('[data-scroll-to-section]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.scrollToSection);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
 /** prefill/candidatureId (voir bindEmbaucheEvents) : pré-remplit un NOUVEAU salarié depuis une
  * candidature reçue par QR code — jamais utilisé en édition (isEdit). candidatureId est juste
  * transmis jusqu'à submitEmployeeForm pour marquer la candidature "embauchée" une fois le salarié
@@ -19114,7 +19235,8 @@ function openEmployeeModal(id, prefill, candidatureId) {
       </div>
       <form id="employee-form">
         <div class="modal-body">
-          <fieldset class="form-section">
+          ${renderEmployeeFormSummary(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
+          <fieldset class="form-section" id="employee-form-section-identite">
             <legend>Identité</legend>
             <div class="form-grid">
               ${selectField('civilite', 'Civilité', ['M.', 'Mme'], employee.civilite)}
@@ -19150,7 +19272,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section">
+          <fieldset class="form-section" id="employee-form-section-contrat">
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
               ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
@@ -19173,7 +19295,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section">
+          <fieldset class="form-section" id="employee-form-section-temps">
             <legend>Temps de travail</legend>
             <div class="form-grid">
               ${selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail)}
@@ -19202,7 +19324,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section">
+          <fieldset class="form-section" id="employee-form-section-statut">
             <legend>Statut</legend>
             <div class="form-grid">
               ${selectField('statut', 'Statut', ['Actif', 'Inactif'], employee.statut)}
@@ -19227,6 +19349,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  bindFormSummaryNav();
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 
