@@ -1666,7 +1666,10 @@ textarea.input { resize: vertical; font-family: inherit; }
    type de congé garde SA PROPRE couleur déjà configurée (Paramètres > Types d'absences,
    type.couleur, appliquée en style inline), le télétravail garde l'accent marine unique déjà utilisé
    partout ailleurs pour lui (jamais une nouvelle couleur par service/poste). */
-.absence-cal-table th, .absence-cal-table td { padding: 8px 6px; min-width: 34px; }
+/* §retour Betty du 09/09/2026 ("fais des cases") : quadrillage complet (comme le modèle envoyé,
+   une vraie grille de cases plutôt qu'un simple trait sous chaque ligne) — .table ne pose par défaut
+   qu'un border-bottom, insuffisant pour distinguer les colonnes de jours les unes des autres. */
+.absence-cal-table th, .absence-cal-table td { padding: 8px 6px; min-width: 34px; border: 1px solid var(--color-border); }
 .absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 16px 22px; min-width: 0; }
 .absence-cal-table th.weekend, .absence-cal-cell.weekend { background: var(--color-muted-soft); }
 .absence-cal-table th.today { color: var(--color-primary-text); font-weight: 700; }
