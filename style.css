@@ -1646,22 +1646,33 @@ textarea.input { resize: vertical; font-family: inherit; }
    mêmes concepts (.legend-conge/.calendar-badge-conge = succès/vert, .legend-teletravail/
    .calendar-badge-teletravail = accent marine, "présent" = info/bleu clair, non utilisé par le
    Calendrier). */
+/* §demande Betty du 10/09/2026 ("même design que [référence Combo], mais les couleurs actuelles") :
+   bloc de couleur plein plutôt qu'un simple accent gauche (plus proche visuellement de la
+   référence), coins plus arrondis, position relative pour loger un petit repère d'icône en coin
+   (.planning-shift-corner-icon) — mêmes trois teintes sémantiques qu'avant, jamais une couleur par
+   service/poste (voir seven_rh_design_palette_rule). */
 .planning-shift-card {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   width: 100%;
-  border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
+  min-height: 40px;
+  box-sizing: border-box;
+  position: relative;
+  border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
-  padding: 6px 4px;
+  padding: 6px 18px 6px 6px;
 }
-.planning-shift-leave { background: var(--color-success-soft); border-left-color: var(--color-success); }
-.planning-shift-remote { background: var(--color-primary-soft); border-left-color: var(--color-primary); }
-.planning-shift-office { background: var(--color-info-soft); border-left-color: var(--color-info); }
-.planning-shift-pending { opacity: 0.6; border-left-style: dashed; }
+.planning-shift-leave { background: var(--color-success-soft); }
+.planning-shift-remote { background: var(--color-primary-soft); }
+.planning-shift-office { background: var(--color-info-soft); }
+.planning-shift-pending { opacity: 0.6; }
+/* Barre continue d'un congé de plusieurs jours (voir renderPlanningDayCells) : un peu plus chunky
+   que la carte d'un seul jour, cohérent avec l'esprit "barre" plutôt que "case" de la référence. */
+.planning-shift-bar { min-height: 44px; padding: 8px 20px 8px 10px; }
 /* §retour Betty du 09/09/2026 ("enlève les icônes, rends les horaires plus jolies") : la légende
    (horaires ou titre du congé) remplace désormais l'icône (voir renderPlanningStatusCell) — elle
    reprend donc la même couleur d'accent que la carte plutôt qu'un simple gris, pour rester la seule
@@ -1670,6 +1681,25 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-shift-leave .planning-shift-caption { color: var(--color-success); }
 .planning-shift-remote .planning-shift-caption { color: var(--color-primary); }
 .planning-shift-office .planning-shift-caption { color: var(--color-info); }
+/* Petit repère d'icône en coin de carte (§demande du 10/09/2026, référence Combo) : discret, jamais
+   la seule information (le texte de la légende reste la source principale), même couleur que la
+   légende via currentColor. */
+.planning-shift-corner-icon { position: absolute; bottom: 3px; right: 4px; opacity: 0.55; line-height: 0; }
+.planning-shift-corner-icon svg { width: 11px; height: 11px; display: block; }
+.planning-shift-leave .planning-shift-corner-icon { color: var(--color-success); }
+.planning-shift-remote .planning-shift-corner-icon { color: var(--color-primary); }
+.planning-shift-office .planning-shift-corner-icon { color: var(--color-info); }
+/* Jour de repos hebdomadaire : en vue Semaine (colonnes assez larges), une étiquette plutôt qu'un
+   simple tiret — plus proche du "Repos hebdomadaire" de la référence, resté un tiret en vue Mois
+   (~30 colonnes déjà étroites, voir renderPlanningStatusCell). */
+.planning-off-pill { display: inline-block; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--color-muted-soft); color: var(--color-text-muted); font-size: 11px; font-weight: 600; }
+/* Compteurs sous le nom du salarié (§demande du 10/09/2026) : heures hebdomadaires contractuelles
+   (employee.horairesHebdo) et solde de repos compensateur (getReposCompensateurSolde) — les deux
+   SEULS compteurs de la référence ayant un vrai équivalent existant dans Nexus, voir
+   renderPlanningEmployeeBadges. */
+.planning-employee-badges { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.planning-employee-badge { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--color-muted-soft); color: var(--color-text-muted); }
+.planning-employee-badge-rcr { background: var(--color-primary-soft); color: var(--color-primary-text); }
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }

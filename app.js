@@ -16020,10 +16020,12 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
   // jolies") : quand une légende texte existe (horaires en vue Semaine, ou titre du congé), elle
   // remplace l'icône plutôt que de s'ajouter en dessous — l'icône ne reste que quand il n'y a rien
   // d'autre à afficher (vue Mois, sans horaires), pour ne jamais laisser une carte totalement vide.
-  const card = status.level === 'off' ? `<span class="planning-off-dash">—</span>` : `
+  const card = status.level === 'off'
+    ? (showHoraires ? `<span class="planning-off-pill">Repos</span>` : `<span class="planning-off-dash">—</span>`)
+    : `
     <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
       ${caption
-        ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div>`
+        ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div><span class="planning-shift-corner-icon">${escapeIcon(status.icon)}</span>`
         : `<div class="planning-shift-icon">${escapeIcon(status.icon)}</div>`}
     </div>
   `;
@@ -16038,6 +16040,74 @@ function formatHorairesRange(employee) {
   const matin = employee.horaireMatinDebut && employee.horaireMatinFin ? `${employee.horaireMatinDebut}-${employee.horaireMatinFin}` : null;
   const apresMidi = employee.horaireApresMidiDebut && employee.horaireApresMidiFin ? `${employee.horaireApresMidiDebut}-${employee.horaireApresMidiFin}` : null;
   return [matin, apresMidi].filter(Boolean).join(' · ');
+}
+
+/** §demande Betty du 10/09/2026 ("même design que [référence Combo], mais les couleurs actuelles") :
+ * la référence affiche sous chaque salarié des compteurs (heures contractuelles, solde d'heures,
+ * repos compensateur...). Nexus n'a pas d'équivalent exact pour chacun (pas de "solde d'heures"
+ * cumulé au sens de la référence) — plutôt que d'inventer une donnée qui n'existe nulle part
+ * ailleurs dans l'appli (risqué dans un outil RH), seuls DEUX compteurs RÉELS et déjà existants
+ * sont repris : les heures hebdomadaires contractuelles (employee.horairesHebdo, déjà affiché sur la
+ * fiche salarié) et le solde de repos compensateur (getReposCompensateurSolde, déjà utilisé au
+ * tableau de bord) — masqué si nul, pour ne pas afficher un badge vide à quasi tout le monde. */
+function renderPlanningEmployeeBadges(employee) {
+  const rcr = getReposCompensateurSolde(employee);
+  return `
+    <div class="planning-employee-badges">
+      <span class="planning-employee-badge" title="Heures hebdomadaires contractuelles">${formatNumberFR(employee.horairesHebdo)} h</span>
+      ${rcr.solde ? `<span class="planning-employee-badge planning-employee-badge-rcr" title="Solde de repos compensateur">RCR ${formatNumberFR(rcr.solde)} h</span>` : ''}
+    </div>
+  `;
+}
+
+/** §demande Betty du 10/09/2026 : sur la référence, un congé de plusieurs jours devient une seule
+ * barre continue (même esprit que computeAbsenceCalendarSegments/renderAbsenceCalendarRow pour le
+ * Calendrier des absences) plutôt qu'une carte répétée à l'identique chaque jour. Regroupe donc les
+ * jours consécutifs relevant de LA MÊME demande de congé — le télétravail et la présence restent en
+ * revanche case par case (non demandé, et un jour de télétravail isolé au milieu d'une semaine
+ * travaillée n'a pas la même continuité "naturelle" qu'un congé). */
+function computePlanningLeaveSegments(employee, dateStrs, leaveRequests) {
+  const segments = [];
+  let current = null;
+  dateStrs.forEach(dateStr => {
+    const leave = leaveRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    const key = leave ? leave.id : null;
+    if (current && current.key === key) {
+      current.dates.push(dateStr);
+    } else {
+      if (current) segments.push(current);
+      current = { key, dates: [dateStr], leave };
+    }
+  });
+  if (current) segments.push(current);
+  return segments;
+}
+
+/** Rend les cellules d'une ligne de planning pour un salarié sur une liste de dates données —
+ * cellule par cellule (renderPlanningStatusCell, inchangé) sauf pour un congé de PLUSIEURS jours
+ * consécutifs, fusionné en une seule cellule `colspan`. Reste glissable (le glisser-déposer déplace
+ * TOUTE la période d'un coup, cf. handlePlanningDrop qui décale dateDebut/dateFin ensemble via le
+ * même deltaJours — aucune perte de fonctionnalité par rapport à l'ancien glisser case par case, tant
+ * qu'aucune des cases ne le pointe individuellement) : la source du glisser reste le premier jour de
+ * la barre, comme si on glissait sa toute première case. */
+function renderPlanningDayCells(employee, dateStrs, leaveRequests, teleworkRequests, showHoraires) {
+  const segments = computePlanningLeaveSegments(employee, dateStrs, leaveRequests);
+  return segments.map(seg => {
+    if (!seg.leave || seg.dates.length === 1) {
+      return seg.dates.map(d => renderPlanningStatusCell(employee, d, leaveRequests, teleworkRequests, showHoraires)).join('');
+    }
+    const startDateStr = seg.dates[0];
+    const status = getStatusForDate(employee, startDateStr, leaveRequests, []);
+    return `<td colspan="${seg.dates.length}" class="planning-cell planning-leave-bar-cell"
+      title="${escapeHtml(status.title)}"
+      data-drop-employee="${employee.id}" data-drop-date="${startDateStr}"
+      ${!status.pending ? `draggable="true" data-drag-request-id="${status.requestId}" data-drag-request-type="${status.requestType}" data-drag-employee="${employee.id}" data-drag-date="${startDateStr}"` : ''}
+    >
+      <div class="planning-shift-card planning-shift-leave planning-shift-bar${status.pending ? ' planning-shift-pending' : ''}">
+        <div class="planning-shift-caption">${escapeHtml(status.title)}</div>
+      </div>
+    </td>`;
+  }).join('');
 }
 
 function renderPlanningSemaine() {
@@ -16069,9 +16139,10 @@ function renderPlanningSemaine() {
                   <div class="planning-employee-info">
                     ${personNameWithPosteHtml(e)}
                     <button type="button" class="btn-link" data-edit-horaires="${e.id}" title="Modifier les horaires">${icon(ICONS.pencil, 12)}</button>
+                    ${renderPlanningEmployeeBadges(e)}
                   </div>
                 </td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
+                ${renderPlanningDayCells(e, weekDates.map(toISODate), leaveRequests, teleworkRequests, true)}
                 <td class="planning-total-cell"><strong>${formatNumberFR(weekDates.reduce((sum, d) => sum + computeDailyHours(e, toISODate(d), leaveRequests, teleworkRequests).heures, 0))} h</strong></td>
               </tr>
             `)}
@@ -16106,8 +16177,11 @@ function renderPlanningMois() {
           <tbody>
             ${renderPlanningGroupRows(employees, daysInMonth + 1, e => `
               <tr>
-                <td>${personNameWithPosteHtml(e)}</td>
-                ${Array.from({ length: daysInMonth }, (_, i) => renderPlanningStatusCell(e, toISODate(new Date(year, month, i + 1)), leaveRequests, teleworkRequests)).join('')}
+                <td>
+                  ${personNameWithPosteHtml(e)}
+                  ${renderPlanningEmployeeBadges(e)}
+                </td>
+                ${renderPlanningDayCells(e, Array.from({ length: daysInMonth }, (_, i) => toISODate(new Date(year, month, i + 1))), leaveRequests, teleworkRequests, false)}
               </tr>
             `)}
           </tbody>
@@ -17257,9 +17331,12 @@ function renderTeletravailPlanning() {
               <tr>
                 <td class="planning-employee-cell">
                   ${renderAvatar(e)}
-                  <div class="planning-employee-info">${personNameWithPosteHtml(e)}</div>
+                  <div class="planning-employee-info">
+                    ${personNameWithPosteHtml(e)}
+                    ${renderPlanningEmployeeBadges(e)}
+                  </div>
                 </td>
-                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
+                ${renderPlanningDayCells(e, weekDates.map(toISODate), leaveRequests, teleworkRequests, true)}
               </tr>
             `)}
             <tr class="planning-summary-row">
