@@ -952,6 +952,27 @@ p { margin: 0; line-height: 1.5; }
   color: var(--color-primary-text);
 }
 
+/* §retour Betty du 10/09/2026 ("qu'on puisse la recadrer quand on la met") : fenêtre de recadrage
+   (openPhotoCropModal, app.js) — cercle (la photo s'affiche toujours en cercle, voir .avatar
+   ci-dessus) dans lequel la photo se déplace/zoome, jamais un carré à angles droits qui tromperait
+   sur le résultat final. */
+.photo-crop-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted-soft);
+  margin: 0 auto;
+  touch-action: none;
+}
+.photo-crop-stage img {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.photo-crop-stage img:active { cursor: grabbing; }
+
 /* §refonte accent unique du 01/09/2026 : renderContratBadge (Stage/Alternance/Apprentissage/Intérim)
    réutilisait ces mêmes classes .avatar-color-* précisément pour rester distinguable (§"une seule
    teinte pour 4 concepts différents" était le problème corrigé à l'époque) — les recoller au marine

@@ -3218,14 +3218,27 @@ function bindLoginScreenEvents() {
 
 // ---- Menu utilisateur (topbar) : rôle, changement de mot de passe, déconnexion ----
 
+/** §retour Betty du 10/09/2026 ("qu'on la voit en haut à droite") : ce bouton vit dans index.html
+ * (hors de #view-root, jamais reconstruit par render()) avec pour seul contenu des initiales codées
+ * en dur — renderAvatar() (utilisée partout ailleurs dès qu'un employee.photo existe) ne s'y
+ * applique pas telle quelle puisqu'il n'y a pas de <div>/<img> à remplacer, juste le bouton
+ * lui-même. Reproduit donc la même logique directement ici : image si la photo existe, initiales
+ * sinon — jamais les deux en même temps (les classes avatar-initials/avatar-color-* n'ont de sens
+ * que pour les initiales, retirées dès qu'une photo est affichée). */
 function renderUserMenuButton() {
   const user = authRepository.getCurrentUser();
   const button = document.getElementById('btn-user-menu');
-  button.textContent = user ? getInitials(user.prenom, user.nom) : '?';
   // Retire l'éventuelle couleur d'un précédent compte (bascule multi-compte) avant d'appliquer la
   // sienne — jamais deux classes avatar-color-* accumulées sur le même bouton.
   button.className = button.className.replace(/\bavatar-color-\d+\b/g, '').trim();
-  if (user) button.classList.add(getAvatarColorClass(user.prenom, user.nom));
+  if (user && user.photo) {
+    button.classList.remove('avatar-initials');
+    button.innerHTML = `<img class="avatar" src="${escapeHtml(user.photo)}" alt="">`;
+  } else {
+    button.classList.add('avatar-initials');
+    button.textContent = user ? getInitials(user.prenom, user.nom) : '?';
+    if (user) button.classList.add(getAvatarColorClass(user.prenom, user.nom));
+  }
 }
 
 function bindUserMenuEvents() {
@@ -13554,7 +13567,7 @@ function renderParametresMonCompte() {
   return `
     <div class="card">
       <h2>Photo de profil</h2>
-      <p class="text-muted" style="margin: 0 0 8px;">Affichée à côté de votre nom partout dans l'application (Planning, listes de salariés...).</p>
+      <p class="text-muted" style="margin: 0 0 8px;">Affichée à côté de votre nom partout dans l'application (Planning, listes de salariés, en haut à droite...).</p>
       <div style="display: flex; align-items: center; gap: 14px;">
         ${renderAvatar(user)}
         <div>
@@ -13566,21 +13579,151 @@ function renderParametresMonCompte() {
   `;
 }
 
+/** §retour Betty du 10/09/2026 ("qu'on puisse la recadrer quand on la met") : la photo choisie passe
+ * par openPhotoCropModal (recadrage) AVANT l'upload — jamais le fichier brut tel que sélectionné.
+ * renderUserMenuButton() est appelée en plus de render() : contrairement au reste de l'app, l'avatar
+ * "en haut à droite" (bouton du menu utilisateur) n'est pas dans #view-root et ne se redessine donc
+ * jamais tout seul via render() (voir showApp(), seul autre appelant de renderUserMenuButton). */
 function bindParametresMonCompteEvents() {
   const user = authRepository.getCurrentUser();
   const photoUploadInput = document.getElementById('f-photo-upload');
   document.getElementById('btn-upload-photo').addEventListener('click', () => photoUploadInput.click());
-  photoUploadInput.addEventListener('change', async () => {
+  photoUploadInput.addEventListener('change', () => {
     const file = photoUploadInput.files[0];
+    photoUploadInput.value = '';
     if (!file) return;
-    try {
-      await employeeRepository.uploadMyPhoto(user.id, file);
-      showToast('Photo de profil mise à jour.');
-      render();
-    } catch (err) {
-      showToast(err.message || 'Impossible de mettre à jour la photo.', 'error');
-    }
+    openPhotoCropModal(file, async (croppedFile) => {
+      try {
+        await employeeRepository.uploadMyPhoto(user.id, croppedFile);
+        showToast('Photo de profil mise à jour.');
+        renderUserMenuButton();
+        render();
+      } catch (err) {
+        showToast(err.message || 'Impossible de mettre à jour la photo.', 'error');
+      }
+    });
   });
+}
+
+/** §retour Betty du 10/09/2026 ("qu'on puisse la recadrer quand on la met") : recadrage simple avant
+ * upload — zoom (molette/glissière) + déplacement (glisser-déposer) de la photo dans une fenêtre
+ * carrée fixe, exactement comme la plupart des uploads d'avatar (Slack, GitHub...). Pas de
+ * bibliothèque tierce : l'appli n'a aucune dépendance externe embarquée (voir qrcode.js, vendu
+ * localement) — un simple <canvas> suffit pour ce besoin, jamais qu'un carré de sortie (la photo
+ * s'affiche toujours en cercle, voir .avatar), pas de ratio à choisir. `onConfirm(croppedFile)`
+ * reçoit un File JPEG déjà recadré, jamais le fichier brut sélectionné par l'utilisateur. */
+function openPhotoCropModal(file, onConfirm) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const stageSize = 280;
+    const outputSize = 400;
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let baseScale = 1;
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    let dragging = false;
+    let dragStart = null;
+
+    const html = `
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Recadrer la photo</h2>
+          <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+        </div>
+        <div class="modal-body">
+          <div class="photo-crop-stage" id="photo-crop-stage" style="width: ${stageSize}px; height: ${stageSize}px;">
+            <img id="photo-crop-img" src="${reader.result}" alt="" draggable="false">
+          </div>
+          <div class="form-field" style="margin-top: 14px;">
+            <label for="photo-crop-zoom">Zoom</label>
+            <input type="range" id="photo-crop-zoom" min="1" max="3" step="0.01" value="1">
+          </div>
+          <p class="text-muted">Faites glisser la photo pour la repositionner.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-crop">Valider</button>
+        </div>
+      </div>
+    `;
+    const modalRoot = document.getElementById('modal-root');
+    modalRoot.innerHTML = html;
+    modalRoot.classList.add('open');
+
+    const imgEl = document.getElementById('photo-crop-img');
+    const zoomInput = document.getElementById('photo-crop-zoom');
+
+    // Recentre/clampe la position à chaque changement (zoom ou glisser) : l'image doit TOUJOURS
+    // couvrir entièrement le carré de recadrage, jamais laisser un bord vide.
+    const applyTransform = () => {
+      const scale = baseScale * zoom;
+      const dispW = naturalWidth * scale;
+      const dispH = naturalHeight * scale;
+      const minX = stageSize - dispW;
+      const minY = stageSize - dispH;
+      panX = Math.min(0, Math.max(minX, panX));
+      panY = Math.min(0, Math.max(minY, panY));
+      imgEl.style.width = `${dispW}px`;
+      imgEl.style.height = `${dispH}px`;
+      imgEl.style.left = `${panX}px`;
+      imgEl.style.top = `${panY}px`;
+    };
+
+    imgEl.onload = () => {
+      naturalWidth = imgEl.naturalWidth;
+      naturalHeight = imgEl.naturalHeight;
+      // "Cover" du carré de recadrage au zoom minimal (1x), comme un background-size:cover.
+      baseScale = Math.max(stageSize / naturalWidth, stageSize / naturalHeight);
+      panX = (stageSize - naturalWidth * baseScale) / 2;
+      panY = (stageSize - naturalHeight * baseScale) / 2;
+      applyTransform();
+    };
+
+    zoomInput.addEventListener('input', () => {
+      zoom = Number(zoomInput.value);
+      applyTransform();
+    });
+
+    imgEl.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      dragStart = { x: e.clientX - panX, y: e.clientY - panY };
+      imgEl.setPointerCapture(e.pointerId);
+    });
+    imgEl.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      panX = e.clientX - dragStart.x;
+      panY = e.clientY - dragStart.y;
+      applyTransform();
+    });
+    imgEl.addEventListener('pointerup', () => { dragging = false; });
+    imgEl.addEventListener('pointercancel', () => { dragging = false; });
+
+    document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-confirm-crop').addEventListener('click', () => {
+      // Fenêtre visible du carré de recadrage, ramenée aux coordonnées pixel de l'image SOURCE
+      // (avant mise à l'échelle) : c'est cette zone-là, et uniquement elle, qui doit être découpée.
+      const scale = baseScale * zoom;
+      const sourceX = -panX / scale;
+      const sourceY = -panY / scale;
+      const sourceSize = stageSize / scale;
+      const canvas = document.createElement('canvas');
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imgEl, sourceX, sourceY, sourceSize, sourceSize, 0, 0, outputSize, outputSize);
+      canvas.toBlob(blob => {
+        if (!blob) { showToast('Impossible de recadrer cette image.', 'error'); return; }
+        const croppedFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+        closeModal();
+        onConfirm(croppedFile);
+      }, 'image/jpeg', 0.9);
+    });
+  };
+  reader.onerror = () => showToast('Impossible de lire ce fichier.', 'error');
+  reader.readAsDataURL(file);
 }
 
 /** Sprint SIRH premium §1 : le prompt d'origine demandait la gestion des types d'absences
