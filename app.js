@@ -12890,6 +12890,9 @@ function renderAbsenceCalendarBoard(sharedData) {
         <option value="">Tous les services</option>
         ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.calendarServiceFilter === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
+      <!-- §demande Betty du 10/09/2026 : pouvoir transférer le calendrier des absences vers Excel —
+           même bouton/gabarit que exportEmployeesExcel (Salariés), respecte le filtre service actif. -->
+      <button type="button" class="btn btn-secondary" id="btn-export-absence-calendar">Exporter Excel</button>
     </div>
     <div class="absence-cal-legend">
       ${leaveTypeRepository.getLeaveTypes().map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
@@ -13044,6 +13047,66 @@ function bindCalendrierEvents() {
       render();
     });
   }
+
+  const exportBtn = document.getElementById('btn-export-absence-calendar');
+  if (exportBtn) exportBtn.addEventListener('click', exportAbsenceCalendarExcel);
+}
+
+/** §demande Betty du 10/09/2026 ("mets un bouton exporter Excel dans le calendrier entreprise") :
+ * un salarié par ligne, un jour du mois affiché par colonne (même mois/filtre service que ce qui est
+ * à l'écran), la cellule reprenant le même libellé que la barre correspondante dans
+ * renderAbsenceCalendarRow (nom du type de congé ou "Télétravail", "(en attente)" si non validé) —
+ * pas le même regroupement par segments/colspan (qui n'a de sens qu'à l'affichage), une valeur par
+ * jour, plus simple à exploiter dans un tableur. */
+async function exportAbsenceCalendarExcel() {
+  try {
+    await loadXLSXLibrary();
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = buildMonthGridCells(year, month);
+  const sharedData = buildCalendarSharedData(cells);
+  let employees = sharedData.employees;
+  if (state.calendarServiceFilter) employees = employees.filter(e => e.service === state.calendarServiceFilter);
+  const { leaveRequests, teleworkRequests, leaveTypesById } = sharedData;
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const headers = ['Salarié', 'Service', ...days.map(String)];
+  const rows = [];
+  groupEmployeesByServiceAndEquipe(employees).forEach(g => {
+    g.equipes.forEach(eq => {
+      eq.employees.forEach(e => {
+        const row = [`${e.prenom} ${e.nom}`, e.service];
+        days.forEach(day => {
+          const dateStr = toISODate(new Date(year, month, day));
+          const leave = leaveRequests.find(r => r.employeeId === e.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+          const telework = !leave && teleworkRequests.find(r => r.employeeId === e.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
+          let label = '';
+          if (leave) {
+            const type = leaveTypesById.get(leave.typeId);
+            label = type ? type.nom : 'Congé';
+            if (leave.statut !== 'Validé') label += ' (en attente)';
+          } else if (telework) {
+            label = 'Télétravail';
+            if (telework.statut !== 'Validé') label += ' (en attente)';
+          }
+          row.push(label);
+        });
+        rows.push(row);
+      });
+    });
+  });
+
+  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Calendrier');
+  const monthSlug = `${year}-${String(month + 1).padStart(2, '0')}`;
+  XLSX.writeFile(workbook, `calendrier-absences-${monthSlug}.xlsx`);
+  auditLogRepository.logAudit('Export', 'Calendrier des absences', `${MONTH_NAMES[month]} ${year}, ${employees.length} salarié${employees.length > 1 ? 's' : ''}`);
 }
 
 /** Extrait de bindCalendrierEvents : le contenu du popover Filtres est régénéré à chaque ouverture
