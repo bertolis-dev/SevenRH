@@ -12885,14 +12885,17 @@ function renderCalendrier() {
         <!-- §demande Betty du 10/09/2026 : le filtre service et l'export Excel du calendrier
              entreprise remontent dans la barre dorée (avec Aujourd'hui) plutôt que dans leur propre
              ligne sous le bascule Moi/Équipe — gagne une ligne de hauteur sur l'écran, voir
-             renderAbsenceCalendarBoard, où ce bloc figurait auparavant. -->
+             renderAbsenceCalendarBoard, où ce bloc figurait auparavant. §retour Betty du 10/09/2026
+             ("le bouton filtres dans calendrier moi [...] tu le mets à droite") : même traitement
+             pour la vue Moi — le bouton "Filtres" (renderCalendarFilterBar) remonte lui aussi dans
+             cette barre plutôt que dans sa propre ligne sous la grille. -->
         ${!sharedData.vuePersonnelle ? `
           <select id="absence-cal-filter-service" class="input">
             <option value="">Tous les services</option>
             ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.calendarServiceFilter === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
           </select>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-export-absence-calendar">Exporter Excel</button>
-        ` : ''}
+        ` : renderCalendarFilterBar()}
         <button class="btn btn-secondary btn-sm" id="btn-cal-today">Aujourd'hui</button>
       </div>
     </div>
@@ -12911,7 +12914,6 @@ function renderCalendrier() {
         </div>
       </div>
 
-      ${renderCalendarFilterBar()}
       ${coverageGap ? `<p class="text-muted" style="margin-top: 10px;">${icon(ICONS.calendar, 14)} Les vacances scolaires ne sont pas encore renseignées pour cette période. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Ajouter l'année scolaire suivante</button></p>` : ''}
     `}
   `;

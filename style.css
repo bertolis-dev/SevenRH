@@ -1391,6 +1391,10 @@ textarea.input { resize: vertical; font-family: inherit; }
    grille (cf. .legend-item ci-dessous, désormais réservé au contenu du popover) — remplacée par une
    bande compacte (pastilles de couleur seules) + un bouton "Filtres" ouvrant .dropdown-panel. */
 .calendar-filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+/* §retour Betty du 10/09/2026 ("le bouton filtres dans calendrier moi [...] tu le mets à droite") :
+   remonté dans .calendar-nav (barre dorée du haut, voir renderCalendrier) — plus besoin de la marge
+   du dessus, pensée pour sa propre ligne sous la grille. */
+.calendar-nav .calendar-filter-bar { margin-top: 0; }
 .calendar-filter-dots { display: flex; align-items: center; gap: 6px; }
 .calendar-filter-dot { width: 12px; height: 12px; border-radius: 4px; transition: opacity 0.15s ease; }
 .calendar-filter-dot.legend-item-inactive { opacity: 0.25; }
