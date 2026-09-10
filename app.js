@@ -12829,6 +12829,17 @@ function renderCalendrier() {
         <button type="button" class="calendar-month-nav-btn" id="btn-cal-next" aria-label="Mois suivant" title="Mois suivant">›</button>
       </div>
       <div class="calendar-nav">
+        <!-- §demande Betty du 10/09/2026 : le filtre service et l'export Excel du calendrier
+             entreprise remontent dans la barre dorée (avec Aujourd'hui) plutôt que dans leur propre
+             ligne sous le bascule Moi/Équipe — gagne une ligne de hauteur sur l'écran, voir
+             renderAbsenceCalendarBoard, où ce bloc figurait auparavant. -->
+        ${!sharedData.vuePersonnelle ? `
+          <select id="absence-cal-filter-service" class="input">
+            <option value="">Tous les services</option>
+            ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.calendarServiceFilter === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-export-absence-calendar">Exporter Excel</button>
+        ` : ''}
         <button class="btn btn-secondary btn-sm" id="btn-cal-today">Aujourd'hui</button>
       </div>
     </div>
@@ -12885,15 +12896,6 @@ function renderAbsenceCalendarBoard(sharedData) {
   };
 
   return `
-    <div class="toolbar card">
-      <select id="absence-cal-filter-service" class="input">
-        <option value="">Tous les services</option>
-        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.calendarServiceFilter === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
-      </select>
-      <!-- §demande Betty du 10/09/2026 : pouvoir transférer le calendrier des absences vers Excel —
-           même bouton/gabarit que exportEmployeesExcel (Salariés), respecte le filtre service actif. -->
-      <button type="button" class="btn btn-secondary" id="btn-export-absence-calendar">Exporter Excel</button>
-    </div>
     <div class="absence-cal-legend">
       ${leaveTypeRepository.getLeaveTypes().map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
       <span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>
