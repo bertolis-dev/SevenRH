@@ -200,6 +200,9 @@ globalThis.__updateLeaveRequestHints = updateLeaveRequestHints;
 globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
 globalThis.__renderPlanningPostes = renderPlanningPostes;
 globalThis.__renderPlanning = renderPlanning;
+globalThis.__renderTeletravailPlanning = renderTeletravailPlanning;
+globalThis.__getWeekDates = getWeekDates;
+globalThis.__toISODate = toISODate;
 globalThis.__openShiftModal = openShiftModal;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
@@ -317,6 +320,9 @@ globalThis.__openShiftModal = openShiftModal;
     FILTER_RESET_HANDLERS: sandbox.__FILTER_RESET_HANDLERS,
     renderPlanningPostes: sandbox.__renderPlanningPostes,
     renderPlanning: sandbox.__renderPlanning,
+    renderTeletravailPlanning: sandbox.__renderTeletravailPlanning,
+    getWeekDates: sandbox.__getWeekDates,
+    toISODate: sandbox.__toISODate,
     openShiftModal: sandbox.__openShiftModal,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,

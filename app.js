@@ -179,6 +179,9 @@ function getInitialViewState() {
     teletravailFilters: { employeeId: '', statut: '' },
     teletravailPage: 1,
     teletravailWeekOffset: 0,
+    // §retour Betty du 10/09/2026 ("fais le même planning pour le planning télétravail") : même
+    // en-tête triable que la grille de quarts de Planning (voir renderPlanningPostes/state.planningPostesSortDir).
+    teletravailSortDir: 'asc', // 'asc' (prénom A-Z) | 'desc' (Z-A)
     // §retour Betty du 07/09/2026 (point 13) : periode ('YYYY-MM', vide = pas de filtre) — pour
     // clôturer un mois, il faut pouvoir s'y limiter, impossible jusqu'ici (seuls salarié/catégorie/
     // statut existaient). Filtré à part de applyStateFilters (égalité stricte, ne convient pas à un
@@ -17609,13 +17612,16 @@ function getWeekDates(weekOffset) {
   return getWeekDatesContaining(toISODate(addDays(new Date(), weekOffset * 7)));
 }
 
-/** §demande Betty du 10/09/2026 ("fais la même forme de planning que le planning de base") : reprend
- * exactement le même gabarit que renderPlanningSemaine (cartes de statut colorées, avatar + poste,
- * regroupement par service via renderPlanningGroupRows) au lieu de l'ancien design (une icône plate
- * par case, aucun regroupement) — seule la ligne de synthèse "Présents au bureau", propre à cet écran
- * et absente du Planning général, reste inchangée en bas de tableau (globale, pas par service : elle
- * existait déjà sous cette forme avant ce changement). Pas de colonne Total ni de crayon horaires
- * (non câblé par bindTeletravailPlanningEvents) : au-delà du strict nécessaire pour "la même forme". */
+/** §retour Betty du 10/09/2026 ("fais le même planning pour le planning télétravail dans congés et
+ * absences") : reprend la STRUCTURE de la grille de quarts de Planning (renderPlanningPostes) —
+ * en-tête "Prénom" triable, regroupement par SERVICE uniquement (groupEmployeesByService, plus de
+ * sous-groupe équipe), cartes de statut en carte flottante (accent gauche, ombre, coins arrondis,
+ * voir .teletravail-planning-card dans style.css) au lieu du remplissage bord à bord d'avant. Betty a
+ * explicitement demandé de GARDER les trois couleurs sémantiques par statut (bureau/télétravail/
+ * congé, voir .planning-shift-office/-remote/-leave) — seule la carte change de FORME, jamais la
+ * couleur en une teinte unique comme sur la grille de quarts (qui n'a qu'un seul statut possible,
+ * contrairement à ce planning-ci). La ligne de synthèse "Présents au bureau" (propre à cet écran)
+ * reste inchangée en bas de tableau. */
 function renderTeletravailPlanning() {
   const weekDates = getWeekDates(state.teletravailWeekOffset);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -17623,6 +17629,33 @@ function renderTeletravailPlanning() {
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+
+  const sortEmployees = (list) => list.slice().sort((a, b) =>
+    state.teletravailSortDir === 'desc' ? b.prenom.localeCompare(a.prenom) : a.prenom.localeCompare(b.prenom)
+  );
+
+  const bodyHtml = groupEmployeesByService(employees).map(g => {
+    const groupEmployees = sortEmployees(g.employees);
+    return `
+      <tr class="planning-service-header"><td colspan="${weekDates.length + 1}">
+        <div class="poste-group-header-row">
+          <span>${escapeHtml(g.service)} <span class="text-muted">(${groupEmployees.length})</span></span>
+        </div>
+      </td></tr>
+      ${groupEmployees.map(e => `
+        <tr>
+          <td class="planning-employee-cell">
+            ${renderAvatar(e)}
+            <div class="planning-employee-info">
+              ${personNameWithPosteHtml(e)}
+              ${renderPlanningEmployeeBadges(e)}
+            </div>
+          </td>
+          ${renderPlanningDayCells(e, weekDates.map(toISODate), leaveRequests, teleworkRequests, true)}
+        </tr>
+      `).join('')}
+    `;
+  }).join('');
 
   return `
     <div class="view-header-row">
@@ -17633,28 +17666,17 @@ function renderTeletravailPlanning() {
         <button class="btn btn-secondary btn-sm" id="btn-week-next">Suivante →</button>
       </div>
     </div>
-    <div class="card table-card planning-scroll-card">
+    <div class="card table-card planning-scroll-card teletravail-planning-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead>
             <tr>
-              <th>Salarié</th>
+              <th id="btn-teletravail-sort-name" style="cursor: pointer;">↕ Prénom (${state.teletravailSortDir === 'desc' ? 'Z-A' : 'A-Z'}) <span style="opacity:0.6;">▾</span></th>
               ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
-              <tr>
-                <td class="planning-employee-cell">
-                  ${renderAvatar(e)}
-                  <div class="planning-employee-info">
-                    ${personNameWithPosteHtml(e)}
-                    ${renderPlanningEmployeeBadges(e)}
-                  </div>
-                </td>
-                ${renderPlanningDayCells(e, weekDates.map(toISODate), leaveRequests, teleworkRequests, true)}
-              </tr>
-            `)}
+            ${bodyHtml}
             <tr class="planning-summary-row">
               <td><strong>Présents au bureau</strong></td>
               ${weekDates.map(d => `<td>${countPresentOnDate(d, employees, teleworkRequests, leaveRequests)}</td>`).join('')}
@@ -17682,6 +17704,12 @@ function bindTeletravailPlanningEvents() {
   document.getElementById('btn-week-prev').addEventListener('click', () => { state.teletravailWeekOffset -= 1; render(); });
   document.getElementById('btn-week-next').addEventListener('click', () => { state.teletravailWeekOffset += 1; render(); });
   document.getElementById('btn-week-today').addEventListener('click', () => { state.teletravailWeekOffset = 0; render(); });
+  // §retour Betty du 10/09/2026 : même en-tête triable que la grille de quarts de Planning.
+  const sortBtn = document.getElementById('btn-teletravail-sort-name');
+  if (sortBtn) sortBtn.addEventListener('click', () => {
+    state.teletravailSortDir = state.teletravailSortDir === 'desc' ? 'asc' : 'desc';
+    render();
+  });
 }
 
 // ---------------------------------------------------------------------------
