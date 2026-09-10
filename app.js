@@ -16831,7 +16831,7 @@ function renderPlanningPostes() {
             const noms = [...new Set(employeeShifts(employee.id).map(s => (allPositions.find(p => p.id === s.positionId) || {}).nom).filter(Boolean))];
             return `<span class="poste-tag">${escapeHtml(noms.join(', ') || '—')}</span>`;
           })() : ''}
-          <div class="planning-employee-badges"><span class="planning-employee-badge">${formatNumberFR(employeeWeekHeures(employee.id))} h</span></div>
+          <div class="poste-employee-hours">${formatNumberFR(employeeWeekHeures(employee.id))} h</div>
         </div>
       </td>
       ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7], positionId)).join('')}

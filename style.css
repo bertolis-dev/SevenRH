@@ -1799,6 +1799,11 @@ textarea.input { resize: vertical; font-family: inherit; }
    bandeau de groupe (voir renderPlanningPostes). */
 .poste-tag { display: inline-block; font-size: 11px; background: var(--color-muted-soft); color: var(--color-text-muted); padding: 1px 6px; border-radius: 6px; margin-top: 2px; }
 
+/* §retour Betty du 10/09/2026 (3e envoi de la même référence, "ça doit ressembler à ça") : texte
+   simple sous le nom, comme la maquette — pas un badge/pilule grisé (.planning-employee-badge, gardé
+   tel quel pour le Planning principal, jamais demandé à changer là-bas). */
+.poste-employee-hours { font-size: 12px; font-weight: 700; color: var(--color-primary-text); margin-top: 2px; }
+
 .poste-budget-row td { background: var(--color-gold-soft); border-top: 2px solid var(--color-gold); font-weight: 700; }
 
 /* Panneau de filtres + grille côte à côte ne tient pas sur un écran de téléphone (voir .poste-layout
