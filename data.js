@@ -2275,6 +2275,20 @@ const DB = {
     return { success: true };
   },
 
+  /** §retour Betty du 10/09/2026 ("dans les paramètres on puisse changer la photo de profil") :
+   * auto-service ouvert à TOUT rôle (Paramètres > Mon compte, voir renderParametresMonCompte,
+   * accessible même à un salarié) — même philosophie que majPropresCoordonnees juste au-dessus
+   * (signature étroite : seulement l'URL déjà téléversée, jamais un patch générique). L'upload
+   * lui-même (vers le bucket "employee-photos") est fait par employeeRepository.uploadMyPhoto AVANT
+   * d'appeler cette méthode, qui ne fait qu'enregistrer l'URL obtenue. */
+  majMaPhoto(employeeId, photoUrl) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    this.updateEmployee(employeeId, { photo: photoUrl });
+    this.logAudit('Modification', 'Photo de profil', `${employee.prenom} ${employee.nom} (auto-modification)`);
+    return { success: true };
+  },
+
   /** § GERER_UTILISATEURS : débloque un compte verrouillé (5 tentatives échouées, cf. login()) sans
    * changer son mot de passe — utile quand le salarié se souvient de son mot de passe mais a été
    * bloqué par erreur (ex. faute de frappe répétée). */
@@ -3442,6 +3456,14 @@ const employeeRepository = {
   ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
   ajusterReposCompensateurPris: (employeeId, year, month, heures, motif) => DB.ajusterReposCompensateurPris(employeeId, year, month, heures, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
+  /** §retour Betty du 10/09/2026 : téléverse le fichier vers le bucket "employee-photos" (URL
+   * publique permanente, même patron que companyRepository.uploadLogo) puis enregistre l'URL sur
+   * le salarié — voir DB.majMaPhoto. */
+  async uploadMyPhoto(employeeId, file) {
+    const url = await window.SupabaseSync.uploadEmployeePhoto(DB.getCurrentCompanyId(), employeeId, file);
+    DB.majMaPhoto(employeeId, url);
+    return url;
+  },
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),
   creerCompteConnexion: (employeeId) => DB.creerCompteConnexion(employeeId),

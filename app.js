@@ -492,7 +492,15 @@ const NAV_ITEMS = [
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
   // existante (navParams sélectionne directement l'onglet), pas une nouvelle vue.
-  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['proprietaire'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } }
+  { key: 'parametres', label: 'Abonnement', icon: ICONS.card, roles: ['proprietaire'], permissions: [PERMISSIONS.GERER_ABONNEMENTS], navParams: { parametresTab: 'abonnement' } },
+  // §retour Betty du 10/09/2026 ("dans les paramètres on puisse changer la photo de profil") :
+  // contrairement aux deux entrées "parametres" ci-dessus (réservées à qui gère l'entreprise), "Mon
+  // compte" doit être atteignable par TOUT rôle (voir PARAMETRES_TABS, canManageParametres — chaque
+  // AUTRE onglet de Paramètres reste cependant cadenassé pour qui n'a pas gererParametres). Sans
+  // `permissions`, `roles.includes(user.role)` s'applique (voir baseNavItemsForRole) — Object.values
+  // couvre bien tous les rôles présents et futurs. Même exclusion de la barre latérale (par key, voir
+  // renderSidebar) que les deux entrées ci-dessus — accessible uniquement via le menu utilisateur.
+  { key: 'parametres', label: 'Mon compte', icon: ICONS.gear, roles: Object.values(ROLES), navParams: { parametresTab: 'mon-compte' } }
 ];
 
 /** §correctif retour QA du 27/08/2026 (point 2) : table de correspondance préfixe de sourceKey ->
@@ -3302,6 +3310,7 @@ function renderUserMenuPanel() {
     ${canSeeGroupSummary ? `<button type="button" class="user-menu-item" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
     <div class="user-menu-divider"></div>
+    <button type="button" class="user-menu-item" id="btn-user-menu-mon-compte">${icon(ICONS.gear, 14)} Mon compte</button>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
@@ -3365,6 +3374,12 @@ function renderUserMenuPanel() {
       openGroupSummaryModal();
     });
   }
+
+  document.getElementById('btn-user-menu-mon-compte').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    state.parametresTab = 'mon-compte';
+    navigateTo('parametres');
+  });
 
   if (canGererParametres) {
     document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
@@ -13449,18 +13464,31 @@ const SETTINGS_LIST_USAGE_CHECK = {
  * seul tableau, une seule vérité : ajouter/retirer un onglet ou changer son module requis se fait
  * ICI et nulle part ailleurs. `isVisible` est un prédicat sans argument (comme hasModule()) — chaque
  * onglet lit lui-même ce dont il a besoin plutôt que de le recevoir en paramètre. */
+// §retour Betty du 10/09/2026 ("dans les paramètres on puisse changer la photo de profil") : la vue
+// "parametres" était jusqu'ici entièrement gated à RH/Propriétaire au niveau de NAV_ITEMS (seul rôle
+// pouvant même l'atteindre) — les `isVisible` ci-dessous n'avaient donc jamais eu besoin de vérifier
+// eux-mêmes gererParametres. Le nouvel onglet "Mon compte" ouvre désormais cette vue à TOUT rôle
+// (voir NAV_ITEMS, l'entrée "Mon compte") : chaque AUTRE onglet doit donc vérifier cette permission
+// EXPLICITEMENT ici, sinon un salarié qui atteint "Mon compte" verrait aussi les onglets
+// d'administration de l'entreprise dans la liste (le "Référentiels"/"Entreprise" affichés, même sans
+// bouton pour les modifier, resteraient une fuite d'information).
+const canManageParametres = () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
+
 const PARAMETRES_TABS = [
-  { key: 'entreprise', label: 'Entreprise', isVisible: () => true, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
+  { key: 'entreprise', label: 'Entreprise', isVisible: canManageParametres, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
   { key: 'abonnement', label: 'Abonnement', isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
-  { key: 'etablissements', label: 'Établissements', isVisible: () => true, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
-  { key: 'services', label: 'Services &amp; équipes', isVisible: () => true, render: renderParametresServices, bind: bindParametresServicesEvents },
-  { key: 'types-absences', label: "Types d'absences", isVisible: () => hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
-  { key: 'listes', label: 'Référentiels', isVisible: () => true, render: renderParametresListes, bind: bindParametresListesEvents },
-  { key: 'vacances', label: 'Vacances scolaires', isVisible: () => hasModule('conges'), render: renderParametresVacances, bind: bindParametresVacancesEvents },
-  { key: 'feries', label: 'Jours fériés', isVisible: () => true, render: renderParametresFeries, bind: bindParametresFeriesEvents },
-  { key: 'fermetures', label: 'Fermetures', isVisible: () => hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
-  { key: 'integrations', label: 'Intégrations', isVisible: () => hasModule('conges') || hasModule('planning') || hasModule('frais'), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
-  { key: 'audit', label: 'Audit', isVisible: () => true, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
+  { key: 'etablissements', label: 'Établissements', isVisible: canManageParametres, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
+  { key: 'services', label: 'Services &amp; équipes', isVisible: canManageParametres, render: renderParametresServices, bind: bindParametresServicesEvents },
+  { key: 'types-absences', label: "Types d'absences", isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
+  { key: 'listes', label: 'Référentiels', isVisible: canManageParametres, render: renderParametresListes, bind: bindParametresListesEvents },
+  { key: 'vacances', label: 'Vacances scolaires', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresVacances, bind: bindParametresVacancesEvents },
+  { key: 'feries', label: 'Jours fériés', isVisible: canManageParametres, render: renderParametresFeries, bind: bindParametresFeriesEvents },
+  { key: 'fermetures', label: 'Fermetures', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
+  { key: 'integrations', label: 'Intégrations', isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
+  { key: 'audit', label: 'Audit', isVisible: canManageParametres, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
+  // Seul onglet accessible à TOUT rôle (voir le commentaire au-dessus) — photo de profil visible
+  // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé.
+  { key: 'mon-compte', label: 'Mon compte', isVisible: () => true, render: renderParametresMonCompte, bind: bindParametresMonCompteEvents },
 ];
 
 function renderParametres() {
@@ -13480,15 +13508,21 @@ function renderParametres() {
   // cas par cas (abonnement, puis 4 onglets liés aux modules) par UNE seule règle générique, valable
   // pour tout onglet présent dans PARAMETRES_TABS — un lien profond ou un changement de modules en
   // cours de session ne laisse donc jamais l'état pointer vers un onglet devenu invisible.
-  if (!PARAMETRES_TABS.some(t => t.key === state.parametresTab && t.isVisible())) state.parametresTab = 'listes';
+  // §retour Betty du 10/09/2026 : "listes" (le repli historique ci-dessus) n'est plus visible pour
+  // qui n'a pas gererParametres (voir canManageParametres) — un salarié dont l'onglet demandé est
+  // devenu invisible doit retomber sur "Mon compte" (toujours visible), jamais rester bloqué.
+  if (!PARAMETRES_TABS.some(t => t.key === state.parametresTab && t.isVisible())) {
+    const listes = PARAMETRES_TABS.find(t => t.key === 'listes');
+    state.parametresTab = (listes && listes.isVisible()) ? 'listes' : 'mon-compte';
+  }
 
   const visibleTabs = PARAMETRES_TABS.filter(t => t.isVisible());
-  const activeTab = PARAMETRES_TABS.find(t => t.key === state.parametresTab) || PARAMETRES_TABS.find(t => t.key === 'listes');
+  const activeTab = PARAMETRES_TABS.find(t => t.key === state.parametresTab) || PARAMETRES_TABS.find(t => t.key === 'mon-compte');
 
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
-      <p class="view-subtitle">Entreprise, types d'absences, référentiels, vacances scolaires, jours fériés et journal d'audit</p>
+      <p class="view-subtitle">${canManageParametres() ? "Entreprise, types d'absences, référentiels, vacances scolaires, jours fériés et journal d'audit" : 'Vos réglages personnels'}</p>
     </div>
     <div class="tabs parametres-tabs-desktop">
       ${visibleTabs.map(t => `<button class="tab ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">${t.label}</button>`).join('')}
@@ -13503,6 +13537,47 @@ function renderParametres() {
       ${activeTab.render()}
     </div>
   `;
+}
+
+// ---- Sous-vue : Mon compte (§retour Betty du 10/09/2026, ouverte à TOUT rôle) ----
+
+/** Photo de profil (§retour Betty du 10/09/2026 : "dans les paramètres on puisse changer la photo
+ * de profil pour qu'on puisse voir dans le planning") — employees.photo existe déjà et est déjà lu
+ * par renderAvatar() partout dans l'app (Planning, listes de salariés...), il ne manquait qu'un
+ * moyen de le renseigner. Même patron que le logo d'entreprise (renderParametresEntreprise) : aperçu
+ * + bouton qui déclenche un input file caché. */
+function renderParametresMonCompte() {
+  const user = authRepository.getCurrentUser();
+  return `
+    <div class="card">
+      <h2>Photo de profil</h2>
+      <p class="text-muted" style="margin: 0 0 8px;">Affichée à côté de votre nom partout dans l'application (Planning, listes de salariés...).</p>
+      <div style="display: flex; align-items: center; gap: 14px;">
+        ${renderAvatar(user)}
+        <div>
+          <input type="file" id="f-photo-upload" accept="image/png,image/jpeg" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-upload-photo">Changer la photo</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindParametresMonCompteEvents() {
+  const user = authRepository.getCurrentUser();
+  const photoUploadInput = document.getElementById('f-photo-upload');
+  document.getElementById('btn-upload-photo').addEventListener('click', () => photoUploadInput.click());
+  photoUploadInput.addEventListener('change', async () => {
+    const file = photoUploadInput.files[0];
+    if (!file) return;
+    try {
+      await employeeRepository.uploadMyPhoto(user.id, file);
+      showToast('Photo de profil mise à jour.');
+      render();
+    } catch (err) {
+      showToast(err.message || 'Impossible de mettre à jour la photo.', 'error');
+    }
+  });
 }
 
 /** Sprint SIRH premium §1 : le prompt d'origine demandait la gestion des types d'absences

@@ -79,6 +79,7 @@ function loadAppJs() {
 ;globalThis.__DB = DB;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
 globalThis.__shiftRepository = shiftRepository;
+globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
 globalThis.__seedExampleShifts = seedExampleShifts;
 `;
@@ -208,6 +209,7 @@ globalThis.__openShiftModal = openShiftModal;
     DB: sandbox.__DB,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
     shiftRepository: sandbox.__shiftRepository,
+    employeeRepository: sandbox.__employeeRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,
     syncNotifications: sandbox.__syncNotifications,
