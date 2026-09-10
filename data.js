@@ -624,6 +624,10 @@ function seedCompany() {
     employees: seedEmployees(),
     services: seedServices(),
     positions: seedPositions(),
+    // §10/09/2026 : l'entreprise de démo est déjà entièrement curatée (salariés, congés...) — pas de
+    // quart d'exemple auto-généré ici (voir seedExampleShifts, qui ne concerne que les entreprises
+    // RÉELLES préexistantes n'ayant jamais eu le moindre quart).
+    exampleShiftsSeeded: true,
     leaveTypes: seedLeaveTypes(),
     schoolHolidays: seedSchoolHolidays()
   });
@@ -717,6 +721,23 @@ async function hydrateCurrentCompanyWithMigrations() {
         await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
       } catch (err) {
         console.error('migrateCompanyPositions : échec de synchronisation, retentera à la prochaine connexion.', err);
+      }
+    }
+    // §retour Betty du 10/09/2026 ("il y a plus de planning la [...] sans les salariés qu'il y a sur
+    // la photo") : une entreprise réelle qui vient de recevoir ses positions par défaut ci-dessus n'a
+    // encore AUCUN quart — la grille groupée par position (voir renderPlanningPostes) n'affiche alors
+    // rien du tout sous l'en-tête. Sème quelques quarts d'exemple avec les VRAIS salariés de
+    // l'entreprise (jamais les noms fictifs d'une référence externe) pour que l'écran soit peuplé dès
+    // la première visite. Mêmes garde-fous que ci-dessus (idempotent, poussé seulement si le droit
+    // d'écrire les paramètres est présent).
+    if (seedExampleShifts(company) && currentUser && hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) {
+      try {
+        const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+          teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+          brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+        await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
+      } catch (err) {
+        console.error('seedExampleShifts : échec de synchronisation, retentera à la prochaine connexion.', err);
       }
     }
   }
@@ -876,6 +897,42 @@ function migrateCompanyPositions(company) {
   return true;
 }
 
+/** §retour Betty du 10/09/2026 ("il y a plus de planning là, tu fais juste un planning comme ça sans
+ * les salariés qu'il y a sur la photo") : sans le moindre quart, la grille (regroupée par position)
+ * n'affiche RIEN sous l'en-tête — chaque position n'y apparaît que si elle a au moins un salarié
+ * avec un quart cette semaine (voir renderPlanningPostes, app.js), donc aucune position tant qu'il
+ * n'existe aucun quart du tout. Sème quelques quarts d'exemple sur les DEUX premières positions, avec
+ * les VRAIS salariés de l'entreprise (jamais les noms fictifs de la référence envoyée) — à modifier
+ * ou supprimer librement ensuite, juste de quoi voir l'écran peuplé au premier coup d'œil plutôt que
+ * vide. Idempotent via `exampleShiftsSeeded` : ne s'applique qu'une seule fois, jamais ré-appliqué
+ * même si tous les quarts d'exemple sont supprimés ensuite (contrairement à `company.shifts.length
+ * > 0`, qui aurait resemé après une suppression complète). */
+function seedExampleShifts(company) {
+  if (company.exampleShiftsSeeded) return false;
+  company.exampleShiftsSeeded = true;
+  if ((company.shifts || []).length > 0) return true;
+  const positions = (company.positions || []).slice(0, 2);
+  const employees = (company.employees || []).filter(e => !e.archive);
+  if (positions.length < 2 || employees.length === 0) return true;
+
+  const fullDays = ['Lun', 'Mar', 'Ven', 'Sam', 'Dim'];
+  const partialDays = ['Mer', 'Jeu'];
+  const plan = [
+    { heureDebut: '09:00', heureFin: '16:00', days: fullDays },
+    { heureDebut: '16:00', heureFin: '23:00', days: fullDays },
+    { heureDebut: '09:00', heureFin: '16:00', days: partialDays },
+    { heureDebut: '16:00', heureFin: '23:00', days: partialDays }
+  ];
+  const shifts = [];
+  employees.slice(0, 8).forEach((employee, i) => {
+    const position = positions[i % 2];
+    const { heureDebut, heureFin, days } = plan[Math.floor(i / 2) % plan.length];
+    days.forEach(weekday => shifts.push({ id: generateId('shift'), employeeId: employee.id, positionId: position.id, weekday, heureDebut, heureFin, pauseMinutes: 30 }));
+  });
+  company.shifts = shifts;
+  return true;
+}
+
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
  * session) et toute action qui cible une entreprise précise sans que ce soit "l'entreprise
  * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
@@ -985,7 +1042,8 @@ const DB = {
     const migratedAnciennete = companies.map(c => migrateAncienneteVersAutresAbsences(c)).some(Boolean);
     const migratedDemiJournee = companies.map(c => migrateLeaveTypeAutoriserDemiJournee(c)).some(Boolean);
     const migratedPositions = companies.map(c => migrateCompanyPositions(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete || migratedDemiJournee || migratedPositions) this.saveCompanies(companies);
+    const seededExampleShifts = companies.map(c => seedExampleShifts(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete || migratedDemiJournee || migratedPositions || seededExampleShifts) this.saveCompanies(companies);
 
     // §correctif audit du 23/08/2026 : cette clé contenait un identifiant BERTOLIS auto-semé avec
     // un mot de passe EN CLAIR, comparé côté client (bertolisLogin ci-dessous) — visible par

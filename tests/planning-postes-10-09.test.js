@@ -28,6 +28,37 @@ async function run() {
     assert.strictEqual(migrateCompanyPositions(companySansPositions), false, 'idempotent : un second passage ne doit plus rien changer');
   }
 
+  // ---- seedExampleShifts (retour Betty du 10/09/2026 : "il y a plus de planning la [...] sans les
+  // salariés qu'il y a sur la photo") : une entreprise réelle sans le moindre quart affichait une
+  // grille totalement vide sous l'en-tête (voir renderPlanningPostes) — sème quelques quarts
+  // d'exemple avec les VRAIS salariés de l'entreprise, une seule fois, jamais ré-appliqué. ----
+  {
+    const { seedPositions, seedExampleShifts } = loadAppJs();
+    const companySansRien = {
+      positions: seedPositions(),
+      shifts: [],
+      employees: [
+        { id: 'e1', prenom: 'Alice', archive: false },
+        { id: 'e2', prenom: 'Bob', archive: false },
+        { id: 'e3', prenom: 'Carla', archive: true }
+      ]
+    };
+    assert.strictEqual(seedExampleShifts(companySansRien), true, 'doit sémer des quarts d\'exemple');
+    assert.ok(companySansRien.shifts.length > 0, 'des quarts d\'exemple doivent être créés');
+    assert.ok(companySansRien.shifts.every(s => ['e1', 'e2'].includes(s.employeeId)), 'seuls les salariés réels non archivés doivent être utilisés (jamais un salarié fictif)');
+    assert.strictEqual(companySansRien.exampleShiftsSeeded, true);
+
+    // Idempotent : un second appel ne fait plus rien, même après suppression totale des quarts.
+    companySansRien.shifts = [];
+    assert.strictEqual(seedExampleShifts(companySansRien), false, 'ne doit plus jamais reséminer une fois déjà marqué');
+    assert.strictEqual(companySansRien.shifts.length, 0, 'les quarts supprimés par l\'utilisateur ne doivent pas revenir');
+
+    // Sans salarié ou avec moins de deux positions, ne crée aucun quart mais marque quand même comme fait.
+    const companySansSalarie = { positions: seedPositions(), shifts: [], employees: [] };
+    assert.strictEqual(seedExampleShifts(companySansSalarie), true);
+    assert.strictEqual(companySansSalarie.shifts.length, 0);
+  }
+
   // ---- computeShiftHeures ----
   {
     const { computeShiftHeures } = loadAppJs();

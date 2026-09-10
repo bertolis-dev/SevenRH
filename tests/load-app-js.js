@@ -83,6 +83,7 @@ globalThis.__shiftRepository = shiftRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
 globalThis.__seedPositions = seedPositions;
 globalThis.__migrateCompanyPositions = migrateCompanyPositions;
+globalThis.__seedExampleShifts = seedExampleShifts;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -214,6 +215,7 @@ globalThis.__openShiftModal = openShiftModal;
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedPositions: sandbox.__seedPositions,
     migrateCompanyPositions: sandbox.__migrateCompanyPositions,
+    seedExampleShifts: sandbox.__seedExampleShifts,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,

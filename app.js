@@ -16796,6 +16796,15 @@ function renderPlanningPostes() {
     bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
   }
 
+  // §retour Betty du 10/09/2026 ("il y a plus de planning la") : quand le regroupement par position
+  // est actif mais qu'AUCUN salarié n'a le moindre quart cette semaine (nouvelle entreprise pas
+  // encore seedée, tous les quarts supprimés, filtre trop restrictif...), la boucle ci-dessus ne
+  // rend rien du tout et le tableau ne montrait plus qu'un en-tête vide — repli sur la liste à plat
+  // des salariés (sans bandeau de groupe) pour qu'il y ait toujours quelque chose sous l'en-tête.
+  if (f.grouperParPosition && !bodyHtml && employees.length > 0) {
+    bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
+  }
+
   const budgetRow = f.afficherBudget ? `
     <tr class="poste-budget-row">
       <td><strong>Budget (heures planifiées)</strong></td>
