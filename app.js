@@ -17189,13 +17189,20 @@ function getWeekDates(weekOffset) {
   return getWeekDatesContaining(toISODate(addDays(new Date(), weekOffset * 7)));
 }
 
+/** §demande Betty du 10/09/2026 ("fais la même forme de planning que le planning de base") : reprend
+ * exactement le même gabarit que renderPlanningSemaine (cartes de statut colorées, avatar + poste,
+ * regroupement par service via renderPlanningGroupRows) au lieu de l'ancien design (une icône plate
+ * par case, aucun regroupement) — seule la ligne de synthèse "Présents au bureau", propre à cet écran
+ * et absente du Planning général, reste inchangée en bas de tableau (globale, pas par service : elle
+ * existait déjà sous cette forme avant ce changement). Pas de colonne Total ni de crayon horaires
+ * (non câblé par bindTeletravailPlanningEvents) : au-delà du strict nécessaire pour "la même forme". */
 function renderTeletravailPlanning() {
   const weekDates = getWeekDates(state.teletravailWeekOffset);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, toISODate(weekDates[0]), toISODate(weekDates[6])));
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
-  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
+  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
 
   return `
     <div class="view-header-row">
@@ -17207,48 +17214,33 @@ function renderTeletravailPlanning() {
       </div>
     </div>
     <div class="card table-card planning-scroll-card">
-      <table class="table planning-table">
-        <thead>
-          <tr>
-            <th>Salarié</th>
-            ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${employees.map(e => renderPlanningRow(e, weekDates, teleworkRequests, leaveRequests)).join('')}
-          <tr class="planning-summary-row">
-            <td><strong>Présents au bureau</strong></td>
-            ${weekDates.map(d => `<td>${countPresentOnDate(d, employees, teleworkRequests, leaveRequests)}</td>`).join('')}
-          </tr>
-        </tbody>
-      </table>
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table">
+          <thead>
+            <tr>
+              <th>Salarié</th>
+              ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${renderPlanningGroupRows(employees, weekDates.length + 1, e => `
+              <tr>
+                <td class="planning-employee-cell">
+                  ${renderAvatar(e)}
+                  <div class="planning-employee-info">${personNameWithPosteHtml(e)}</div>
+                </td>
+                ${weekDates.map(d => renderPlanningStatusCell(e, toISODate(d), leaveRequests, teleworkRequests, true)).join('')}
+              </tr>
+            `)}
+            <tr class="planning-summary-row">
+              <td><strong>Présents au bureau</strong></td>
+              ${weekDates.map(d => `<td>${countPresentOnDate(d, employees, teleworkRequests, leaveRequests)}</td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      `}
     </div>
   `;
-}
-
-function renderPlanningRow(employee, weekDates, teleworkRequests, leaveRequests) {
-  return `
-    <tr>
-      <td>${personNameHtml(employee)}</td>
-      ${weekDates.map(d => renderPlanningCell(employee, d, teleworkRequests, leaveRequests)).join('')}
-    </tr>
-  `;
-}
-
-function renderPlanningCell(employee, date, teleworkRequests, leaveRequests) {
-  const dateStr = toISODate(date);
-  const weekday = WEEKDAY_LABELS[(date.getDay() + 6) % 7];
-
-  if (!(employee.joursTravailles || []).includes(weekday)) {
-    return `<td class="planning-cell planning-off">—</td>`;
-  }
-  if (leaveRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin)) {
-    return `<td class="planning-cell planning-leave" title="Congé">${icon(ICONS.sun, 14)}</td>`;
-  }
-  if (teleworkRequests.some(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin)) {
-    return `<td class="planning-cell planning-remote" title="Télétravail">${icon(ICONS.home, 14)}</td>`;
-  }
-  return `<td class="planning-cell planning-office" title="Présent au bureau">${icon(ICONS.building, 14)}</td>`;
 }
 
 function countPresentOnDate(date, employees, teleworkRequests, leaveRequests) {
