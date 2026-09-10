@@ -13671,15 +13671,31 @@ function openPhotoCropModal(file, onConfirm) {
       imgEl.style.top = `${panY}px`;
     };
 
-    imgEl.onload = () => {
+    // §retour Betty du 10/09/2026 ("c'est pas bien cadré [...] modifie ça") : deux correctifs.
+    //   1. Une <img src="data:..."> peut déjà être `complete` (image décodée) à l'instant même où
+    //      son attribut src est posé (voir l'insertion via modalRoot.innerHTML plus haut) — le
+    //      handler `onload` posé APRÈS coup ne se déclenche alors jamais, et l'image reste à sa
+    //      taille native non recadrée (aucun style.width/left/top appliqué) au lieu d'être centrée
+    //      et mise à l'échelle. Filet de sécurité : si l'image est déjà chargée, on initialise tout
+    //      de suite plutôt que d'attendre un évènement qui ne viendra pas.
+    //   2. Centrage vertical strict par défaut : sur une photo portrait (visage dans le tiers
+    //      supérieur, cas le plus courant d'une photo de profil), un centrage à 50 % coupait trop de
+    //      la tête et laissait trop d'épaules/torse visible. Biais à 25 % (au lieu de 50 %) vers le
+    //      haut de l'image quand elle déborde verticalement — sans effet sur une photo au format
+    //      paysage (rien ne déborde alors verticalement, le calcul donne 0 dans les deux cas).
+    const initCrop = () => {
       naturalWidth = imgEl.naturalWidth;
       naturalHeight = imgEl.naturalHeight;
       // "Cover" du carré de recadrage au zoom minimal (1x), comme un background-size:cover.
       baseScale = Math.max(stageSize / naturalWidth, stageSize / naturalHeight);
-      panX = (stageSize - naturalWidth * baseScale) / 2;
-      panY = (stageSize - naturalHeight * baseScale) / 2;
+      const dispW = naturalWidth * baseScale;
+      const dispH = naturalHeight * baseScale;
+      panX = (stageSize - dispW) / 2;
+      panY = (stageSize - dispH) * 0.25;
       applyTransform();
     };
+    if (imgEl.complete && imgEl.naturalWidth > 0) initCrop();
+    else imgEl.onload = initCrop;
 
     zoomInput.addEventListener('input', () => {
       zoom = Number(zoomInput.value);

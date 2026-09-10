@@ -2646,6 +2646,22 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .user-menu-wrapper { position: relative; }
 
+/* §retour Betty du 10/09/2026 ("c'est pas bien cadré [...] modifie ça") : #btn-user-menu est un
+   <button> natif — sans ce reset, le padding/bordure par défaut du navigateur (jamais un problème
+   tant que le contenu n'était que des initiales, centrées par le display:flex d'.avatar-initials)
+   réduit la place réellement disponible pour la photo une fois affichée en <img> (voir
+   renderUserMenuButton, app.js), qui garde elle sa taille pleine de 36px — l'image déborde alors du
+   cercle du bouton, visuellement décalée plutôt que parfaitement centrée. Ce reset s'applique dans
+   les DEUX cas (initiales ou photo), sans avoir besoin d'y penser côté JS. */
+#btn-user-menu {
+  padding: 0;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
 .user-menu-panel {
   position: absolute;
   top: calc(100% + 10px);
