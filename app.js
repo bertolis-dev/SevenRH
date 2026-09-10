@@ -399,6 +399,11 @@ const NAV_ITEMS = [
   // (essai/essentiel/professionnel/premium, toujours tout inclus) — ne restreint que les
   // entreprises passées à la carte, selon les modules réellement souscrits.
   { key: 'planning', label: 'Planning', icon: ICONS.schedule, roles: ['manager', 'rh', 'proprietaire'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
+  // §retour Betty du 10/09/2026 ("enlève tous les boutons [Semaine/Mois/Année/Horaires...], tu mets
+  // juste un endroit avec le même planning") : plus un onglet DANS Planning (qui affichait forcément
+  // sa barre d'onglets Semaine/Mois/Année/Horaires/Astreintes/Postes), mais sa propre entrée de menu
+  // — une page à part, uniquement la grille (voir renderPlanningPostesPage), rien d'autre autour.
+  { key: 'planning-postes', label: 'Postes', icon: ICONS.clipboard, roles: ['manager', 'rh', 'proprietaire'], group: 'personnel', module: 'planning' },
   { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
   // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
@@ -5367,6 +5372,10 @@ function renderInner() {
     case 'planning':
       root.innerHTML = renderPlanning();
       bindPlanningEvents();
+      break;
+    case 'planning-postes':
+      root.innerHTML = renderPlanningPostesPage();
+      bindPlanningPostesEvents();
       break;
     case 'parametres':
       root.innerHTML = renderParametres();
@@ -15920,16 +15929,15 @@ function renderPlanning() {
       <h1>Planning</h1>
       <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail : congés et télétravail validés</p>
     </div>
-    ${state.planningView !== 'postes' ? renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe') : ''}
+    ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
     <div class="tabs">
       <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
       <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
       <button class="tab ${state.planningView === 'annee' ? 'active' : ''}" data-planning-view="annee">Année</button>
       <button class="tab ${state.planningView === 'horaires' ? 'active' : ''}" data-planning-view="horaires">Horaires</button>
       <button class="tab ${state.planningView === 'astreintes' ? 'active' : ''}" data-planning-view="astreintes">Astreintes</button>
-      <button class="tab ${state.planningView === 'postes' ? 'active' : ''}" data-planning-view="postes">Postes</button>
     </div>
-    ${state.planningView !== 'astreintes' && state.planningView !== 'postes' ? `
+    ${state.planningView !== 'astreintes' ? `
     <div class="toolbar card">
       <select id="planning-filter-service" class="input">
         <option value="">Tous les services</option>
@@ -15942,9 +15950,21 @@ function renderPlanning() {
         : state.planningView === 'annee' ? renderPlanningAnnee()
         : state.planningView === 'horaires' ? renderPlanningHoraires()
         : state.planningView === 'astreintes' ? renderPlanningAstreintes()
-        : state.planningView === 'postes' ? renderPlanningPostes()
         : renderPlanningSemaine()}
     </div>
+  `;
+}
+
+/** §retour Betty du 10/09/2026 ("enlève tous les boutons [Semaine/Mois/Année/Horaires...], tu mets
+ * juste un endroit avec le même planning que celui sur l'image") : page à part entière (sa propre
+ * entrée de menu, voir NAV_ITEMS 'planning-postes'), pas un onglet de plus dans Planning — rien que
+ * le titre et la grille, aucun onglet ni barre d'outils à côté. */
+function renderPlanningPostesPage() {
+  return `
+    <div class="view-header">
+      <h1>Postes</h1>
+    </div>
+    ${renderPlanningPostes()}
   `;
 }
 
@@ -16561,7 +16581,6 @@ function bindPlanningEvents() {
   if (state.planningView === 'semaine' || state.planningView === 'mois') bindPlanningDragEvents();
 
   if (state.planningView === 'astreintes') bindPlanningAstreintesEvents();
-  if (state.planningView === 'postes') bindPlanningPostesEvents();
 }
 
 /** §7.21 : liste des astreintes (toutes entreprises visibles pour l'utilisateur, via

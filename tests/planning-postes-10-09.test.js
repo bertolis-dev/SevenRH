@@ -118,7 +118,30 @@ async function run() {
     shiftRepository.delete(shift.id);
   }
 
-  console.log('OK — planning-postes-10-09.test.js (positions/quarts récurrents, filtres, regroupement, quarts à combler, budget)');
+  // ---- §retour Betty du 10/09/2026 ("enlève tous les boutons Semaine/Mois/Année/Horaires, tu mets
+  //      juste un endroit avec le même planning") : page à part (NAV_ITEMS 'planning-postes'), plus
+  //      un onglet dans Planning — sa barre d'onglets ne doit plus proposer "Postes". ----
+  {
+    const { NAV_ITEMS, renderPlanning, renderPlanningPostesPage, DB, sandbox, state } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+
+    assert.ok(NAV_ITEMS.some(item => item.key === 'planning-postes'), '"Postes" doit avoir sa propre entrée de menu');
+
+    state.planningView = 'semaine';
+    const planningHtml = renderPlanning();
+    assert.ok(!planningHtml.includes('data-planning-view="postes"'), 'Planning ne doit plus avoir d\'onglet "Postes" (page à part désormais)');
+    assert.ok(planningHtml.includes('data-planning-view="semaine"'), 'les autres onglets de Planning (Semaine, Mois, Année, Horaires, Astreintes) restent inchangés');
+
+    const postesPageHtml = renderPlanningPostesPage();
+    assert.ok(!postesPageHtml.includes('class="tabs"'), 'la page Postes ne doit avoir aucune barre d\'onglets (Semaine/Mois/Année/Horaires/Astreintes)');
+    assert.ok(!postesPageHtml.includes('class="toolbar'), 'la page Postes ne doit avoir aucune barre d\'outils');
+    assert.ok(postesPageHtml.includes('planning-table'), 'la grille elle-même doit toujours être rendue');
+  }
+
+  console.log('OK — planning-postes-10-09.test.js (positions/quarts récurrents, filtres, regroupement, quarts à combler, budget, page dédiée sans onglets)');
 }
 
 run().catch((err) => {

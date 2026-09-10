@@ -200,6 +200,7 @@ globalThis.__openLeaveRequestModal = openLeaveRequestModal;
 globalThis.__updateLeaveRequestHints = updateLeaveRequestHints;
 globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
 globalThis.__renderPlanningPostes = renderPlanningPostes;
+globalThis.__renderPlanningPostesPage = renderPlanningPostesPage;
 globalThis.__renderPlanning = renderPlanning;
 globalThis.__openShiftModal = openShiftModal;
 `;
@@ -318,6 +319,7 @@ globalThis.__openShiftModal = openShiftModal;
     notificationRepository: sandbox.__notificationRepository,
     FILTER_RESET_HANDLERS: sandbox.__FILTER_RESET_HANDLERS,
     renderPlanningPostes: sandbox.__renderPlanningPostes,
+    renderPlanningPostesPage: sandbox.__renderPlanningPostesPage,
     renderPlanning: sandbox.__renderPlanning,
     openShiftModal: sandbox.__openShiftModal,
     getStatusForDate: sandbox.__getStatusForDate,
