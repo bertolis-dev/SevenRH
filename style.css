@@ -1712,41 +1712,13 @@ textarea.input { resize: vertical; font-family: inherit; }
    bord à bord — voir plus haut), une seule teinte or/marine pour tous les postes, jamais une couleur
    par position comme dans la référence.
    --------------------------------------------------------------------- */
-.poste-layout { display: flex; align-items: flex-start; gap: 16px; }
-.poste-filters-panel { width: 260px; flex-shrink: 0; position: sticky; top: 0; }
-.poste-main { flex: 1; min-width: 0; }
-
-.poste-filter-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border-soft); }
-.poste-filter-section-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.poste-filter-chevron { margin-left: auto; transition: transform 0.15s ease; color: var(--color-text-muted); }
-.poste-filter-chevron.open { transform: rotate(180deg); }
-.poste-filter-section-body[hidden] { display: none; }
-
-/* Bouton pilule "+ Créer"/"Publier" (§retour du 10/09/2026, même poids visuel que la référence) — or
-   plutôt que le corail de la référence. */
-.poste-btn-pill {
-  border-radius: 999px;
-  background: var(--color-gold);
-  color: #fff;
-  border: none;
-  font-weight: 700;
-  font-size: 13px;
-  padding: 7px 16px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.poste-btn-pill:hover { opacity: 0.88; }
-.poste-btn-count { background: rgba(255, 255, 255, 0.35); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
-
+/* §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
+   pas ce qu'il y a autour") : plus de panneau de filtres ni de barre d'outils — retiré avec le reste
+   des styles qui ne servaient qu'à ça (.poste-layout/.poste-filters-panel/.poste-btn-pill/
+   .poste-checkbox-row/...). Ne reste que la grille elle-même. */
 .poste-group-header-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 .poste-group-menu-btn { background: transparent; border: none; color: #fff; opacity: 0.85; cursor: pointer; padding: 2px 6px; font-size: 15px; line-height: 1; }
 .poste-group-menu-btn:hover { opacity: 1; }
-.poste-filter-subtitle { font-size: 11px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 10px 0 4px; }
-.poste-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
-.poste-checkbox-row input { accent-color: var(--color-primary); }
 
 /* §retour Betty du 10/09/2026 ("ça doit être exactement ça sauf que c'est en bleu et doré") : carte
    FLOTTANTE avec marge (pas un remplissage bord à bord comme .planning-shift-card, utilisé lui pour
@@ -1805,13 +1777,6 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-employee-hours { font-size: 12px; font-weight: 700; color: var(--color-primary-text); margin-top: 2px; }
 
 .poste-budget-row td { background: var(--color-gold-soft); border-top: 2px solid var(--color-gold); font-weight: 700; }
-
-/* Panneau de filtres + grille côte à côte ne tient pas sur un écran de téléphone (voir .poste-layout
-   plus haut) — empilés à la place, même seuil que le reste de l'appli (voir §menu mobile "☰"). */
-@media (max-width: 860px) {
-  .poste-layout { flex-direction: column; }
-  .poste-filters-panel { width: 100%; position: static; }
-}
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }

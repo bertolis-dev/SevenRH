@@ -80,8 +80,12 @@ async function run() {
     state.planningPostesFilters.afficherBudget = false;
 
     const html = renderPlanningPostes();
-    assert.ok(html.includes('poste-filters-panel'), 'le panneau de filtres doit être rendu');
-    assert.ok(html.includes('Caisse') && html.includes('Commis') && html.includes('Entrepôt'), 'toutes les positions doivent apparaître dans le filtre, même sans quart cette semaine');
+    // §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning") :
+    // plus de panneau de filtres ni de barre d'outils — seule la grille reste, une position sans
+    // aucun quart cette semaine (ex. Entrepôt) n'apparaît donc plus nulle part (avant, elle restait
+    // visible dans la liste des filtres retirée depuis).
+    assert.ok(!html.includes('poste-filters-panel'), 'le panneau de filtres a été retiré');
+    assert.ok(!html.includes('Entrepôt'), 'une position sans aucun quart cette semaine ne doit plus apparaître nulle part (plus de liste de filtres)');
     assert.ok(html.includes('09:00-16:00'), 'l\'horaire du quart doit être affiché tel quel (avec le zéro initial)');
     assert.ok(html.includes('6,50 h'), 'la durée du quart (9h-16h, 30min de pause) doit être calculée à 6,5h');
     assert.ok(html.includes('data-add-shift'), 'une case vide doit proposer un "+" quand "Afficher les quarts à combler" est actif');

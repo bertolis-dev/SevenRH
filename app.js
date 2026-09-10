@@ -216,7 +216,9 @@ function getInitialViewState() {
     // séparé de planningFilters/planningWeekOffset (utilisés par Semaine/Mois), propre à cet écran.
     planningPostesWeekOffset: 0,
     planningPostesSortDir: 'asc', // 'asc' (prénom A-Z) | 'desc' (Z-A)
-    planningPostesSectionsOpen: { positions: true, affichage: true },
+    // §retour du 10/09/2026 ("enlève tous les boutons") : plus aucun contrôle dans l'interface pour
+    // changer ces valeurs (panneau de filtres retiré) — restent les réglages par défaut qui pilotent
+    // le rendu de la grille (regroupement par position, cases "+" à combler...).
     planningPostesFilters: {
       etablissementId: '',
       positionIds: null, // null = toutes ; Set d'ids sinon
@@ -16858,7 +16860,6 @@ function renderPlanningPostes() {
     bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
   }
 
-  const totalShiftsCount = allShifts.filter(s => employees.some(e => e.id === s.employeeId)).length;
   const budgetRow = f.afficherBudget ? `
     <tr class="poste-budget-row">
       <td><strong>Budget (heures planifiées)</strong></td>
@@ -16871,173 +16872,43 @@ function renderPlanningPostes() {
     </tr>
   ` : '';
 
+  // §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
+  // pas ce qu'il y a autour") : plus de panneau de filtres, plus de barre d'outils (recherche,
+  // navigation semaine, sélecteur Semaine/Jour, icônes, pilules) — uniquement la grille elle-même,
+  // telle que dessinée dans la référence (en-tête triable, bandeaux de groupe avec "⋯", cartes de
+  // quart, total). Les réglages qu'affichait le panneau retiré gardent leurs valeurs par défaut
+  // (state.planningPostesFilters), simplement plus modifiables depuis cet écran.
   return `
-    <div class="poste-layout">
-      ${renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f)}
-      <div class="poste-main">
-        <div class="toolbar card">
-          ${canManage ? `<button type="button" class="poste-btn-pill" id="btn-add-shift">+ Créer</button>` : ''}
-          <input type="text" class="input" id="poste-search-employe" placeholder="Rechercher un salarié..." value="${escapeHtml(f.search)}" style="max-width: 160px;">
-          <button class="btn btn-secondary btn-sm" id="btn-poste-week-today">Aujourd'hui</button>
-          <button class="btn btn-secondary btn-sm" id="btn-poste-week-prev">‹</button>
-          <button class="btn btn-secondary btn-sm" id="btn-poste-week-next">›</button>
-          <span class="btn btn-secondary btn-sm" style="cursor: default;">${formatDate(weekStartStr)} au ${formatDate(weekEndStr)}</span>
-          <select class="input" id="poste-view-mode" style="width: auto;">
-            <option value="semaine" selected>Semaine</option>
-            <option value="jour">Jour</option>
-          </select>
-          <button type="button" class="btn-icon" id="btn-poste-print" title="Imprimer">${icon(ICONS.printer, 15)}</button>
-          <span class="poste-btn-pill" style="margin-left: auto; background: var(--color-primary);">${totalShiftsCount} quart${totalShiftsCount > 1 ? 's' : ''}</span>
-        </div>
-        <div class="card table-card planning-scroll-card poste-grid-card">
-          ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
-            <table class="table planning-table">
-              <thead>
-                <tr>
-                  <th id="btn-poste-sort-name" style="cursor: pointer;">↕ Prénom (${state.planningPostesSortDir === 'desc' ? 'Z-A' : 'A-Z'})</th>
-                  ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]}. ${d.getDate()}</th>`).join('')}
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${bodyHtml}
-                ${budgetRow}
-              </tbody>
-            </table>
-          `}
-        </div>
-      </div>
+    <div class="card table-card planning-scroll-card poste-grid-card">
+      ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
+        <table class="table planning-table">
+          <thead>
+            <tr>
+              <th id="btn-poste-sort-name" style="cursor: pointer;">↕ Prénom (${state.planningPostesSortDir === 'desc' ? 'Z-A' : 'A-Z'})</th>
+              ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]}. ${d.getDate()}</th>`).join('')}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bodyHtml}
+            ${budgetRow}
+          </tbody>
+        </table>
+      `}
     </div>
   `;
 }
 
-function renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f) {
-  const filteredPositions = f.positionSearch.trim()
-    ? allPositions.filter(p => p.nom.toLowerCase().includes(f.positionSearch.trim().toLowerCase()))
-    : allPositions;
-  const allChecked = allPositions.every(p => activePositionIds.has(p.id));
-
-  return `
-    <div class="card poste-filters-panel">
-      <div class="view-header-row" style="margin-bottom: 12px;">
-        <h2 style="margin: 0;">Filtres</h2>
-        <button type="button" class="btn-link" id="btn-poste-reset-filters">Réinitialiser</button>
-      </div>
-
-      <div class="form-field">
-        <label>${icon(ICONS.building, 12)} Établissement</label>
-        <select class="input" id="poste-filter-etablissement">
-          <option value="">Tous les établissements</option>
-          ${etablissementRepository.getAll().map(et => `<option value="${et.id}" ${f.etablissementId === et.id ? 'selected' : ''}>${escapeHtml(et.nom)}</option>`).join('')}
-        </select>
-      </div>
-
-      <div class="poste-filter-section">
-        <div class="poste-filter-section-title" id="poste-toggle-positions">
-          Positions <span class="badge badge-muted">${activePositionIds.size}</span>
-          <span class="poste-filter-chevron ${state.planningPostesSectionsOpen.positions ? 'open' : ''}">▾</span>
-        </div>
-        <div class="poste-filter-section-body" ${state.planningPostesSectionsOpen.positions ? '' : 'hidden'}>
-          <input type="text" class="input" id="poste-filter-position-search" placeholder="Filtrer" value="${escapeHtml(f.positionSearch)}" style="margin-bottom: 8px;">
-          <label class="poste-checkbox-row">
-            <input type="checkbox" id="poste-filter-position-all" ${allChecked ? 'checked' : ''}>
-            Toutes les positions
-          </label>
-          ${filteredPositions.map(p => `
-            <label class="poste-checkbox-row">
-              <input type="checkbox" data-position-filter="${p.id}" ${activePositionIds.has(p.id) ? 'checked' : ''}>
-              ${escapeHtml(p.nom)}
-            </label>
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="poste-filter-section">
-        <div class="poste-filter-section-title" id="poste-toggle-affichage">
-          Affichage
-          <span class="poste-filter-chevron ${state.planningPostesSectionsOpen.affichage ? 'open' : ''}">▾</span>
-        </div>
-        <div class="poste-filter-section-body" ${state.planningPostesSectionsOpen.affichage ? '' : 'hidden'}>
-        <p class="poste-filter-subtitle">Quarts</p>
-        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-a-combler" ${f.afficherQuartsACombler ? 'checked' : ''}> Afficher les quarts à combler</label>
-        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-masquer-confirmes" ${f.masquerQuartsConfirmes ? 'checked' : ''}> Masquer les quarts confirmés</label>
-        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-grouper" ${f.grouperParPosition ? 'checked' : ''}> Grouper par position</label>
-        <p class="poste-filter-subtitle">Budget</p>
-        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-budget" ${f.afficherBudget ? 'checked' : ''}> Afficher le budget</label>
-        <p class="poste-filter-subtitle">Salariés</p>
-        <select class="input" id="poste-filter-employes">
-          <option value="tous" ${f.employesFiltre === 'tous' ? 'selected' : ''}>Tous</option>
-          <option value="avecQuart" ${f.employesFiltre === 'avecQuart' ? 'selected' : ''}>Avec quart cette semaine</option>
-        </select>
-        <p class="poste-filter-subtitle">Congés</p>
-        <select class="input" id="poste-filter-conges">
-          <option value="afficher" ${f.congesFiltre === 'afficher' ? 'selected' : ''}>Afficher</option>
-          <option value="masquer" ${f.congesFiltre === 'masquer' ? 'selected' : ''}>Masquer</option>
-        </select>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
+/** §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
+ * pas ce qu'il y a autour") : plus de panneau de filtres, plus de barre d'outils — seuls les
+ * comportements dessinés DANS la grille elle-même restent interactifs (trier par prénom, "⋯" sur un
+ * bandeau de groupe, cliquer une carte pour la modifier, cliquer une case vide pour ajouter un
+ * quart). */
 function bindPlanningPostesEvents() {
-  document.getElementById('btn-poste-week-today').addEventListener('click', () => { state.planningPostesWeekOffset = 0; render(); });
-  document.getElementById('btn-poste-week-prev').addEventListener('click', () => { state.planningPostesWeekOffset -= 1; render(); });
-  document.getElementById('btn-poste-week-next').addEventListener('click', () => { state.planningPostesWeekOffset += 1; render(); });
-
   document.getElementById('btn-poste-sort-name').addEventListener('click', () => {
     state.planningPostesSortDir = state.planningPostesSortDir === 'desc' ? 'asc' : 'desc';
     render();
   });
-
-  const searchInput = document.getElementById('poste-search-employe');
-  searchInput.addEventListener('input', (e) => { state.planningPostesFilters.search = e.target.value; render(); });
-  // Le focus se perdrait sinon à chaque frappe (le champ est reconstruit par render()) — recale le
-  // curseur en fin de texte, même patron que les autres champs de recherche live de l'appli.
-  searchInput.focus();
-  searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
-
-  const addBtn = document.getElementById('btn-add-shift');
-  if (addBtn) addBtn.addEventListener('click', () => openShiftModal());
-
-  document.getElementById('btn-poste-reset-filters').addEventListener('click', () => {
-    state.planningPostesFilters = {
-      etablissementId: '', positionIds: null, positionSearch: '', search: '',
-      afficherQuartsACombler: true, masquerQuartsConfirmes: false, grouperParPosition: true,
-      afficherBudget: false, employesFiltre: 'tous', congesFiltre: 'afficher'
-    };
-    state.planningPostesSortDir = 'asc';
-    render();
-  });
-
-  document.getElementById('poste-filter-etablissement').addEventListener('change', (e) => {
-    state.planningPostesFilters.etablissementId = e.target.value;
-    render();
-  });
-  document.getElementById('poste-filter-position-search').addEventListener('input', (e) => {
-    state.planningPostesFilters.positionSearch = e.target.value;
-    render();
-  });
-  document.getElementById('poste-filter-position-all').addEventListener('change', (e) => {
-    state.planningPostesFilters.positionIds = e.target.checked ? null : new Set();
-    render();
-  });
-  document.querySelectorAll('[data-position-filter]').forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      const f = state.planningPostesFilters;
-      const all = positionRepository.getAll();
-      const current = f.positionIds === null ? new Set(all.map(p => p.id)) : new Set(f.positionIds);
-      if (e.target.checked) current.add(cb.dataset.positionFilter); else current.delete(cb.dataset.positionFilter);
-      f.positionIds = current;
-      render();
-    });
-  });
-  document.getElementById('poste-filter-a-combler').addEventListener('change', (e) => { state.planningPostesFilters.afficherQuartsACombler = e.target.checked; render(); });
-  document.getElementById('poste-filter-masquer-confirmes').addEventListener('change', (e) => { state.planningPostesFilters.masquerQuartsConfirmes = e.target.checked; render(); });
-  document.getElementById('poste-filter-grouper').addEventListener('change', (e) => { state.planningPostesFilters.grouperParPosition = e.target.checked; render(); });
-  document.getElementById('poste-filter-budget').addEventListener('change', (e) => { state.planningPostesFilters.afficherBudget = e.target.checked; render(); });
-  document.getElementById('poste-filter-employes').addEventListener('change', (e) => { state.planningPostesFilters.employesFiltre = e.target.value; render(); });
-  document.getElementById('poste-filter-conges').addEventListener('change', (e) => { state.planningPostesFilters.congesFiltre = e.target.value; render(); });
 
   document.querySelectorAll('[data-edit-shift]').forEach(card => {
     card.addEventListener('click', () => openShiftModal(shiftRepository.getById(card.dataset.editShift)));
@@ -17049,34 +16920,11 @@ function bindPlanningPostesEvents() {
     });
   });
 
-  document.getElementById('poste-toggle-positions').addEventListener('click', () => {
-    const open = state.planningPostesSectionsOpen;
-    open.positions = !open.positions;
-    render();
-  });
-  document.getElementById('poste-toggle-affichage').addEventListener('click', () => {
-    const open = state.planningPostesSectionsOpen;
-    open.affichage = !open.affichage;
-    render();
-  });
-
   document.querySelectorAll('[data-position-menu]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       openPositionOptionsModal(btn.dataset.positionMenu);
     });
-  });
-
-  document.getElementById('btn-poste-print').addEventListener('click', () => window.print());
-
-  // §retour Betty du 10/09/2026 : la vue "Jour" de la référence n'a pas été construite (hors
-  // périmètre signalé) — le select existe pour la fidélité visuelle, mais choisir "Jour" prévient
-  // plutôt que de silencieusement ne rien faire ou pire, afficher un écran cassé.
-  document.getElementById('poste-view-mode').addEventListener('change', (e) => {
-    if (e.target.value === 'jour') {
-      showToast('Vue "Jour" pas encore disponible pour ce planning.', 'error');
-      e.target.value = 'semaine';
-    }
   });
 }
 
