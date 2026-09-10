@@ -1709,16 +1709,17 @@ textarea.input { resize: vertical; font-family: inherit; }
    envoyée, MAIS identité Nexus (bleu marine + or), jamais la palette de la référence (confirmé avant
    de commencer) : les cases de quart réutilisent .planning-shift-card/.planning-shift-caption/
    .planning-shift-subtext déjà en place pour le Planning (même "cadrillage", même remplissage de
-   bord à bord — voir plus haut), une seule teinte or/marine pour tous les postes, jamais une couleur
-   par position comme dans la référence.
+   bord à bord — voir plus haut), une seule teinte or/marine pour tous les groupes, jamais une
+   couleur par service comme dans la référence. §correctif du 10/09/2026 ("il faut que ce soit le
+   service à cet endroit") : le regroupement, inspiré par la référence, se fait par SERVICE (déjà
+   existant sur la fiche salarié) et non plus par "Position" (retirée) — les groupes se gèrent donc
+   depuis Paramètres > Services, plus de "⋯" ni de menu dédié ici.
    --------------------------------------------------------------------- */
 /* §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
    pas ce qu'il y a autour") : plus de panneau de filtres ni de barre d'outils — retiré avec le reste
    des styles qui ne servaient qu'à ça (.poste-layout/.poste-filters-panel/.poste-btn-pill/
    .poste-checkbox-row/...). Ne reste que la grille elle-même. */
 .poste-group-header-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
-.poste-group-menu-btn { background: transparent; border: none; color: #fff; opacity: 0.85; cursor: pointer; padding: 2px 6px; font-size: 15px; line-height: 1; }
-.poste-group-menu-btn:hover { opacity: 1; }
 
 /* §retour Betty du 10/09/2026 ("ça doit être exactement ça sauf que c'est en bleu et doré") : carte
    FLOTTANTE avec marge (pas un remplissage bord à bord comme .planning-shift-card, utilisé lui pour
@@ -1770,10 +1771,6 @@ textarea.input { resize: vertical; font-family: inherit; }
   transition: opacity 0.12s ease;
 }
 .poste-shift-add:hover { opacity: 1; border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
-
-/* Vue "à plat" (Grouper par position décoché) : étiquette de poste sous le nom, à la place du
-   bandeau de groupe (voir renderPlanningPostes). */
-.poste-tag { display: inline-block; font-size: 11px; background: var(--color-muted-soft); color: var(--color-text-muted); padding: 1px 6px; border-radius: 6px; margin-top: 2px; }
 
 /* §retour Betty du 10/09/2026 (3e envoi de la même référence, "ça doit ressembler à ça") : texte
    simple sous le nom, comme la maquette — pas un badge/pilule grisé (.planning-employee-badge, gardé

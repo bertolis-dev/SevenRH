@@ -78,11 +78,8 @@ function loadAppJs() {
   const exposeAfterData = `
 ;globalThis.__DB = DB;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
-globalThis.__positionRepository = positionRepository;
 globalThis.__shiftRepository = shiftRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
-globalThis.__seedPositions = seedPositions;
-globalThis.__migrateCompanyPositions = migrateCompanyPositions;
 globalThis.__seedExampleShifts = seedExampleShifts;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
@@ -210,11 +207,8 @@ globalThis.__openShiftModal = openShiftModal;
     sandbox,
     DB: sandbox.__DB,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
-    positionRepository: sandbox.__positionRepository,
     shiftRepository: sandbox.__shiftRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
-    seedPositions: sandbox.__seedPositions,
-    migrateCompanyPositions: sandbox.__migrateCompanyPositions,
     seedExampleShifts: sandbox.__seedExampleShifts,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,

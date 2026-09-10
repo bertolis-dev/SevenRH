@@ -63,15 +63,15 @@ async function run() {
         leaveTypes: [{ id: 't1', nom: 'Congés payés' }] // pas de autoriserDemiJournee, comme une entreprise réelle plus ancienne que ce champ
       }),
       pushLeaveTypes: async (leaveTypes) => { pushedCalls.push(leaveTypes); },
-      // migrateCompanyPositions (§10/09/2026) tourne aussi ici (le mock ci-dessus n'a pas non plus de
-      // champ `positions`) et pousse via pushCompanyProfile — sans mock, l'appel échoue (avalé par le
+      // seedExampleShifts (§10/09/2026) tourne aussi ici (le mock ci-dessus n'a pas de champ
+      // `shifts`) et pousse via pushCompanyProfile — sans mock, l'appel échoue (avalé par le
       // try/catch, sans faire échouer ce test) mais pollue la sortie console pour rien.
       pushCompanyProfile: async () => {}
     };
     const company = await hydrateCurrentCompanyWithMigrations();
     assert.strictEqual(company.leaveTypes[0].autoriserDemiJournee, true, 'la VRAIE connexion (pas seulement DB.init) doit corriger le champ manquant');
     assert.strictEqual(pushedCalls.length, 1, 'un RH (droit d\'écrire les types de congés) doit voir la correction poussée côté serveur');
-    assert.ok(Array.isArray(company.positions) && company.positions.length > 0, 'migrateCompanyPositions doit aussi tourner sur une vraie connexion (même leçon que la demi-journée)');
+    assert.ok(Array.isArray(company.shifts) && company.shifts.length > 0, 'seedExampleShifts doit aussi tourner sur une vraie connexion (même leçon que la demi-journée)');
 
     // Un salarié (pas le droit d'écrire les paramètres) : correction en mémoire pour cette session,
     // mais jamais de tentative d'écriture serveur (la policy RLS leave_types_write la rejetterait de

@@ -212,21 +212,20 @@ function getInitialViewState() {
     planningWeekOffset: 0,
     planningYear: new Date().getFullYear(),
     planningMonth: new Date().getMonth(),
-    // Onglet Planning > Postes (§10/09/2026) : positions/quarts récurrents hebdomadaires — état
-    // séparé de planningFilters/planningWeekOffset (utilisés par Semaine/Mois), propre à cet écran.
+    // Onglet Planning > Postes (§10/09/2026, puis §10/09/2026 suite retour Betty "il faut que ce
+    // soit le service à cet endroit" : le regroupement par "Position" — un concept inventé pour cet
+    // écran — a été abandonné au profit du Service, déjà existant sur la fiche salarié) : quarts
+    // récurrents hebdomadaires — état séparé de planningFilters/planningWeekOffset (Semaine/Mois).
     planningPostesWeekOffset: 0,
     planningPostesSortDir: 'asc', // 'asc' (prénom A-Z) | 'desc' (Z-A)
     // §retour du 10/09/2026 ("enlève tous les boutons") : plus aucun contrôle dans l'interface pour
     // changer ces valeurs (panneau de filtres retiré) — restent les réglages par défaut qui pilotent
-    // le rendu de la grille (regroupement par position, cases "+" à combler...).
+    // le rendu de la grille (cases "+" à combler...).
     planningPostesFilters: {
       etablissementId: '',
-      positionIds: null, // null = toutes ; Set d'ids sinon
-      positionSearch: '', // filtre la LISTE des positions dans le panneau (pas les salariés)
       search: '', // filtre les salariés (barre d'outils)
       afficherQuartsACombler: true,
       masquerQuartsConfirmes: false,
-      grouperParPosition: true,
       afficherBudget: false,
       employesFiltre: 'tous', // 'tous' | 'avecQuart'
       congesFiltre: 'afficher' // 'afficher' | 'masquer'
@@ -15934,7 +15933,7 @@ function renderPlanning() {
   return `
     <div class="view-header">
       <h1>Planning</h1>
-      <p class="view-subtitle">Positions et quarts de travail, par salarié.</p>
+      <p class="view-subtitle">Quarts de travail, par salarié.</p>
     </div>
     ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
     ${renderPlanningPostes()}
@@ -16667,10 +16666,18 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
 
 // ---------------------------------------------------------------------------
 // Planning par postes (§demande Betty du 10/09/2026) — écran distinct, inspiré d'une maquette envoyée
-// (structure fonctionnelle : positions, quarts récurrents hebdomadaires, filtres, regroupement par
-// poste) mais avec l'identité visuelle de Nexus (bleu marine + or), jamais la palette/le branding de
-// la référence elle-même (confirmé avec Betty avant de commencer) — voir positionRepository/
-// shiftRepository (data.js) et seven_rh_design_palette_rule.
+// (structure fonctionnelle : quarts récurrents hebdomadaires, regroupement par service) mais avec
+// l'identité visuelle de Nexus (bleu marine + or), jamais la palette/le branding de la référence
+// elle-même (confirmé avec Betty avant de commencer) — voir shiftRepository (data.js) et
+// seven_rh_design_palette_rule.
+//
+// §correctif du 10/09/2026 : le premier jet regroupait les quarts par "Position" (Caisse, Commis...),
+// un concept créé spécifiquement pour cet écran en s'inspirant de la référence externe. Betty a
+// demandé à ce que le regroupement affiché ("Caisse") utilise à la place le SERVICE du salarié — un
+// champ déjà existant sur sa fiche (voir employee.service), le même que sur les autres écrans
+// (Salariés, Calendrier...). Le concept "Position" est donc entièrement retiré (plus de gestion
+// dédiée, plus de champ sur le quart) : chaque quart n'est plus rattaché qu'à un salarié, dont le
+// service déjà connu pilote à la fois le regroupement ET l'étiquette affichée sur la carte du quart.
 //
 // Simplifications volontaires par rapport à la maquette, à signaler explicitement (Betty a demandé à
 // être prévenue de tout écart) :
@@ -16681,8 +16688,8 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
 //     fonctionnalité de workflow, pas un simple habillage. Remplacé par un compteur simple de quarts
 //     affichés.
 //   - Pas de "Copier/Partager/Imprimer" (hors périmètre).
-//   - Pas de couleur par position (la maquette en propose une par défaut) : bleu marine + or partout,
-//     confirmé par Betty.
+//   - Pas de couleur par service (la maquette en propose une par position) : bleu marine + or
+//     partout, confirmé par Betty.
 // ---------------------------------------------------------------------------
 
 /** Salariés visibles pour cet écran (portée manager déjà appliquée), avant application des filtres
@@ -16720,14 +16727,8 @@ function renderPlanningPostes() {
   const weekStartStr = toISODate(weekDates[0]);
   const weekEndStr = toISODate(weekDates[6]);
 
-  const allPositions = positionRepository.getAll().slice().sort((a, b) => a.ordre - b.ordre);
-  const activePositionIds = f.positionIds === null ? new Set(allPositions.map(p => p.id)) : f.positionIds;
-  const activePositions = allPositions.filter(p => activePositionIds.has(p.id));
-
-  const allShifts = shiftRepository.getAll().filter(s => activePositionIds.has(s.positionId));
-  const shiftsFor = (employeeId, weekday, positionId) => allShifts.find(s =>
-    s.employeeId === employeeId && s.weekday === weekday && (!positionId || s.positionId === positionId)
-  );
+  const allShifts = shiftRepository.getAll();
+  const shiftsFor = (employeeId, weekday) => allShifts.find(s => s.employeeId === employeeId && s.weekday === weekday);
   const employeeShifts = (employeeId) => allShifts.filter(s => s.employeeId === employeeId);
   const employeeWeekHeures = (employeeId) => round2(employeeShifts(employeeId).reduce((sum, s) => sum + computeShiftHeures(s), 0));
 
@@ -16741,69 +16742,62 @@ function renderPlanningPostes() {
   // marge/ombre/accent gauche (voir .poste-shift-card, style.css) plutôt que le remplissage bord à
   // bord du Planning principal (.planning-shift-card) — les deux écrans suivent chacun leur propre
   // référence visuelle, ils n'ont pas à se ressembler entre eux.
-  const renderCell = (employee, weekday, positionId) => {
-    const shift = shiftsFor(employee.id, weekday, positionId);
+  const renderCell = (employee, weekday) => {
+    const shift = shiftsFor(employee.id, weekday);
     if (shift && !f.masquerQuartsConfirmes) {
-      const position = allPositions.find(p => p.id === shift.positionId);
       return `<td class="planning-cell">
         <div class="poste-shift-card" data-edit-shift="${shift.id}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
-          <div class="poste-shift-position">${escapeHtml(position ? position.nom : '')}</div>
+          <div class="poste-shift-position">${escapeHtml(employee.service || '')}</div>
           ${shift.pauseMinutes ? `<div class="poste-shift-pause">${icon(ICONS.pause, 9)} ${shift.pauseMinutes}m</div>` : ''}
         </div>
       </td>`;
     }
     if (f.afficherQuartsACombler && canManage) {
-      return `<td class="planning-cell"><button type="button" class="poste-shift-add" data-add-shift="${employee.id}|${weekday}|${positionId || ''}" title="Ajouter un quart">+</button></td>`;
+      return `<td class="planning-cell"><button type="button" class="poste-shift-add" data-add-shift="${employee.id}|${weekday}" title="Ajouter un quart">+</button></td>`;
     }
     return `<td class="planning-cell"></td>`;
   };
 
-  const renderEmployeeRow = (employee, positionId) => `
+  const renderEmployeeRow = (employee) => `
     <tr>
       <td class="planning-employee-cell">
         ${renderAvatar(employee)}
         <div class="planning-employee-info">
           <div>${personNameHtml(employee)}</div>
-          ${!f.grouperParPosition ? (() => {
-            const noms = [...new Set(employeeShifts(employee.id).map(s => (allPositions.find(p => p.id === s.positionId) || {}).nom).filter(Boolean))];
-            return `<span class="poste-tag">${escapeHtml(noms.join(', ') || '—')}</span>`;
-          })() : ''}
           <div class="poste-employee-hours">${formatNumberFR(employeeWeekHeures(employee.id))} h</div>
         </div>
       </td>
-      ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7], positionId)).join('')}
+      ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7])).join('')}
       <td class="planning-total-cell"><strong>${formatNumberFR(employeeWeekHeures(employee.id))} h</strong></td>
     </tr>
   `;
 
-  let bodyHtml;
-  if (f.grouperParPosition) {
-    bodyHtml = activePositions.map(position => {
-      const positionEmployees = sortEmployees(employees.filter(e => employeeShifts(e.id).some(s => s.positionId === position.id)));
-      if (positionEmployees.length === 0) return '';
-      return `
-        <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">
-          <div class="poste-group-header-row">
-            <span>${escapeHtml(position.nom)} <span class="text-muted">(${positionEmployees.length})</span></span>
-            ${canManage ? `<button type="button" class="poste-group-menu-btn" data-position-menu="${position.id}" title="Options de la position">⋯</button>` : ''}
-          </div>
-        </td></tr>
-        ${positionEmployees.map(e => renderEmployeeRow(e, position.id)).join('')}
-      `;
-    }).join('');
-  } else {
-    bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
-  }
+  // §retour Betty du 10/09/2026 ("il faut que ce soit le service à cet endroit") : regroupement par
+  // SERVICE (champ déjà existant sur la fiche salarié), plus par Position (concept retiré). Un
+  // salarié sans service assigné est regroupé à part, toujours en dernier — l'ordre des autres
+  // groupes suit celui des services déclarés dans Paramètres (pas un tri alphabétique arbitraire).
+  const serviceOrder = serviceRepository.getAll().map(s => s.nom);
+  const serviceOf = (employee) => employee.service && employee.service.trim() ? employee.service : null;
+  const groupNames = [...new Set(employees.map(serviceOf))];
+  groupNames.sort((a, b) => {
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return serviceOrder.indexOf(a) - serviceOrder.indexOf(b);
+  });
 
-  // §retour Betty du 10/09/2026 ("il y a plus de planning la") : quand le regroupement par position
-  // est actif mais qu'AUCUN salarié n'a le moindre quart cette semaine (nouvelle entreprise pas
-  // encore seedée, tous les quarts supprimés, filtre trop restrictif...), la boucle ci-dessus ne
-  // rend rien du tout et le tableau ne montrait plus qu'un en-tête vide — repli sur la liste à plat
-  // des salariés (sans bandeau de groupe) pour qu'il y ait toujours quelque chose sous l'en-tête.
-  if (f.grouperParPosition && !bodyHtml && employees.length > 0) {
-    bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
-  }
+  const bodyHtml = groupNames.map(nom => {
+    const groupEmployees = sortEmployees(employees.filter(e => serviceOf(e) === nom));
+    if (groupEmployees.length === 0) return '';
+    return `
+      <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">
+        <div class="poste-group-header-row">
+          <span>${escapeHtml(nom || 'Sans service')} <span class="text-muted">(${groupEmployees.length})</span></span>
+        </div>
+      </td></tr>
+      ${groupEmployees.map(e => renderEmployeeRow(e)).join('')}
+    `;
+  }).join('');
 
   const budgetRow = f.afficherBudget ? `
     <tr class="poste-budget-row">
@@ -16846,9 +16840,10 @@ function renderPlanningPostes() {
 
 /** §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
  * pas ce qu'il y a autour") : plus de panneau de filtres, plus de barre d'outils — seuls les
- * comportements dessinés DANS la grille elle-même restent interactifs (trier par prénom, "⋯" sur un
- * bandeau de groupe, cliquer une carte pour la modifier, cliquer une case vide pour ajouter un
- * quart). */
+ * comportements dessinés DANS la grille elle-même restent interactifs (trier par prénom, cliquer une
+ * carte pour la modifier, cliquer une case vide pour ajouter un quart). Le "⋯" du bandeau de groupe
+ * (options de la position) a disparu avec la position elle-même — un groupe est désormais un Service,
+ * qui se gère déjà depuis Paramètres > Services. */
 function bindPlanningPostesEvents() {
   document.getElementById('btn-poste-sort-name').addEventListener('click', () => {
     state.planningPostesSortDir = state.planningPostesSortDir === 'desc' ? 'asc' : 'desc';
@@ -16860,79 +16855,18 @@ function bindPlanningPostesEvents() {
   });
   document.querySelectorAll('[data-add-shift]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const [employeeId, weekday, positionId] = btn.dataset.addShift.split('|');
-      openShiftModal(null, { employeeId, weekday, positionId: positionId || '' });
-    });
-  });
-
-  document.querySelectorAll('[data-position-menu]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openPositionOptionsModal(btn.dataset.positionMenu);
-    });
-  });
-}
-
-/** Options d'une position de planning (accessible via le "⋯" du bandeau de groupe) : renommer ou
- * supprimer (cascade sur les quarts qui la référencent, voir DB.deletePosition). */
-function openPositionOptionsModal(positionId) {
-  const position = positionRepository.getById(positionId);
-  if (!position) return;
-  const html = `
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Position : ${escapeHtml(position.nom)}</h2>
-        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-field">
-          <label for="f-position-nom">Nom</label>
-          <input class="input" type="text" id="f-position-nom" value="${escapeHtml(position.nom)}">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="btn-delete-position" style="margin-right: auto;">Supprimer</button>
-        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-        <button type="button" class="btn btn-primary" id="btn-save-position">Enregistrer</button>
-      </div>
-    </div>
-  `;
-  const modalRoot = document.getElementById('modal-root');
-  modalRoot.innerHTML = html;
-  modalRoot.classList.add('open');
-  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('btn-save-position').addEventListener('click', () => {
-    const nom = document.getElementById('f-position-nom').value.trim();
-    if (!nom) { showToast('Le nom ne peut pas être vide.', 'error'); return; }
-    positionRepository.rename(positionId, nom);
-    closeModal();
-    showToast('Position renommée.');
-    render();
-  });
-  document.getElementById('btn-delete-position').addEventListener('click', () => {
-    openConfirm({
-      title: `Supprimer la position "${position.nom}" ?`,
-      message: 'Tous les quarts rattachés à cette position seront supprimés avec elle.',
-      confirmLabel: 'Supprimer',
-      danger: true,
-      onConfirm: () => {
-        positionRepository.delete(positionId);
-        closeModal();
-        showToast('Position supprimée.');
-        render();
-      }
+      const [employeeId, weekday] = btn.dataset.addShift.split('|');
+      openShiftModal(null, { employeeId, weekday });
     });
   });
 }
 
 /** `shift` = quart existant à modifier (null pour une création) ; `preset` = valeurs initiales pour
- * une création lancée depuis une case "+" précise (employé/jour/position déjà connus). */
+ * une création lancée depuis une case "+" précise (employé/jour déjà connus). */
 function openShiftModal(shift, preset) {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
-  const positions = positionRepository.getAll().slice().sort((a, b) => a.ordre - b.ordre);
   const values = shift || Object.assign(makeEmptyShiftDraft(), preset || {});
 
   const html = `
@@ -16949,13 +16883,6 @@ function openShiftModal(shift, preset) {
               <select class="input" id="f-shift-employee" required>
                 <option value="">Sélectionner...</option>
                 ${employees.map(e => `<option value="${e.id}" ${values.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-shift-position">Position</label>
-              <select class="input" id="f-shift-position" required>
-                <option value="">Sélectionner...</option>
-                ${positions.map(p => `<option value="${p.id}" ${values.positionId === p.id ? 'selected' : ''}>${escapeHtml(p.nom)}</option>`).join('')}
               </select>
             </div>
             <div class="form-field">
@@ -17002,13 +16929,12 @@ function openShiftModal(shift, preset) {
     evt.preventDefault();
     const data = {
       employeeId: document.getElementById('f-shift-employee').value,
-      positionId: document.getElementById('f-shift-position').value,
       weekday: document.getElementById('f-shift-weekday').value,
       heureDebut: document.getElementById('f-shift-debut').value,
       heureFin: document.getElementById('f-shift-fin').value,
       pauseMinutes: Number(document.getElementById('f-shift-pause').value) || 0
     };
-    if (!data.employeeId || !data.positionId) { showToast('Sélectionnez un salarié et une position.', 'error'); return; }
+    if (!data.employeeId) { showToast('Sélectionnez un salarié.', 'error'); return; }
     if (data.heureFin <= data.heureDebut) { showToast('L\'heure de fin doit être après l\'heure de début.', 'error'); return; }
     if (shift) shiftRepository.update(shift.id, data); else shiftRepository.create(data);
     closeModal();
@@ -17018,7 +16944,7 @@ function openShiftModal(shift, preset) {
 }
 
 function makeEmptyShiftDraft() {
-  return { employeeId: '', positionId: '', weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
+  return { employeeId: '', weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
 }
 
 /** Sprint SIRH premium §3 : glisser une case de congé/télétravail VALIDÉ (renderPlanningStatusCell
