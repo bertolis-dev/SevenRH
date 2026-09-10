@@ -1631,68 +1631,71 @@ textarea.input { resize: vertical; font-family: inherit; }
    Télétravail — planning hebdomadaire
    --------------------------------------------------------------------- */
 
-.planning-table th, .planning-table td { text-align: center; }
+/* §retour Betty du 10/09/2026 ("ça ne ressemble pas à l'image, il faut le même cadrillage, tous
+   pareil sauf les couleurs") : la référence est un vrai quadrillage façon tableur — bordure fine
+   autour de CHAQUE case (pas juste un filet horizontal comme les autres tableaux de l'appli), un
+   bloc de couleur qui remplit la case de bord à bord (pas une carte arrondie flottant avec une
+   marge/ombre), texte aligné à gauche. `border-collapse: collapse` déjà hérité de .table (voir plus
+   haut) : ajouter `border` sur chaque cellule suffit à obtenir un quadrillage complet, sans
+   redéfinir la structure du tableau. */
+.planning-table th, .planning-table td { text-align: center; border: 1px solid var(--color-border); }
 .planning-table th:first-child, .planning-table td:first-child { text-align: left; }
+/* Les cases de statut (renderPlanningStatusCell/renderPlanningDayCells) perdent leur padding — la
+   carte de couleur à l'intérieur (position absolute) remplit alors la case exactement de bord à
+   bord, comme dans la référence, plutôt que de flotter avec une marge visible. */
+.planning-table td.planning-cell, .planning-table td.planning-leave-bar-cell { padding: 0; position: relative; text-align: left; }
 
-.planning-cell { font-size: 16px; }
-.planning-cell svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
+.planning-cell svg { width: 14px; height: 14px; display: block; margin: 0 auto; }
 .planning-off-dash { color: var(--color-text-muted); font-size: 13px; }
 
-/* §demande Betty du 09/09/2026 ("change le design du planning, style Agendrix") : chaque jour occupé
-   devient une petite carte (fond + accent gauche + coins arrondis, voir renderPlanningStatusCell)
-   plutôt qu'un aplat de couleur sur toute la cellule — plus proche visuellement du modèle envoyé,
-   SANS reprendre sa palette "une couleur par poste" (repoussée deux fois déjà sur ce projet, voir
-   seven_rh_design_palette_rule) : ces trois teintes restent EXACTEMENT celles du Calendrier pour les
-   mêmes concepts (.legend-conge/.calendar-badge-conge = succès/vert, .legend-teletravail/
-   .calendar-badge-teletravail = accent marine, "présent" = info/bleu clair, non utilisé par le
-   Calendrier). */
 /* §demande Betty du 10/09/2026 ("même design que [référence Combo], mais les couleurs actuelles") :
-   bloc de couleur plein plutôt qu'un simple accent gauche (plus proche visuellement de la
-   référence), coins plus arrondis, position relative pour loger un petit repère d'icône en coin
-   (.planning-shift-corner-icon) — mêmes trois teintes sémantiques qu'avant, jamais une couleur par
+   bloc de couleur qui remplit toute la case (position absolute, inset 0 — un enfant en `height:100%`
+   ne se résout pas de façon fiable dans une cellule de tableau, même leçon déjà tirée pour
+   .absence-cal-bar, voir plus bas dans ce fichier), à peine arrondi (pas une carte flottante avec
+   ombre), texte aligné à gauche — mêmes trois teintes sémantiques qu'avant, jamais une couleur par
    service/poste (voir seven_rh_design_palette_rule). */
 .planning-shift-card {
-  display: inline-flex;
+  position: absolute;
+  inset: 0;
+  display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 100%;
-  min-height: 40px;
   box-sizing: border-box;
-  position: relative;
-  border-radius: var(--radius-md);
+  border-radius: 3px;
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  padding: 6px 18px 6px 6px;
+  padding: 6px 18px 6px 8px;
 }
 .planning-shift-leave { background: var(--color-success-soft); }
 .planning-shift-remote { background: var(--color-primary-soft); }
 .planning-shift-office { background: var(--color-info-soft); }
 .planning-shift-pending { opacity: 0.6; }
-/* Barre continue d'un congé de plusieurs jours (voir renderPlanningDayCells) : un peu plus chunky
-   que la carte d'un seul jour, cohérent avec l'esprit "barre" plutôt que "case" de la référence. */
-.planning-shift-bar { min-height: 44px; padding: 8px 20px 8px 10px; }
+/* Repos hebdomadaire (§retour du 10/09/2026) : même case pleine que les autres statuts (tous
+   pareil), simplement grise et centrée — en vue Semaine seulement (colonnes assez larges), vue Mois
+   inchangée (~30 colonnes déjà étroites, un tiret suffit, voir renderPlanningStatusCell). */
+.planning-shift-off { background: var(--color-muted-soft); align-items: center; text-align: center; }
+.planning-shift-off .planning-shift-caption { color: var(--color-text-muted); text-align: center; }
 /* §retour Betty du 09/09/2026 ("enlève les icônes, rends les horaires plus jolies") : la légende
    (horaires ou titre du congé) remplace désormais l'icône (voir renderPlanningStatusCell) — elle
    reprend donc la même couleur d'accent que la carte plutôt qu'un simple gris, pour rester la seule
    information visuelle du jour. */
-.planning-shift-caption { font-size: 12px; font-weight: 700; line-height: 1.3; text-align: center; }
+.planning-shift-caption { font-size: 12px; font-weight: 700; line-height: 1.3; }
+.planning-shift-subtext { font-size: 11px; font-weight: 500; line-height: 1.3; opacity: 0.85; }
 .planning-shift-leave .planning-shift-caption { color: var(--color-success); }
 .planning-shift-remote .planning-shift-caption { color: var(--color-primary); }
 .planning-shift-office .planning-shift-caption { color: var(--color-info); }
 /* Petit repère d'icône en coin de carte (§demande du 10/09/2026, référence Combo) : discret, jamais
    la seule information (le texte de la légende reste la source principale), même couleur que la
    légende via currentColor. */
-.planning-shift-corner-icon { position: absolute; bottom: 3px; right: 4px; opacity: 0.55; line-height: 0; }
+.planning-shift-corner-icon { position: absolute; bottom: 4px; right: 6px; opacity: 0.55; line-height: 0; }
 .planning-shift-corner-icon svg { width: 11px; height: 11px; display: block; }
 .planning-shift-leave .planning-shift-corner-icon { color: var(--color-success); }
 .planning-shift-remote .planning-shift-corner-icon { color: var(--color-primary); }
 .planning-shift-office .planning-shift-corner-icon { color: var(--color-info); }
-/* Jour de repos hebdomadaire : en vue Semaine (colonnes assez larges), une étiquette plutôt qu'un
-   simple tiret — plus proche du "Repos hebdomadaire" de la référence, resté un tiret en vue Mois
-   (~30 colonnes déjà étroites, voir renderPlanningStatusCell). */
-.planning-off-pill { display: inline-block; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--color-muted-soft); color: var(--color-text-muted); font-size: 11px; font-weight: 600; }
+/* Vue Mois (~30 colonnes déjà étroites) : icône seule, recentrée (le reste de la carte est aligné à
+   gauche par défaut, voir plus haut) — voir renderPlanningStatusCell. */
+.planning-shift-icon-only { align-items: center; padding: 4px; }
+.planning-shift-icon { display: flex; justify-content: center; width: 100%; }
 /* Compteurs sous le nom du salarié (§demande du 10/09/2026) : heures hebdomadaires contractuelles
    (employee.horairesHebdo) et solde de repos compensateur (getReposCompensateurSolde) — les deux
    SEULS compteurs de la référence ayant un vrai équivalent existant dans Nexus, voir

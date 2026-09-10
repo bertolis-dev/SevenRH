@@ -16005,28 +16005,33 @@ function personNameWithPosteHtml(e) {
  * (icône + texte) tient dans la carte plutôt qu'à plat dans la cellule, pour un rendu plus proche
  * d'un vrai planning visuel. Un jour de congé affiche aussi son type en légende (ex. "Congés payés"),
  * pas seulement l'icône — la carte serait sinon vide de texte, contrairement aux jours travaillés. */
+/** §retour Betty du 10/09/2026 ("tous pareil sauf les couleurs") : le titre déjà calculé par
+ * getStatusForDate ("Présent", "Télétravail", nom du congé...) sert directement de légende en gras —
+ * même format pour tous les statuts, plutôt qu'une légende différente selon le cas (avant : horaires
+ * pour présent/télétravail, titre pour congé). Les horaires viennent en seconde ligne, plus petite,
+ * uniquement pour présent/télétravail (un congé n'a pas d'horaires à afficher). */
 function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequests, showHoraires = false) {
   const status = getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests);
   const draggable = (status.level === 'leave' || status.level === 'remote') && !status.pending;
-  // showHoraires gate aussi la légende congé (pas seulement horaires/télétravail) : en vue Mois
-  // (~30 colonnes déjà étroites), un texte de légende sur un seul jour élargirait sa colonne et
-  // désaligner toute la grille par rapport aux autres jours — mieux vaut l'icône seule partout,
-  // cohérent avec le choix déjà fait de ne pas afficher les horaires en Mois.
-  const caption = !showHoraires ? ''
-    : status.level === 'leave' ? status.title
-    : (status.level === 'office' || status.level === 'remote') ? formatHorairesRange(employee)
-    : '';
-  // §retour Betty du 09/09/2026 ("enlève les icônes au-dessus des horaires, rends les horaires plus
-  // jolies") : quand une légende texte existe (horaires en vue Semaine, ou titre du congé), elle
-  // remplace l'icône plutôt que de s'ajouter en dessous — l'icône ne reste que quand il n'y a rien
-  // d'autre à afficher (vue Mois, sans horaires), pour ne jamais laisser une carte totalement vide.
-  const card = status.level === 'off'
-    ? (showHoraires ? `<span class="planning-off-pill">Repos</span>` : `<span class="planning-off-dash">—</span>`)
-    : `
+  if (status.level === 'off') {
+    // §retour Betty du 10/09/2026 : même case pleine que les autres statuts en vue Semaine (colonnes
+    // assez larges) — reste un simple tiret en vue Mois (~30 colonnes déjà étroites, voir plus haut
+    // dans l'historique de ce fichier pour ce choix).
+    const card = showHoraires
+      ? `<div class="planning-shift-card planning-shift-off"><div class="planning-shift-caption">Repos</div></div>`
+      : `<span class="planning-off-dash">—</span>`;
+    return `<td class="planning-cell" title="${escapeHtml(status.title)}">${card}</td>`;
+  }
+  const subtext = showHoraires && (status.level === 'office' || status.level === 'remote') ? formatHorairesRange(employee) : '';
+  const card = showHoraires ? `
     <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
-      ${caption
-        ? `<div class="planning-shift-caption">${escapeHtml(caption)}</div><span class="planning-shift-corner-icon">${escapeIcon(status.icon)}</span>`
-        : `<div class="planning-shift-icon">${escapeIcon(status.icon)}</div>`}
+      <div class="planning-shift-caption">${escapeHtml(status.title)}</div>
+      ${subtext ? `<div class="planning-shift-subtext">${escapeHtml(subtext)}</div>` : ''}
+      <span class="planning-shift-corner-icon">${escapeIcon(status.icon)}</span>
+    </div>
+  ` : `
+    <div class="planning-shift-card planning-shift-${status.level} planning-shift-icon-only${status.pending ? ' planning-shift-pending' : ''}">
+      <div class="planning-shift-icon">${escapeIcon(status.icon)}</div>
     </div>
   `;
   return `<td class="planning-cell"
