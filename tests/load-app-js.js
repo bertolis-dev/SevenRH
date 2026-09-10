@@ -78,6 +78,11 @@ function loadAppJs() {
   const exposeAfterData = `
 ;globalThis.__DB = DB;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
+globalThis.__positionRepository = positionRepository;
+globalThis.__shiftRepository = shiftRepository;
+globalThis.__computeShiftHeures = computeShiftHeures;
+globalThis.__seedPositions = seedPositions;
+globalThis.__migrateCompanyPositions = migrateCompanyPositions;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -194,6 +199,9 @@ globalThis.__leaveTypeRepository = leaveTypeRepository;
 globalThis.__openLeaveRequestModal = openLeaveRequestModal;
 globalThis.__updateLeaveRequestHints = updateLeaveRequestHints;
 globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
+globalThis.__renderPlanningPostes = renderPlanningPostes;
+globalThis.__renderPlanning = renderPlanning;
+globalThis.__openShiftModal = openShiftModal;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -201,6 +209,11 @@ globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
     sandbox,
     DB: sandbox.__DB,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
+    positionRepository: sandbox.__positionRepository,
+    shiftRepository: sandbox.__shiftRepository,
+    computeShiftHeures: sandbox.__computeShiftHeures,
+    seedPositions: sandbox.__seedPositions,
+    migrateCompanyPositions: sandbox.__migrateCompanyPositions,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,
@@ -304,6 +317,9 @@ globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
     getNotifDayGroupLabel: sandbox.__getNotifDayGroupLabel,
     notificationRepository: sandbox.__notificationRepository,
     FILTER_RESET_HANDLERS: sandbox.__FILTER_RESET_HANDLERS,
+    renderPlanningPostes: sandbox.__renderPlanningPostes,
+    renderPlanning: sandbox.__renderPlanning,
+    openShiftModal: sandbox.__openShiftModal,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

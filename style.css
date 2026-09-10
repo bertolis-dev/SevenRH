@@ -1704,6 +1704,59 @@ textarea.input { resize: vertical; font-family: inherit; }
 .planning-employee-badge { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--color-muted-soft); color: var(--color-text-muted); }
 .planning-employee-badge-rcr { background: var(--color-primary-soft); color: var(--color-primary-text); }
 
+/* ---------------------------------------------------------------------
+   Planning par postes (§demande Betty du 10/09/2026) — écran distinct inspiré d'une maquette
+   envoyée, MAIS identité Nexus (bleu marine + or), jamais la palette de la référence (confirmé avant
+   de commencer) : les cases de quart réutilisent .planning-shift-card/.planning-shift-caption/
+   .planning-shift-subtext déjà en place pour le Planning (même "cadrillage", même remplissage de
+   bord à bord — voir plus haut), une seule teinte or/marine pour tous les postes, jamais une couleur
+   par position comme dans la référence.
+   --------------------------------------------------------------------- */
+.poste-layout { display: flex; align-items: flex-start; gap: 16px; }
+.poste-filters-panel { width: 260px; flex-shrink: 0; position: sticky; top: 0; }
+.poste-main { flex: 1; min-width: 0; }
+
+.poste-filter-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border-soft); }
+.poste-filter-section-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.poste-filter-subtitle { font-size: 11px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 10px 0 4px; }
+.poste-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
+.poste-checkbox-row input { accent-color: var(--color-primary); }
+
+.planning-shift-poste { background: var(--color-gold-soft); }
+.planning-shift-poste .planning-shift-caption { color: var(--color-text); }
+
+/* Case vide "à combler" : même case pleine que les autres (bordure de la grille, position absolute
+   déjà réglée sur .planning-table td.planning-cell), un simple "+" en pointillé plutôt qu'un statut
+   coloré — devient teal/marine au survol pour inviter au clic. */
+.poste-shift-add {
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed var(--color-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.poste-shift-add:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
+
+/* Vue "à plat" (Grouper par position décoché) : étiquette de poste sous le nom, à la place du
+   bandeau de groupe (voir renderPlanningPostes). */
+.poste-tag { display: inline-block; font-size: 11px; background: var(--color-muted-soft); color: var(--color-text-muted); padding: 1px 6px; border-radius: 6px; margin-top: 2px; }
+
+.poste-budget-row td { background: var(--color-gold-soft); border-top: 2px solid var(--color-gold); font-weight: 700; }
+
+/* Panneau de filtres + grille côte à côte ne tient pas sur un écran de téléphone (voir .poste-layout
+   plus haut) — empilés à la place, même seuil que le reste de l'appli (voir §menu mobile "☰"). */
+@media (max-width: 860px) {
+  .poste-layout { flex-direction: column; }
+  .poste-filters-panel { width: 100%; position: static; }
+}
+
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }
 .planning-cell-dragging { opacity: 0.4; }

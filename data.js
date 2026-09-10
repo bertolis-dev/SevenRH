@@ -592,6 +592,8 @@ function makeEmptyCompany() {
     etablissements: [],
     employees: [],
     services: [],
+    positions: [], // Planning par postes (§10/09/2026) — voir seedPositions()/migrateCompanyPositions()
+    shifts: [],
     settings: Object.assign({}, DEFAULT_SETTINGS),
     leaveTypes: [],
     leaveRequests: [],
@@ -621,6 +623,7 @@ function seedCompany() {
     matriculeSeq: 6,
     employees: seedEmployees(),
     services: seedServices(),
+    positions: seedPositions(),
     leaveTypes: seedLeaveTypes(),
     schoolHolidays: seedSchoolHolidays()
   });
@@ -697,6 +700,23 @@ async function hydrateCurrentCompanyWithMigrations() {
         await window.SupabaseSync.pushLeaveTypes(company.leaveTypes, company.id);
       } catch (err) {
         console.error('migrateLeaveTypeAutoriserDemiJournee : échec de synchronisation, retentera à la prochaine connexion.', err);
+      }
+    }
+    // §demande Betty du 10/09/2026 (écran Planning > Postes) : même raisonnement — une entreprise
+    // réelle déjà existante doit voir ses positions par défaut apparaître dès la connexion suivante,
+    // pas seulement dans un cache local jamais réellement utilisé pour une vraie session. positions/
+    // shifts vivent dans le blob "profil entreprise" (pas de table dédiée, voir DB.savePositions) —
+    // c'est donc pushCompanyProfile qu'il faut rappeler ici, avec la MÊME liste de champs exclus que
+    // saveCompanyProfile (un remplacement complet côté serveur, jamais une fusion : repousser un
+    // sous-ensemble de champs effacerait le reste du blob déjà en base).
+    if (migrateCompanyPositions(company) && currentUser && hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) {
+      try {
+        const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+          teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+          brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+        await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
+      } catch (err) {
+        console.error('migrateCompanyPositions : échec de synchronisation, retentera à la prochaine connexion.', err);
       }
     }
   }
@@ -816,6 +836,46 @@ function migrateCompanyAbonnement(company) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Planning par postes (§demande Betty du 10/09/2026) — positions de planning ("Caisse", "Commis"...)
+// et quarts récurrents hebdomadaires (jour de semaine + horaire, PAS une date précise : un modèle de
+// planning type, pas un planning daté définitivement). Distinct de employee.poste (intitulé de poste
+// du salarié) : une "position" ici est une affectation de PLANNING, un même salarié peut en théorie
+// être planifié sur plusieurs positions différentes selon le jour. Pas de champ couleur par position
+// (contrairement à la maquette envoyée) : Betty a confirmé garder bleu marine + or, voir
+// seven_rh_design_palette_rule — jamais une couleur par service/poste dans cette appli.
+// ---------------------------------------------------------------------------
+
+function seedPositions() {
+  return ['Caisse', 'Commis', 'Concierge', 'Assistant-gérant', 'RH', 'Entrepôt'].map((nom, i) => ({ id: generateId('pos'), nom, ordre: i }));
+}
+
+function makeEmptyShift() {
+  return { id: null, positionId: null, employeeId: null, weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
+}
+
+/** Durée effective d'un quart en heures décimales : (fin − début) − pause. Toutes les valeurs sont
+ * déjà validées HH:MM à la saisie (submitShiftForm, app.js) — pas de garde supplémentaire ici. */
+function computeShiftHeures(shift) {
+  const [dh, dm] = shift.heureDebut.split(':').map(Number);
+  const [fh, fm] = shift.heureFin.split(':').map(Number);
+  const minutes = Math.max(0, (fh * 60 + fm) - (dh * 60 + dm) - (shift.pauseMinutes || 0));
+  return round2(minutes / 60);
+}
+
+/** Ajoute positions/shifts aux entreprises créées avant l'existence de cet écran — sans ça, une
+ * entreprise réelle déjà existante se retrouverait avec un écran Planning > Postes vide de toute
+ * position proposée, silencieusement. Idempotent (`if (company.positions) return false`), appliquée
+ * à la fois au cache local (DB.init()) ET à la vraie connexion (hydrateCurrentCompanyWithMigrations)
+ * — même leçon que migrateLeaveTypeAutoriserDemiJournee juste au-dessus : un champ dont dépend un
+ * comportement visible doit être corrigé sur une VRAIE connexion, pas seulement le cache local. */
+function migrateCompanyPositions(company) {
+  if (company.positions) return false;
+  company.positions = seedPositions();
+  company.shifts = company.shifts || [];
+  return true;
+}
+
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
  * session) et toute action qui cible une entreprise précise sans que ce soit "l'entreprise
  * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
@@ -924,7 +984,8 @@ const DB = {
     const migratedSaisiParSalarie = companies.map(c => migrateLeaveTypeSaisiParSalarie(c)).some(Boolean);
     const migratedAnciennete = companies.map(c => migrateAncienneteVersAutresAbsences(c)).some(Boolean);
     const migratedDemiJournee = companies.map(c => migrateLeaveTypeAutoriserDemiJournee(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete || migratedDemiJournee) this.saveCompanies(companies);
+    const migratedPositions = companies.map(c => migrateCompanyPositions(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete || migratedDemiJournee || migratedPositions) this.saveCompanies(companies);
 
     // §correctif audit du 23/08/2026 : cette clé contenait un identifiant BERTOLIS auto-semé avec
     // un mot de passe EN CLAIR, comparé côté client (bertolisLogin ci-dessous) — visible par
@@ -1723,6 +1784,106 @@ const DB = {
     equipe.managerIds = managerIds;
     this.saveServices(list);
     this.logAudit('Modification', 'Équipe', `Managers de ${equipe.nom} (${service.nom})`);
+  },
+
+  // ---- Planning par postes (§10/09/2026) — positions + quarts récurrents hebdomadaires ----
+
+  /** Repousse le blob "profil entreprise" en entier (companies.data, JSONB) — un remplacement
+   * COMPLET côté serveur (syncCompanyProfile fait un .update({data}), jamais une fusion), donc
+   * toujours repartir de `company` entier plutôt que d'un sous-objet construit à la main, sous peine
+   * d'effacer silencieusement les autres champs déjà en base. Même liste de champs exclus que
+   * saveCompanyProfile (ceux qui ont leur propre table dédiée) — factorisé ici pour positions/shifts
+   * plutôt que dupliqué une troisième fois. */
+  _pushCompanyDataBlob(company) {
+    const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+      teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
+  },
+
+  getPositions() {
+    return (this.getCurrentCompany().positions || []).slice();
+  },
+
+  savePositions(list) {
+    const company = this.getCurrentCompany();
+    company.positions = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getPositionById(id) {
+    return this.getPositions().find(p => p.id === id) || null;
+  },
+
+  addPosition(nom) {
+    const list = this.getPositions();
+    const position = { id: generateId('pos'), nom, ordre: list.length };
+    list.push(position);
+    this.savePositions(list);
+    this.logAudit('Création', 'Position (planning)', nom);
+    return position;
+  },
+
+  renamePosition(id, nom) {
+    const list = this.getPositions();
+    const position = list.find(p => p.id === id);
+    if (!position) return;
+    position.nom = nom;
+    this.savePositions(list);
+    this.logAudit('Modification', 'Position (planning)', nom);
+  },
+
+  /** Un quart déjà créé pour cette position devient orphelin sinon — plutôt que de le laisser
+   * pointer vers un id qui n'existe plus (silencieusement invisible dès que le filtre positions
+   * cherche à retrouver son nom), il est supprimé avec elle. */
+  deletePosition(id) {
+    const position = this.getPositionById(id);
+    this.savePositions(this.getPositions().filter(p => p.id !== id));
+    if (position) {
+      this.saveShifts(this.getShifts().filter(s => s.positionId !== id));
+      this.logAudit('Suppression', 'Position (planning)', position.nom);
+    }
+  },
+
+  getShifts() {
+    return (this.getCurrentCompany().shifts || []).slice();
+  },
+
+  saveShifts(list) {
+    const company = this.getCurrentCompany();
+    company.shifts = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getShiftById(id) {
+    return this.getShifts().find(s => s.id === id) || null;
+  },
+
+  addShift(data) {
+    const list = this.getShifts();
+    const shift = Object.assign(makeEmptyShift(), data, { id: generateId('shift') });
+    list.push(shift);
+    this.saveShifts(list);
+    this.logAudit('Création', 'Quart de planning', `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}`);
+    return shift;
+  },
+
+  updateShift(id, patch) {
+    const list = this.getShifts();
+    const index = list.findIndex(s => s.id === id);
+    if (index === -1) return null;
+    list[index] = Object.assign({}, list[index], patch);
+    this.saveShifts(list);
+    this.logAudit('Modification', 'Quart de planning', `${list[index].weekday} ${list[index].heureDebut}-${list[index].heureFin}`);
+    return list[index];
+  },
+
+  deleteShift(id) {
+    const shift = this.getShiftById(id);
+    this.saveShifts(this.getShifts().filter(s => s.id !== id));
+    if (shift) this.logAudit('Suppression', 'Quart de planning', `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}`);
   },
 
   // ---- Vacances scolaires (paramétrables par zone) ----
@@ -3328,6 +3489,23 @@ const teleworkRepository = {
   getForEmployee: (employeeId) => DB.getTeleworkRequestsForEmployee(employeeId),
   create: (data) => DB.addTeleworkRequest(data),
   update: (id, patch) => DB.updateTeleworkRequest(id, patch)
+};
+
+// Planning par postes (§10/09/2026) — voir DB.getPositions/getShifts.
+const positionRepository = {
+  getAll: () => DB.getPositions(),
+  getById: (id) => DB.getPositionById(id),
+  create: (nom) => DB.addPosition(nom),
+  rename: (id, nom) => DB.renamePosition(id, nom),
+  delete: (id) => DB.deletePosition(id)
+};
+
+const shiftRepository = {
+  getAll: () => DB.getShifts(),
+  getById: (id) => DB.getShiftById(id),
+  create: (data) => DB.addShift(data),
+  update: (id, patch) => DB.updateShift(id, patch),
+  delete: (id) => DB.deleteShift(id)
 };
 
 const expenseRepository = {

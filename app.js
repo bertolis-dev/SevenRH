@@ -212,6 +212,22 @@ function getInitialViewState() {
     planningWeekOffset: 0,
     planningYear: new Date().getFullYear(),
     planningMonth: new Date().getMonth(),
+    // Onglet Planning > Postes (§10/09/2026) : positions/quarts récurrents hebdomadaires — état
+    // séparé de planningFilters/planningWeekOffset (utilisés par Semaine/Mois), propre à cet écran.
+    planningPostesWeekOffset: 0,
+    planningPostesSortDir: 'asc', // 'asc' (prénom A-Z) | 'desc' (Z-A)
+    planningPostesFilters: {
+      etablissementId: '',
+      positionIds: null, // null = toutes ; Set d'ids sinon
+      positionSearch: '', // filtre la LISTE des positions dans le panneau (pas les salariés)
+      search: '', // filtre les salariés (barre d'outils)
+      afficherQuartsACombler: true,
+      masquerQuartsConfirmes: false,
+      grouperParPosition: true,
+      afficherBudget: false,
+      employesFiltre: 'tous', // 'tous' | 'avecQuart'
+      congesFiltre: 'afficher' // 'afficher' | 'masquer'
+    },
     auditFilters: { action: '', search: '', dateDebut: '', dateFin: '' },
     auditPage: 1,
     calendrierVue: 'entreprise', // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
@@ -15900,15 +15916,16 @@ function renderPlanning() {
       <h1>Planning</h1>
       <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail : congés et télétravail validés</p>
     </div>
-    ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
+    ${state.planningView !== 'postes' ? renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe') : ''}
     <div class="tabs">
       <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
       <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
       <button class="tab ${state.planningView === 'annee' ? 'active' : ''}" data-planning-view="annee">Année</button>
       <button class="tab ${state.planningView === 'horaires' ? 'active' : ''}" data-planning-view="horaires">Horaires</button>
       <button class="tab ${state.planningView === 'astreintes' ? 'active' : ''}" data-planning-view="astreintes">Astreintes</button>
+      <button class="tab ${state.planningView === 'postes' ? 'active' : ''}" data-planning-view="postes">Postes</button>
     </div>
-    ${state.planningView !== 'astreintes' ? `
+    ${state.planningView !== 'astreintes' && state.planningView !== 'postes' ? `
     <div class="toolbar card">
       <select id="planning-filter-service" class="input">
         <option value="">Tous les services</option>
@@ -15921,6 +15938,7 @@ function renderPlanning() {
         : state.planningView === 'annee' ? renderPlanningAnnee()
         : state.planningView === 'horaires' ? renderPlanningHoraires()
         : state.planningView === 'astreintes' ? renderPlanningAstreintes()
+        : state.planningView === 'postes' ? renderPlanningPostes()
         : renderPlanningSemaine()}
     </div>
   `;
@@ -16539,6 +16557,7 @@ function bindPlanningEvents() {
   if (state.planningView === 'semaine' || state.planningView === 'mois') bindPlanningDragEvents();
 
   if (state.planningView === 'astreintes') bindPlanningAstreintesEvents();
+  if (state.planningView === 'postes') bindPlanningPostesEvents();
 }
 
 /** §7.21 : liste des astreintes (toutes entreprises visibles pour l'utilisateur, via
@@ -16709,6 +16728,394 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-close-modal-footer').addEventListener('click', closeModal);
+}
+
+// ---------------------------------------------------------------------------
+// Planning par postes (§demande Betty du 10/09/2026) — écran distinct, inspiré d'une maquette envoyée
+// (structure fonctionnelle : positions, quarts récurrents hebdomadaires, filtres, regroupement par
+// poste) mais avec l'identité visuelle de Nexus (bleu marine + or), jamais la palette/le branding de
+// la référence elle-même (confirmé avec Betty avant de commencer) — voir positionRepository/
+// shiftRepository (data.js) et seven_rh_design_palette_rule.
+//
+// Simplifications volontaires par rapport à la maquette, à signaler explicitement (Betty a demandé à
+// être prévenue de tout écart) :
+//   - Pas de vue "Jour" (seule "Semaine" existe) : la référence en propose une, hors périmètre d'un
+//     premier jet fonctionnel.
+//   - Pas de bouton "Publier"/badge associé : la référence suppose un état brouillon/publié, qui
+//     n'existe nulle part dans le modèle de données de Nexus — l'inventer aurait été une vraie
+//     fonctionnalité de workflow, pas un simple habillage. Remplacé par un compteur simple de quarts
+//     affichés.
+//   - Pas de "Copier/Partager/Imprimer" (hors périmètre).
+//   - Pas de couleur par position (la maquette en propose une par défaut) : bleu marine + or partout,
+//     confirmé par Betty.
+// ---------------------------------------------------------------------------
+
+/** Salariés visibles pour cet écran (portée manager déjà appliquée), avant application des filtres
+ * propres à l'écran Postes (établissement, recherche, congés, "avec quart seulement"). */
+function getPlanningPostesEmployees(f, weekStartStr, weekEndStr) {
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  let employees = employeeRepository.getAll().filter(e => !e.archive);
+  if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
+  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
+  if (f.search.trim()) {
+    const q = f.search.trim().toLowerCase();
+    employees = employees.filter(e => `${e.prenom} ${e.nom}`.toLowerCase().includes(q));
+  }
+  if (f.congesFiltre === 'masquer') {
+    const onLeaveIds = new Set(
+      leaveRepository.getAll()
+        .filter(r => r.statut === 'Validé' && r.dateDebut <= weekEndStr && r.dateFin >= weekStartStr)
+        .map(r => r.employeeId)
+    );
+    employees = employees.filter(e => !onLeaveIds.has(e.id));
+  }
+  return employees;
+}
+
+function renderPlanningPostes() {
+  const user = authRepository.getCurrentUser();
+  const canManage = hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
+  const f = state.planningPostesFilters;
+  const weekDates = getWeekDates(state.planningPostesWeekOffset);
+  const weekStartStr = toISODate(weekDates[0]);
+  const weekEndStr = toISODate(weekDates[6]);
+
+  const allPositions = positionRepository.getAll().slice().sort((a, b) => a.ordre - b.ordre);
+  const activePositionIds = f.positionIds === null ? new Set(allPositions.map(p => p.id)) : f.positionIds;
+  const activePositions = allPositions.filter(p => activePositionIds.has(p.id));
+
+  const allShifts = shiftRepository.getAll().filter(s => activePositionIds.has(s.positionId));
+  const shiftsFor = (employeeId, weekday, positionId) => allShifts.find(s =>
+    s.employeeId === employeeId && s.weekday === weekday && (!positionId || s.positionId === positionId)
+  );
+  const employeeShifts = (employeeId) => allShifts.filter(s => s.employeeId === employeeId);
+  const employeeWeekHeures = (employeeId) => round2(employeeShifts(employeeId).reduce((sum, s) => sum + computeShiftHeures(s), 0));
+
+  let employees = getPlanningPostesEmployees(f, weekStartStr, weekEndStr);
+  if (f.employesFiltre === 'avecQuart') employees = employees.filter(e => employeeShifts(e.id).length > 0);
+  const sortEmployees = (list) => list.slice().sort((a, b) =>
+    state.planningPostesSortDir === 'desc' ? b.prenom.localeCompare(a.prenom) : a.prenom.localeCompare(b.prenom)
+  );
+
+  const renderCell = (employee, weekday, positionId) => {
+    const shift = shiftsFor(employee.id, weekday, positionId);
+    if (shift && !f.masquerQuartsConfirmes) {
+      const position = allPositions.find(p => p.id === shift.positionId);
+      return `<td class="planning-cell">
+        <div class="planning-shift-card planning-shift-poste" data-edit-shift="${shift.id}">
+          <div class="planning-shift-caption">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
+          <div class="planning-shift-subtext">${escapeHtml(position ? position.nom : '')}${shift.pauseMinutes ? ` · ${shift.pauseMinutes} min de pause` : ''}</div>
+        </div>
+      </td>`;
+    }
+    if (f.afficherQuartsACombler && canManage) {
+      return `<td class="planning-cell"><button type="button" class="poste-shift-add" data-add-shift="${employee.id}|${weekday}|${positionId || ''}" title="Ajouter un quart">+</button></td>`;
+    }
+    return `<td class="planning-cell"></td>`;
+  };
+
+  const renderEmployeeRow = (employee, positionId) => `
+    <tr>
+      <td class="planning-employee-cell">
+        ${renderAvatar(employee)}
+        <div class="planning-employee-info">
+          <div>${personNameHtml(employee)}</div>
+          ${!f.grouperParPosition ? (() => {
+            const noms = [...new Set(employeeShifts(employee.id).map(s => (allPositions.find(p => p.id === s.positionId) || {}).nom).filter(Boolean))];
+            return `<span class="poste-tag">${escapeHtml(noms.join(', ') || '—')}</span>`;
+          })() : ''}
+          <div class="planning-employee-badges"><span class="planning-employee-badge">${formatNumberFR(employeeWeekHeures(employee.id))} h</span></div>
+        </div>
+      </td>
+      ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7], positionId)).join('')}
+      <td class="planning-total-cell"><strong>${formatNumberFR(employeeWeekHeures(employee.id))} h</strong></td>
+    </tr>
+  `;
+
+  let bodyHtml;
+  if (f.grouperParPosition) {
+    bodyHtml = activePositions.map(position => {
+      const positionEmployees = sortEmployees(employees.filter(e => employeeShifts(e.id).some(s => s.positionId === position.id)));
+      if (positionEmployees.length === 0) return '';
+      return `
+        <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(position.nom)} <span class="text-muted">(${positionEmployees.length})</span></td></tr>
+        ${positionEmployees.map(e => renderEmployeeRow(e, position.id)).join('')}
+      `;
+    }).join('');
+  } else {
+    bodyHtml = sortEmployees(employees).map(e => renderEmployeeRow(e, null)).join('');
+  }
+
+  const totalShiftsCount = allShifts.filter(s => employees.some(e => e.id === s.employeeId)).length;
+  const budgetRow = f.afficherBudget ? `
+    <tr class="poste-budget-row">
+      <td><strong>Budget (heures planifiées)</strong></td>
+      ${weekDates.map(d => {
+        const weekday = WEEKDAY_LABELS[(d.getDay() + 6) % 7];
+        const total = allShifts.filter(s => s.weekday === weekday && employees.some(e => e.id === s.employeeId)).reduce((sum, s) => sum + computeShiftHeures(s), 0);
+        return `<td><strong>${formatNumberFR(round2(total))} h</strong></td>`;
+      }).join('')}
+      <td><strong>${formatNumberFR(round2(allShifts.filter(s => employees.some(e => e.id === s.employeeId)).reduce((sum, s) => sum + computeShiftHeures(s), 0)))} h</strong></td>
+    </tr>
+  ` : '';
+
+  return `
+    <div class="poste-layout">
+      ${renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f)}
+      <div class="poste-main">
+        <div class="toolbar card">
+          <input type="text" class="input" id="poste-search-employe" placeholder="Rechercher un salarié..." value="${escapeHtml(f.search)}" style="max-width: 200px;">
+          <button class="btn btn-secondary btn-sm" id="btn-poste-week-today">Aujourd'hui</button>
+          <button class="btn btn-secondary btn-sm" id="btn-poste-week-prev">‹</button>
+          <button class="btn btn-secondary btn-sm" id="btn-poste-week-next">›</button>
+          <span class="btn btn-secondary btn-sm" style="cursor: default;">${formatDate(weekStartStr)} au ${formatDate(weekEndStr)}</span>
+          ${canManage ? `<button type="button" class="btn btn-primary btn-sm" id="btn-add-shift" style="margin-left: auto;">+ Créer un quart</button>` : ''}
+          <span class="badge badge-muted">${totalShiftsCount} quart${totalShiftsCount > 1 ? 's' : ''} affiché${totalShiftsCount > 1 ? 's' : ''}</span>
+        </div>
+        <div class="card table-card planning-scroll-card">
+          ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
+            <table class="table planning-table">
+              <thead>
+                <tr>
+                  <th id="btn-poste-sort-name" style="cursor: pointer;">↕ Prénom (${state.planningPostesSortDir === 'desc' ? 'Z-A' : 'A-Z'})</th>
+                  ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]}. ${d.getDate()}</th>`).join('')}
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${bodyHtml}
+                ${budgetRow}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f) {
+  const filteredPositions = f.positionSearch.trim()
+    ? allPositions.filter(p => p.nom.toLowerCase().includes(f.positionSearch.trim().toLowerCase()))
+    : allPositions;
+  const allChecked = allPositions.every(p => activePositionIds.has(p.id));
+
+  return `
+    <div class="card poste-filters-panel">
+      <div class="view-header-row" style="margin-bottom: 12px;">
+        <h2 style="margin: 0;">Filtres</h2>
+        <button type="button" class="btn-link" id="btn-poste-reset-filters">Réinitialiser</button>
+      </div>
+
+      <div class="form-field">
+        <label>${icon(ICONS.building, 12)} Établissement</label>
+        <select class="input" id="poste-filter-etablissement">
+          <option value="">Tous les établissements</option>
+          ${etablissementRepository.getAll().map(et => `<option value="${et.id}" ${f.etablissementId === et.id ? 'selected' : ''}>${escapeHtml(et.nom)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="poste-filter-section">
+        <div class="poste-filter-section-title">Positions <span class="badge badge-muted">${activePositionIds.size}</span></div>
+        <input type="text" class="input" id="poste-filter-position-search" placeholder="Filtrer" value="${escapeHtml(f.positionSearch)}" style="margin-bottom: 8px;">
+        <label class="poste-checkbox-row">
+          <input type="checkbox" id="poste-filter-position-all" ${allChecked ? 'checked' : ''}>
+          Toutes les positions
+        </label>
+        ${filteredPositions.map(p => `
+          <label class="poste-checkbox-row">
+            <input type="checkbox" data-position-filter="${p.id}" ${activePositionIds.has(p.id) ? 'checked' : ''}>
+            ${escapeHtml(p.nom)}
+          </label>
+        `).join('')}
+      </div>
+
+      <div class="poste-filter-section">
+        <div class="poste-filter-section-title">Affichage</div>
+        <p class="poste-filter-subtitle">Quarts</p>
+        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-a-combler" ${f.afficherQuartsACombler ? 'checked' : ''}> Afficher les quarts à combler</label>
+        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-masquer-confirmes" ${f.masquerQuartsConfirmes ? 'checked' : ''}> Masquer les quarts confirmés</label>
+        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-grouper" ${f.grouperParPosition ? 'checked' : ''}> Grouper par position</label>
+        <p class="poste-filter-subtitle">Budget</p>
+        <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-budget" ${f.afficherBudget ? 'checked' : ''}> Afficher le budget</label>
+        <p class="poste-filter-subtitle">Salariés</p>
+        <select class="input" id="poste-filter-employes">
+          <option value="tous" ${f.employesFiltre === 'tous' ? 'selected' : ''}>Tous</option>
+          <option value="avecQuart" ${f.employesFiltre === 'avecQuart' ? 'selected' : ''}>Avec quart cette semaine</option>
+        </select>
+        <p class="poste-filter-subtitle">Congés</p>
+        <select class="input" id="poste-filter-conges">
+          <option value="afficher" ${f.congesFiltre === 'afficher' ? 'selected' : ''}>Afficher</option>
+          <option value="masquer" ${f.congesFiltre === 'masquer' ? 'selected' : ''}>Masquer</option>
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function bindPlanningPostesEvents() {
+  document.getElementById('btn-poste-week-today').addEventListener('click', () => { state.planningPostesWeekOffset = 0; render(); });
+  document.getElementById('btn-poste-week-prev').addEventListener('click', () => { state.planningPostesWeekOffset -= 1; render(); });
+  document.getElementById('btn-poste-week-next').addEventListener('click', () => { state.planningPostesWeekOffset += 1; render(); });
+
+  document.getElementById('btn-poste-sort-name').addEventListener('click', () => {
+    state.planningPostesSortDir = state.planningPostesSortDir === 'desc' ? 'asc' : 'desc';
+    render();
+  });
+
+  const searchInput = document.getElementById('poste-search-employe');
+  searchInput.addEventListener('input', (e) => { state.planningPostesFilters.search = e.target.value; render(); });
+  // Le focus se perdrait sinon à chaque frappe (le champ est reconstruit par render()) — recale le
+  // curseur en fin de texte, même patron que les autres champs de recherche live de l'appli.
+  searchInput.focus();
+  searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+
+  const addBtn = document.getElementById('btn-add-shift');
+  if (addBtn) addBtn.addEventListener('click', () => openShiftModal());
+
+  document.getElementById('btn-poste-reset-filters').addEventListener('click', () => {
+    state.planningPostesFilters = {
+      etablissementId: '', positionIds: null, positionSearch: '', search: '',
+      afficherQuartsACombler: true, masquerQuartsConfirmes: false, grouperParPosition: true,
+      afficherBudget: false, employesFiltre: 'tous', congesFiltre: 'afficher'
+    };
+    state.planningPostesSortDir = 'asc';
+    render();
+  });
+
+  document.getElementById('poste-filter-etablissement').addEventListener('change', (e) => {
+    state.planningPostesFilters.etablissementId = e.target.value;
+    render();
+  });
+  document.getElementById('poste-filter-position-search').addEventListener('input', (e) => {
+    state.planningPostesFilters.positionSearch = e.target.value;
+    render();
+  });
+  document.getElementById('poste-filter-position-all').addEventListener('change', (e) => {
+    state.planningPostesFilters.positionIds = e.target.checked ? null : new Set();
+    render();
+  });
+  document.querySelectorAll('[data-position-filter]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const f = state.planningPostesFilters;
+      const all = positionRepository.getAll();
+      const current = f.positionIds === null ? new Set(all.map(p => p.id)) : new Set(f.positionIds);
+      if (e.target.checked) current.add(cb.dataset.positionFilter); else current.delete(cb.dataset.positionFilter);
+      f.positionIds = current;
+      render();
+    });
+  });
+  document.getElementById('poste-filter-a-combler').addEventListener('change', (e) => { state.planningPostesFilters.afficherQuartsACombler = e.target.checked; render(); });
+  document.getElementById('poste-filter-masquer-confirmes').addEventListener('change', (e) => { state.planningPostesFilters.masquerQuartsConfirmes = e.target.checked; render(); });
+  document.getElementById('poste-filter-grouper').addEventListener('change', (e) => { state.planningPostesFilters.grouperParPosition = e.target.checked; render(); });
+  document.getElementById('poste-filter-budget').addEventListener('change', (e) => { state.planningPostesFilters.afficherBudget = e.target.checked; render(); });
+  document.getElementById('poste-filter-employes').addEventListener('change', (e) => { state.planningPostesFilters.employesFiltre = e.target.value; render(); });
+  document.getElementById('poste-filter-conges').addEventListener('change', (e) => { state.planningPostesFilters.congesFiltre = e.target.value; render(); });
+
+  document.querySelectorAll('[data-edit-shift]').forEach(card => {
+    card.addEventListener('click', () => openShiftModal(shiftRepository.getById(card.dataset.editShift)));
+  });
+  document.querySelectorAll('[data-add-shift]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [employeeId, weekday, positionId] = btn.dataset.addShift.split('|');
+      openShiftModal(null, { employeeId, weekday, positionId: positionId || '' });
+    });
+  });
+}
+
+/** `shift` = quart existant à modifier (null pour une création) ; `preset` = valeurs initiales pour
+ * une création lancée depuis une case "+" précise (employé/jour/position déjà connus). */
+function openShiftModal(shift, preset) {
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  let employees = employeeRepository.getAll().filter(e => !e.archive);
+  if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
+  const positions = positionRepository.getAll().slice().sort((a, b) => a.ordre - b.ordre);
+  const values = shift || Object.assign(makeEmptyShiftDraft(), preset || {});
+
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>${shift ? 'Modifier le quart' : 'Ajouter un quart'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="shift-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="f-shift-employee">Salarié</label>
+              <select class="input" id="f-shift-employee" required>
+                <option value="">Sélectionner...</option>
+                ${employees.map(e => `<option value="${e.id}" ${values.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-shift-position">Position</label>
+              <select class="input" id="f-shift-position" required>
+                <option value="">Sélectionner...</option>
+                ${positions.map(p => `<option value="${p.id}" ${values.positionId === p.id ? 'selected' : ''}>${escapeHtml(p.nom)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-shift-weekday">Jour</label>
+              <select class="input" id="f-shift-weekday">
+                ${WEEKDAY_LABELS.map(w => `<option value="${w}" ${values.weekday === w ? 'selected' : ''}>${w}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field"><label for="f-shift-debut">Heure de début</label><input class="input" type="time" id="f-shift-debut" value="${escapeHtml(values.heureDebut)}" required></div>
+            <div class="form-field"><label for="f-shift-fin">Heure de fin</label><input class="input" type="time" id="f-shift-fin" value="${escapeHtml(values.heureFin)}" required></div>
+            <div class="form-field"><label for="f-shift-pause">Pause (minutes)</label><input class="input" type="number" min="0" step="5" id="f-shift-pause" value="${values.pauseMinutes != null ? values.pauseMinutes : 30}"></div>
+          </div>
+          <p class="text-muted">Quart récurrent chaque semaine, tant qu'il n'est pas modifié ou supprimé (pas rattaché à une date précise).</p>
+        </div>
+        <div class="modal-footer">
+          ${shift ? `<button type="button" class="btn btn-secondary" id="btn-delete-shift" style="margin-right: auto;">Supprimer</button>` : ''}
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${shift ? 'Enregistrer' : 'Ajouter'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const deleteBtn = document.getElementById('btn-delete-shift');
+  if (deleteBtn) deleteBtn.addEventListener('click', () => {
+    openConfirm({
+      title: 'Supprimer ce quart ?',
+      message: 'Cette action est irréversible.',
+      confirmLabel: 'Supprimer',
+      danger: true,
+      onConfirm: () => {
+        shiftRepository.delete(shift.id);
+        closeModal();
+        showToast('Quart supprimé.');
+        render();
+      }
+    });
+  });
+  document.getElementById('shift-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const data = {
+      employeeId: document.getElementById('f-shift-employee').value,
+      positionId: document.getElementById('f-shift-position').value,
+      weekday: document.getElementById('f-shift-weekday').value,
+      heureDebut: document.getElementById('f-shift-debut').value,
+      heureFin: document.getElementById('f-shift-fin').value,
+      pauseMinutes: Number(document.getElementById('f-shift-pause').value) || 0
+    };
+    if (!data.employeeId || !data.positionId) { showToast('Sélectionnez un salarié et une position.', 'error'); return; }
+    if (data.heureFin <= data.heureDebut) { showToast('L\'heure de fin doit être après l\'heure de début.', 'error'); return; }
+    if (shift) shiftRepository.update(shift.id, data); else shiftRepository.create(data);
+    closeModal();
+    showToast(shift ? 'Quart modifié.' : 'Quart ajouté.');
+    render();
+  });
+}
+
+function makeEmptyShiftDraft() {
+  return { employeeId: '', positionId: '', weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
 }
 
 /** Sprint SIRH premium §3 : glisser une case de congé/télétravail VALIDÉ (renderPlanningStatusCell
