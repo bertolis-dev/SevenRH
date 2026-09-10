@@ -185,6 +185,15 @@ globalThis.__renderNotifPanel = renderNotifPanel;
 globalThis.__getNotifDayGroupLabel = getNotifDayGroupLabel;
 globalThis.__notificationRepository = notificationRepository;
 globalThis.__FILTER_RESET_HANDLERS = FILTER_RESET_HANDLERS;
+globalThis.__getStatusForDate = getStatusForDate;
+globalThis.__getHalfDayForDate = getHalfDayForDate;
+globalThis.__computeAbsenceCalendarSegments = computeAbsenceCalendarSegments;
+globalThis.__renderAbsenceCalendarRow = renderAbsenceCalendarRow;
+globalThis.__renderAbsenceCalendarBoard = renderAbsenceCalendarBoard;
+globalThis.__leaveTypeRepository = leaveTypeRepository;
+globalThis.__openLeaveRequestModal = openLeaveRequestModal;
+globalThis.__updateLeaveRequestHints = updateLeaveRequestHints;
+globalThis.__submitLeaveRequestForm = submitLeaveRequestForm;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -295,6 +304,15 @@ globalThis.__FILTER_RESET_HANDLERS = FILTER_RESET_HANDLERS;
     getNotifDayGroupLabel: sandbox.__getNotifDayGroupLabel,
     notificationRepository: sandbox.__notificationRepository,
     FILTER_RESET_HANDLERS: sandbox.__FILTER_RESET_HANDLERS,
+    getStatusForDate: sandbox.__getStatusForDate,
+    getHalfDayForDate: sandbox.__getHalfDayForDate,
+    computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,
+    renderAbsenceCalendarRow: sandbox.__renderAbsenceCalendarRow,
+    renderAbsenceCalendarBoard: sandbox.__renderAbsenceCalendarBoard,
+    leaveTypeRepository: sandbox.__leaveTypeRepository,
+    openLeaveRequestModal: sandbox.__openLeaveRequestModal,
+    updateLeaveRequestHints: sandbox.__updateLeaveRequestHints,
+    submitLeaveRequestForm: sandbox.__submitLeaveRequestForm,
   };
 }
 

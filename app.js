@@ -12969,11 +12969,23 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
     if (seg.leave) {
       const type = leaveTypesById.get(seg.leave.typeId);
       const pending = seg.leave.statut !== 'Validé';
-      const label = type ? type.nom : 'Congé';
-      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(label)}, du ${startDay} au ${endDay}${pending ? ' (en attente)' : ''}">
-        ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}</span>` : ''}
+      // §demande Betty du 10/09/2026 : la demi-journée concerne toujours le premier et/ou dernier
+      // jour du segment (jamais un jour intermédiaire, voir getHalfDayForDate) — sur un segment d'un
+      // seul jour, elle s'ajoute directement au libellé centré ; sur plusieurs jours, elle s'ajoute
+      // au(x) quantième(s) d'extrémité concerné(s) plutôt que d'encombrer le libellé central.
+      const startDateStr = toISODate(new Date(state.calendarYear, state.calendarMonth, startDay));
+      const endDateStr = toISODate(new Date(state.calendarYear, state.calendarMonth, endDay));
+      const startHalf = getHalfDayForDate(seg.leave, startDateStr);
+      const endHalf = getHalfDayForDate(seg.leave, endDateStr);
+      const halfDayLabel = (h) => h === 'matin' ? 'matin' : 'après-midi';
+      const label = `${type ? type.nom : 'Congé'}${!multiDay && startHalf ? ` (${halfDayLabel(startHalf)})` : ''}`;
+      const titleSuffix = multiDay
+        ? `, du ${startDay}${startHalf ? ` (${halfDayLabel(startHalf)})` : ''} au ${endDay}${endHalf ? ` (${halfDayLabel(endHalf)})` : ''}`
+        : startHalf ? `, ${halfDayLabel(startHalf)}` : '';
+      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(type ? type.nom : 'Congé')}${escapeHtml(titleSuffix)}${pending ? ' (en attente)' : ''}">
+        ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}${startHalf ? '<sup>½</sup>' : ''}</span>` : ''}
         <span class="absence-cal-bar-label">${escapeHtml(label)}</span>
-        ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}</span>` : ''}
+        ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}${endHalf ? '<sup>½</sup>' : ''}</span>` : ''}
       </div></td>`;
     }
     const pending = seg.telework.statut !== 'Validé';
@@ -15818,6 +15830,22 @@ function exportAuditLogCSV() {
 // Vue : Planning des absences (semaine / mois / année, tous types confondus)
 // ---------------------------------------------------------------------------
 
+/** §demande Betty du 10/09/2026 ("que ce soit affiché dans le planning équipe et calendrier
+ * entreprise") : une demi-journée de congé se pose déjà (openLeaveRequestModal, `demiJournee` pour
+ * un jour isolé ou `demiJourneeDebut`/`demiJourneeFin` pour le premier/dernier jour d'une période),
+ * mais rien ne le signalait sur ces deux écrans — seul le nom du type de congé y apparaissait, comme
+ * pour une journée complète. Renvoie 'matin'/'apres-midi' pour LA date précise concernée (jamais pour
+ * un jour intermédiaire d'une période à cheval sur plusieurs jours, qui reste bien une journée
+ * complète), ou null sinon — réutilisé à la fois par le Planning (par jour) et le Calendrier des
+ * absences (sur les jours de début/fin d'un segment). */
+function getHalfDayForDate(request, dateStr) {
+  if (!request) return null;
+  if (request.demiJournee && request.dateDebut === request.dateFin && dateStr === request.dateDebut) return request.demiJournee;
+  if (request.demiJourneeDebut === 'apres-midi' && dateStr === request.dateDebut) return 'apres-midi';
+  if (request.demiJourneeFin === 'matin' && dateStr === request.dateFin) return 'matin';
+  return null;
+}
+
 /** Statut d'un salarié à une date donnée, tous types d'absence confondus (congé ou télétravail).
  * Sprint SIRH premium §2 : `leaveRequests`/`teleworkRequests` peuvent désormais inclure des demandes
  * "En attente" (pas seulement "Validé") — `pending: true` permet à l'affichage de les distinguer
@@ -15832,7 +15860,9 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
   if (onLeave) {
     const type = leaveTypeRepository.getLeaveTypeById(onLeave.typeId);
     const pending = onLeave.statut !== 'Validé';
-    return { icon: type ? type.icone : ICONS.sun, level: 'leave', title: `${type ? type.nom : 'Congé'}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
+    const halfDay = getHalfDayForDate(onLeave, dateStr);
+    const halfDaySuffix = halfDay ? ` (${halfDay === 'matin' ? 'matin' : 'après-midi'})` : '';
+    return { icon: type ? type.icone : ICONS.sun, level: 'leave', title: `${type ? type.nom : 'Congé'}${halfDaySuffix}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
   }
 
   const onTelework = teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);

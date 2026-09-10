@@ -33,6 +33,8 @@ globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
 globalThis.__ROLES = ROLES;
 globalThis.__seedLeaveTypes = seedLeaveTypes;
 globalThis.__ensureDefaultLeaveTypesBackfilled = ensureDefaultLeaveTypesBackfilled;
+globalThis.__migrateLeaveTypeAutoriserDemiJournee = migrateLeaveTypeAutoriserDemiJournee;
+globalThis.__hydrateCurrentCompanyWithMigrations = hydrateCurrentCompanyWithMigrations;
 globalThis.__hasPermission = hasPermission;
 globalThis.__PERMISSIONS = PERMISSIONS;
 globalThis.__calculateAcquisition = calculateAcquisition;
@@ -66,6 +68,8 @@ globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
     ROLES: sandbox.__ROLES,
     seedLeaveTypes: sandbox.__seedLeaveTypes,
     ensureDefaultLeaveTypesBackfilled: sandbox.__ensureDefaultLeaveTypesBackfilled,
+    migrateLeaveTypeAutoriserDemiJournee: sandbox.__migrateLeaveTypeAutoriserDemiJournee,
+    hydrateCurrentCompanyWithMigrations: sandbox.__hydrateCurrentCompanyWithMigrations,
     hasPermission: sandbox.__hasPermission,
     PERMISSIONS: sandbox.__PERMISSIONS,
     calculateAcquisition: sandbox.__calculateAcquisition,

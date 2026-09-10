@@ -685,6 +685,20 @@ async function hydrateCurrentCompanyWithMigrations() {
     // APRÈS avoir reçu ce retour. Retrouve donc l'utilisateur courant directement sur `company`.
     const currentUser = (company.employees || []).find(e => e.id === company._currentEmployeeId) || null;
     await ensureDefaultLeaveTypesBackfilled(company, currentUser);
+    // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
+    // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
+    // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
+    // proposée pour un type qui ne l'a pas explicitement, voir migrateLeaveTypeAutoriserDemiJournee),
+    // pas seulement un champ affiché différemment. Appliquée en mémoire pour tout le monde (mutation
+    // sans risque, aucun id ni référence externe en jeu), poussée côté serveur seulement si
+    // l'utilisateur a le droit d'écrire les types de congés (même garde que ensureDefaultLeaveTypesBackfilled).
+    if (migrateLeaveTypeAutoriserDemiJournee(company) && currentUser && hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) {
+      try {
+        await window.SupabaseSync.pushLeaveTypes(company.leaveTypes, company.id);
+      } catch (err) {
+        console.error('migrateLeaveTypeAutoriserDemiJournee : échec de synchronisation, retentera à la prochaine connexion.', err);
+      }
+    }
   }
   return company;
 }
@@ -773,6 +787,22 @@ function migrateLeaveTypeSaisiParSalarie(company) {
   (company.leaveTypes || []).forEach(t => {
     if ('saisiParSalarie' in t) return;
     t.saisiParSalarie = t.nom.trim().toLowerCase() !== 'maladie';
+    changed = true;
+  });
+  return changed;
+}
+
+/** §demande Betty du 10/09/2026 ("poser une demi-journée") : le champ existe depuis longtemps
+ * (updateLeaveRequestHints, app.js — n'affiche le sélecteur demi-journée que si
+ * type.autoriserDemiJournee est vrai), défaut true pour un type CRÉÉ maintenant (makeEmptyLeaveType)
+ * — mais un type créé AVANT l'ajout de ce champ n'a jamais eu l'occasion de le recevoir, donc
+ * `undefined`/falsy, et la demi-journée ne s'affiche alors JAMAIS pour lui, sans le moindre message :
+ * exactement le cas d'une entreprise réelle plus ancienne que ce champ (Seven Sept elle-même). */
+function migrateLeaveTypeAutoriserDemiJournee(company) {
+  let changed = false;
+  (company.leaveTypes || []).forEach(t => {
+    if ('autoriserDemiJournee' in t) return;
+    t.autoriserDemiJournee = true;
     changed = true;
   });
   return changed;
@@ -893,7 +923,8 @@ const DB = {
     const migratedAbonnements = companies.map(c => migrateCompanyAbonnement(c)).some(Boolean);
     const migratedSaisiParSalarie = companies.map(c => migrateLeaveTypeSaisiParSalarie(c)).some(Boolean);
     const migratedAnciennete = companies.map(c => migrateAncienneteVersAutresAbsences(c)).some(Boolean);
-    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete) this.saveCompanies(companies);
+    const migratedDemiJournee = companies.map(c => migrateLeaveTypeAutoriserDemiJournee(c)).some(Boolean);
+    if (migratedEtablissements || migratedLeaveCategories || migratedAbonnements || migratedSaisiParSalarie || migratedAnciennete || migratedDemiJournee) this.saveCompanies(companies);
 
     // §correctif audit du 23/08/2026 : cette clé contenait un identifiant BERTOLIS auto-semé avec
     // un mot de passe EN CLAIR, comparé côté client (bertolisLogin ci-dessous) — visible par
