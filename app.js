@@ -216,6 +216,7 @@ function getInitialViewState() {
     // séparé de planningFilters/planningWeekOffset (utilisés par Semaine/Mois), propre à cet écran.
     planningPostesWeekOffset: 0,
     planningPostesSortDir: 'asc', // 'asc' (prénom A-Z) | 'desc' (Z-A)
+    planningPostesSectionsOpen: { positions: true, affichage: true },
     planningPostesFilters: {
       etablissementId: '',
       positionIds: null, // null = toutes ; Set d'ids sinon
@@ -344,6 +345,7 @@ const ICONS = {
   warningTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 15H3z"/><line x1="12" y1="10" x2="12" y2="14.5"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>',
   ticket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a1.5 1.5 0 0 0 0 3v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a1.5 1.5 0 0 0 0-3z"/><line x1="10" y1="7" x2="10" y2="17" stroke-dasharray="2 2"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,17 20,6"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>',
   percent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12" y2="7.6"/></svg>',
   helpCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><line x1="12" y1="16.5" x2="12" y2="16.6"/></svg>',
@@ -16797,14 +16799,19 @@ function renderPlanningPostes() {
     state.planningPostesSortDir === 'desc' ? b.prenom.localeCompare(a.prenom) : a.prenom.localeCompare(b.prenom)
   );
 
+  // §retour Betty du 10/09/2026 ("exactement ça sauf en bleu et doré") : carte flottante avec
+  // marge/ombre/accent gauche (voir .poste-shift-card, style.css) plutôt que le remplissage bord à
+  // bord du Planning principal (.planning-shift-card) — les deux écrans suivent chacun leur propre
+  // référence visuelle, ils n'ont pas à se ressembler entre eux.
   const renderCell = (employee, weekday, positionId) => {
     const shift = shiftsFor(employee.id, weekday, positionId);
     if (shift && !f.masquerQuartsConfirmes) {
       const position = allPositions.find(p => p.id === shift.positionId);
       return `<td class="planning-cell">
-        <div class="planning-shift-card planning-shift-poste" data-edit-shift="${shift.id}">
-          <div class="planning-shift-caption">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
-          <div class="planning-shift-subtext">${escapeHtml(position ? position.nom : '')}${shift.pauseMinutes ? ` · ${shift.pauseMinutes} min de pause` : ''}</div>
+        <div class="poste-shift-card" data-edit-shift="${shift.id}">
+          <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
+          <div class="poste-shift-position">${escapeHtml(position ? position.nom : '')}</div>
+          ${shift.pauseMinutes ? `<div class="poste-shift-pause">${icon(ICONS.pause, 9)} ${shift.pauseMinutes}m</div>` : ''}
         </div>
       </td>`;
     }
@@ -16838,7 +16845,12 @@ function renderPlanningPostes() {
       const positionEmployees = sortEmployees(employees.filter(e => employeeShifts(e.id).some(s => s.positionId === position.id)));
       if (positionEmployees.length === 0) return '';
       return `
-        <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">${escapeHtml(position.nom)} <span class="text-muted">(${positionEmployees.length})</span></td></tr>
+        <tr class="planning-service-header"><td colspan="${weekDates.length + 2}">
+          <div class="poste-group-header-row">
+            <span>${escapeHtml(position.nom)} <span class="text-muted">(${positionEmployees.length})</span></span>
+            ${canManage ? `<button type="button" class="poste-group-menu-btn" data-position-menu="${position.id}" title="Options de la position">⋯</button>` : ''}
+          </div>
+        </td></tr>
         ${positionEmployees.map(e => renderEmployeeRow(e, position.id)).join('')}
       `;
     }).join('');
@@ -16864,15 +16876,20 @@ function renderPlanningPostes() {
       ${renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f)}
       <div class="poste-main">
         <div class="toolbar card">
-          <input type="text" class="input" id="poste-search-employe" placeholder="Rechercher un salarié..." value="${escapeHtml(f.search)}" style="max-width: 200px;">
+          ${canManage ? `<button type="button" class="poste-btn-pill" id="btn-add-shift">+ Créer</button>` : ''}
+          <input type="text" class="input" id="poste-search-employe" placeholder="Rechercher un salarié..." value="${escapeHtml(f.search)}" style="max-width: 160px;">
           <button class="btn btn-secondary btn-sm" id="btn-poste-week-today">Aujourd'hui</button>
           <button class="btn btn-secondary btn-sm" id="btn-poste-week-prev">‹</button>
           <button class="btn btn-secondary btn-sm" id="btn-poste-week-next">›</button>
           <span class="btn btn-secondary btn-sm" style="cursor: default;">${formatDate(weekStartStr)} au ${formatDate(weekEndStr)}</span>
-          ${canManage ? `<button type="button" class="btn btn-primary btn-sm" id="btn-add-shift" style="margin-left: auto;">+ Créer un quart</button>` : ''}
-          <span class="badge badge-muted">${totalShiftsCount} quart${totalShiftsCount > 1 ? 's' : ''} affiché${totalShiftsCount > 1 ? 's' : ''}</span>
+          <select class="input" id="poste-view-mode" style="width: auto;">
+            <option value="semaine" selected>Semaine</option>
+            <option value="jour">Jour</option>
+          </select>
+          <button type="button" class="btn-icon" id="btn-poste-print" title="Imprimer">${icon(ICONS.printer, 15)}</button>
+          <span class="poste-btn-pill" style="margin-left: auto; background: var(--color-primary);">${totalShiftsCount} quart${totalShiftsCount > 1 ? 's' : ''}</span>
         </div>
-        <div class="card table-card planning-scroll-card">
+        <div class="card table-card planning-scroll-card poste-grid-card">
           ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
             <table class="table planning-table">
               <thead>
@@ -16916,22 +16933,31 @@ function renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f) {
       </div>
 
       <div class="poste-filter-section">
-        <div class="poste-filter-section-title">Positions <span class="badge badge-muted">${activePositionIds.size}</span></div>
-        <input type="text" class="input" id="poste-filter-position-search" placeholder="Filtrer" value="${escapeHtml(f.positionSearch)}" style="margin-bottom: 8px;">
-        <label class="poste-checkbox-row">
-          <input type="checkbox" id="poste-filter-position-all" ${allChecked ? 'checked' : ''}>
-          Toutes les positions
-        </label>
-        ${filteredPositions.map(p => `
+        <div class="poste-filter-section-title" id="poste-toggle-positions">
+          Positions <span class="badge badge-muted">${activePositionIds.size}</span>
+          <span class="poste-filter-chevron ${state.planningPostesSectionsOpen.positions ? 'open' : ''}">▾</span>
+        </div>
+        <div class="poste-filter-section-body" ${state.planningPostesSectionsOpen.positions ? '' : 'hidden'}>
+          <input type="text" class="input" id="poste-filter-position-search" placeholder="Filtrer" value="${escapeHtml(f.positionSearch)}" style="margin-bottom: 8px;">
           <label class="poste-checkbox-row">
-            <input type="checkbox" data-position-filter="${p.id}" ${activePositionIds.has(p.id) ? 'checked' : ''}>
-            ${escapeHtml(p.nom)}
+            <input type="checkbox" id="poste-filter-position-all" ${allChecked ? 'checked' : ''}>
+            Toutes les positions
           </label>
-        `).join('')}
+          ${filteredPositions.map(p => `
+            <label class="poste-checkbox-row">
+              <input type="checkbox" data-position-filter="${p.id}" ${activePositionIds.has(p.id) ? 'checked' : ''}>
+              ${escapeHtml(p.nom)}
+            </label>
+          `).join('')}
+        </div>
       </div>
 
       <div class="poste-filter-section">
-        <div class="poste-filter-section-title">Affichage</div>
+        <div class="poste-filter-section-title" id="poste-toggle-affichage">
+          Affichage
+          <span class="poste-filter-chevron ${state.planningPostesSectionsOpen.affichage ? 'open' : ''}">▾</span>
+        </div>
+        <div class="poste-filter-section-body" ${state.planningPostesSectionsOpen.affichage ? '' : 'hidden'}>
         <p class="poste-filter-subtitle">Quarts</p>
         <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-a-combler" ${f.afficherQuartsACombler ? 'checked' : ''}> Afficher les quarts à combler</label>
         <label class="poste-checkbox-row"><input type="checkbox" id="poste-filter-masquer-confirmes" ${f.masquerQuartsConfirmes ? 'checked' : ''}> Masquer les quarts confirmés</label>
@@ -16948,6 +16974,7 @@ function renderPlanningPostesFiltersPanel(allPositions, activePositionIds, f) {
           <option value="afficher" ${f.congesFiltre === 'afficher' ? 'selected' : ''}>Afficher</option>
           <option value="masquer" ${f.congesFiltre === 'masquer' ? 'selected' : ''}>Masquer</option>
         </select>
+        </div>
       </div>
     </div>
   `;
@@ -17019,6 +17046,89 @@ function bindPlanningPostesEvents() {
     btn.addEventListener('click', () => {
       const [employeeId, weekday, positionId] = btn.dataset.addShift.split('|');
       openShiftModal(null, { employeeId, weekday, positionId: positionId || '' });
+    });
+  });
+
+  document.getElementById('poste-toggle-positions').addEventListener('click', () => {
+    const open = state.planningPostesSectionsOpen;
+    open.positions = !open.positions;
+    render();
+  });
+  document.getElementById('poste-toggle-affichage').addEventListener('click', () => {
+    const open = state.planningPostesSectionsOpen;
+    open.affichage = !open.affichage;
+    render();
+  });
+
+  document.querySelectorAll('[data-position-menu]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openPositionOptionsModal(btn.dataset.positionMenu);
+    });
+  });
+
+  document.getElementById('btn-poste-print').addEventListener('click', () => window.print());
+
+  // §retour Betty du 10/09/2026 : la vue "Jour" de la référence n'a pas été construite (hors
+  // périmètre signalé) — le select existe pour la fidélité visuelle, mais choisir "Jour" prévient
+  // plutôt que de silencieusement ne rien faire ou pire, afficher un écran cassé.
+  document.getElementById('poste-view-mode').addEventListener('change', (e) => {
+    if (e.target.value === 'jour') {
+      showToast('Vue "Jour" pas encore disponible pour ce planning.', 'error');
+      e.target.value = 'semaine';
+    }
+  });
+}
+
+/** Options d'une position de planning (accessible via le "⋯" du bandeau de groupe) : renommer ou
+ * supprimer (cascade sur les quarts qui la référencent, voir DB.deletePosition). */
+function openPositionOptionsModal(positionId) {
+  const position = positionRepository.getById(positionId);
+  if (!position) return;
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Position : ${escapeHtml(position.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-field">
+          <label for="f-position-nom">Nom</label>
+          <input class="input" type="text" id="f-position-nom" value="${escapeHtml(position.nom)}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-delete-position" style="margin-right: auto;">Supprimer</button>
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-save-position">Enregistrer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-save-position').addEventListener('click', () => {
+    const nom = document.getElementById('f-position-nom').value.trim();
+    if (!nom) { showToast('Le nom ne peut pas être vide.', 'error'); return; }
+    positionRepository.rename(positionId, nom);
+    closeModal();
+    showToast('Position renommée.');
+    render();
+  });
+  document.getElementById('btn-delete-position').addEventListener('click', () => {
+    openConfirm({
+      title: `Supprimer la position "${position.nom}" ?`,
+      message: 'Tous les quarts rattachés à cette position seront supprimés avec elle.',
+      confirmLabel: 'Supprimer',
+      danger: true,
+      onConfirm: () => {
+        positionRepository.delete(positionId);
+        closeModal();
+        showToast('Position supprimée.');
+        render();
+      }
     });
   });
 }

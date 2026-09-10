@@ -1717,22 +1717,73 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-main { flex: 1; min-width: 0; }
 
 .poste-filter-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border-soft); }
-.poste-filter-section-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.poste-filter-section-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.poste-filter-chevron { margin-left: auto; transition: transform 0.15s ease; color: var(--color-text-muted); }
+.poste-filter-chevron.open { transform: rotate(180deg); }
+.poste-filter-section-body[hidden] { display: none; }
+
+/* Bouton pilule "+ Créer"/"Publier" (§retour du 10/09/2026, même poids visuel que la référence) — or
+   plutôt que le corail de la référence. */
+.poste-btn-pill {
+  border-radius: 999px;
+  background: var(--color-gold);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.poste-btn-pill:hover { opacity: 0.88; }
+.poste-btn-count { background: rgba(255, 255, 255, 0.35); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+
+.poste-group-header-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.poste-group-menu-btn { background: transparent; border: none; color: #fff; opacity: 0.85; cursor: pointer; padding: 2px 6px; font-size: 15px; line-height: 1; }
+.poste-group-menu-btn:hover { opacity: 1; }
 .poste-filter-subtitle { font-size: 11px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 10px 0 4px; }
 .poste-checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
 .poste-checkbox-row input { accent-color: var(--color-primary); }
 
-.planning-shift-poste { background: var(--color-gold-soft); }
-.planning-shift-poste .planning-shift-caption { color: var(--color-text); }
+/* §retour Betty du 10/09/2026 ("ça doit être exactement ça sauf que c'est en bleu et doré") : carte
+   FLOTTANTE avec marge (pas un remplissage bord à bord comme .planning-shift-card, utilisé lui pour
+   le Planning principal après le retour "cadrillage" du 10/09/2026 — les deux écrans n'ont pas à se
+   ressembler entre eux, chacun suit sa propre référence) — fond blanc, accent gauche or, coins
+   arrondis, légère ombre, TROIS lignes (horaire, position, pause) comme la maquette. Le fond
+   légèrement teinté de la case elle-même (.poste-grid-card) rejoue le fond menthe de la référence
+   avec un ton neutre de l'appli plutôt qu'une nouvelle couleur. */
+.poste-grid-card { background: var(--color-bg); }
+.poste-shift-card {
+  position: absolute;
+  inset: 4px;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-gold);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+}
+.poste-shift-time { font-weight: 700; font-size: 12.5px; color: var(--color-text); }
+.poste-shift-position { font-size: 11px; color: var(--color-text-muted); }
+.poste-shift-pause { font-size: 10.5px; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; }
+.poste-shift-pause svg { width: 9px; height: 9px; }
 
-/* Case vide "à combler" : même case pleine que les autres (bordure de la grille, position absolute
-   déjà réglée sur .planning-table td.planning-cell), un simple "+" en pointillé plutôt qu'un statut
-   coloré — devient teal/marine au survol pour inviter au clic. */
+/* Case vide "à combler" : mêmes marges que la carte occupée, un simple "+" en pointillé plutôt qu'un
+   statut coloré — devient marine au survol pour inviter au clic. */
 .poste-shift-add {
   position: absolute;
-  inset: 3px;
+  inset: 4px;
   border: 1px dashed var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
   font-size: 16px;
