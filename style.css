@@ -1749,8 +1749,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-shift-pause { font-size: 10.5px; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; }
 .poste-shift-pause svg { width: 9px; height: 9px; }
 
-/* Case vide "à combler" : mêmes marges que la carte occupée, un simple "+" en pointillé plutôt qu'un
-   statut coloré — devient marine au survol pour inviter au clic. */
+/* §retour Betty du 10/09/2026 ("vérifie que ça correspond bien à l'image") : la référence ne montre
+   AUCUN "+" visible dans ses cases vides (juste une case nue) — invisible par défaut, révélé au
+   survol plutôt que retiré (reste cliquable/trouvable, juste pas une pointillée en permanence comme
+   avant). Remplit toute la case comme la carte occupée (mêmes marges). */
 .poste-shift-add {
   position: absolute;
   inset: 4px;
@@ -1764,8 +1766,10 @@ textarea.input { resize: vertical; font-family: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
-.poste-shift-add:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
+.poste-shift-add:hover { opacity: 1; border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
 
 /* Vue "à plat" (Grouper par position décoché) : étiquette de poste sous le nom, à la place du
    bandeau de groupe (voir renderPlanningPostes). */
@@ -1777,6 +1781,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-employee-hours { font-size: 12px; font-weight: 700; color: var(--color-primary-text); margin-top: 2px; }
 
 .poste-budget-row td { background: var(--color-gold-soft); border-top: 2px solid var(--color-gold); font-weight: 700; }
+
+/* Colonne Total alignée à droite, comme la référence (le reste du Planning n'a jamais eu cette
+   demande, cette règle reste donc scopée à l'écran Postes). */
+.poste-grid-card th:last-child, .poste-grid-card .planning-total-cell { text-align: right; }
 
 /* Sprint SIRH premium §3 : "modification par glisser-déposer" du Planning (Semaine/Mois) */
 .planning-cell[draggable="true"] { cursor: grab; }

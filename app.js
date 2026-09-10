@@ -16903,7 +16903,7 @@ function renderPlanningPostes() {
         <table class="table planning-table">
           <thead>
             <tr>
-              <th id="btn-poste-sort-name" style="cursor: pointer;">↕ Prénom (${state.planningPostesSortDir === 'desc' ? 'Z-A' : 'A-Z'})</th>
+              <th id="btn-poste-sort-name" style="cursor: pointer;">↕ Prénom (${state.planningPostesSortDir === 'desc' ? 'Z-A' : 'A-Z'}) <span style="opacity:0.6;">▾</span></th>
               ${weekDates.map(d => `<th>${WEEKDAY_LABELS[(d.getDay() + 6) % 7]}. ${d.getDate()}</th>`).join('')}
               <th>Total</th>
             </tr>
