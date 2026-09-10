@@ -398,12 +398,10 @@ const NAV_ITEMS = [
   // `module` (voir LANDING_ALACARTE_MODULES/hasModule) : sans effet pour un abonnement classique
   // (essai/essentiel/professionnel/premium, toujours tout inclus) — ne restreint que les
   // entreprises passées à la carte, selon les modules réellement souscrits.
+  // §retour Betty du 10/09/2026 : "Postes" a d'abord eu sa propre entrée de menu, puis "j'ai pas
+  // demandé ce bouton" — la grille de postes vit désormais directement DANS Planning (voir
+  // renderPlanning), plus d'entrée de menu séparée.
   { key: 'planning', label: 'Planning', icon: ICONS.schedule, roles: ['manager', 'rh', 'proprietaire'], group: 'personnel', navParams: { planningVue: 'personnel' }, module: 'planning' },
-  // §retour Betty du 10/09/2026 ("enlève tous les boutons [Semaine/Mois/Année/Horaires...], tu mets
-  // juste un endroit avec le même planning") : plus un onglet DANS Planning (qui affichait forcément
-  // sa barre d'onglets Semaine/Mois/Année/Horaires/Astreintes/Postes), mais sa propre entrée de menu
-  // — une page à part, uniquement la grille (voir renderPlanningPostesPage), rien d'autre autour.
-  { key: 'planning-postes', label: 'Postes', icon: ICONS.clipboard, roles: ['manager', 'rh', 'proprietaire'], group: 'personnel', module: 'planning' },
   { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', navParams: { calendrierVue: 'personnel' }, module: 'conges' },
   // §sprint refonte UX §7 : fusion de "Congés"/"Absences"/"Télétravail" (3 entrées pointant vers 3
   // écrans quasi identiques) en une seule, à onglets internes (voir renderAbsencesHub) — même
@@ -5372,10 +5370,6 @@ function renderInner() {
     case 'planning':
       root.innerHTML = renderPlanning();
       bindPlanningEvents();
-      break;
-    case 'planning-postes':
-      root.innerHTML = renderPlanningPostesPage();
-      bindPlanningPostesEvents();
       break;
     case 'parametres':
       root.innerHTML = renderParametres();
@@ -15923,47 +15917,26 @@ function getPlanningEmployees(periodStart, periodEnd) {
   return employees;
 }
 
+/** §retour Betty du 10/09/2026, en plusieurs temps : "enlève tous les boutons (Semaine/Mois/Année/
+ * Horaires...), tu mets juste un endroit avec le même planning" a d'abord fait de Postes une page à
+ * part (NAV_ITEMS dédié) — mais "enlève le bouton poste, j'ai pas demandé ce bouton [...] les
+ * boutons dans Planning équipe et Moi tu enlève pas, mais les autres" clarifie que la grille doit
+ * plutôt REMPLACER le contenu de "Planning" lui-même : garde le bascule Planning équipe/Moi (déjà là
+ * avant), retire les onglets Semaine/Mois/Année/Horaires/Astreintes et la barre d'outils (filtre
+ * service) qui allaient avec.
+ *
+ * Les anciennes vues (renderPlanningSemaine/Mois/Annee/Horaires/Astreintes et leurs bindings)
+ * restent dans le code, simplement plus reliées à aucun bouton — pas supprimées, au cas où ce
+ * remplacement soit reconsidéré (une régression du même ordre que celle-ci ne se réécrit pas en 5
+ * minutes si la décision change), mais aucun risque de code mort actif : elles ne sont plus jamais
+ * appelées depuis cet écran. */
 function renderPlanning() {
   return `
     <div class="view-header">
       <h1>Planning</h1>
-      <p class="view-subtitle">Absences (semaine, mois, année) et horaires de travail : congés et télétravail validés</p>
+      <p class="view-subtitle">Positions et quarts de travail, par salarié.</p>
     </div>
     ${renderMoiEquipeToggle('planningVue', 'equipe', 'Planning équipe')}
-    <div class="tabs">
-      <button class="tab ${state.planningView === 'semaine' ? 'active' : ''}" data-planning-view="semaine">Semaine</button>
-      <button class="tab ${state.planningView === 'mois' ? 'active' : ''}" data-planning-view="mois">Mois</button>
-      <button class="tab ${state.planningView === 'annee' ? 'active' : ''}" data-planning-view="annee">Année</button>
-      <button class="tab ${state.planningView === 'horaires' ? 'active' : ''}" data-planning-view="horaires">Horaires</button>
-      <button class="tab ${state.planningView === 'astreintes' ? 'active' : ''}" data-planning-view="astreintes">Astreintes</button>
-    </div>
-    ${state.planningView !== 'astreintes' ? `
-    <div class="toolbar card">
-      <select id="planning-filter-service" class="input">
-        <option value="">Tous les services</option>
-        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.planningFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
-      </select>
-    </div>
-    ` : ''}
-    <div id="planning-content">
-      ${state.planningView === 'mois' ? renderPlanningMois()
-        : state.planningView === 'annee' ? renderPlanningAnnee()
-        : state.planningView === 'horaires' ? renderPlanningHoraires()
-        : state.planningView === 'astreintes' ? renderPlanningAstreintes()
-        : renderPlanningSemaine()}
-    </div>
-  `;
-}
-
-/** §retour Betty du 10/09/2026 ("enlève tous les boutons [Semaine/Mois/Année/Horaires...], tu mets
- * juste un endroit avec le même planning que celui sur l'image") : page à part entière (sa propre
- * entrée de menu, voir NAV_ITEMS 'planning-postes'), pas un onglet de plus dans Planning — rien que
- * le titre et la grille, aucun onglet ni barre d'outils à côté. */
-function renderPlanningPostesPage() {
-  return `
-    <div class="view-header">
-      <h1>Postes</h1>
-    </div>
     ${renderPlanningPostes()}
   `;
 }
@@ -16512,75 +16485,14 @@ function openHorairesModal(employeeId) {
   });
 }
 
+/** §retour Betty du 10/09/2026 (voir le commentaire au-dessus de renderPlanning) : Planning ne
+ * rend plus que le bascule Planning équipe/Moi et la grille de postes — plus aucun des boutons
+ * Semaine/Mois/Année/Horaires/Astreintes ni la barre d'outils qui allait avec, donc plus aucune des
+ * anciennes liaisons (glisser-déposer, navigation semaine/mois/année, crayon horaires...) : les
+ * garder aurait planté au premier rendu (document.getElementById sur un bouton qui n'existe plus). */
 function bindPlanningEvents() {
-  document.querySelectorAll('[data-planning-view]').forEach(btn => {
-    btn.addEventListener('click', () => { state.planningView = btn.dataset.planningView; render(); });
-  });
   bindMoiEquipeToggleEvents();
-
-  // §7.21 : pas de filtre service sur l'onglet Astreintes (toolbar non rendue, voir renderPlanning).
-  const filterServiceSelect = document.getElementById('planning-filter-service');
-  if (filterServiceSelect) {
-    filterServiceSelect.addEventListener('change', (e) => {
-      state.planningFilters.service = e.target.value;
-      render();
-    });
-  }
-
-  const horairesSemaineActive = state.planningView === 'horaires' && state.horairesView !== 'jour' && state.horairesView !== 'mois';
-  if (state.planningView === 'semaine' || horairesSemaineActive) {
-    document.getElementById('btn-planning-week-prev').addEventListener('click', () => { state.planningWeekOffset -= 1; render(); });
-    document.getElementById('btn-planning-week-next').addEventListener('click', () => { state.planningWeekOffset += 1; render(); });
-    document.getElementById('btn-planning-week-today').addEventListener('click', () => { state.planningWeekOffset = 0; render(); });
-  }
-  // §retour Betty du 09/09/2026 : le crayon "Modifier les horaires" vit désormais aussi dans la vue
-  // Semaine principale (renderPlanningSemaine), pas seulement dans l'onglet Horaires — lié
-  // inconditionnellement plutôt que dans le seul bloc `if (state.planningView === 'horaires')`
-  // ci-dessous, sans risque : document.querySelectorAll ne renvoie simplement rien là où le bouton
-  // n'est pas rendu.
-  document.querySelectorAll('[data-edit-horaires]').forEach(btn => {
-    btn.addEventListener('click', () => openHorairesModal(btn.dataset.editHoraires));
-  });
-  if (state.planningView === 'horaires') {
-    document.querySelectorAll('[data-horaires-view]').forEach(btn => {
-      btn.addEventListener('click', () => { state.horairesView = btn.dataset.horairesView; render(); });
-    });
-    if (state.horairesView === 'jour') {
-      document.getElementById('btn-horaires-day-prev').addEventListener('click', () => { state.horairesDay = toISODate(addDays(new Date(state.horairesDay), -1)); render(); });
-      document.getElementById('btn-horaires-day-next').addEventListener('click', () => { state.horairesDay = toISODate(addDays(new Date(state.horairesDay), 1)); render(); });
-      document.getElementById('btn-horaires-day-today').addEventListener('click', () => { state.horairesDay = toISODate(new Date()); render(); });
-    }
-    if (state.horairesView === 'mois') {
-      document.getElementById('btn-planning-month-prev').addEventListener('click', () => { shiftPlanningMonth(-1); });
-      document.getElementById('btn-planning-month-next').addEventListener('click', () => { shiftPlanningMonth(1); });
-      document.getElementById('btn-planning-month-today').addEventListener('click', () => {
-        const now = new Date();
-        state.planningYear = now.getFullYear();
-        state.planningMonth = now.getMonth();
-        render();
-      });
-    }
-  }
-  if (state.planningView === 'mois') {
-    document.getElementById('btn-planning-month-prev').addEventListener('click', () => { shiftPlanningMonth(-1); });
-    document.getElementById('btn-planning-month-next').addEventListener('click', () => { shiftPlanningMonth(1); });
-    document.getElementById('btn-planning-month-today').addEventListener('click', () => {
-      const now = new Date();
-      state.planningYear = now.getFullYear();
-      state.planningMonth = now.getMonth();
-      render();
-    });
-  } else if (state.planningView === 'annee') {
-    document.getElementById('btn-planning-year-prev').addEventListener('click', () => { state.planningYear -= 1; render(); });
-    document.getElementById('btn-planning-year-next').addEventListener('click', () => { state.planningYear += 1; render(); });
-  }
-
-  // Sprint SIRH premium §3 : "modification par glisser-déposer" — uniquement les vues Semaine/Mois
-  // (celles qui affichent une case par jour via renderPlanningStatusCell) ; Année/Horaires n'ont pas
-  // de case "un salarié, un jour" de ce type.
-  if (state.planningView === 'semaine' || state.planningView === 'mois') bindPlanningDragEvents();
-
-  if (state.planningView === 'astreintes') bindPlanningAstreintesEvents();
+  bindPlanningPostesEvents();
 }
 
 /** §7.21 : liste des astreintes (toutes entreprises visibles pour l'utilisateur, via
@@ -16776,7 +16688,12 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
 /** Salariés visibles pour cet écran (portée manager déjà appliquée), avant application des filtres
  * propres à l'écran Postes (établissement, recherche, congés, "avec quart seulement"). */
 function getPlanningPostesEmployees(f, weekStartStr, weekEndStr) {
-  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  // §retour Betty du 10/09/2026 : la grille de postes remplace désormais le contenu de Planning
+  // (voir renderPlanning) — le bascule Planning équipe/Moi, resté en place, doit donc continuer à
+  // limiter la grille au seul utilisateur courant en "Moi", même principe que l'ancien
+  // getPlanningEmployees (Semaine/Mois, retiré de l'écran mais toujours dans le fichier).
+  const user = authRepository.getCurrentUser();
+  const visibleIds = (user.role !== ROLES.SALARIE && state.planningVue === 'personnel') ? [user.id] : getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);

@@ -118,30 +118,41 @@ async function run() {
     shiftRepository.delete(shift.id);
   }
 
-  // ---- §retour Betty du 10/09/2026 ("enlève tous les boutons Semaine/Mois/Année/Horaires, tu mets
-  //      juste un endroit avec le même planning") : page à part (NAV_ITEMS 'planning-postes'), plus
-  //      un onglet dans Planning — sa barre d'onglets ne doit plus proposer "Postes". ----
+  // ---- §retour Betty du 10/09/2026, dernière clarification : "enlève le bouton poste, j'ai pas
+  //      demandé ce bouton [...] les boutons dans Planning équipe et Moi tu enlève pas, mais les
+  //      autres" — la grille remplace directement le contenu de Planning (plus de page/entrée de
+  //      menu séparée), le bascule Planning équipe/Moi reste, mais plus aucun onglet Semaine/Mois/
+  //      Année/Horaires/Astreintes ni de barre d'outils. ----
   {
-    const { NAV_ITEMS, renderPlanning, renderPlanningPostesPage, DB, sandbox, state } = loadAppJs();
+    const { NAV_ITEMS, renderPlanning, DB, sandbox, positionRepository, shiftRepository, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
 
-    assert.ok(NAV_ITEMS.some(item => item.key === 'planning-postes'), '"Postes" doit avoir sa propre entrée de menu');
+    assert.ok(!NAV_ITEMS.some(item => item.key === 'planning-postes'), '"Postes" ne doit plus avoir sa propre entrée de menu (fusionné dans Planning)');
 
-    state.planningView = 'semaine';
+    const employee = DB.getEmployees().find(e => e.id !== rh.id);
+    const caisse = positionRepository.getAll().find(p => p.nom === 'Caisse');
+    const shift = shiftRepository.create({ employeeId: employee.id, positionId: caisse.id, weekday: 'Lun', heureDebut: '09:00', heureFin: '16:00', pauseMinutes: 30 });
+
+    state.planningVue = 'equipe';
     const planningHtml = renderPlanning();
-    assert.ok(!planningHtml.includes('data-planning-view="postes"'), 'Planning ne doit plus avoir d\'onglet "Postes" (page à part désormais)');
-    assert.ok(planningHtml.includes('data-planning-view="semaine"'), 'les autres onglets de Planning (Semaine, Mois, Année, Horaires, Astreintes) restent inchangés');
+    assert.ok(!planningHtml.includes('data-planning-view'), 'Planning ne doit plus avoir aucun onglet Semaine/Mois/Année/Horaires/Astreintes');
+    assert.ok(!planningHtml.includes('class="toolbar'), 'Planning ne doit plus avoir de barre d\'outils (filtre service)');
+    assert.ok(planningHtml.includes('data-moi-equipe'), 'le bascule "Planning équipe / Moi" doit rester');
+    assert.ok(planningHtml.includes('09:00-16:00'), 'la grille de postes doit être affichée directement dans Planning');
 
-    const postesPageHtml = renderPlanningPostesPage();
-    assert.ok(!postesPageHtml.includes('class="tabs"'), 'la page Postes ne doit avoir aucune barre d\'onglets (Semaine/Mois/Année/Horaires/Astreintes)');
-    assert.ok(!postesPageHtml.includes('class="toolbar'), 'la page Postes ne doit avoir aucune barre d\'outils');
-    assert.ok(postesPageHtml.includes('planning-table'), 'la grille elle-même doit toujours être rendue');
+    // "Moi" doit filtrer la grille au seul utilisateur courant (RH ici, sans quart) — le quart de
+    // l'autre salarié ne doit plus apparaître.
+    state.planningVue = 'personnel';
+    const planningHtmlMoi = renderPlanning();
+    assert.ok(!planningHtmlMoi.includes('09:00-16:00'), '"Moi" doit limiter la grille au salarié connecté, pas montrer les quarts des autres');
+
+    shiftRepository.delete(shift.id);
   }
 
-  console.log('OK — planning-postes-10-09.test.js (positions/quarts récurrents, filtres, regroupement, quarts à combler, budget, page dédiée sans onglets)');
+  console.log('OK — planning-postes-10-09.test.js (positions/quarts récurrents, filtres, regroupement, quarts à combler, budget, fusionné dans Planning sans onglets)');
 }
 
 run().catch((err) => {
