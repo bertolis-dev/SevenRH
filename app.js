@@ -9737,17 +9737,38 @@ function renderEmployeeDetail(id) {
  * notes de frais d'un tiers" dans le catalogue, VOIR_COMPTEURS joue déjà ce rôle pour ce type
  * d'information personnelle/financière). Masquée entièrement (pas de carte vide) si l'entreprise n'a
  * pas souscrit au module frais, ou si l'utilisateur n'a pas accès. */
+/** §retour Betty du 11/09/2026 (point 1, étape 2) : hydrateCurrentCompany ne rapatrie plus qu'une
+ * fenêtre glissante de notes de frais (~40 mois, voir HYDRATION_WINDOW_MONTHS, supabase-client.js) —
+ * un simple .reduce() sur le cache local sous-évaluerait silencieusement ce total pour un salarié
+ * dont l'historique dépasse la fenêtre. Le vrai total vient du serveur (get_expense_totals_for_employee,
+ * RLS-scopée), chargé une fois par salarié consulté (même patron que loadBertolisTickets) ; en
+ * attendant la réponse (ou si elle échoue), on affiche les chiffres locaux comme valeur immédiate —
+ * jamais un total inférieur au vrai n'est affiché plus d'un instant. */
+function ensureFraisTotalsLoaded(employeeId) {
+  state.fraisTotalsCache = state.fraisTotalsCache || {};
+  if (state.fraisTotalsCache[employeeId]) return;
+  state.fraisTotalsCache[employeeId] = { loading: true };
+  window.SupabaseSync.getExpenseTotalsForEmployee(employeeId).then((result) => {
+    state.fraisTotalsCache[employeeId] = result;
+    if (state.view === 'employeeDetail') render();
+  });
+}
+
 function renderEmployeeFraisCard(e, user) {
   if (!hasModule('frais')) return '';
   if (user.id !== e.id && !hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)) return '';
   const expenses = expenseRepository.getAll().filter(n => n.employeeId === e.id).sort((a, b) => b.date.localeCompare(a.date));
-  const total = expenses.reduce((sum, n) => sum + n.montantTTC, 0);
-  const enAttente = expenses.filter(n => n.statut === 'En attente').length;
+  ensureFraisTotalsLoaded(e.id);
+  const serverTotals = state.fraisTotalsCache[e.id];
+  const hasServerTotals = serverTotals && serverTotals.success;
+  const total = hasServerTotals ? serverTotals.totalMontant : expenses.reduce((sum, n) => sum + n.montantTTC, 0);
+  const enAttente = hasServerTotals ? serverTotals.enAttenteCount : expenses.filter(n => n.statut === 'En attente').length;
+  const nombreNotes = hasServerTotals ? serverTotals.totalCount : expenses.length;
   return `
     <div class="card">
       <h2>Notes de frais</h2>
-      <p class="view-subtitle">${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC${enAttente ? ` · ${enAttente} en attente` : ''}</p>
-      ${expenses.length === 0 ? '<p class="text-muted">Aucune note de frais enregistrée.</p>' : `
+      <p class="view-subtitle">${nombreNotes} note${nombreNotes > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC${enAttente ? ` · ${enAttente} en attente` : ''}</p>
+      ${nombreNotes === 0 ? '<p class="text-muted">Aucune note de frais enregistrée.</p>' : expenses.length === 0 ? '<p class="text-muted">Notes existantes, toutes antérieures à 40 mois (hors du cache local) : contactez BERTOLIS si vous avez besoin d\'en consulter le détail.</p>' : `
         <details class="collapsible-panel">
           <summary>Voir les notes de frais</summary>
           <div style="overflow-x: auto;">
@@ -18540,6 +18561,18 @@ function exportRowsToCSV(headers, rows, filename) {
 // Vue : Notes de frais
 // ---------------------------------------------------------------------------
 
+/** Doit rester en phase avec HYDRATION_WINDOW_MONTHS (supabase-client.js) — dupliqué ici plutôt que
+ * lu via window.SupabaseSync (asynchrone dans le vrai client, et les tests existants simulent
+ * SupabaseSync par un Proxy générique qui renvoie des fonctions async pour tout : un appel
+ * synchrone depuis une fonction de RENDU comme renderFrais() casserait cette convention partagée
+ * par toute la suite de tests). Purement indicatif (un message d'aide), jamais utilisé pour une
+ * vraie requête — une dérive de quelques jours entre les deux copies serait sans conséquence. */
+const HYDRATION_WINDOW_MONTHS = 40;
+function hydrationWindowCutoffDateISO() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - HYDRATION_WINDOW_MONTHS, now.getDate()).toISOString().slice(0, 10);
+}
+
 function getFilteredExpenses() {
   const filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
     [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
@@ -18573,9 +18606,18 @@ function renderFrais() {
   // §amélioration du 09/09/2026 : même distinction que Congés/Télétravail (voir renderCongesDemandes)
   // — "aucune note ne correspond à ces filtres" prêtait à confusion quand il n'y a simplement AUCUNE
   // note créée pour l'instant.
-  const emptyStateMessage = Object.values(state.fraisFilters).some(Boolean)
-    ? 'Aucune note de frais ne correspond à ces filtres.'
-    : 'Aucune note de frais pour l\'instant. Utilisez le bouton "+ Nouvelle note" ci-dessus pour créer la première.';
+  //
+  // §retour Betty du 11/09/2026 (point 1, étape 2) : le filtre "période" ci-dessous (input type=
+  // month, valeur libre) peut désormais pointer vers un mois antérieur à la fenêtre glissante
+  // rapatriée à la connexion (~40 mois, voir HYDRATION_WINDOW_MONTHS, supabase-client.js) — sans ce
+  // message dédié, "0 note" pour une vieille période ressemblerait à un bug plutôt qu'à une limite
+  // connue (les notes existent peut-être bien côté serveur, juste hors du cache local).
+  const periodeAvantFenetre = Boolean(state.fraisFilters.periode && `${state.fraisFilters.periode}-01` < hydrationWindowCutoffDateISO());
+  const emptyStateMessage = periodeAvantFenetre
+    ? 'Aucune note dans le cache local pour cette période (plus de 40 mois) : contactez BERTOLIS si vous avez besoin de cet historique.'
+    : Object.values(state.fraisFilters).some(Boolean)
+      ? 'Aucune note de frais ne correspond à ces filtres.'
+      : 'Aucune note de frais pour l\'instant. Utilisez le bouton "+ Nouvelle note" ci-dessus pour créer la première.';
 
   return `
     <div class="view-header view-header-row">

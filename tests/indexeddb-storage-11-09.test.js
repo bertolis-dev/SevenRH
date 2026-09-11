@@ -70,6 +70,26 @@ async function run() {
     assert.strictEqual(fromIdb[0].raisonSociale, 'Renommée pendant le test', 'la modification doit finir par atteindre IndexedDB, même si saveCompanies() ne l\'attend pas');
   }
 
+  // ---- Régression : pendant la (brève) fenêtre où DB.init() est encore en cours (IndexedDB
+  // disponible = un vrai `await`, contrairement au repli synchrone), un appel à DB.logAudit()
+  // déclenché par autre chose (ex. reportClientError sur un rejet de promesse sans rapport, comme
+  // l'échec d'enregistrement du ServiceWorker constaté en navigateur réel) ne doit jamais planter
+  // faute d'entreprise encore chargée ----
+  {
+    const fakeIdb = createFakeIndexedDB();
+    const { DB, sandbox } = loadDataJs({ indexedDB: fakeIdb });
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+
+    const initPromise = DB.init(); // volontairement PAS attendu tout de suite
+    assert.strictEqual(DB.getCompanies().length, 0, 'sanity : pendant la fenêtre, aucune entreprise chargée pour l\'instant');
+    assert.doesNotThrow(() => DB.logAudit('Erreur', 'Application', 'test pendant la fenêtre'),
+      'logAudit() ne doit jamais planter si appelé avant la fin de DB.init() (aucune entreprise à journaliser pour l\'instant, sortie silencieuse)');
+
+    await initPromise;
+    assert.strictEqual(DB.getCompanies().length, 1, 'une fois DB.init() terminé, l\'entreprise de démonstration doit bien être chargée');
+    assert.doesNotThrow(() => DB.logAudit('Erreur', 'Application', 'test après la fenêtre'), 'logAudit() doit fonctionner normalement une fois DB.init() terminé');
+  }
+
   // ---- Purge (déconnexion, connexion refusée) : ne doit plus rien laisser lisible dans
   // IndexedDB, même exigence de sécurité que pour localStorage (poste RH partagé) ----
   {

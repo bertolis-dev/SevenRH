@@ -3165,6 +3165,15 @@ const DB = {
   /** Historique borné (2000 entrées) pour ne pas saturer le localStorage indéfiniment. */
   logAudit(action, entite, cible, details) {
     const company = this.getCurrentCompany();
+    // §retour Betty du 11/09/2026 (point 1, étape 1) : DB.init() hydrate désormais _companiesCache
+    // de façon asynchrone (voir idbAvailable()) — il existe donc maintenant une brève fenêtre au
+    // tout premier chargement où getCompanies() peut être vide (avant que le seed de démonstration
+    // n'ait eu lieu), par exemple si un rejet de promesse sans rapport (l'enregistrement du
+    // ServiceWorker, non bloquant) déclenche reportClientError() pendant cette fenêtre. Rien à
+    // journaliser tant qu'aucune entreprise n'existe encore : sortie silencieuse plutôt qu'un
+    // TypeError qui ferait échouer reportClientError elle-même (son unique rôle est de ne jamais
+    // planter, quoi qu'il arrive).
+    if (!company) return;
     // Peut être absent (ex. tout premier seed, avant toute session) — jamais bloquant, l'entrée
     // reste alors sans auteur plutôt que de faire échouer l'action elle-même.
     const user = this.getCurrentUser();

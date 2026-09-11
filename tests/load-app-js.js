@@ -220,6 +220,8 @@ globalThis.__renderAvatar = renderAvatar;
 globalThis.__resolveAvatarUrl = resolveAvatarUrl;
 globalThis.__hydrateAvatarImages = hydrateAvatarImages;
 globalThis.__reportClientError = reportClientError;
+globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
+globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -350,6 +352,8 @@ globalThis.__reportClientError = reportClientError;
     resolveAvatarUrl: sandbox.__resolveAvatarUrl,
     hydrateAvatarImages: sandbox.__hydrateAvatarImages,
     reportClientError: sandbox.__reportClientError,
+    renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
+    ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

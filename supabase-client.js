@@ -664,10 +664,34 @@ async function fetchCurrentEmployeeRow() {
 // Hydratation complète de l'entreprise courante — reconstruit la forme de makeEmptyCompany()
 // ---------------------------------------------------------------------------
 
+/** §retour Betty du 11/09/2026 (point 1, étape 2 : "le volume téléchargé à chaque connexion ne
+ * cesse de croître") : leave_requests/telework_requests/expenses n'ont plus l'intégralité de
+ * l'historique rapatriée à chaque connexion, seulement une fenêtre glissante. Valeur choisie à
+ * partir du pire cas identifié dans getLeaveBalance (data.js) : le report/fractionnement d'un type
+ * de congé avec dateClotureCompteur regarde jusqu'à DEUX périodes de clôture avant la période en
+ * cours ("previous2"), soit jusqu'à ~36 mois en arrière dans le pire cas (clôture le lendemain de
+ * refDate) — 40 mois laisse une marge de sécurité de 4 mois. Les autres calculs qui dépendent de ces
+ * 3 tables restent sûrs avec une fenêtre bien plus courte (ancienneté/RCR lisent l'employé lui-même,
+ * pas ces tables ; les vérifications de doublon/kilométrage sont bornées à l'année en cours).
+ *
+ * Connu et accepté comme limite de cette étape (pas encore traité) : un filtre "période" manuel
+ * plus ancien que cette fenêtre (ex. Notes de frais → mois de dépense) peut désormais renvoyer un
+ * résultat vide même si des notes existent réellement côté serveur — voir le message dédié dans
+ * renderFrais() (app.js) plutôt qu'un silence trompeur. Un accès à l'historique complet à la
+ * demande (réversibilité RGPD, très vieille consultation) est un chantier séparé, pas encore fait.
+ */
+const HYDRATION_WINDOW_MONTHS = 40;
+
+function hydrationWindowCutoffISO() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - HYDRATION_WINDOW_MONTHS, now.getDate()).toISOString();
+}
+
 async function hydrateCurrentCompany() {
   const employeeRow = await fetchCurrentEmployeeRow();
   if (!employeeRow) return null;
   const companyId = employeeRow.company_id;
+  const windowCutoff = hydrationWindowCutoffISO();
 
   const [
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
@@ -689,11 +713,14 @@ async function hydrateCurrentCompany() {
     // solde/compteur/quota) passent donc par fetchAllRows (pagination réelle par .range()) plutôt
     // qu'une requête unique. support_tickets/entretiens/idées/brouillons restent en requête simple
     // (consultation pure, comme audit_log/notifications ci-dessous) : aucun calcul n'en dépend.
-    fetchAllRows(() => supabase.from('leave_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
-    supabase.from('leave_requests_calendar').select('*').eq('company_id', companyId),
-    fetchAllRows(() => supabase.from('telework_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
-    supabase.from('telework_requests_calendar').select('*').eq('company_id', companyId),
-    fetchAllRows(() => supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('leave_requests').select('*').eq('company_id', companyId).gte('created_at', windowCutoff).order('created_at', { ascending: false })),
+    // Vue redactée (0007_security_fixes.sql) : n'expose pas created_at, seulement date_debut/date_fin
+    // — filtrée sur date_debut plutôt que created_at, ce qui est de toute façon le critère le plus
+    // pertinent pour "qui est absent" (le calendrier ne s'intéresse qu'aux DATES de l'absence).
+    supabase.from('leave_requests_calendar').select('*').eq('company_id', companyId).gte('date_debut', windowCutoff.slice(0, 10)),
+    fetchAllRows(() => supabase.from('telework_requests').select('*').eq('company_id', companyId).gte('created_at', windowCutoff).order('created_at', { ascending: false })),
+    supabase.from('telework_requests_calendar').select('*').eq('company_id', companyId).gte('date_debut', windowCutoff.slice(0, 10)),
+    fetchAllRows(() => supabase.from('expenses').select('*').eq('company_id', companyId).gte('created_at', windowCutoff).order('created_at', { ascending: false })),
     fetchAllRows(() => supabase.from('documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
     supabase.from('support_tickets').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     supabase.from('entretiens').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
@@ -842,6 +869,19 @@ async function getEmployeePhotoUrl(path) {
   const { data, error } = await supabase.storage.from('employee-photos').createSignedUrl(path, 3600);
   if (error) throw error;
   return data.signedUrl;
+}
+
+/** §retour Betty du 11/09/2026 (point 1, étape 2) : depuis que hydrateCurrentCompany ne rapatrie
+ * plus qu'une fenêtre glissante de notes de frais (voir HYDRATION_WINDOW_MONTHS plus haut), le total
+ * "toute période" affiché sur la fiche salarié (renderEmployeeFraisCard, app.js) ne peut plus être
+ * calculé sur le cache local — get_expense_totals_for_employee (0048) calcule le vrai total côté
+ * serveur, RLS-scopée comme le reste (voir son commentaire dans la migration), sans jamais
+ * rapatrier les lignes elles-mêmes. */
+async function getExpenseTotalsForEmployee(employeeId) {
+  const { data, error } = await supabase.rpc('get_expense_totals_for_employee', { p_employee_id: employeeId });
+  if (error) return { success: false, error: error.message };
+  const row = (Array.isArray(data) ? data[0] : data) || { total_count: 0, total_montant: 0, en_attente_count: 0 };
+  return { success: true, totalCount: row.total_count, totalMontant: Number(row.total_montant) || 0, enAttenteCount: row.en_attente_count };
 }
 
 /** Dépôt de candidature (voir renderCandidatureForm, app.js) — la seule action de toute
@@ -1299,7 +1339,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };
