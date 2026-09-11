@@ -70,8 +70,10 @@ const MODULES: Record<string, { unite: "salarie" | "declarant"; priceIds: { mens
   // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR — nouveau module facturé, voir
   // NAV_ITEMS "Pointeuse" et LANDING_ALACARTE_MODULES (app.js). Price réels (mode PRODUCTION) créés
   // le 11/09/2026 directement dans le Dashboard Stripe (tarif fixe, pas de palier de volume comme
-  // les autres modules — plus simple, ajustable plus tard si besoin).
-  pointage: { unite: "salarie", priceIds: { mensuel: "price_1UESrrCGRqCJoHLtzjh1wUN6", annuel: "price_1UESuKCGRqCJoHLtIqlmCqkn" } },
+  // les autres modules — plus simple, ajustable plus tard si besoin). Premiers price_... créés par
+  // erreur en mode Test (retour "No such price" en prod) — remplacés le 11/09/2026 par les vrais
+  // price_... créés en mode réel.
+  pointage: { unite: "salarie", priceIds: { mensuel: "price_1UETASCAcL94JssK5tssYNxY", annuel: "price_1UETAyCAcL94JssKgdURcehf" } },
 };
 
 function statutFromStripeStatus(stripeStatus: string): string {
