@@ -2608,6 +2608,24 @@ const DB = {
     return list[index];
   },
 
+  /** Voir recalculerIndemnitesKilometriquesAnnee pour le calcul — persiste les montants ajustés et
+   * journalise l'opération globalement (une seule entrée d'audit pour tout l'ajustement, pas une
+   * par note touchée). `annee` : année civile (string 'YYYY') de la note qui vient d'être refusée/
+   * annulée — jamais l'année en cours, une note peut être refusée bien après l'année du trajet. */
+  recalculerIndemnitesKilometriques(employeeId, annee) {
+    const list = this.getExpenses();
+    const misesAJour = recalculerIndemnitesKilometriquesAnnee(employeeId, annee, list);
+    if (!misesAJour.length) return;
+    misesAJour.forEach(({ id, montantTTC }) => {
+      const index = list.findIndex(e => e.id === id);
+      if (index !== -1) list[index] = Object.assign({}, list[index], { montantTTC, dateModification: new Date().toISOString() });
+    });
+    this.saveExpenses(list);
+    const employee = this.getEmployeeById(employeeId);
+    this.logAudit('Modification', 'Note de frais',
+      `Recalcul du barème kilométrique (${misesAJour.length} note${misesAJour.length > 1 ? 's' : ''} ajustée${misesAJour.length > 1 ? 's' : ''}, ${annee}) suite à un refus/une annulation${employee ? ' · ' + employee.prenom + ' ' + employee.nom : ''}`);
+  },
+
   // ---- Sprint SIRH premium §10 : brouillons de demandes (congé/absence, télétravail, note de
   // frais) — `company.brouillons` ajouté après le lancement initial, lu défensivement (`|| []`,
   // même principe que `documents`) plutôt que migré, aucune entreprise existante n'en a besoin
@@ -3595,7 +3613,8 @@ const expenseRepository = {
   getById: (id) => DB.getExpenseById(id),
   getForEmployee: (employeeId) => DB.getExpensesForEmployee(employeeId),
   create: (data) => DB.addExpense(data),
-  update: (id, patch) => DB.updateExpense(id, patch)
+  update: (id, patch) => DB.updateExpense(id, patch),
+  recalculerIndemnitesKilometriques: (employeeId, annee) => DB.recalculerIndemnitesKilometriques(employeeId, annee)
 };
 
 const draftRepository = {
@@ -4422,6 +4441,34 @@ function getKilometrageDejaDeclareAnnee(employeeId, dateStr, allExpenses, exclud
     .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique' && e.id !== excludeExpenseId
       && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
     .reduce((sum, e) => sum + ((e.kilometrage && Number(e.kilometrage.distanceKm)) || 0), 0);
+}
+
+/** §retour Betty du 07/09/2026 (revenu le 11/09/2026, "un vrai défaut de paiement") : refuser ou
+ * annuler une note Kilométrique ne retire son kilométrage du cumul annuel que pour les FUTURES
+ * notes (getKilometrageDejaDeclareAnnee exclut déjà Refusé/Annulé) — les notes DÉJÀ enregistrées
+ * avant ce refus restent figées sur l'indemnité calculée à l'époque, sur un cumul qui n'existe plus
+ * : le salarié perd la différence (jusqu'à un palier entier du barème, largement plusieurs centaines
+ * d'euros à 5 CV). Rejoue donc le calcul cumulatif dans l'ordre de SAISIE d'origine (dateCreation,
+ * jamais la date du trajet : c'est cet ordre-là qui a produit le montant initial de chaque note, pas
+ * l'ordre chronologique des trajets) sur les seules notes encore valides de CETTE année pour CE
+ * salarié. Pure fonction (pas d'écriture) — voir DB.recalculerIndemnitesKilometriques pour la
+ * persistance, appelée après tout refus/annulation d'une note Kilométrique (voir
+ * handleRefuseExpense/handleCancelExpense/handleSelfCancelExpense, app.js). */
+function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses) {
+  const notes = allExpenses
+    .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique'
+      && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
+    .sort((a, b) => (a.dateCreation || '').localeCompare(b.dateCreation || ''));
+  let cumul = 0;
+  const misesAJour = [];
+  notes.forEach(note => {
+    const distanceKm = (note.kilometrage && Number(note.kilometrage.distanceKm)) || 0;
+    const puissanceFiscale = note.kilometrage && note.kilometrage.puissanceFiscale;
+    const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul);
+    cumul += distanceKm;
+    if (Math.abs(nouveauMontant - note.montantTTC) > 0.001) misesAJour.push({ id: note.id, montantTTC: nouveauMontant });
+  });
+  return misesAJour;
 }
 
 // ---------------------------------------------------------------------------

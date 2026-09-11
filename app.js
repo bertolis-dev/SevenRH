@@ -18588,6 +18588,10 @@ function handleSelfCancelExpense(id) {
     danger: true,
     onConfirm: () => {
       expenseRepository.update(id, cancelRequest(expense));
+      // §retour Betty du 07/09/2026, revenu le 11/09/2026 ("vrai défaut de paiement") : une note
+      // Kilométrique annulée ne doit plus compter dans le cumul annuel des AUTRES notes déjà
+      // enregistrées — voir recalculerIndemnitesKilometriquesAnnee (data.js).
+      if (expense.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(expense.employeeId, (expense.date || '').slice(0, 4));
       auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
       showToast('Note de frais annulée.');
       render();
@@ -18629,6 +18633,9 @@ function handleRefuseExpense(id) {
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
       expenseRepository.update(id, refuseRequest(expense, motif));
+      // §retour Betty du 07/09/2026, revenu le 11/09/2026 ("vrai défaut de paiement") : voir le
+      // commentaire identique sur handleCancelExpense/handleSelfCancelExpense ci-dessous.
+      if (expense.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(expense.employeeId, (expense.date || '').slice(0, 4));
       auditLogRepository.logAudit('Refus', 'Note de frais', `${auditLabelForEmployee(expense.employeeId)} : ${motif}`, auditDetailsForActor());
       notifyRequesterEmail(expense.id, 'frais', 'refusee', motif);
       showToast('Note de frais refusée.');
@@ -18647,6 +18654,13 @@ function handleCancelExpense(id) {
     danger: true,
     onConfirm: () => {
       expenseRepository.update(id, cancelRequest(expense));
+      // §retour Betty du 07/09/2026, revenu le 11/09/2026 ("vrai défaut de paiement") : une note
+      // Kilométrique annulée/refusée ne doit plus compter dans le cumul annuel des AUTRES notes déjà
+      // enregistrées pour ce salarié cette année-là — sans ce recalcul, elles restent surévaluées ou
+      // sous-évaluées sur un cumul qui n'existe plus (voir recalculerIndemnitesKilometriquesAnnee,
+      // data.js). Motif du choix `expense.date` (date du trajet) plutôt qu'aujourd'hui pour l'année :
+      // une note peut être refusée bien après l'année où le trajet a eu lieu.
+      if (expense.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(expense.employeeId, (expense.date || '').slice(0, 4));
       auditLogRepository.logAudit('Annulation', 'Note de frais', auditLabelForEmployee(expense.employeeId), auditDetailsForActor());
       showToast('Note de frais annulée.');
       render();

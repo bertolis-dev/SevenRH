@@ -54,8 +54,10 @@ globalThis.__isLeaveTypeEligibleForEmployee = isLeaveTypeEligibleForEmployee;
 globalThis.__calculateAncienneteYears = calculateAncienneteYears;
 globalThis.__calculateIndemniteKilometrique = calculateIndemniteKilometrique;
 globalThis.__getKilometrageDejaDeclareAnnee = getKilometrageDejaDeclareAnnee;
+globalThis.__recalculerIndemnitesKilometriquesAnnee = recalculerIndemnitesKilometriquesAnnee;
 globalThis.__getBaremeKilometrique = getBaremeKilometrique;
 globalThis.__markExpensePaid = markExpensePaid;
+globalThis.__refuseRequest = refuseRequest;
 globalThis.__findDuplicateExpense = findDuplicateExpense;
 globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
 `;
@@ -89,8 +91,10 @@ globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
     calculateAncienneteYears: sandbox.__calculateAncienneteYears,
     calculateIndemniteKilometrique: sandbox.__calculateIndemniteKilometrique,
     getKilometrageDejaDeclareAnnee: sandbox.__getKilometrageDejaDeclareAnnee,
+    recalculerIndemnitesKilometriquesAnnee: sandbox.__recalculerIndemnitesKilometriquesAnnee,
     getBaremeKilometrique: sandbox.__getBaremeKilometrique,
     markExpensePaid: sandbox.__markExpensePaid,
+    refuseRequest: sandbox.__refuseRequest,
     findDuplicateExpense: sandbox.__findDuplicateExpense,
     getExpenseRembourseDate: sandbox.__getExpenseRembourseDate,
   };
