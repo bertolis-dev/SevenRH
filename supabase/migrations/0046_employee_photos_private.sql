@@ -20,8 +20,13 @@ update storage.buckets set public = false where id = 'employee-photos';
 -- signée à l'affichage. On réduit ici les valeurs déjà enregistrées à ce même chemin, sinon les
 -- photos déjà téléversées avant cette migration cesseraient de s'afficher (SupabaseSync.
 -- getEmployeePhotoUrl recevrait une URL complète au lieu d'un chemin).
+--
+-- "photo" n'est PAS une colonne à part de employees (contrairement à nom/prenom/email) : elle vit
+-- dans le blob data jsonb (voir employeeFromRow, supabase-client.js : `photo: d.photo ?? null`),
+-- comme la plupart des champs de la fiche salarié — d'où le passage par data->>'photo'/jsonb_set
+-- plutôt qu'un simple "set photo = ...".
 update employees
-set photo = regexp_replace(photo, '^.*/storage/v1/object/public/employee-photos/', '')
-where photo like '%/storage/v1/object/public/employee-photos/%';
+set data = jsonb_set(data, '{photo}', to_jsonb(regexp_replace(data->>'photo', '^.*/storage/v1/object/public/employee-photos/', '')))
+where data->>'photo' like '%/storage/v1/object/public/employee-photos/%';
 
 insert into schema_migrations (version) values ('0046_employee_photos_private') on conflict do nothing;
