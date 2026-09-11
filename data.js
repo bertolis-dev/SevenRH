@@ -4555,23 +4555,72 @@ function computeMontantTVA(montantTTC, tauxTVA) {
 }
 
 /**
- * Barème kilométrique officiel VOITURES, par tranche de puissance fiscale et de distance annuelle.
- * §retour Betty du 07/09/2026 : ce commentaire affirmait à tort que le barème était "une donnée
- * paramétrable" — il est en réalité codé en dur ici, sans réglage possible ni année de référence
- * enregistrée quelque part, alors qu'il est republié chaque année par l'administration fiscale
- * (barème actuel : revenus 2025/imposition 2026). Ne couvre pas non plus la majoration de 20 % pour
- * les véhicules électriques, ni les barèmes distincts deux-roues/cyclomoteurs. Rendre ceci
- * réellement paramétrable (par année, par motorisation) est un chantier à part, pas fait ici —
- * seul le calcul CUMULATIF annuel (voir calculateIndemniteKilometrique) a été corrigé ce jour-là.
+ * Barème kilométrique officiel, par motorisation/tranche de puissance fiscale/distance annuelle.
+ * §retour Betty du 11/09/2026 (point 5, "ce qui reste ouvert") : le commentaire précédent (07/09)
+ * documentait honnêtement que ceci n'était PAS paramétrable — corrigé ici sur deux axes demandés
+ * explicitement : la MOTORISATION (voiture/moto/cyclomoteur, des barèmes officiels de STRUCTURE
+ * différente, pas seulement de valeurs — seuils de distance à 5000/20000 km pour une voiture contre
+ * 3000/6000 km pour un deux-roues) et une majoration de 20 % pour les véhicules électriques (en
+ * vigueur depuis le barème 2021, arrêté du 1er février 2022 — à vérifier que ce taux n'a pas changé
+ * avant application en paie). Voir calculateIndemniteKilometrique(distanceKm, puissanceFiscale,
+ * kmDejaDeclares, { typeVehicule, electrique, annee }) plus bas.
+ *
+ * ⚠️ VALEURS INDICATIVES, PAS ENCORE CONFIRMÉES PAR ANNÉE CIVILE DISTINCTE — même esprit que
+ * CONVENTION_COLLECTIVE_RULES un peu plus haut dans ce fichier : la STRUCTURE (tranches par CV,
+ * seuils de distance, majoration électrique) est correcte, mais les valeurs exactes moto/
+ * cyclomoteur en particulier n'ont pas pu être vérifiées avec certitude au moment d'écrire ceci — à
+ * confronter au barème officiel en vigueur (service-public.fr/impots.gouv.fr) avant toute
+ * application réelle en paie. Une erreur ici a un impact financier direct pour le salarié.
+ *
+ * Un seul jeu de valeurs par motorisation pour l'instant (pas un historique complet année par
+ * année) : ajouter une année future se fait en ajoutant une clé au tableau correspondant ci-dessous
+ * — getBaremeKilometrique retombe sur l'année connue la plus proche si l'année demandée n'a pas
+ * encore été saisie, plutôt que d'échouer.
  */
-function getBaremeKilometrique() {
-  return [
-    { cvMax: 3, tranche1: 0.529, tranche2Coef: 0.316, tranche2Fixe: 1065, tranche3: 0.370 },
-    { cvMax: 4, tranche1: 0.606, tranche2Coef: 0.340, tranche2Fixe: 1330, tranche3: 0.407 },
-    { cvMax: 5, tranche1: 0.636, tranche2Coef: 0.357, tranche2Fixe: 1395, tranche3: 0.427 },
-    { cvMax: 6, tranche1: 0.665, tranche2Coef: 0.374, tranche2Fixe: 1457, tranche3: 0.447 },
-    { cvMax: Infinity, tranche1: 0.697, tranche2Coef: 0.394, tranche2Fixe: 1515, tranche3: 0.470 }
-  ];
+const BAREMES_KILOMETRIQUES = {
+  voiture: {
+    2026: [
+      { cvMax: 3, tranche1: 0.529, tranche2Coef: 0.316, tranche2Fixe: 1065, tranche3: 0.370 },
+      { cvMax: 4, tranche1: 0.606, tranche2Coef: 0.340, tranche2Fixe: 1330, tranche3: 0.407 },
+      { cvMax: 5, tranche1: 0.636, tranche2Coef: 0.357, tranche2Fixe: 1395, tranche3: 0.427 },
+      { cvMax: 6, tranche1: 0.665, tranche2Coef: 0.374, tranche2Fixe: 1457, tranche3: 0.447 },
+      { cvMax: Infinity, tranche1: 0.697, tranche2Coef: 0.394, tranche2Fixe: 1515, tranche3: 0.470 }
+    ]
+  },
+  // Seuils 3000/6000 km (voir getSeuilsKilometriques) — structure officielle à 3 tranches de
+  // puissance (1-2 CV / 3-5 CV / plus de 5 CV), valeurs ⚠️ à vérifier avant application réelle.
+  moto: {
+    2026: [
+      { cvMax: 2, tranche1: 0.395, tranche2Coef: 0.099, tranche2Fixe: 891, tranche3: 0.234 },
+      { cvMax: 5, tranche1: 0.468, tranche2Coef: 0.082, tranche2Fixe: 1158, tranche3: 0.281 },
+      { cvMax: Infinity, tranche1: 0.606, tranche2Coef: 0.079, tranche2Fixe: 1583, tranche3: 0.343 }
+    ]
+  },
+  // Cyclomoteurs (< 50 cm3) : pas de tranche par puissance fiscale dans le barème officiel (un
+  // deux-roues de cette catégorie n'a pas de CV au sens fiscal habituel) — un seul jeu de
+  // coefficients, cvMax: Infinity pour que la même logique de recherche de tranche s'applique sans
+  // cas particulier ailleurs dans le code.
+  cyclomoteur: {
+    2026: [
+      { cvMax: Infinity, tranche1: 0.315, tranche2Coef: 0.079, tranche2Fixe: 711, tranche3: 0.198 }
+    ]
+  }
+};
+
+const MAJORATION_VEHICULE_ELECTRIQUE = 0.20;
+
+function getBaremeKilometrique(typeVehicule, annee) {
+  const tables = BAREMES_KILOMETRIQUES[typeVehicule] || BAREMES_KILOMETRIQUES.voiture;
+  const years = Object.keys(tables).map(Number).sort((a, b) => a - b);
+  const demandee = Number(annee) || years[years.length - 1];
+  const applicable = years.filter(y => y <= demandee).pop() ?? years[0];
+  return tables[applicable];
+}
+
+/** Seuils de distance annuelle qui délimitent les 3 tranches du barème — 5000/20000 km pour une
+ * voiture, 3000/6000 km pour un deux-roues (moto ou cyclomoteur), structure officielle distincte. */
+function getSeuilsKilometriques(typeVehicule) {
+  return (typeVehicule === 'moto' || typeVehicule === 'cyclomoteur') ? { seuil1: 3000, seuil2: 6000 } : { seuil1: 5000, seuil2: 20000 };
 }
 
 /** §retour Betty du 07/09/2026 (point 1, le plus sérieux des défauts frais) : le barème fiscal
@@ -4585,29 +4634,45 @@ function getBaremeKilometrique() {
  * notes (bareme(k1) + [bareme(k1+k2)-bareme(k1)] + ... = bareme(total)) — aucune note déjà
  * enregistrée n'a donc besoin d'être réécrite rétroactivement quand une nouvelle fait franchir une
  * tranche, contrairement à un barème appliqué naïvement note par note. */
-function calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares) {
-  const tier = getBaremeKilometrique().find(b => puissanceFiscale <= b.cvMax) || getBaremeKilometrique().slice(-1)[0];
+/** `options.typeVehicule` ('voiture' par défaut, ou 'moto'/'cyclomoteur'), `options.electrique`
+ * (majoration de 20 %, voir MAJORATION_VEHICULE_ELECTRIQUE) et `options.annee` (barème applicable,
+ * voir getBaremeKilometrique) — tous optionnels, un appel sans options reproduit exactement le
+ * comportement d'avant leur ajout (barème voiture, sans majoration, dernière année connue). La
+ * majoration s'applique à l'indemnité MARGINALE déjà calculée ci-dessous (mathématiquement
+ * équivalent à l'appliquer à bareme() avant la différence, car un pourcentage constant se
+ * télescope de la même façon : 1,2×(a−b) = 1,2a − 1,2b), plus simple à écrire ainsi. */
+function calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, options = {}) {
+  const typeVehicule = options.typeVehicule || 'voiture';
+  const tiers = getBaremeKilometrique(typeVehicule, options.annee);
+  const seuils = getSeuilsKilometriques(typeVehicule);
+  const tier = tiers.find(b => puissanceFiscale <= b.cvMax) || tiers[tiers.length - 1];
   const bareme = (d) => {
     if (d <= 0) return 0;
-    if (d <= 5000) return d * tier.tranche1;
-    if (d <= 20000) return d * tier.tranche2Coef + tier.tranche2Fixe;
+    if (d <= seuils.seuil1) return d * tier.tranche1;
+    if (d <= seuils.seuil2) return d * tier.tranche2Coef + tier.tranche2Fixe;
     return d * tier.tranche3;
   };
   const avant = Math.max(0, Number(kmDejaDeclares) || 0);
   const apres = avant + (Number(distanceKm) || 0);
-  return round2(bareme(apres) - bareme(avant));
+  const montant = round2(bareme(apres) - bareme(avant));
+  return options.electrique ? round2(montant * (1 + MAJORATION_VEHICULE_ELECTRIQUE)) : montant;
 }
 
 /** Kilomètres déjà déclarés par ce salarié sur l'année civile de `dateStr` (hors notes refusées/
  * annulées, qui n'ont jamais réellement consommé de tranche) — sert de point de départ au calcul
  * cumulatif ci-dessus. `excludeExpenseId` exclut la note elle-même si on recalcule une note déjà
- * enregistrée (jamais le cas aujourd'hui à la création, utile si une modification est ajoutée plus tard). */
-function getKilometrageDejaDeclareAnnee(employeeId, dateStr, allExpenses, excludeExpenseId) {
+ * enregistrée (jamais le cas aujourd'hui à la création, utile si une modification est ajoutée plus tard).
+ * `typeVehicule` ('voiture' par défaut, compatible avec toute note saisie avant ce champ) : le cumul
+ * doit être suivi SÉPARÉMENT par motorisation — voiture et moto ont des barèmes/tranches totalement
+ * distincts, mélanger leurs kilomètres ferait basculer l'un dans une tranche à cause de l'autre. */
+function getKilometrageDejaDeclareAnnee(employeeId, dateStr, allExpenses, excludeExpenseId, typeVehicule) {
   const year = (dateStr || '').slice(0, 4);
   if (!year) return 0;
+  const type = typeVehicule || 'voiture';
   return allExpenses
     .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique' && e.id !== excludeExpenseId
-      && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
+      && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé'
+      && ((e.kilometrage && e.kilometrage.typeVehicule) || 'voiture') === type)
     .reduce((sum, e) => sum + ((e.kilometrage && Number(e.kilometrage.distanceKm)) || 0), 0);
 }
 
@@ -4627,13 +4692,19 @@ function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses) {
     .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique'
       && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
     .sort((a, b) => (a.dateCreation || '').localeCompare(b.dateCreation || ''));
-  let cumul = 0;
+  // §retour Betty du 11/09/2026 (barème paramétrable par motorisation) : voiture/moto/cyclomoteur
+  // ont des tranches totalement distinctes — le cumul doit être rejoué SÉPARÉMENT par motorisation,
+  // jamais mélangé (voir le même principe dans getKilometrageDejaDeclareAnnee ci-dessus).
+  const cumulParType = {};
   const misesAJour = [];
   notes.forEach(note => {
     const distanceKm = (note.kilometrage && Number(note.kilometrage.distanceKm)) || 0;
     const puissanceFiscale = note.kilometrage && note.kilometrage.puissanceFiscale;
-    const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul);
-    cumul += distanceKm;
+    const typeVehicule = (note.kilometrage && note.kilometrage.typeVehicule) || 'voiture';
+    const electrique = Boolean(note.kilometrage && note.kilometrage.electrique);
+    const cumul = cumulParType[typeVehicule] || 0;
+    const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul, { typeVehicule, electrique });
+    cumulParType[typeVehicule] = cumul + distanceKm;
     if (Math.abs(nouveauMontant - note.montantTTC) > 0.001) misesAJour.push({ id: note.id, montantTTC: nouveauMontant });
   });
   return misesAJour;

@@ -19105,6 +19105,8 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
         libelle: editingExpense.libelle, montantTTC: editingExpense.montantTTC, tauxTVA: editingExpense.tauxTVA,
         distanceKm: editingExpense.kilometrage && editingExpense.kilometrage.distanceKm,
         puissanceFiscale: editingExpense.kilometrage && editingExpense.kilometrage.puissanceFiscale,
+        typeVehicule: (editingExpense.kilometrage && editingExpense.kilometrage.typeVehicule) || 'voiture',
+        electrique: Boolean(editingExpense.kilometrage && editingExpense.kilometrage.electrique),
         commentaire: editingExpense.commentaire, justificatif: editingExpense.justificatif }
     : (draft && draft.champs) || {};
   state.pendingAttachment = champs.justificatif || null;
@@ -19144,9 +19146,28 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
             </div>
           </div>
 
+          <!-- §retour Betty du 11/09/2026 (point 5, "barème paramétrable par motorisation") : la
+               puissance fiscale n'a de sens que pour voiture/moto (les cyclomoteurs < 50 cm3 n'ont
+               pas de CV au sens fiscal habituel, voir BAREMES_KILOMETRIQUES.cyclomoteur) — masquée
+               via updateExpenseCategoryFields/f-typeVehicule ci-dessous plutôt que rendue
+               optionnelle partout, pour ne jamais laisser un salarié en voiture/moto la sauter par
+               erreur. -->
           <div class="form-grid" id="expense-km-fields" style="margin-top: 14px; display: none;">
             ${textField('distanceKm', 'Distance (km, aller-retour inclus)', champs.distanceKm || '', false, 'number')}
-            ${textField('puissanceFiscale', 'Puissance fiscale (CV)', champs.puissanceFiscale || '', false, 'number')}
+            <div class="form-field">
+              <label for="f-typeVehicule">Type de véhicule</label>
+              <select class="input" id="f-typeVehicule" name="typeVehicule">
+                <option value="voiture" ${(champs.typeVehicule || 'voiture') === 'voiture' ? 'selected' : ''}>Voiture</option>
+                <option value="moto" ${champs.typeVehicule === 'moto' ? 'selected' : ''}>Moto</option>
+                <option value="cyclomoteur" ${champs.typeVehicule === 'cyclomoteur' ? 'selected' : ''}>Cyclomoteur (&lt; 50 cm³)</option>
+              </select>
+            </div>
+            <div class="form-field" id="field-puissance-fiscale">
+              ${textField('puissanceFiscale', 'Puissance fiscale (CV)', champs.puissanceFiscale || '', false, 'number')}
+            </div>
+            <div class="form-field form-field-checkbox" style="align-items: flex-end;">
+              <label><input type="checkbox" id="f-vehiculeElectrique" ${champs.electrique ? 'checked' : ''}> Véhicule électrique (majoration de 20 %)</label>
+            </div>
           </div>
           <p class="text-muted" id="expense-km-hint" style="margin-top: 8px;"></p>
 
@@ -19179,6 +19200,9 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
   document.getElementById('f-categorie').addEventListener('change', () => { updateExpenseCategoryFields(); updateExpenseJustificatifLabel(); });
   document.getElementById('f-distanceKm').addEventListener('input', updateExpenseKmHint);
   document.getElementById('f-puissanceFiscale').addEventListener('input', updateExpenseKmHint);
+  document.getElementById('f-typeVehicule').addEventListener('change', () => { updateExpensePuissanceFiscaleVisibility(); updateExpenseKmHint(); });
+  document.getElementById('f-vehiculeElectrique').addEventListener('change', updateExpenseKmHint);
+  updateExpensePuissanceFiscaleVisibility();
   // §retour Betty du 07/09/2026 : le cumul annuel dépend de l'année de la dépense — sans ce
   // listener, changer la date après avoir déjà saisi distance/puissance laissait l'aperçu affiché
   // sur le cumul de la mauvaise année.
@@ -19208,15 +19232,28 @@ function updateExpenseCategoryFields() {
   const isKm = document.getElementById('f-categorie').value === 'Kilométrique';
   document.getElementById('expense-standard-fields').style.display = isKm ? 'none' : 'grid';
   document.getElementById('expense-km-fields').style.display = isKm ? 'grid' : 'none';
-  if (isKm) updateExpenseKmHint(); else document.getElementById('expense-km-hint').textContent = '';
+  if (isKm) { updateExpensePuissanceFiscaleVisibility(); updateExpenseKmHint(); } else document.getElementById('expense-km-hint').textContent = '';
+}
+
+/** §retour Betty du 11/09/2026 (point 5, barème paramétrable par motorisation) : un cyclomoteur
+ * (< 50 cm3) n'a pas de puissance fiscale au sens habituel — BAREMES_KILOMETRIQUES.cyclomoteur n'a
+ * d'ailleurs qu'une seule tranche, n'importe quelle valeur y correspondrait de toute façon. Masqué
+ * plutôt que laissé optionnel, pour ne jamais laisser un salarié en voiture/moto le sauter par erreur. */
+function updateExpensePuissanceFiscaleVisibility() {
+  const typeVehicule = document.getElementById('f-typeVehicule').value;
+  document.getElementById('field-puissance-fiscale').style.display = typeVehicule === 'cyclomoteur' ? 'none' : 'block';
 }
 
 function updateExpenseKmHint() {
   const distanceKm = Number(document.getElementById('f-distanceKm').value) || 0;
-  const puissanceFiscale = Number(document.getElementById('f-puissanceFiscale').value) || 0;
+  const typeVehicule = document.getElementById('f-typeVehicule').value;
+  const puissanceFiscale = typeVehicule === 'cyclomoteur' ? 0 : (Number(document.getElementById('f-puissanceFiscale').value) || 0);
+  const electrique = document.getElementById('f-vehiculeElectrique').checked;
   const hint = document.getElementById('expense-km-hint');
-  if (!distanceKm || !puissanceFiscale) {
-    hint.textContent = 'Renseignez la distance et la puissance fiscale pour calculer l\'indemnité.';
+  if (!distanceKm || (typeVehicule !== 'cyclomoteur' && !puissanceFiscale)) {
+    hint.textContent = typeVehicule === 'cyclomoteur'
+      ? 'Renseignez la distance pour calculer l\'indemnité.'
+      : 'Renseignez la distance et la puissance fiscale pour calculer l\'indemnité.';
     return;
   }
   // §retour Betty du 07/09/2026 : l'aperçu affiché pendant la saisie doit refléter le VRAI montant
@@ -19225,10 +19262,10 @@ function updateExpenseKmHint() {
   // Exclut la note elle-même du cumul en mode modification (point 5), sinon elle se compterait deux fois.
   const employeeId = document.getElementById('f-employeeId').value;
   const dateStr = document.getElementById('f-date').value || toISODate(new Date());
-  const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll(), state.editingExpenseId);
-  const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
+  const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll(), state.editingExpenseId, typeVehicule);
+  const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique });
   hint.textContent = kmDejaDeclares > 0
-    ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année, avant cette note).`
+    ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année pour ce type de véhicule, avant cette note).`
     : `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)}`;
 }
 
@@ -19262,19 +19299,27 @@ async function submitExpenseForm(evt) {
 
   if (categorie === 'Kilométrique') {
     const distanceKm = Number(formData.get('distanceKm')) || 0;
-    const puissanceFiscale = Number(formData.get('puissanceFiscale')) || 0;
-    if (distanceKm <= 0 || puissanceFiscale <= 0) {
-      showToast('Renseignez une distance et une puissance fiscale valides (supérieures à 0).', 'error');
+    // §retour Betty du 11/09/2026 (barème paramétrable par motorisation) : un cyclomoteur (<50cm3)
+    // n'a pas de puissance fiscale au sens habituel (champ masqué, voir
+    // updateExpensePuissanceFiscaleVisibility) — n'exige donc pas cette valeur, contrairement à
+    // voiture/moto.
+    const typeVehicule = formData.get('typeVehicule') || 'voiture';
+    const puissanceFiscale = typeVehicule === 'cyclomoteur' ? 0 : (Number(formData.get('puissanceFiscale')) || 0);
+    const electrique = document.getElementById('f-vehiculeElectrique').checked;
+    if (distanceKm <= 0 || (typeVehicule !== 'cyclomoteur' && puissanceFiscale <= 0)) {
+      showToast(typeVehicule === 'cyclomoteur' ? 'Renseignez une distance valide (supérieure à 0).' : 'Renseignez une distance et une puissance fiscale valides (supérieures à 0).', 'error');
       return;
     }
     // §retour Betty du 07/09/2026 (point 1) : recalculé ici plutôt que de faire confiance au
     // montant affiché à l'écran au moment de la saisie — une autre note kilométrique a pu être
     // envoyée entre-temps (ex. deux onglets ouverts), le cumul doit être celui à l'instant de l'envoi.
-    // Exclut la note elle-même en modification (point 5), sinon elle se compterait deux fois.
-    const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll(), state.editingExpenseId);
-    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares);
+    // Exclut la note elle-même en modification (point 5), sinon elle se compterait deux fois. Le
+    // cumul est scopé au type de véhicule (point 5, 11/09/2026) : voiture et moto ne se mélangent
+    // jamais dans le même compteur annuel.
+    const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll(), state.editingExpenseId, typeVehicule);
+    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique });
     tauxTVA = 0;
-    kilometrage = { distanceKm, puissanceFiscale };
+    kilometrage = { distanceKm, puissanceFiscale, typeVehicule, electrique };
   } else {
     montantTTC = Number(formData.get('montantTTC')) || 0;
     tauxTVA = Number(formData.get('tauxTVA'));

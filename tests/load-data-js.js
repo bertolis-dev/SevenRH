@@ -67,6 +67,7 @@ globalThis.__calculateIndemniteKilometrique = calculateIndemniteKilometrique;
 globalThis.__getKilometrageDejaDeclareAnnee = getKilometrageDejaDeclareAnnee;
 globalThis.__recalculerIndemnitesKilometriquesAnnee = recalculerIndemnitesKilometriquesAnnee;
 globalThis.__getBaremeKilometrique = getBaremeKilometrique;
+globalThis.__getSeuilsKilometriques = getSeuilsKilometriques;
 globalThis.__markExpensePaid = markExpensePaid;
 globalThis.__refuseRequest = refuseRequest;
 globalThis.__findDuplicateExpense = findDuplicateExpense;
@@ -109,6 +110,7 @@ globalThis.__isArretTravailType = isArretTravailType;
     getKilometrageDejaDeclareAnnee: sandbox.__getKilometrageDejaDeclareAnnee,
     recalculerIndemnitesKilometriquesAnnee: sandbox.__recalculerIndemnitesKilometriquesAnnee,
     getBaremeKilometrique: sandbox.__getBaremeKilometrique,
+    getSeuilsKilometriques: sandbox.__getSeuilsKilometriques,
     markExpensePaid: sandbox.__markExpensePaid,
     refuseRequest: sandbox.__refuseRequest,
     findDuplicateExpense: sandbox.__findDuplicateExpense,
