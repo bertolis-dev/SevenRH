@@ -125,7 +125,32 @@ async function run() {
     assert.ok(htmlAvecModule.includes('poste-shift-pointage'), 'avec le module souscrit, la confirmation du pointage du jour doit apparaître');
   }
 
-  console.log('OK — pointage-11-09.test.js (durée travaillée, jeton du QR + régénération, arrivée/départ avec pause déjeuner, confirmation dans Planning gated par module)');
+  // ---- renderPointeuse : bouton "QR de pointage" pour manager/propriétaire ("directeur") ----
+  // §retour Betty du 11/09/2026 ("pour le directeur et les manageurs un bouton qr code pointeur") :
+  // jusqu'ici, afficher/régénérer ce QR n'était possible que depuis Paramètres > Établissements
+  // (RH/Propriétaire uniquement) — un manager n'a pas du tout accès à Paramètres.
+  {
+    const { DB, sandbox, renderPointeuse } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+
+    const manager = DB.getEmployees().find(e => e.role === 'manager');
+    DB._currentEmployeeId = manager.id;
+    const htmlManager = renderPointeuse();
+    assert.ok(htmlManager.includes('data-pointage-qr-etablissement'), 'un manager doit voir un bouton pour afficher le QR de pointage');
+
+    const proprietaire = DB.getEmployees().find(e => e.role === 'proprietaire');
+    DB._currentEmployeeId = proprietaire.id;
+    const htmlProprietaire = renderPointeuse();
+    assert.ok(htmlProprietaire.includes('data-pointage-qr-etablissement'), 'le propriétaire ("directeur") doit aussi voir ce bouton');
+
+    const salarie = DB.getEmployees().find(e => e.role === 'salarie');
+    DB._currentEmployeeId = salarie.id;
+    const htmlSalarie = renderPointeuse();
+    assert.ok(!htmlSalarie.includes('data-pointage-qr-etablissement'), 'un simple salarié ne doit pas voir ce bouton (pas demandé par Betty)');
+  }
+
+  console.log('OK — pointage-11-09.test.js (durée travaillée, jeton du QR + régénération, arrivée/départ avec pause déjeuner, confirmation dans Planning gated par module, QR accessible aux managers/propriétaire)');
 }
 
 run().catch((err) => {

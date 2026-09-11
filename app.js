@@ -18140,6 +18140,18 @@ function renderPointeuse() {
       <button type="button" class="btn btn-primary" id="btn-open-scan-pointage">${icon(ICONS.scanFrame, 16)} Scanner le QR</button>
     </div>
 
+    ${['manager', 'proprietaire'].includes(user.role) ? `
+      <div class="card" style="margin-top: 16px;">
+        <h2>QR de pointage</h2>
+        <p class="text-muted" style="margin: 0 0 12px;">À imprimer ou afficher à l'accueil, jusqu'ici accessible uniquement depuis Paramètres &gt; Établissements (RH/Propriétaire).</p>
+        <div class="badge-row" style="gap: 10px;">
+          ${etablissementRepository.getAll().map(etab => `
+            <button type="button" class="btn btn-secondary btn-sm" data-pointage-qr-etablissement="${etab.id}">${icon(ICONS.scanFrame, 13)} ${escapeHtml(etab.nom)}</button>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     ${historique.length ? `
       <div class="card" style="margin-top: 16px;">
         <h2>Historique (7 derniers jours)</h2>
@@ -18163,6 +18175,11 @@ function renderPointeuse() {
 
 function bindPointeuseEvents() {
   document.getElementById('btn-open-scan-pointage').addEventListener('click', openPointageScanModal);
+  // §retour Betty du 11/09/2026 ("pour le directeur et les manageurs un bouton qr code") : jusqu'ici
+  // seul Paramètres > Établissements (RH/Propriétaire, voir renderEtablissementCard) permettait
+  // d'afficher/régénérer ce QR — un manager n'a pas accès à Paramètres du tout. Réutilise la même
+  // modale (openPointageQrModal) plutôt que d'en dupliquer une.
+  document.querySelectorAll('[data-pointage-qr-etablissement]').forEach(btn => btn.addEventListener('click', () => openPointageQrModal(btn.dataset.pointageQrEtablissement)));
 }
 
 /** Lecture caméra en local (jsQR) — chaque frame vidéo est dessinée dans un <canvas> hors-écran
