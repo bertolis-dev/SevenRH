@@ -1267,6 +1267,96 @@ const LANDING_FEATURES = [
         [ICONS.schedule, 'Départ 17h12 · 8h09 travaillées', 'success', 'Terminé']
       ]
     }
+  },
+  {
+    icon: ICONS.coin, title: 'Rémunération',
+    text: 'Vue consolidée du salaire, des heures supplémentaires et du repos compensateur.',
+    detail: [
+      "Salaire brut mensuel, heures supplémentaires saisies et leur suivi par rapport au contingent annuel",
+      "Solde de repos compensateur par salarié, avec ajustement manuel possible depuis sa fiche",
+      "Radar trésorerie RH : projection de l'impact des embauches/départs déjà planifiés sur la masse salariale à 30/60/90 jours",
+      "Taux de conversion heures sup → repos compensateur paramétrable (jamais imposé, dépend de votre accord de branche/entreprise)"
+    ],
+    howItWorks: [
+      "Chaque mois, les heures supplémentaires et le repos compensateur sont saisis ou ajustés depuis la fiche du salarié.",
+      "La vue Rémunération consolide ces éléments avec le salaire brut, sans ressaisie ailleurs.",
+      "Le Radar trésorerie RH projette automatiquement l'impact des mouvements de personnel déjà planifiés."
+    ],
+    audience: [
+      { role: 'RH', text: "A une vue consolidée du salaire et des heures sup, sans jongler entre plusieurs fichiers." },
+      { role: 'Direction', text: "Anticipe l'impact des embauches et départs sur la masse salariale avant qu'ils n'arrivent." },
+      { role: 'Comptabilité', text: "Retrouve les mêmes chiffres que la préparation de paie, sans écart de ressaisie." }
+    ],
+    related: [2, 6],
+    mock: {
+      title: 'Rémunération',
+      kpis: [['3', 'Heures sup ce mois'], ['12h', 'Repos compensateur'], ['+2', 'Embauches à 60 jours']],
+      rows: [
+        [ICONS.coin, 'Salaire brut mensuel consolidé', null, null],
+        [ICONS.schedule, 'Repos compensateur : T. Petit', 'info', '12h disponibles'],
+        [ICONS.chart, 'Radar trésorerie RH à 30/60/90 jours', 'success', 'À jour']
+      ]
+    }
+  },
+  {
+    icon: ICONS.notepad, title: 'Entretiens',
+    text: 'Entretiens professionnels et annuels planifiés, avec auto-évaluation et retour manager.',
+    detail: [
+      "Planification d'un entretien (date, participants) par RH ou manager",
+      "Auto-évaluation complétée par le salarié avant la date, puis verrouillée à la clôture",
+      "Retour du manager, puis clôture par RH pour garder une trace fidèle de l'échange",
+      "Rappel automatique quand le bilan à 6 ans (obligation légale récurrente) approche"
+    ],
+    howItWorks: [
+      "RH ou le manager planifie l'entretien avec une date et les participants.",
+      "Le salarié complète son auto-évaluation avant la date, le manager la sienne après.",
+      "RH clôture l'entretien, qui se verrouille pour garder une trace fidèle de l'échange."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Prépare et complète son auto-évaluation directement dans l'application." },
+      { role: 'Manager', text: "Planifie et mène les entretiens de son équipe, avec l'historique déjà à portée de main." },
+      { role: 'RH', text: "Ne rate plus un bilan à 6 ans, rappelé automatiquement avant l'échéance légale." }
+    ],
+    related: [0, 5],
+    mock: {
+      title: 'Entretiens',
+      kpis: [['3', 'Entretiens ce trimestre'], ['1', 'Auto-évaluation en attente'], ['1', 'Bilan à 6 ans à prévoir']],
+      rows: [
+        [ICONS.notepad, 'Entretien annuel : S. Benali', 'info', 'Planifié'],
+        [ICONS.checkCircle, 'Auto-évaluation complétée', 'success', 'Prêt pour le manager'],
+        [ICONS.warningTriangle, 'Bilan à 6 ans : échéance proche', 'warning', 'À planifier']
+      ]
+    }
+  },
+  {
+    icon: ICONS.personPlus, title: 'Embauche',
+    text: 'Candidatures reçues par QR code ou lien, sans compte à créer pour le candidat.',
+    detail: [
+      "Postes ouverts au recrutement, partagés par QR code ou lien direct",
+      "Formulaire public de candidature (CV et lettre de motivation), sans compte à créer",
+      "Liste des candidatures reçues, consultables directement depuis l'application",
+      "Conversion en fiche salarié pré-remplie en un clic depuis une candidature"
+    ],
+    howItWorks: [
+      "RH ouvre un poste au recrutement et partage le QR code ou le lien de candidature.",
+      "Le candidat postule depuis son téléphone ou son ordinateur, sans créer de compte.",
+      "RH retrouve la candidature dans l'application et crée la fiche salarié en un clic si elle est retenue."
+    ],
+    audience: [
+      { role: 'RH', text: "Centralise les candidatures reçues, sans copier-coller depuis une boîte mail." },
+      { role: 'Direction', text: "A une visibilité claire sur les postes ouverts et les candidatures en cours." },
+      { role: 'Candidat', text: "Postule en quelques minutes, sans créer de compte ni installer d'application." }
+    ],
+    related: [0, 8],
+    mock: {
+      title: 'Embauche',
+      kpis: [['2', 'Postes ouverts'], ['5', 'Candidatures reçues'], ['1', 'À traiter']],
+      rows: [
+        [ICONS.personPlus, 'Candidature reçue : Poste Commercial', 'info', 'Nouvelle'],
+        [ICONS.document, 'CV et lettre de motivation joints', null, null],
+        [ICONS.checkCircle, 'Fiche salarié pré-remplie en un clic', 'success', 'Prêt à embaucher']
+      ]
+    }
   }
 ];
 
@@ -1325,7 +1415,8 @@ const ABOUT_CATEGORIES = [
       "Organigramme hiérarchique généré automatiquement à partir des managers",
       "Catégories de salariés personnalisables",
       "Alertes automatiques : anniversaires d'ancienneté (médailles du travail), entretiens professionnels (tous les 2 ans) et bilans (tous les 6 ans)",
-      "Import en masse de salariés depuis un fichier CSV/Excel"
+      "Import en masse de salariés depuis un fichier CSV/Excel",
+      "Embauche : candidatures reçues par QR code ou lien, converties en fiche salarié en un clic"
     ]
   },
   {
@@ -1348,7 +1439,8 @@ const ABOUT_CATEGORIES = [
       "Préparation de paie avec détection automatique des anomalies avant export",
       "Export vers votre logiciel de paie",
       "Notes de frais avec justificatifs, workflow de validation et remboursement (y compris kilométrique)",
-      "Tickets restaurant calculés automatiquement selon les jours travaillés, part employeur incluse"
+      "Tickets restaurant calculés automatiquement selon les jours travaillés, part employeur incluse",
+      "Rémunération : salaire brut, heures supplémentaires, repos compensateur et projection de la masse salariale"
     ]
   },
   {
