@@ -82,6 +82,9 @@ globalThis.__shiftRepository = shiftRepository;
 globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
 globalThis.__seedExampleShifts = seedExampleShifts;
+globalThis.__pointageRepository = pointageRepository;
+globalThis.__etablissementRepository = etablissementRepository;
+globalThis.__computeDureeTravailleeMinutes = computeDureeTravailleeMinutes;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -92,6 +95,8 @@ globalThis.__navigateTo = navigateTo;
 globalThis.__render = render;
 globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
+globalThis.__LANDING_ALACARTE_MODULES = LANDING_ALACARTE_MODULES;
+globalThis.__renderPointeuse = renderPointeuse;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
@@ -215,12 +220,17 @@ globalThis.__openShiftModal = openShiftModal;
     employeeRepository: sandbox.__employeeRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,
+    pointageRepository: sandbox.__pointageRepository,
+    etablissementRepository: sandbox.__etablissementRepository,
+    computeDureeTravailleeMinutes: sandbox.__computeDureeTravailleeMinutes,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,
     render: sandbox.__render,
     state: sandbox.__state,
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
+    LANDING_ALACARTE_MODULES: sandbox.__LANDING_ALACARTE_MODULES,
+    renderPointeuse: sandbox.__renderPointeuse,
     getVisibleEmployeeIdsForCurrentUser: sandbox.__getVisibleEmployeeIdsForCurrentUser,
     isCurrentWorkflowStepFor: sandbox.__isCurrentWorkflowStepFor,
     parisDateFromISO: sandbox.__parisDateFromISO,

@@ -349,6 +349,8 @@ const ICONS = {
   warningTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 15H3z"/><line x1="12" y1="10" x2="12" y2="14.5"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>',
   ticket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a1.5 1.5 0 0 0 0 3v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a1.5 1.5 0 0 0 0-3z"/><line x1="10" y1="7" x2="10" y2="17" stroke-dasharray="2 2"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,17 20,6"/></svg>',
+  // Pointeuse QR (§11/09/2026) — viseur/cadre de scan, symbole universel du "scan par caméra".
+  scanFrame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M20 8V5a1 1 0 0 0-1-1h-3"/><path d="M4 16v3a1 1 0 0 0 1 1h3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><line x1="4" y1="12" x2="20" y2="12"/></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>',
   percent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12" y2="7.6"/></svg>',
@@ -474,6 +476,10 @@ const NAV_ITEMS = [
   // Propriétaire gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2
   // entrées de menu distinctes pour un même écran.
   { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'tickets' },
+  // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR — ouvert à TOUT rôle (chacun
+  // pointe pour soi-même, même patron que "Tickets restaurant" ci-dessus), gated par le nouveau
+  // module "pointage" (voir LANDING_ALACARTE_MODULES).
+  { key: 'pointeuse', label: 'Pointeuse', icon: ICONS.schedule, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'pointage' },
   { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
   // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
   // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
@@ -1229,6 +1235,38 @@ const LANDING_FEATURES = [
         [ICONS.checkCircle, 'Ticket résolu', 'success', 'Terminé']
       ]
     }
+  },
+  {
+    icon: ICONS.scanFrame, title: 'Pointeuse QR',
+    text: "Arrivée et départ pointés en un scan, avec confirmation directement dans le planning.",
+    detail: [
+      "Un QR fixe par établissement, à imprimer ou afficher à l'accueil",
+      "Chaque salarié scanne depuis l'application, avec son propre téléphone",
+      "Un premier scan enregistre l'arrivée, le suivant le départ",
+      "Heures réellement travaillées calculées automatiquement",
+      "Confirmation visible directement dans le planning, à côté du quart prévu",
+      "QR régénérable à tout moment : l'ancien est aussitôt invalidé"
+    ],
+    howItWorks: [
+      "La RH génère et affiche le QR de pointage à l'accueil de l'établissement, depuis Paramètres.",
+      "Le salarié le scanne en arrivant, puis à nouveau en partant, depuis l'écran Pointeuse.",
+      "Le planning affiche aussitôt la confirmation, à côté du quart prévu du salarié."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Pointe en un scan, sans badge ni pointeuse physique à entretenir." },
+      { role: 'Manager', text: "Voit directement dans le planning qui est réellement arrivé." },
+      { role: 'RH', text: "Dispose des heures réellement travaillées, sans ressaisie manuelle." }
+    ],
+    related: [1, 0],
+    mock: {
+      title: 'Pointeuse',
+      kpis: [['9h03', 'Dernière arrivée'], ['8h09', 'Travaillées aujourd\'hui'], ['1', 'Établissement équipé']],
+      rows: [
+        [ICONS.scanFrame, 'Scan à l\'accueil : J. Moreau', 'success', 'Arrivée 9h03'],
+        [ICONS.checkCircle, 'Confirmé dans le planning', null, null],
+        [ICONS.schedule, 'Départ 17h12 · 8h09 travaillées', 'success', 'Terminé']
+      ]
+    }
   }
 ];
 
@@ -1269,7 +1307,13 @@ const LANDING_ALACARTE_MODULES = [
   { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
   { key: 'remuneration', label: 'Rémunération', prix: 1.50, unite: 'salarié' }, // NAV_ITEMS: remuneration
   { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: entretiens
-  { key: 'embauche', label: 'Embauche', prix: 1.90, unite: 'salarié' } // NAV_ITEMS: embauche
+  { key: 'embauche', label: 'Embauche', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: embauche
+  // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR fixe (un par établissement,
+  // scanné depuis l'app, voir NAV_ITEMS "Pointeuse" et renderPointeuse). Prix À CONFIRMER PAR BETTY
+  // — placé ici à titre indicatif (entre "Tickets restaurant" et "Planning"), à ajuster librement
+  // dans ce tableau, seul endroit à changer pour le prix (repris automatiquement par le composeur
+  // à la carte ET la page publique, voir LANDING_FEATURES pour le descriptif marketing).
+  { key: 'pointage', label: 'Pointeuse QR (arrivée/départ)', prix: 1.50, unite: 'salarié' } // NAV_ITEMS: pointeuse
 ];
 
 const ABOUT_CATEGORIES = [
@@ -1293,7 +1337,8 @@ const ABOUT_CATEGORIES = [
       "Compteurs automatiques par salarié, mis à jour à chaque demande",
       "Calendrier partagé avec filtres par type d'événement",
       "Demandes et planning de télétravail",
-      "Jours fériés et vacances scolaires intégrés au calendrier"
+      "Jours fériés et vacances scolaires intégrés au calendrier",
+      "Pointeuse QR : arrivée et départ pointés en un scan, confirmés directement dans le planning"
     ]
   },
   {
@@ -5360,6 +5405,10 @@ function renderInner() {
     case 'entretiens':
       root.innerHTML = renderEntretiens();
       bindEntretiensEvents();
+      break;
+    case 'pointeuse':
+      root.innerHTML = renderPointeuse();
+      bindPointeuseEvents();
       break;
     case 'mes-tickets':
       root.innerHTML = renderMesTickets();
@@ -14562,6 +14611,7 @@ function renderEtablissementCard(etab) {
       <div class="view-header-row">
         <h2>${escapeHtml(etab.nom)}</h2>
         <div class="detail-header-actions">
+          ${hasModule('pointage') ? `<button class="btn-link" data-pointage-qr-etablissement="${etab.id}">${icon(ICONS.scanFrame, 13)} QR de pointage</button>` : ''}
           <button class="btn-link" data-edit-etablissement="${etab.id}">Modifier</button>
           <button class="btn-link btn-link-danger" data-delete-etablissement="${etab.id}">Supprimer</button>
         </div>
@@ -14579,8 +14629,65 @@ function renderEtablissementCard(etab) {
   `;
 }
 
+/** §demande Betty du 11/09/2026 (Pointeuse QR, "un QR fixe par établissement") : QR encodant
+ * "nexusrh-pointage:<etablissementId>:<pointageToken>" (voir openPointageScanModal, qui reconnaît ce
+ * préfixe) — à imprimer/afficher à l'accueil de CET établissement. "Régénérer" invalide
+ * immédiatement l'ancien tirage (perdu, photographié/partagé...), voir DB.regenererPointageToken. */
+function openPointageQrModal(etablissementId) {
+  const etab = etablissementRepository.getById(etablissementId);
+  if (!etab) return;
+  if (!etab.pointageToken) etablissementRepository.regenererPointageToken(etablissementId);
+  renderPointageQrModalContent(etablissementId);
+}
+
+function renderPointageQrModalContent(etablissementId) {
+  const etab = etablissementRepository.getById(etablissementId);
+  const payload = `nexusrh-pointage:${etab.id}:${etab.pointageToken}`;
+  const qr = qrcode(0, 'M');
+  qr.addData(payload);
+  qr.make();
+  const qrSvg = qr.createSvgTag({ cellSize: 5, margin: 8, alt: 'QR code de pointage', title: `Pointage — ${etab.nom}` });
+
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>QR de pointage — ${escapeHtml(etab.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body" style="text-align: center;">
+        <p class="text-muted">À imprimer ou afficher à l'accueil de cet établissement : chaque salarié le scanne (bouton "Pointeuse") pour enregistrer son arrivée puis son départ.</p>
+        <div style="margin: 16px 0;">${qrSvg}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-regenerer-pointage-qr">Régénérer (invalide l'ancien)</button>
+        <button type="button" class="btn btn-primary" id="btn-close-modal-footer">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-close-modal-footer').addEventListener('click', closeModal);
+  document.getElementById('btn-regenerer-pointage-qr').addEventListener('click', () => {
+    openConfirm({
+      title: 'Régénérer ce QR ?',
+      message: "L'ancien QR (déjà imprimé/affiché) ne fonctionnera plus dès qu'un nouveau sera généré.",
+      confirmLabel: 'Régénérer',
+      danger: true,
+      onConfirm: () => {
+        etablissementRepository.regenererPointageToken(etablissementId);
+        showToast('QR régénéré.');
+        renderPointageQrModalContent(etablissementId);
+      }
+    });
+  });
+}
+
 function bindParametresEtablissementsEvents() {
   document.getElementById('btn-new-etablissement').addEventListener('click', () => openEtablissementModal(null));
+
+  document.querySelectorAll('[data-pointage-qr-etablissement]').forEach(btn => btn.addEventListener('click', () => openPointageQrModal(btn.dataset.pointageQrEtablissement)));
 
   document.querySelectorAll('[data-edit-etablissement]').forEach(btn => btn.addEventListener('click', () => openEtablissementModal(btn.dataset.editEtablissement)));
 
@@ -16977,20 +17084,42 @@ function renderPlanningPostes() {
     state.planningPostesSortDir === 'desc' ? b.prenom.localeCompare(a.prenom) : a.prenom.localeCompare(b.prenom)
   );
 
+  // §demande Betty du 11/09/2026 (Pointeuse QR, "dire dans le planning que l'employé est bien
+  // présent") : un pointage réel (voir pointageRepository) ne peut exister QUE pour aujourd'hui —
+  // calculé une seule fois ici plutôt que dans renderCell, jamais comparé à un autre jour de la
+  // semaine affichée. Masqué si le module n'est pas souscrit (aucun pointage ne peut alors exister
+  // de toute façon, mais évite un accès superflu au repository).
+  const todayStr = toISODate(new Date());
+  const pointageBadgeFor = (employeeId, weekday, dateStr) => {
+    if (!hasModule('pointage') || dateStr !== todayStr) return '';
+    const pointages = pointageRepository.getForEmployeeOnDate(employeeId, dateStr);
+    if (!pointages.length) return '';
+    const dernier = pointages[pointages.length - 1];
+    const texte = dernier.heureDepart ? `${dernier.heureArrivee} → ${dernier.heureDepart}` : `${dernier.heureArrivee}`;
+    return `<div class="poste-shift-pointage">${icon(ICONS.checkCircle, 10)} Pointé ${escapeHtml(texte)}</div>`;
+  };
+
   // §retour Betty du 10/09/2026 ("exactement ça sauf en bleu et doré") : carte flottante avec
   // marge/ombre/accent gauche (voir .poste-shift-card, style.css) plutôt que le remplissage bord à
   // bord du Planning principal (.planning-shift-card) — les deux écrans suivent chacun leur propre
   // référence visuelle, ils n'ont pas à se ressembler entre eux.
-  const renderCell = (employee, weekday) => {
+  const renderCell = (employee, weekday, dateStr) => {
     const shift = shiftsFor(employee.id, weekday);
+    const pointageBadge = pointageBadgeFor(employee.id, weekday, dateStr);
     if (shift && !f.masquerQuartsConfirmes) {
       return `<td class="planning-cell">
         <div class="poste-shift-card" data-edit-shift="${shift.id}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
           <div class="poste-shift-position">${escapeHtml(employee.service || '')}</div>
           ${shift.pauseMinutes ? `<div class="poste-shift-pause">${icon(ICONS.pause, 9)} ${shift.pauseMinutes}m</div>` : ''}
+          ${pointageBadge}
         </div>
       </td>`;
+    }
+    if (pointageBadge) {
+      // Un pointage réel existe aujourd'hui même sans quart programmé (ex. quart non renseigné) —
+      // reste visible plutôt que masqué derrière un "+" ou une case vide.
+      return `<td class="planning-cell"><div class="poste-shift-card poste-shift-pointage-only">${pointageBadge}</div></td>`;
     }
     if (f.afficherQuartsACombler && canManage) {
       return `<td class="planning-cell"><button type="button" class="poste-shift-add" data-add-shift="${employee.id}|${weekday}" title="Ajouter un quart">+</button></td>`;
@@ -17007,7 +17136,7 @@ function renderPlanningPostes() {
           <div class="poste-employee-hours">${formatNumberFR(employeeWeekHeures(employee.id))} h</div>
         </div>
       </td>
-      ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7])).join('')}
+      ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7], toISODate(d))).join('')}
       <td class="planning-total-cell"><strong>${formatNumberFR(employeeWeekHeures(employee.id))} h</strong></td>
     </tr>
   `;
@@ -17870,6 +17999,158 @@ function bindTeletravailPlanningEvents() {
   if (sortBtn) sortBtn.addEventListener('click', () => {
     state.teletravailSortDir = state.teletravailSortDir === 'desc' ? 'asc' : 'desc';
     render();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pointeuse QR (§demande Betty du 11/09/2026) — un salarié pointe son arrivée puis son départ en
+// scannant, depuis SON téléphone (caméra, voir openPointageScanModal), le QR fixe affiché à
+// l'accueil de son établissement (généré depuis Paramètres > Établissements, voir
+// renderEtablissementCard/openPointageQrModal). Lecture QR 100% locale via jsQR (vendu localement,
+// jsqr.js, même patron que qrcode.js pour la génération) : aucune image envoyée à un serveur.
+// ---------------------------------------------------------------------------
+
+function renderPointeuse() {
+  const user = authRepository.getCurrentUser();
+  const today = toISODate(new Date());
+  const todaysPointages = pointageRepository.getForEmployeeOnDate(user.id, today);
+  const dernier = todaysPointages[todaysPointages.length - 1];
+  const enCours = dernier && !dernier.heureDepart;
+
+  // 7 derniers jours (hors aujourd'hui, déjà résumé ci-dessus) pour un historique rapide — pas de
+  // pagination/filtre pour un premier jet, juste de quoi vérifier que ça s'est bien enregistré.
+  const historique = [];
+  for (let i = 1; i <= 7; i++) {
+    const date = toISODate(addDays(new Date(), -i));
+    const pointages = pointageRepository.getForEmployeeOnDate(user.id, date);
+    if (pointages.length) historique.push({ date, pointages });
+  }
+
+  return `
+    <div class="view-header">
+      <h1>Pointeuse</h1>
+      <p class="view-subtitle">Pointez votre arrivée puis votre départ en scannant le QR affiché sur votre lieu de travail.</p>
+    </div>
+
+    <div class="card pointage-today-card">
+      ${enCours
+        ? `<p class="pointage-today-status">${icon(ICONS.checkCircle, 16)} Arrivée enregistrée à <strong>${escapeHtml(dernier.heureArrivee)}</strong> — en cours.</p>`
+        : dernier
+          ? `<p class="pointage-today-status">${icon(ICONS.checkCircle, 16)} Aujourd'hui : ${escapeHtml(dernier.heureArrivee)} → ${escapeHtml(dernier.heureDepart)} (${formatNumberFR(round2(todaysPointages.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0) / 60))} h travaillées).</p>`
+          : `<p class="text-muted pointage-today-status">Aucun pointage aujourd'hui.</p>`}
+      <button type="button" class="btn btn-primary" id="btn-open-scan-pointage">${icon(ICONS.scanFrame, 16)} Scanner le QR</button>
+    </div>
+
+    ${historique.length ? `
+      <div class="card" style="margin-top: 16px;">
+        <h2>Historique (7 derniers jours)</h2>
+        <table class="table">
+          <thead><tr><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th></tr></thead>
+          <tbody>
+            ${historique.map(h => h.pointages.map(p => `
+              <tr>
+                <td>${formatDate(h.date)}</td>
+                <td>${escapeHtml(p.heureArrivee || '—')}</td>
+                <td>${escapeHtml(p.heureDepart || '—')}</td>
+                <td>${p.heureDepart ? formatNumberFR(round2(computeDureeTravailleeMinutes(p) / 60)) + ' h' : '—'}</td>
+              </tr>
+            `).join('')).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : ''}
+  `;
+}
+
+function bindPointeuseEvents() {
+  document.getElementById('btn-open-scan-pointage').addEventListener('click', openPointageScanModal);
+}
+
+/** Lecture caméra en local (jsQR) — chaque frame vidéo est dessinée dans un <canvas> hors-écran
+ * puis passée à jsQR, en boucle via requestAnimationFrame jusqu'à détection d'un QR reconnu (préfixe
+ * "nexusrh-pointage:") ou fermeture de la modale. getUserMedia peut échouer (refus, HTTP non
+ * sécurisé, pas de caméra) : message clair affiché dans la modale plutôt qu'un écran bloqué en
+ * silence sans explication. */
+function openPointageScanModal() {
+  const user = authRepository.getCurrentUser();
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Scanner le QR de pointage</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="pointage-scan-stage" id="pointage-scan-stage">
+          <video id="pointage-scan-video" autoplay playsinline muted></video>
+        </div>
+        <p class="text-muted" id="pointage-scan-status" style="text-align: center; margin-top: 10px;">Visez le QR affiché à l'accueil.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  const video = document.getElementById('pointage-scan-video');
+  const statusEl = document.getElementById('pointage-scan-status');
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let stream = null;
+  let rafId = null;
+  let stopped = false;
+
+  const stop = () => {
+    stopped = true;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  };
+  const finishClose = () => { stop(); closeModal(); };
+  document.getElementById('btn-close-modal').addEventListener('click', finishClose);
+  document.getElementById('btn-cancel-modal').addEventListener('click', finishClose);
+
+  const handleDecodedText = (text) => {
+    const match = /^nexusrh-pointage:([^:]+):(.+)$/.exec(text.trim());
+    if (!match) return; // pas notre format (ex. un QR affiché par erreur) : on continue de scanner
+    stop();
+    const [, etablissementId, token] = match;
+    const result = pointageRepository.enregistrer(user.id, etablissementId, token);
+    if (!result.success) {
+      showToast(result.error, 'error');
+      closeModal();
+      return;
+    }
+    if (result.type === 'arrivee') {
+      showToast(`Arrivée enregistrée à ${result.heure}.`);
+    } else {
+      showToast(`Départ enregistré à ${result.heure} (${formatNumberFR(round2(result.dureeMinutes / 60))} h travaillées aujourd'hui).`);
+    }
+    closeModal();
+    render();
+  };
+
+  const tick = () => {
+    if (stopped) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) { handleDecodedText(code.data); return; }
+    }
+    rafId = requestAnimationFrame(tick);
+  };
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s => {
+    if (stopped) { s.getTracks().forEach(t => t.stop()); return; }
+    stream = s;
+    video.srcObject = s;
+    rafId = requestAnimationFrame(tick);
+  }).catch(() => {
+    statusEl.textContent = "Impossible d'accéder à la caméra (autorisation refusée, ou connexion non sécurisée).";
   });
 }
 

@@ -593,6 +593,7 @@ function makeEmptyCompany() {
     employees: [],
     services: [],
     shifts: [], // Planning par postes (§10/09/2026) — voir shiftRepository, computeShiftHeures()
+    pointages: [], // Pointeuse QR (§11/09/2026) — voir pointageRepository, computeDureeTravailleeMinutes()
 
     settings: Object.assign({}, DEFAULT_SETTINGS),
     leaveTypes: [],
@@ -897,6 +898,30 @@ function seedExampleShifts(company) {
   });
   company.shifts = shifts;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Pointeuse QR (§demande Betty du 11/09/2026) — un salarié pointe son arrivée puis son départ en
+// scannant, depuis l'app (caméra du téléphone, voir openPointageScanModal/jsqr.js), un QR FIXE
+// affiché à l'accueil de SON établissement. Décisions prises avec Betty avant de commencer :
+//   - QR fixe (imprimable), un seul par établissement — pas de rotation automatique (plus simple à
+//     déployer ; à durcir plus tard si le détournement devient un vrai problème).
+//   - Arrivée ET départ (calcul des heures réellement travaillées), pas juste une présence binaire.
+//   - Aucun jugement de retard affiché — seulement "présent, pointé à HH:MM".
+// ---------------------------------------------------------------------------
+
+function makeEmptyPointage() {
+  return { id: null, employeeId: null, etablissementId: null, date: '', heureArrivee: null, heureDepart: null };
+}
+
+/** Durée travaillée d'UN pointage fermé (arrivée + départ), en minutes — 0 si encore ouvert (pas de
+ * départ) ou incohérent. Plusieurs pointages fermés le même jour (ex. pause déjeuner : sortie puis
+ * retour) s'additionnent simplement à l'appelant, aucune fusion nécessaire ici. */
+function computeDureeTravailleeMinutes(pointage) {
+  if (!pointage.heureArrivee || !pointage.heureDepart) return 0;
+  const [ah, am] = pointage.heureArrivee.split(':').map(Number);
+  const [dh, dm] = pointage.heureDepart.split(':').map(Number);
+  return Math.max(0, (dh * 60 + dm) - (ah * 60 + am));
 }
 
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
@@ -1863,6 +1888,70 @@ const DB = {
     const shift = this.getShiftById(id);
     this.saveShifts(this.getShifts().filter(s => s.id !== id));
     if (shift) this.logAudit('Suppression', 'Quart de planning', `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}`);
+  },
+
+  // ---- Pointeuse QR (§11/09/2026) ----
+
+  getPointages() {
+    return (this.getCurrentCompany().pointages || []).slice();
+  },
+
+  savePointages(list) {
+    const company = this.getCurrentCompany();
+    company.pointages = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getPointagesForEmployeeOnDate(employeeId, date) {
+    return this.getPointages().filter(p => p.employeeId === employeeId && p.date === date);
+  },
+
+  /** Génère (ou régénère) le jeton du QR de pointage d'un établissement — affiché à l'accueil, ce QR
+   * est FIXE (voir le commentaire en tête de section) : régénérer invalide immédiatement tous les
+   * tirages précédents (perdu, photographié/partagé, changement d'établissement...), sans jamais
+   * toucher au reste de la fiche établissement. */
+  regenererPointageToken(etablissementId) {
+    const token = generateId('pqr');
+    this.updateEtablissement(etablissementId, { pointageToken: token });
+    return token;
+  },
+
+  /** Un scan bascule entre arrivée et départ pour LA MÊME journée : s'il existe déjà un pointage
+   * OUVERT (arrivée sans départ) pour ce salarié aujourd'hui, ce scan le CLÔTURE (départ) ; sinon il
+   * en ouvre un nouveau (arrivée). Gère ainsi une pause déjeuner (sortie puis retour) sans logique
+   * supplémentaire : plusieurs pointages fermés le même jour s'additionnent simplement au calcul des
+   * heures travaillées. `token` doit correspondre au pointageToken de l'établissement scanné — le QR
+   * étant fixe et affiché publiquement, c'est la SEULE vérification qui empêche un QR d'une autre
+   * entreprise (ou inventé) de créer un pointage ; voir regenererPointageToken pour l'invalider. */
+  enregistrerPointage(employeeId, etablissementId, token) {
+    const etablissement = this.getEtablissementById(etablissementId);
+    if (!etablissement || !etablissement.pointageToken || etablissement.pointageToken !== token) {
+      return { success: false, error: 'QR code invalide ou expiré.' };
+    }
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+
+    const now = new Date();
+    const date = toISODate(now);
+    const heure = now.toTimeString().slice(0, 5);
+    const list = this.getPointages();
+    const todaysList = list.filter(p => p.employeeId === employeeId && p.date === date);
+    const ouvert = todaysList.find(p => p.heureArrivee && !p.heureDepart);
+
+    if (ouvert) {
+      ouvert.heureDepart = heure;
+      this.savePointages(list);
+      this.logAudit('Modification', 'Pointage', `${employee.prenom} ${employee.nom} · départ ${heure}`);
+      const dureeMinutes = todaysList.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0);
+      return { success: true, type: 'depart', heure, dureeMinutes };
+    }
+
+    const pointage = Object.assign(makeEmptyPointage(), { id: generateId('pointage'), employeeId, etablissementId, date, heureArrivee: heure });
+    list.push(pointage);
+    this.savePointages(list);
+    this.logAudit('Création', 'Pointage', `${employee.prenom} ${employee.nom} · arrivée ${heure}`);
+    return { success: true, type: 'arrivee', heure };
   },
 
   // ---- Vacances scolaires (paramétrables par zone) ----
@@ -3567,7 +3656,15 @@ const etablissementRepository = {
   getById: (id) => DB.getEtablissementById(id),
   create: (data) => DB.addEtablissement(data),
   update: (id, patch) => DB.updateEtablissement(id, patch),
-  delete: (id) => DB.deleteEtablissement(id)
+  delete: (id) => DB.deleteEtablissement(id),
+  regenererPointageToken: (id) => DB.regenererPointageToken(id)
+};
+
+// Pointeuse QR (§11/09/2026) — voir DB.getPointages/enregistrerPointage.
+const pointageRepository = {
+  getAll: () => DB.getPointages(),
+  getForEmployeeOnDate: (employeeId, date) => DB.getPointagesForEmployeeOnDate(employeeId, date),
+  enregistrer: (employeeId, etablissementId, token) => DB.enregistrerPointage(employeeId, etablissementId, token)
 };
 
 const companyRepository = {
@@ -3824,7 +3921,11 @@ function makeEmptyEtablissement() {
     telephone: '',
     responsableId: null,
     principal: false,
-    actif: true
+    actif: true,
+    // §demande Betty du 11/09/2026 (Pointeuse QR) — voir DB.regenererPointageToken/makeEmptyPointage
+    // un peu plus bas : jeton du QR fixe affiché à l'accueil de CET établissement, null tant qu'il
+    // n'a jamais été généré.
+    pointageToken: null
   };
 }
 

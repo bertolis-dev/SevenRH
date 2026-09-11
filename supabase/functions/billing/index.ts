@@ -67,6 +67,12 @@ const MODULES: Record<string, { unite: "salarie" | "declarant"; priceIds: { mens
   // silencieusement) pour devenir son propre module facturé — Price réels (mode PRODUCTION) créés
   // le 20/08/2026 via stripe-setup-embauche-module.sh.
   embauche: { unite: "salarie", priceIds: { mensuel: "price_1U6UF5CAcL94JssKa63bSnO0", annuel: "price_1U6UF6CAcL94JssKoETMMO3b" } },
+  // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR — nouveau module facturé, voir
+  // NAV_ITEMS "Pointeuse" et LANDING_ALACARTE_MODULES (app.js). Price à créer via
+  // stripe-setup-pointage-module.sh AVANT toute vraie souscription à ce module (les deux
+  // placeholders ci-dessous ne correspondent à aucun Price réel — un "checkout" échouerait tant
+  // qu'ils ne sont pas remplacés par les vrais "price_..." renvoyés par le script).
+  pointage: { unite: "salarie", priceIds: { mensuel: "price_REMPLACER_MENSUEL_POINTAGE", annuel: "price_REMPLACER_ANNUEL_POINTAGE" } },
 };
 
 function statutFromStripeStatus(stripeStatus: string): string {

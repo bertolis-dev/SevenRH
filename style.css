@@ -1797,6 +1797,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-shift-pause { font-size: 10.5px; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; }
 .poste-shift-pause svg { width: 9px; height: 9px; }
 
+/* §demande Betty du 11/09/2026 (Pointeuse QR, "dire dans le planning que l'employé est bien
+   présent") : confirmation réelle (pointage scanné), distincte du quart simplement PRÉVU — vert
+   plutôt que le gris neutre du reste de la carte, jamais confondue avec l'horaire planifié. */
+.poste-shift-pointage { font-size: 10px; font-weight: 700; color: var(--color-success); display: flex; align-items: center; gap: 3px; margin-top: 2px; }
+.poste-shift-pointage svg { width: 9px; height: 9px; }
+.poste-shift-pointage-only { justify-content: center; align-items: center; }
+
 /* §retour Betty du 10/09/2026 ("vérifie que ça correspond bien à l'image") : la référence ne montre
    AUCUN "+" visible dans ses cases vides (juste une case nue) — invisible par défaut, révélé au
    survol plutôt que retiré (reste cliquable/trouvable, juste pas une pointillée en permanence comme
@@ -1825,6 +1832,26 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-employee-hours { font-size: 12px; font-weight: 700; color: var(--color-primary-text); margin-top: 2px; }
 
 .poste-budget-row td { background: var(--color-gold-soft); border-top: 2px solid var(--color-gold); font-weight: 700; }
+
+/* ---------------------------------------------------------------------
+   Pointeuse QR (§demande Betty du 11/09/2026)
+   --------------------------------------------------------------------- */
+.pointage-today-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px; }
+.pointage-today-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.pointage-today-status svg { color: var(--color-success); flex-shrink: 0; }
+
+/* Fenêtre caméra (openPointageScanModal) : carrée, coins arrondis, la vidéo remplit tout l'espace
+   (object-fit:cover, même patron que .avatar) plutôt que déformée ou avec des bandes vides. */
+.pointage-scan-stage {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #000;
+}
+.pointage-scan-stage video { width: 100%; height: 100%; object-fit: cover; }
 
 /* Colonne Total alignée à droite, comme la référence (le reste du Planning n'a jamais eu cette
    demande, cette règle reste donc scopée à l'écran Postes). */
