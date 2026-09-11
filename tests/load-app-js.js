@@ -219,6 +219,7 @@ globalThis.__openShiftModal = openShiftModal;
 globalThis.__renderAvatar = renderAvatar;
 globalThis.__resolveAvatarUrl = resolveAvatarUrl;
 globalThis.__hydrateAvatarImages = hydrateAvatarImages;
+globalThis.__reportClientError = reportClientError;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -348,6 +349,7 @@ globalThis.__hydrateAvatarImages = hydrateAvatarImages;
     renderAvatar: sandbox.__renderAvatar,
     resolveAvatarUrl: sandbox.__resolveAvatarUrl,
     hydrateAvatarImages: sandbox.__hydrateAvatarImages,
+    reportClientError: sandbox.__reportClientError,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

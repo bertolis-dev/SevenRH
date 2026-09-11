@@ -1,5 +1,9 @@
 // Seven RH — fonction "bertolis-tickets" : seul point d'accès cross-entreprises aux tickets
-// support, utilisé par la console BERTOLIS. Contrairement à billing/manage-employee-account, la
+// support ET (depuis le 11/09/2026, §retour Betty point 2) aux erreurs client remontées
+// (client_error_reports, voir listErrors/markErrorReviewed plus bas) — réutilise ce même point
+// d'entrée plutôt qu'une fonction dédiée pour ne pas exiger un second secret à configurer côté
+// Supabase pour un besoin qui a la même forme (lecture cross-entreprises depuis la console
+// BERTOLIS). Utilisé par la console BERTOLIS. Contrairement à billing/manage-employee-account, la
 // console BERTOLIS n'a PAS de compte Supabase Auth (choix explicite pour cette itération — voir
 // 0017_support_tickets.sql) : elle ne peut donc pas passer par has_permission()/current_company_id()
 // avec un jeton d'appelant. La sécurité repose ici entièrement sur un secret partagé (en-tête
@@ -171,6 +175,34 @@ Deno.serve(async (req) => {
       if (updateErr) throw updateErr;
 
       await logToCompanyAuditLog(supabaseAdmin, ticket.company_id, ticket.titre, "Suggestion IA appliquée par BERTOLIS");
+      return jsonResponse({ success: true });
+    }
+
+    if (body.action === "listErrors") {
+      // §retour Betty du 11/09/2026 (point 2) : même patron cross-entreprises que "list" ci-dessus
+      // pour les tickets — plafond fixe, jamais un jeu de données non borné (voir
+      // client_error_reports_created_idx, 0047_client_error_reports.sql). Les erreurs déjà marquées
+      // vues restent exclues par défaut, comme les tickets fermés pour "list".
+      const includeReviewed = body.includeReviewed === true;
+      let query = supabaseAdmin
+        .from("client_error_reports")
+        .select("*, companies(raison_sociale)")
+        .order("created_at", { ascending: false })
+        .limit(300);
+      query = includeReviewed ? query : query.eq("revu_par_bertolis", false);
+      const { data, error } = await query;
+      if (error) throw error;
+      return jsonResponse({ erreurs: data });
+    }
+
+    if (body.action === "markErrorReviewed") {
+      const { errorId } = body;
+      if (!errorId) return jsonResponse({ error: "Requête invalide." }, 400);
+      const { error } = await supabaseAdmin
+        .from("client_error_reports")
+        .update({ revu_par_bertolis: true })
+        .eq("id", errorId);
+      if (error) throw error;
       return jsonResponse({ success: true });
     }
 

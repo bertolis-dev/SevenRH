@@ -1269,13 +1269,30 @@ async function pushClearAuditLog(companyId) {
   if (error) throw error;
 }
 
+/** §retour Betty du 11/09/2026 (point 2) : copie de l'erreur à destination de BERTOLIS (voir
+ * 0047_client_error_reports.sql), en plus de l'écriture dans l'audit_log DE L'ENTREPRISE que
+ * reportClientError (app.js) continue de faire. Insertion directe protégée par RLS, JAMAIS via la
+ * file de re-tentative (_pushInBackground) : un signalement d'erreur perdu n'a pas besoin d'être
+ * rejoué, contrairement aux données métier — c'est un signal diagnostique, pas une donnée cliente. */
+async function reportClientErrorToBertolis(companyId, employeeId, version, contexte, message, stack) {
+  const { error } = await supabase.from('client_error_reports').insert({
+    company_id: companyId,
+    employee_id: employeeId || null,
+    version: version || null,
+    contexte,
+    message,
+    stack: (stack || '').slice(0, 4000)
+  });
+  if (error) throw error;
+}
+
 window.SupabaseSync = {
   signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, getOrCreateIcalToken, regenerateIcalToken, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
   pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
-  pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog,
+  pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog, reportClientErrorToBertolis,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,

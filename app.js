@@ -2665,9 +2665,10 @@ function renderBertolisConsole() {
       <div class="tabs">
         <button type="button" class="tab ${activeTab === 'entreprises' ? 'active' : ''}" data-bertolis-tab="entreprises">Entreprises clientes</button>
         <button type="button" class="tab ${activeTab === 'tickets' ? 'active' : ''}" data-bertolis-tab="tickets">Tickets support</button>
+        <button type="button" class="tab ${activeTab === 'erreurs' ? 'active' : ''}" data-bertolis-tab="erreurs">Erreurs</button>
       </div>
       <div id="bertolis-tab-content">
-        ${activeTab === 'entreprises' ? renderBertolisEntreprisesTab() : renderBertolisTicketsTab()}
+        ${activeTab === 'entreprises' ? renderBertolisEntreprisesTab() : activeTab === 'tickets' ? renderBertolisTicketsTab() : renderBertolisErreursTab()}
       </div>
     </main>
   `;
@@ -2686,7 +2687,8 @@ function renderBertolisConsole() {
   });
 
   if (activeTab === 'entreprises') bindBertolisEntreprisesEvents();
-  else bindBertolisTicketsEvents();
+  else if (activeTab === 'tickets') bindBertolisTicketsEvents();
+  else bindBertolisErreursEvents();
 }
 
 function renderBertolisEntreprisesTab() {
@@ -2906,6 +2908,90 @@ function bindBertolisTicketsEvents() {
       textarea.focus();
     });
   }
+}
+
+/** §retour Betty du 11/09/2026 (point 2, "nous ne voyons toujours pas les erreurs de nos clients") —
+ * même patron cross-entreprises que renderBertolisTicketsTab ci-dessus (Edge Function
+ * bertolis-tickets, même secret partagé, aucune configuration supplémentaire côté Supabase). Non
+ * signalées par défaut : une erreur déjà vue ne doit pas continuer à polluer la liste, mais reste
+ * consultable via "Voir aussi les erreurs déjà vues" (comme "fermés exclus" pour les tickets). */
+function renderBertolisErreursTab() {
+  if (!state.bertolisErreursData && !state.bertolisErreursLoading) {
+    state.bertolisErreursLoading = true;
+    loadBertolisErreurs();
+  }
+  if (state.bertolisErreursLoading && !state.bertolisErreursData) {
+    return renderSkeletonLines(4);
+  }
+  if (state.bertolisErreursData.error) {
+    return `<div class="empty-state"><p>Erreur lors du chargement : ${escapeHtml(state.bertolisErreursData.error)}</p></div>`;
+  }
+  const erreurs = state.bertolisErreursData.erreurs || [];
+  const showAll = !!state.bertolisErreursShowAll;
+  return `
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Erreurs remontées</h1>
+        <p class="view-subtitle">${erreurs.length} erreur${erreurs.length > 1 ? 's' : ''} ${showAll ? '(déjà vues incluses)' : '(non vues)'}</p>
+      </div>
+      <label><input type="checkbox" id="f-bertolis-erreurs-show-all" ${showAll ? 'checked' : ''}> Voir aussi les erreurs déjà vues</label>
+    </div>
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr><th>Entreprise</th><th>Écran</th><th>Message</th><th>Version</th><th>Survenue le</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${erreurs.length === 0 ? '<tr><td colspan="6" class="text-muted">Aucune erreur.</td></tr>' : erreurs.map(e => `
+            <tr class="${e.revu_par_bertolis ? 'text-muted' : ''}">
+              <td>${escapeHtml((e.companies && e.companies.raison_sociale) || '—')}</td>
+              <td>${escapeHtml(e.contexte)}</td>
+              <td style="max-width: 420px; white-space: normal;">${escapeHtml(e.message)}</td>
+              <td>${escapeHtml(e.version || '—')}</td>
+              <td>${formatDateTime(e.created_at)}</td>
+              <td class="table-actions">
+                ${e.revu_par_bertolis
+                  ? '<span class="text-muted">Vue</span>'
+                  : `<button type="button" class="btn btn-secondary btn-sm" data-mark-erreur-reviewed="${e.id}">Marquer comme vue</button>`}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function loadBertolisErreurs() {
+  const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'listErrors', {
+    includeReviewed: !!state.bertolisErreursShowAll
+  });
+  state.bertolisErreursLoading = false;
+  state.bertolisErreursData = result.success ? { erreurs: result.erreurs } : { error: result.error || 'Erreur inconnue.' };
+  if (state.bertolisTab === 'erreurs') renderBertolisConsole();
+}
+
+function bindBertolisErreursEvents() {
+  const showAllCheckbox = document.getElementById('f-bertolis-erreurs-show-all');
+  if (showAllCheckbox) {
+    showAllCheckbox.addEventListener('change', () => {
+      state.bertolisErreursShowAll = showAllCheckbox.checked;
+      state.bertolisErreursData = null;
+      renderBertolisConsole();
+    });
+  }
+
+  document.querySelectorAll('[data-mark-erreur-reviewed]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'markErrorReviewed', {
+        errorId: btn.dataset.markErreurReviewed
+      });
+      if (!result.success) { showToast(result.error || 'Erreur.', 'error'); btn.disabled = false; return; }
+      state.bertolisErreursData = null;
+      renderBertolisConsole();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -5453,13 +5539,31 @@ function renderCrashFallback() {
  * table ni fonction Edge nécessaire. Jamais bloquant, jamais remonté à l'utilisateur (qui vient déjà
  * de voir le filet de sécurité) ; tout échec de la journalisation elle-même reste local à ce catch. */
 function reportClientError(err, context) {
+  const message = (err && err.message) || String(err);
+  const stack = (err && err.stack) || '';
   try {
-    const message = (err && err.message) || String(err);
-    const stack = (err && err.stack) || '';
     auditLogRepository.logAudit('Erreur', 'Application', `${context} : ${message}`, stack.slice(0, 1500));
   } catch (loggingErr) {
     console.error('reportClientError : échec de la journalisation elle-même.', loggingErr);
   }
+  // §retour Betty du 11/09/2026 (point 2, "nous ne voyons toujours pas les erreurs de nos clients") :
+  // le journal ci-dessus n'était consulté par personne pour cet usage — en plus, on transmet
+  // directement à BERTOLIS (voir 0047_client_error_reports.sql). Jamais bloquant, jamais rejoué si
+  // ça échoue (pas de file de re-tentative pour un simple signal diagnostique).
+  try {
+    const company = DB.getCurrentCompany();
+    const user = authRepository.getCurrentUser();
+    if (company && window.SupabaseSync) {
+      window.SupabaseSync.reportClientErrorToBertolis(company.id, user ? user.id : null, getAppVersion(), context, message, stack).catch(() => {});
+    }
+  } catch { /* jamais bloquant : voir commentaire ci-dessus */ }
+}
+
+/** Extrait le "?v=..." déjà posé sur app.js (index.html) — même idiome que loadXLSXLibrary un peu
+ * plus bas, pour ne pas maintenir un second numéro de version à la main. */
+function getAppVersion() {
+  const appScript = document.querySelector('script[src*="app.js"]');
+  return (appScript && appScript.src.includes('?')) ? appScript.src.split('?')[1] : '';
 }
 
 function renderInner() {
