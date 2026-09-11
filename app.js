@@ -3371,12 +3371,13 @@ function renderUserMenuButton() {
   button.className = button.className.replace(/\bavatar-color-\d+\b/g, '').trim();
   if (user && user.photo) {
     button.classList.remove('avatar-initials');
-    button.innerHTML = `<img class="avatar" src="${escapeHtml(user.photo)}" alt="">`;
+    button.innerHTML = `<img class="avatar" data-photo-path="${escapeHtml(user.photo)}" alt="">`;
   } else {
     button.classList.add('avatar-initials');
     button.textContent = user ? getInitials(user.prenom, user.nom) : '?';
     if (user) button.classList.add(getAvatarColorClass(user.prenom, user.nom));
   }
+  hydrateAvatarImages();
 }
 
 function bindUserMenuEvents() {
@@ -5422,6 +5423,7 @@ function render() {
   try {
     renderInner();
     updateHelpButtonVisibility();
+    hydrateAvatarImages();
   } catch (err) {
     console.error('render() a levé une exception : affichage du filet de sécurité au lieu d\'un écran vide.', err);
     reportClientError(err, 'render');
@@ -7800,11 +7802,55 @@ async function exportEmployeesExcel() {
   auditLogRepository.logAudit('Export', 'Salariés', `${visible.length} salarié${visible.length > 1 ? 's' : ''}`);
 }
 
+/** e.photo est un CHEMIN de stockage (bucket privé, voir 0046_employee_photos_private.sql), jamais
+ * une URL directement affichable : on pose data-photo-path et hydrateAvatarImages() (appelée après
+ * chaque render()) résout l'URL signée en tâche de fond et la pose sur src. */
 function renderAvatar(e) {
   if (e.photo) {
-    return `<img class="avatar" src="${e.photo}" alt="">`;
+    return `<img class="avatar" data-photo-path="${escapeHtml(e.photo)}" alt="">`;
   }
   return `<div class="avatar avatar-initials ${getAvatarColorClass(e.prenom, e.nom)}">${escapeHtml(getInitials(e.prenom, e.nom))}</div>`;
+}
+
+/** §retour Betty du 11/09/2026 (point 3) : employee-photos est un bucket privé, e.photo ne contient
+ * plus qu'un chemin de stockage — on résout ce chemin en URL signée à la demande (jamais en avance
+ * pour toute l'entreprise, ça alourdirait l'hydratation, cf. point 1) et on met en cache la
+ * promesse/résultat en mémoire (jamais dans localStorage : une URL signée expirée n'aurait aucun
+ * sens survivant à une fermeture d'onglet). Marge de 5 min sous l'expiration serveur réelle (1h,
+ * voir getEmployeePhotoUrl côté supabase-client.js) pour ne jamais servir une URL au bord d'expirer. */
+const avatarUrlCache = new Map();
+const avatarUrlPending = new Map();
+const AVATAR_URL_TTL_MS = 55 * 60 * 1000;
+
+async function resolveAvatarUrl(path) {
+  const cached = avatarUrlCache.get(path);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
+  if (avatarUrlPending.has(path)) return avatarUrlPending.get(path);
+  const promise = (async () => {
+    try {
+      const url = await window.SupabaseSync.getEmployeePhotoUrl(path);
+      avatarUrlCache.set(path, { url, expiresAt: Date.now() + AVATAR_URL_TTL_MS });
+      return url;
+    } catch {
+      return null;
+    } finally {
+      avatarUrlPending.delete(path);
+    }
+  })();
+  avatarUrlPending.set(path, promise);
+  return promise;
+}
+
+/** Appelée après chaque render() (et après renderUserMenuButton(), hors de #view-root) : cherche
+ * TOUTE <img class="avatar" data-photo-path> nouvellement affichée et lui pose son URL signée dès
+ * qu'elle est résolue — fonctionne quel que soit l'écran, sans toucher aux dizaines d'appelants de
+ * renderAvatar(). */
+function hydrateAvatarImages() {
+  document.querySelectorAll('img.avatar[data-photo-path]').forEach((img) => {
+    const path = img.getAttribute('data-photo-path');
+    if (!path || img.src) return;
+    resolveAvatarUrl(path).then((url) => { if (url) img.src = url; });
+  });
 }
 
 /** CDI/CDD gardent une vraie portée sémantique (permanent/temporaire, garde badge-success/warning) —

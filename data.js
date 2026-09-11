@@ -2367,13 +2367,14 @@ const DB = {
   /** §retour Betty du 10/09/2026 ("dans les paramètres on puisse changer la photo de profil") :
    * auto-service ouvert à TOUT rôle (Paramètres > Mon compte, voir renderParametresMonCompte,
    * accessible même à un salarié) — même philosophie que majPropresCoordonnees juste au-dessus
-   * (signature étroite : seulement l'URL déjà téléversée, jamais un patch générique). L'upload
-   * lui-même (vers le bucket "employee-photos") est fait par employeeRepository.uploadMyPhoto AVANT
-   * d'appeler cette méthode, qui ne fait qu'enregistrer l'URL obtenue. */
-  majMaPhoto(employeeId, photoUrl) {
+   * (signature étroite : seulement le chemin déjà téléversé, jamais un patch générique). L'upload
+   * lui-même (vers le bucket privé "employee-photos", voir 0046_employee_photos_private.sql) est
+   * fait par employeeRepository.uploadMyPhoto AVANT d'appeler cette méthode, qui ne fait
+   * qu'enregistrer le chemin obtenu (résolu en URL signée à l'affichage, jamais stocké comme URL). */
+  majMaPhoto(employeeId, photoPath) {
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
-    this.updateEmployee(employeeId, { photo: photoUrl });
+    this.updateEmployee(employeeId, { photo: photoPath });
     this.logAudit('Modification', 'Photo de profil', `${employee.prenom} ${employee.nom} (auto-modification)`);
     return { success: true };
   },
@@ -3563,13 +3564,14 @@ const employeeRepository = {
   ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
   ajusterReposCompensateurPris: (employeeId, year, month, heures, motif) => DB.ajusterReposCompensateurPris(employeeId, year, month, heures, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
-  /** §retour Betty du 10/09/2026 : téléverse le fichier vers le bucket "employee-photos" (URL
-   * publique permanente, même patron que companyRepository.uploadLogo) puis enregistre l'URL sur
-   * le salarié — voir DB.majMaPhoto. */
+  /** §retour Betty du 10/09/2026 : téléverse le fichier vers le bucket privé "employee-photos"
+   * (voir 0046_employee_photos_private.sql) puis enregistre le CHEMIN obtenu sur le salarié — voir
+   * DB.majMaPhoto. Plus d'URL publique permanente : renderAvatar()/hydrateAvatarImages() (app.js)
+   * résolvent ce chemin en URL signée à l'affichage. */
   async uploadMyPhoto(employeeId, file) {
-    const url = await window.SupabaseSync.uploadEmployeePhoto(DB.getCurrentCompanyId(), employeeId, file);
-    DB.majMaPhoto(employeeId, url);
-    return url;
+    const path = await window.SupabaseSync.uploadEmployeePhoto(DB.getCurrentCompanyId(), employeeId, file);
+    DB.majMaPhoto(employeeId, path);
+    return path;
   },
   deverrouillerCompte: (employeeId) => DB.deverrouillerCompte(employeeId),
   forcerMotDePasse: (employeeId, newPassword) => DB.forcerNouveauMotDePasse(employeeId, newPassword),

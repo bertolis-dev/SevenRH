@@ -818,20 +818,30 @@ async function uploadCompanyLogo(companyId, file) {
 }
 
 /** Upload de la photo de profil (Paramètres → Mon compte, §retour Betty du 10/09/2026 : "pour
- * qu'on puisse voir dans le planning") — bucket public, même raisonnement que company-logos
- * (0025_company_logo.sql) : un avatar s'affiche en permanence dans des dizaines de lignes à la fois
- * (Planning, listes de salariés...) — passer par des URLs signées y forcerait un aller-retour
- * réseau par avatar affiché, contrairement à employee-documents/justificatifs (bucket privé, un
- * seul fichier consulté à la fois sur demande explicite). Chemin scopé par entreprise ET par
- * salarié (voir 0045_employee_photos_storage.sql) : chacun ne peut écrire QUE sa propre photo. */
+ * qu'on puisse voir dans le planning") — bucket PRIVÉ depuis le 11/09/2026 (§retour Betty, point 3 :
+ * une URL publique reste valable indéfiniment et contourne les policies RLS, un salarié parti
+ * pouvait garder l'accès aux photos de ses ex-collègues sans limite de temps, voir
+ * 0046_employee_photos_private.sql). Retourne désormais le CHEMIN de stockage, pas une URL :
+ * renderAvatar()/hydrateAvatarImages() (app.js) le résolvent en URL signée à l'affichage via
+ * getEmployeePhotoUrl(). Chemin scopé par entreprise ET par salarié (voir
+ * 0045_employee_photos_storage.sql) : chacun ne peut écrire QUE sa propre photo. */
 async function uploadEmployeePhoto(companyId, employeeId, file) {
   const ext = (file.type === 'image/png') ? 'png' : (file.type === 'image/jpeg') ? 'jpg' : null;
   if (!ext) throw new Error('Format non accepté (PNG ou JPEG uniquement).');
   const path = `${companyId}/${employeeId}.${ext}`;
   const { error } = await supabase.storage.from('employee-photos').upload(path, file, { contentType: file.type, upsert: true });
   if (error) throw error;
-  const { data } = supabase.storage.from('employee-photos').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
+}
+
+/** URL signée (1h) pour une photo de profil — voir employee_photos_select (0045) et le passage en
+ * bucket privé (0046_employee_photos_private.sql). Appelée à l'affichage (hydrateAvatarImages,
+ * app.js), jamais stockée telle quelle : le client la met en cache en mémoire avec une marge de
+ * sécurité sous l'heure d'expiration réelle. */
+async function getEmployeePhotoUrl(path) {
+  const { data, error } = await supabase.storage.from('employee-photos').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 /** Dépôt de candidature (voir renderCandidatureForm, app.js) — la seule action de toute
@@ -1272,7 +1282,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };
