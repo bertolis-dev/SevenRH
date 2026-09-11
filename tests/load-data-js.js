@@ -73,6 +73,7 @@ globalThis.__findDuplicateExpense = findDuplicateExpense;
 globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
 globalThis.__idbAvailable = idbAvailable;
 globalThis.__idbGet = idbGet;
+globalThis.__isArretTravailType = isArretTravailType;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -114,6 +115,7 @@ globalThis.__idbGet = idbGet;
     getExpenseRembourseDate: sandbox.__getExpenseRembourseDate,
     idbAvailable: sandbox.__idbAvailable,
     idbGet: sandbox.__idbGet,
+    isArretTravailType: sandbox.__isArretTravailType,
   };
 }
 

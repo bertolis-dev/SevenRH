@@ -8448,6 +8448,17 @@ function bindMesDocumentsEvents() {
 // §sprint suivi de livraison : ouvert/en_cours/resolu/ferme existaient déjà (0017), "livre" est
 // nouveau (0018) — ferme devient une clôture hors parcours normal (annulé/doublon), pas une étape.
 const TICKET_STATUT_LABELS = { ouvert: 'Nouvelle demande', en_cours: 'En cours', resolu: 'Terminé', livre: 'Livré', ferme: 'Fermé' };
+
+/** §retour Betty du 11/09/2026 (point 4.1) : distinction utile même sans calcul d'IJ — la carence
+ * sécurité sociale (3 jours) et la subrogation ne s'appliquent pas de la même façon selon le type
+ * (un accident du travail/de trajet n'a normalement pas de délai de carence, contrairement à la
+ * maladie ordinaire) — champ purement déclaratif ici, jamais utilisé pour un calcul automatique. */
+const TYPE_ARRET_LABELS = {
+  maladie: 'Maladie ordinaire',
+  accidentTravail: 'Accident du travail',
+  accidentTrajet: 'Accident de trajet',
+  maladieProfessionnelle: 'Maladie professionnelle'
+};
 const TICKET_STATUT_BADGE_CLASS = { ouvert: 'info', en_cours: 'warning', resolu: 'success', livre: 'success', ferme: 'muted' };
 const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 
@@ -9581,7 +9592,9 @@ function renderEmployeeDetail(id) {
           ${renderContratBadge(e.typeContrat)}
           ${renderStatutBadge(e.statut)}
           ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
+          ${e.anonymise ? '<span class="badge badge-muted" title="Données personnelles retirées automatiquement après le départ (durée de conservation, voir Paramètres > Listes)">Anonymisé</span>' : ''}
         </div>
+        ${e.anonymise ? `<p class="text-muted" style="margin-top: 6px;">Fiche anonymisée le ${formatDate(e.dateAnonymisation)} (durée de conservation dépassée) : les données personnelles ont été retirées, les compteurs/historiques restent conservés pour vos rapports.</p>` : ''}
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Propriétaire peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
@@ -11254,6 +11267,7 @@ function renderRequestActions(r, type) {
     return `
       ${historyBtn}
       <button class="btn-link" data-attestation="${r.id}">Attestation</button>
+      ${r.arretTravail && canProlonger ? `<button class="btn-link" data-attestation-salaire="${r.id}">Attestation de salaire</button>` : ''}
       ${canProlonger ? `<button class="btn-link" data-prolonger="${r.id}">Prolonger</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link" data-regulariser="${r.id}">Régulariser</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel="${r.id}">Annuler</button>` : ''}
@@ -11536,6 +11550,9 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   document.querySelectorAll('[data-attestation]').forEach(btn => {
     btn.addEventListener('click', () => openLeaveAttestationModal(btn.dataset.attestation));
   });
+  document.querySelectorAll('[data-attestation-salaire]').forEach(btn => {
+    btn.addEventListener('click', () => openAttestationSalaireModal(btn.dataset.attestationSalaire));
+  });
 
   document.querySelectorAll('[data-prolonger]').forEach(btn => {
     btn.addEventListener('click', () => openProlongerModal(btn.dataset.prolonger));
@@ -11641,6 +11658,81 @@ function openLeaveAttestationModal(requestId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('btn-print-attestation').addEventListener('click', () => {
     auditLogRepository.logAudit('Export', 'Attestation de congé', `${employee.prenom} ${employee.nom}`);
+    window.print();
+  });
+}
+
+/** §retour Betty du 11/09/2026 (point 4.1, "arrêts de travail") : "un prospect nous posera la
+ * question dans les 10 premières minutes" — jusqu'ici rien n'existait pour préparer l'attestation
+ * de salaire (le document transmis à la CPAM pour déclencher les indemnités journalières), au-delà
+ * de l'attestation de congé générique ci-dessus (juste "il/elle était absent·e", sans salaire).
+ *
+ * SCOPE VOLONTAIREMENT LIMITÉ (v1, chiffrage séparé pour la suite selon Betty elle-même) : regroupe
+ * les données déjà disponibles dans l'app (identité, dates de l'arrêt, type, subrogation, salaire
+ * brut mensuel SI le suivi de masse salariale est activé) dans un document imprimable à
+ * relire/compléter avant transmission. AUCUN calcul d'indemnités journalières, de carence ou de
+ * salaire de référence (moyenne des 3 derniers mois, plafond sécu...) : une erreur sur ce calcul a
+ * un impact financier réel pour le salarié, contrairement à un document mal mis en page — à ne
+ * jamais automatiser sans validation par quelqu'un de compétent en paie. Nexus alimente la paie, il
+ * ne la fait pas (position de Betty, cf. le reste de ce sujet). */
+function openAttestationSalaireModal(requestId) {
+  const r = leaveRepository.getById(requestId);
+  if (!r) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
+  const employee = employeeRepository.getById(r.employeeId);
+  const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
+  if (!employee || !type || !r.arretTravail) { showToast('Informations d\'arrêt introuvables pour cette demande.', 'error'); return; }
+  const profile = companyRepository.getProfile();
+  const settings = settingsRepository.getSettings();
+  const arret = r.arretTravail;
+  const prolongations = r.prolongations || [];
+  const derniereProlongation = prolongations[prolongations.length - 1];
+
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Attestation de salaire</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">${icon(ICONS.warningTriangle, 12)} Document préparatoire, à relire et compléter (salaire de référence, dates) avant transmission à la CPAM. Aucune indemnité n'est calculée par Nexus.</p>
+        <div class="print-area print-document">
+          <div class="print-header">
+            <h1>Attestation de salaire</h1>
+            <p class="text-muted">Préparée le ${formatDate(toISODate(new Date()))}</p>
+          </div>
+          <h2>Employeur</h2>
+          <p>${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' · SIRET ' + escapeHtml(profile.siret) : ''}</p>
+          <p>${escapeHtml(profile.adresse || '____________________')}</p>
+          <h2>Salarié</h2>
+          <p>${personNameHtml(employee)} (matricule ${escapeHtml(employee.matricule || '—')})${employee.numeroSecu ? ' · N° sécurité sociale ' + escapeHtml(employee.numeroSecu) : ' · N° sécurité sociale non renseigné dans la fiche'}</p>
+          <p>Poste : ${escapeHtml(employee.poste || '—')} · Dernier jour travaillé avant l'arrêt : ${formatDate(r.dateDebut)}</p>
+          <h2>Arrêt de travail</h2>
+          <p>Type : <strong>${escapeHtml(TYPE_ARRET_LABELS[arret.typeArret] || arret.typeArret)}</strong></p>
+          <p>Période : du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}${derniereProlongation ? ` (dernière prolongation déclarée le ${formatDate(derniereProlongation.date)})` : ''}</p>
+          <p>Subrogation employeur : <strong>${arret.subrogation ? 'Oui (l\'entreprise perçoit les IJ et maintient le salaire)' : 'Non'}</strong></p>
+          <h2>Salaire de référence</h2>
+          ${settings.masseSalarialeActivee && employee.salaireBrutMensuel
+            ? `<p>Salaire brut mensuel actuel (fiche salarié) : ${formatCurrencyFR(employee.salaireBrutMensuel)} — à vérifier sur les 3 derniers mois réels avant transmission (primes, heures supplémentaires, changement de taux...), Nexus n'alimentant pas votre historique de paie détaillé.</p>`
+            : `<p class="text-muted">Non renseigné dans Nexus (suivi de la masse salariale désactivé, ou champ vide sur la fiche salarié) — à compléter manuellement avec votre gestionnaire de paie.</p>`}
+          <div class="print-signature">
+            <span>Fait pour servir et valoir ce que de droit.</span>
+            <span class="print-signature-line">Signature et cachet de l'entreprise</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-attestation-salaire">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-attestation-salaire').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Attestation de salaire', `${employee.prenom} ${employee.nom}`);
     window.print();
   });
 }
@@ -11991,6 +12083,21 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
               </select>
             </div>
           </div>
+          <!-- §retour Betty du 11/09/2026 (point 4.1, "arrêts de travail") : visible seulement pour
+               un type "Maladie" (voir isArretTravailType), togglé par updateLeaveRequestHints comme
+               les champs demi-journée ci-dessus. Purement déclaratif, aucun calcul d'indemnités
+               journalières ici (chantier à part). -->
+          <div class="form-grid" id="field-arret-travail" style="margin-top:14px; display:none;">
+            <div class="form-field">
+              <label for="f-typeArret">Type d'arrêt</label>
+              <select class="input" id="f-typeArret" name="typeArret">
+                ${Object.keys(TYPE_ARRET_LABELS).map(k => `<option value="${k}" ${(champs.typeArret || 'maladie') === k ? 'selected' : ''}>${TYPE_ARRET_LABELS[k]}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field form-field-checkbox" style="align-items: flex-end;">
+              <label><input type="checkbox" id="f-subrogation" ${champs.subrogation ? 'checked' : ''}> Subrogation (l'entreprise perçoit les IJ et maintient le salaire)</label>
+            </div>
+          </div>
           <div class="form-field" style="margin-top:14px;">
             <label for="f-commentaire">Commentaire</label>
             <textarea class="input" id="f-commentaire" name="commentaire" rows="2">${escapeHtml(champs.commentaire || '')}</textarea>
@@ -12093,6 +12200,8 @@ function updateLeaveRequestHints() {
   // §7.12 : le champ mono-jour ci-dessus et les deux champs début/fin ci-dessous sont mutuellement
   // exclusifs (une période ne peut pas être à la fois "un seul jour" et "plusieurs jours").
   demiFieldMulti.style.display = type && type.autoriserDemiJournee && multiJours ? 'grid' : 'none';
+  const arretField = document.getElementById('field-arret-travail');
+  if (arretField) arretField.style.display = isArretTravailType(type) ? 'grid' : 'none';
 
   if (!type || !employeeId) { hint.textContent = ''; return; }
   const employee = employeeRepository.getById(employeeId);
@@ -12289,12 +12398,20 @@ async function submitLeaveRequestForm(evt) {
   // (ex. "Sélectionnez un salarié...") qui laisse l'utilisateur corriger et renvoyer. Sans ce
   // garde-fou, un double-clic (ou un Entrée qui se déclenche deux fois) pendant l'appel réseau de
   // resolveWorkflowWithFallback créait deux demandes identiques.
+  // §retour Betty du 11/09/2026 (point 4.1) : lu depuis le champ réel (jamais formData.get(), qui
+  // renverrait une valeur même si field-arret-travail est masqué pour un type non concerné) — même
+  // garde-fou défensif que demiJournee/demiJourneeDebut/demiJourneeFin ci-dessus.
+  const arretTravail = isArretTravailType(type)
+    ? { typeArret: formData.get('typeArret') || 'maladie', subrogation: document.getElementById('f-subrogation').checked }
+    : null;
+
   const submitBtn = evt.target.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
   const createdRequest = await leaveRepository.create({
     employeeId, typeId, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, nbJours,
     commentaire: formData.get('commentaire') || '',
-    justificatif: state.pendingAttachment
+    justificatif: state.pendingAttachment,
+    arretTravail
   });
 
   uploadJustificatifBestEffort({
@@ -14405,6 +14522,33 @@ function renderParametresEntreprise() {
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
     </div>
+    ${renderExportDonneesCard(user)}
+  `;
+}
+
+/** §retour Betty du 11/09/2026 (point 4.2, réversibilité) : "un acheteur sérieux pose cette question
+ * avant de signer", et c'est aussi une obligation de portabilité. Export JSON complet (salariés,
+ * congés, télétravail, notes de frais, documents, tickets, entretiens, idées, journal d'audit...),
+ * SANS la fenêtre glissante de hydrateCurrentCompany (point 1 étape 2, voir
+ * fetchFullCompanyExportData, supabase-client.js) : un export de réversibilité doit couvrir TOUT
+ * l'historique, pas seulement les ~40 derniers mois affichés au quotidien. Réservé à qui gère déjà
+ * les Paramètres (RH/Propriétaire) — même permission que le reste de cet écran.
+ *
+ * Scope volontairement réduit pour cette première version : JSON structuré uniquement (pas de
+ * variante Excel/tableur pour l'instant — le JSON seul satisfait déjà l'exigence de portabilité,
+ * "format structuré, couramment utilisé, lisible par machine"), et les documents (contrats,
+ * justificatifs...) sont listés par leur RÉFÉRENCE (nom, catégorie, chemin de stockage) plutôt que
+ * leur contenu réembarqué : générer une URL signée pour chaque fichier au moment de l'export
+ * ralentirait l'opération pour peu de valeur (les fichiers restent téléchargeables individuellement
+ * depuis les fiches salariés). À enrichir si Betty en a besoin. */
+function renderExportDonneesCard(user) {
+  if (!hasPermission(user, PERMISSIONS.GERER_PARAMETRES)) return '';
+  return `
+    <div class="card">
+      <h2>Réversibilité des données</h2>
+      <p class="text-muted">Exportez l'intégralité des données de votre entreprise (salariés, congés, télétravail, notes de frais, documents, tickets, entretiens, idées, journal d'audit) dans un fichier JSON structuré, indépendamment de Nexus RH.</p>
+      <button type="button" class="btn btn-secondary" id="btn-export-toutes-donnees">Exporter toutes les données</button>
+    </div>
   `;
 }
 
@@ -14858,6 +15002,30 @@ function bindParametresEntrepriseEvents() {
       showToast(err.message || 'Impossible de mettre à jour le logo.', 'error');
     }
   });
+
+  const exportBtn = document.getElementById('btn-export-toutes-donnees');
+  if (exportBtn) exportBtn.addEventListener('click', handleExportToutesDonnees);
+}
+
+/** Voir renderExportDonneesCard ci-dessus pour le contexte/le scope de cet export. */
+async function handleExportToutesDonnees() {
+  const btn = document.getElementById('btn-export-toutes-donnees');
+  const libelleInitial = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Export en cours...';
+  try {
+    const company = companyRepository.getCurrent();
+    const data = await window.SupabaseSync.fetchFullCompanyExportData(company.id);
+    const dateFichier = new Date().toISOString().slice(0, 10);
+    downloadJSONFile(data, `export-${(company.raisonSociale || 'entreprise').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${dateFichier}.json`);
+    auditLogRepository.logAudit('Export', 'Réversibilité', 'Export complet des données de l\'entreprise');
+    showToast('Export généré.');
+  } catch (err) {
+    showToast(err.message || 'Impossible de générer l\'export.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = libelleInitial;
+  }
 }
 
 // ---- Sous-vue : Établissements (§12) ----
@@ -15323,6 +15491,11 @@ function renderParametresListes() {
           <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
           <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
         </div>
+        <div class="form-field">
+          <label for="f-duree-conservation">Durée de conservation après départ (années)</label>
+          <input class="input" type="number" min="1" step="1" id="f-duree-conservation" value="${escapeHtml(settings.dureeConservationSalariesPartisAnnees)}">
+          <p class="form-hint">Passé ce délai après son départ, la fiche d'un salarié est anonymisée automatiquement (jamais supprimée : les compteurs/historiques restent exploitables pour vos rapports, seules les données personnelles identifiantes sont retirées). Valeur par défaut indicative, à faire confirmer par votre juriste/DPO.</p>
+        </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
           <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
@@ -15555,6 +15728,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
+  bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
   bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
@@ -18543,6 +18717,21 @@ function csvEscape(value) {
 
 function downloadTextFile(content, filename, mimeType) {
   const blob = new Blob(['﻿' + content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Comme downloadTextFile, mais SANS le BOM qu'elle pose (utile pour Excel/CSV, mais un JSON qui
+ * commence par un BOM échoue au JSON.parse() strict de nombreux outils — un export de réversibilité
+ * doit rester lisible par n'importe quel outil externe sans bidouille). */
+function downloadJSONFile(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

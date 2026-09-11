@@ -72,6 +72,8 @@ function employeeFromRow(row) {
     statut: d.statut ?? 'Actif',
     dateDepart: d.dateDepart ?? '',
     archive: row.archive ?? false,
+    anonymise: d.anonymise ?? false,
+    dateAnonymisation: d.dateAnonymisation ?? null,
     salaireBrutMensuel: d.salaireBrutMensuel ?? 0,
     genre: d.genre ?? '',
     compteurs: d.compteurs ?? {},
@@ -799,6 +801,79 @@ async function hydrateCurrentCompany() {
   };
 }
 
+/** §retour Betty du 11/09/2026 (point 4.2, réversibilité) : export complet, SANS la fenêtre
+ * glissante de hydrateCurrentCompany ci-dessus (point 1 étape 2) — un export de portabilité doit
+ * couvrir TOUT l'historique, pas seulement les ~40 derniers mois. Fonction séparée plutôt qu'une
+ * option sur hydrateCurrentCompany (appelée à CHAQUE connexion, le chemin le plus sensible de toute
+ * l'app) : une régression ici ne risque jamais de casser la connexion, au prix de quelques requêtes
+ * dupliquées. Jamais appelée automatiquement — seulement au clic explicite sur "Exporter toutes les
+ * données" (Paramètres, RH/Propriétaire uniquement). RLS s'applique normalement (pas de
+ * service-role) : ne peut renvoyer que ce que l'appelant a déjà le droit de lire. */
+async function fetchFullCompanyExportData(companyId) {
+  const [
+    companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
+    leaveRequestsRes, teleworkRequestsRes, expensesRes, documentsRes,
+    supportTicketsRes, entretiensRes, ideesRes, auditLogRes,
+    schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes
+  ] = await Promise.all([
+    supabase.from('companies').select('*').eq('id', companyId).single(),
+    supabase.from('employees').select('*').eq('company_id', companyId),
+    supabase.from('etablissements').select('*').eq('company_id', companyId),
+    supabase.from('services').select('*').eq('company_id', companyId),
+    supabase.from('leave_types').select('*').eq('company_id', companyId),
+    fetchAllRows(() => supabase.from('leave_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('telework_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('expenses').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('documents').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('support_tickets').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('entretiens').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    fetchAllRows(() => supabase.from('idees').select('*').eq('company_id', companyId).order('created_at', { ascending: false })),
+    // Contrairement à hydrateCurrentCompany (.limit(1000), une consultation courante) : un export de
+    // réversibilité doit couvrir TOUT le journal, jamais seulement les 1000 entrées les plus
+    // récentes — rien ne purge jamais audit_log côté serveur (voir son commentaire).
+    fetchAllRows(() => supabase.from('audit_log').select('*').eq('company_id', companyId).order('date', { ascending: false })),
+    supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
+    supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
+    supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle(),
+    supabase.from('subscription_modules').select('*').eq('company_id', companyId)
+  ]);
+
+  const company = companyRes.data;
+  if (!company) throw new Error('Entreprise introuvable ou accès refusé.');
+  const failed = [
+    ['companies', companyRes], ['employees', employeesRes], ['etablissements', etablissementsRes],
+    ['services', servicesRes], ['leave_types', leaveTypesRes], ['leave_requests', leaveRequestsRes],
+    ['telework_requests', teleworkRequestsRes], ['expenses', expensesRes], ['documents', documentsRes],
+    ['support_tickets', supportTicketsRes], ['entretiens', entretiensRes], ['idees', ideesRes],
+    ['audit_log', auditLogRes], ['settings', settingsRes], ['subscriptions', subscriptionRes],
+    ['subscription_modules', subscriptionModulesRes]
+  ].filter(([, res]) => res && res.error);
+  if (failed.length) throw new Error('Échec de lecture (' + failed.map(([t]) => t).join(', ') + ') — export incomplet, réessayez.');
+
+  return {
+    exporteLe: new Date().toISOString(),
+    entreprise: { id: company.id, raisonSociale: company.raison_sociale, ...(company.data || {}) },
+    abonnement: {
+      ...abonnementFromRow(subscriptionRes.data),
+      modules: (subscriptionModulesRes.data || []).map(r => ({ key: r.module_key, quantite: r.quantite }))
+    },
+    etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
+    salaries: (employeesRes.data || []).map(employeeFromRow),
+    services: (servicesRes.data || []).map(serviceFromRow),
+    parametres: settingsRes.data ? settingsRes.data.data : {},
+    typesConge: (leaveTypesRes.data || []).map(leaveTypeFromRow),
+    demandesConge: (leaveRequestsRes.data || []).map(leaveRequestFromRow),
+    demandesTeletravail: (teleworkRequestsRes.data || []).map(teleworkRequestFromRow),
+    notesDeFrais: (expensesRes.data || []).map(expenseFromRow),
+    documents: (documentsRes.data || []).map(documentFromRow),
+    ticketsSupport: (supportTicketsRes.data || []).map(ticketFromRow),
+    entretiens: (entretiensRes.data || []).map(entretienFromRow),
+    idees: (ideesRes.data || []).map(ideeFromRow),
+    joursFeries: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
+    journalAudit: (auditLogRes.data || []).map(auditLogFromRow)
+  };
+}
+
 /** Appelle la fonction serveur "billing" (Edge Function Supabase) — invoke() du client Supabase
  * transmet automatiquement le jeton de la session en cours, exactement ce dont has_permission()/
  * current_company_id() ont besoin côté serveur pour vérifier qui appelle (voir supabase/functions/
@@ -1327,7 +1402,7 @@ async function reportClientErrorToBertolis(companyId, employeeId, version, conte
 }
 
 window.SupabaseSync = {
-  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, getOrCreateIcalToken, regenerateIcalToken, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany,
+  signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, getOrCreateIcalToken, regenerateIcalToken, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany, fetchFullCompanyExportData,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,

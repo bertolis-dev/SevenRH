@@ -222,6 +222,15 @@ globalThis.__hydrateAvatarImages = hydrateAvatarImages;
 globalThis.__reportClientError = reportClientError;
 globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
 globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
+globalThis.__renderEmployeeDetail = renderEmployeeDetail;
+globalThis.__renderParametresListes = renderParametresListes;
+globalThis.__renderParametresEntreprise = renderParametresEntreprise;
+globalThis.__bindParametresEntrepriseEvents = bindParametresEntrepriseEvents;
+globalThis.__handleExportToutesDonnees = handleExportToutesDonnees;
+globalThis.__renderRequestActions = renderRequestActions;
+globalThis.__openAttestationSalaireModal = openAttestationSalaireModal;
+globalThis.__TYPE_ARRET_LABELS = TYPE_ARRET_LABELS;
+globalThis.__isArretTravailType = isArretTravailType;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -354,6 +363,15 @@ globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
     reportClientError: sandbox.__reportClientError,
     renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
     ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
+    renderEmployeeDetail: sandbox.__renderEmployeeDetail,
+    renderParametresListes: sandbox.__renderParametresListes,
+    renderParametresEntreprise: sandbox.__renderParametresEntreprise,
+    bindParametresEntrepriseEvents: sandbox.__bindParametresEntrepriseEvents,
+    handleExportToutesDonnees: sandbox.__handleExportToutesDonnees,
+    renderRequestActions: sandbox.__renderRequestActions,
+    openAttestationSalaireModal: sandbox.__openAttestationSalaireModal,
+    TYPE_ARRET_LABELS: sandbox.__TYPE_ARRET_LABELS,
+    isArretTravailType: sandbox.__isArretTravailType,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

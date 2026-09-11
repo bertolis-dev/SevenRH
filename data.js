@@ -551,6 +551,14 @@ const DEFAULT_SETTINGS = {
   // art. L3121-36), à vérifier et ajuster par chaque entreprise avec son gestionnaire de paie —
   // jamais une valeur à prendre pour argent comptant sans vérification.
   tauxReposCompensateur: 25,
+  // §retour Betty du 11/09/2026 (point 4.3, "durée de conservation") : durée, en années après le
+  // départ d'un salarié, avant que sa fiche ne soit anonymisée (jamais supprimée — voir
+  // anonymize_departed_employees, 0049_retention_anonymisation.sql). 5 ans par défaut : ordre de
+  // grandeur usuel pour un dossier RH (délai de prescription civile de droit commun, souvent cité
+  // par la CNIL comme référence pour ce type de données) — VALEUR PAR DÉFAUT INDICATIVE, à faire
+  // confirmer par votre juriste/DPO avant de s'y fier, exactement comme tauxReposCompensateur
+  // ci-dessus pour les sujets paie. Modifiable par entreprise (Paramètres > Listes > Salariés).
+  dureeConservationSalariesPartisAnnees: 5,
   // Index de l'égalité professionnelle femmes-hommes (voir DB.enregistrerIndexEgalite) : { [année]:
   // { note, datePublication, mesuresCorrectives } }, une entrée par année civile déclarée.
   indexEgaliteProfessionnelle: {},
@@ -4036,6 +4044,12 @@ function makeEmptyEmployee() {
     statut: 'Actif',
     dateDepart: '',
     archive: false,
+    // §retour Betty du 11/09/2026 (point 4.3) : posé par anonymize_departed_employees() côté
+    // serveur (0049_retention_anonymisation.sql), jamais par le client — juste lu ici pour adapter
+    // l'affichage (voir personNameHtml/renderAvatar). Ne préjuge de rien côté formulaire d'édition :
+    // une fiche anonymisée reste normalement en lecture, pas bloquée en écriture par ce champ seul.
+    anonymise: false,
+    dateAnonymisation: null,
 
     // Champs sensibles, réservés au Propriétaire, affichés uniquement si le réglage correspondant est activé
     salaireBrutMensuel: 0,
@@ -4438,6 +4452,12 @@ function makeEmptyLeaveRequest() {
     // de la retrouver/l'annuler si la fermeture est ensuite modifiée ou supprimée, sans jamais
     // confondre une fermeture avec un congé posé normalement par le salarié.
     fermetureId: null,
+    // §retour Betty du 11/09/2026 (point 4.1, "arrêts de travail") : renseigné uniquement quand
+    // leaveType est un arrêt (voir isArretTravailType) — { typeArret, subrogation }. PAS de calcul
+    // d'indemnités journalières/carence ici (chantier à part, demande un chiffrage séparé selon
+    // Betty elle-même) : juste de quoi éviter qu'un prospect ne voie rien du tout sur ce sujet, et
+    // préparer les données pour l'attestation de salaire (voir openAttestationSalaireModal, app.js).
+    arretTravail: null,
     dateCreation: null,
     dateModification: null
   };
@@ -5202,6 +5222,14 @@ function leaveTypeNameMatches(nom, target) {
   const n = (nom || '').trim().toLowerCase();
   const t = target.trim().toLowerCase();
   return n === t || n.startsWith(t + ' ');
+}
+
+/** §retour Betty du 11/09/2026 (point 4.1, "arrêts de travail") : mêmes limites que le
+ * rapprochement par nom ci-dessus (un renommage complet du type y échapperait) — utilisé pour
+ * savoir si une demande DOIT porter des informations d'arrêt (type d'arrêt/subrogation, voir
+ * request.arretTravail) et si "Attestation de salaire" doit être proposée sur cette ligne. */
+function isArretTravailType(leaveType) {
+  return Boolean(leaveType) && leaveTypeNameMatches(leaveType.nom, 'Maladie');
 }
 
 /** §correctif retour QA du 27/08/2026 (point 2.4) : leaveType.proratisationTempsPartiel n'existait
