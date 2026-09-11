@@ -7,9 +7,9 @@
 -- service-role, même secret partagé que les tickets support — pas de nouveau secret à configurer) :
 -- jamais de lecture croisée entre entreprises depuis le client lui-même.
 create table client_error_reports (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references companies(id) on delete cascade,
-  employee_id uuid references employees(id) on delete set null,
+  id text primary key default gen_random_uuid()::text,
+  company_id text not null references companies(id) on delete cascade,
+  employee_id text references employees(id) on delete set null,
   version text,
   contexte text not null,
   message text not null,
