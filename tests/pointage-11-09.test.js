@@ -150,7 +150,25 @@ async function run() {
     assert.ok(!htmlSalarie.includes('data-pointage-qr-etablissement'), 'un simple salarié ne doit pas voir ce bouton (pas demandé par Betty)');
   }
 
-  console.log('OK — pointage-11-09.test.js (durée travaillée, jeton du QR + régénération, arrivée/départ avec pause déjeuner, confirmation dans Planning gated par module, QR accessible aux managers/propriétaire)');
+  // ---- Modale du QR : boutons Régénérer/Partager/Imprimer/Fermer présents ----
+  // §retour Betty du 11/09/2026 ("un bouton pour partager et imprimer le qr code").
+  {
+    const { DB, sandbox, etablissementRepository, openPointageQrModal } = loadAppJs();
+    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    DB.init();
+    const rh = DB.getEmployees().find(e => e.role === 'rh');
+    DB._currentEmployeeId = rh.id;
+    const etab = etablissementRepository.getAll()[0];
+
+    openPointageQrModal(etab.id);
+    const modalHtml = sandbox.document.getElementById('modal-root').innerHTML;
+    assert.ok(modalHtml.includes('btn-partager-pointage-qr'), 'la modale doit avoir un bouton "Partager"');
+    assert.ok(modalHtml.includes('btn-imprimer-pointage-qr'), 'la modale doit avoir un bouton "Imprimer"');
+    assert.ok(modalHtml.includes('btn-regenerer-pointage-qr'), 'la modale doit garder son bouton "Régénérer"');
+    assert.ok(modalHtml.includes('class="print-area"'), 'le QR doit être dans .print-area (isolé à l\'impression, voir style.css)');
+  }
+
+  console.log('OK — pointage-11-09.test.js (durée travaillée, jeton du QR + régénération, arrivée/départ avec pause déjeuner, confirmation dans Planning gated par module, QR accessible aux managers/propriétaire, boutons Partager/Imprimer)');
 }
 
 run().catch((err) => {

@@ -336,6 +336,7 @@ const ICONS = {
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   wrench: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-.7-.7-2z"/></svg>',
   printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/><circle cx="7.5" cy="12.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><line x1="8.3" y1="10.7" x2="15.7" y2="6.3"/><line x1="8.3" y1="13.3" x2="15.7" y2="17.7"/></svg>',
   clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v2H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>',
   paperclip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5l6.5-6.5a3 3 0 1 1 4.2 4.2L11 18a5 5 0 1 1-7-7l7.5-7.5"/></svg>',
   package: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v9l9 5 9-5V8"/><line x1="12" y1="13" x2="12" y2="22"/></svg>',
@@ -14755,10 +14756,18 @@ function renderPointageQrModalContent(etablissementId) {
       </div>
       <div class="modal-body" style="text-align: center;">
         <p class="text-muted">À imprimer ou afficher à l'accueil de cet établissement : chaque salarié le scanne (bouton "Pointeuse") pour enregistrer son arrivée puis son départ.</p>
-        <div style="margin: 16px 0;">${qrSvg}</div>
+        <!-- §retour Betty du 11/09/2026 ("un bouton pour partager et imprimer") : .print-area (déjà
+             utilisée par la Fiche PDF/attestation, voir style.css) isole ce seul contenu à
+             l'impression — jamais le reste de l'application (barre latérale, en-tête...). -->
+        <div class="print-area" id="pointage-qr-print-area" style="margin: 16px 0;">
+          <h3 style="margin: 0 0 12px;">Pointage — ${escapeHtml(etab.nom)}</h3>
+          ${qrSvg}
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="btn-regenerer-pointage-qr">Régénérer (invalide l'ancien)</button>
+        <button type="button" class="btn btn-secondary" id="btn-partager-pointage-qr">${icon(ICONS.share, 14)} Partager</button>
+        <button type="button" class="btn btn-secondary" id="btn-imprimer-pointage-qr">${icon(ICONS.printer, 14)} Imprimer</button>
         <button type="button" class="btn btn-primary" id="btn-close-modal-footer">Fermer</button>
       </div>
     </div>
@@ -14781,6 +14790,53 @@ function renderPointageQrModalContent(etablissementId) {
       }
     });
   });
+  document.getElementById('btn-imprimer-pointage-qr').addEventListener('click', () => window.print());
+  document.getElementById('btn-partager-pointage-qr').addEventListener('click', () => sharePointageQrImage(etab));
+}
+
+/** §retour Betty du 11/09/2026 ("un bouton pour partager") : le QR est un <svg> (qrcode.js), pas un
+ * fichier — le convertit en PNG (via <canvas>) pour pouvoir le partager comme une vraie image
+ * (WhatsApp, email...), plutôt qu'un texte ou un lien qui n'a pas de sens ici (le QR encode un jeton
+ * interne, pas une URL ouvrable). navigator.share n'existe que sur HTTPS/contextes sécurisés et
+ * certains navigateurs (surtout mobile) : repli sur un message clair plutôt qu'un échec silencieux. */
+async function sharePointageQrImage(etab) {
+  const svgEl = document.querySelector('#pointage-qr-print-area svg');
+  if (!svgEl) return;
+  if (!navigator.share) {
+    showToast("Le partage n'est pas disponible sur ce navigateur, utilisez Imprimer.", 'error');
+    return;
+  }
+  const svgData = new XMLSerializer().serializeToString(svgEl);
+  const url = URL.createObjectURL(new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' }));
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width || 400;
+    canvas.height = img.height || 400;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const file = new File([blob], `qr-pointage-${etab.nom}.png`, { type: 'image/png' });
+    const shareData = { title: `QR de pointage — ${etab.nom}`, files: [file] };
+    if (navigator.canShare && !navigator.canShare(shareData)) {
+      // Partage de fichier non supporté par ce navigateur (voir canShare) : repli sur un partage
+      // texte simple plutôt qu'un échec silencieux — au moins le nom de l'établissement est transmis.
+      await navigator.share({ title: shareData.title, text: `QR de pointage pour ${etab.nom} (voir la pièce jointe imprimée, ou Paramètres > Établissements dans Nexus).` });
+      return;
+    }
+    await navigator.share(shareData);
+  } catch (err) {
+    if (err && err.name !== 'AbortError') showToast('Impossible de partager ce QR.', 'error');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function bindParametresEtablissementsEvents() {

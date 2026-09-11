@@ -35,6 +35,11 @@ function stubElement() {
 function loadAppJs() {
   const dataSource = fs.readFileSync(path.join(__dirname, '..', 'data.js'), 'utf8');
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  // §11/09/2026 : vendorisée comme app.js/data.js (voir index.html), chargée ici aussi pour que les
+  // fonctions qui appellent le global `qrcode` (renderEmbauche, renderPointageQrModalContent) soient
+  // testables sans planter sur "qrcode is not defined" — pas de dépendance DOM au chargement (pur
+  // générateur JS), donc chargeable tel quel dans ce bac à sable minimal.
+  const qrcodeSource = fs.readFileSync(path.join(__dirname, '..', 'qrcode.js'), 'utf8');
 
   const store = {};
   const localStorage = {
@@ -74,6 +79,7 @@ function loadAppJs() {
   // réseau réel accidentel vers une API externe pendant les tests.
   sandbox.fetch = async () => { throw new Error('fetch() non simulé dans ce test — voir sandbox.window.fetch'); };
   vm.createContext(sandbox);
+  vm.runInContext(qrcodeSource, sandbox, { filename: 'qrcode.js' });
 
   const exposeAfterData = `
 ;globalThis.__DB = DB;
@@ -97,6 +103,7 @@ globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__LANDING_ALACARTE_MODULES = LANDING_ALACARTE_MODULES;
 globalThis.__renderPointeuse = renderPointeuse;
+globalThis.__openPointageQrModal = openPointageQrModal;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
@@ -231,6 +238,7 @@ globalThis.__openShiftModal = openShiftModal;
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     LANDING_ALACARTE_MODULES: sandbox.__LANDING_ALACARTE_MODULES,
     renderPointeuse: sandbox.__renderPointeuse,
+    openPointageQrModal: sandbox.__openPointageQrModal,
     getVisibleEmployeeIdsForCurrentUser: sandbox.__getVisibleEmployeeIdsForCurrentUser,
     isCurrentWorkflowStepFor: sandbox.__isCurrentWorkflowStepFor,
     parisDateFromISO: sandbox.__parisDateFromISO,
