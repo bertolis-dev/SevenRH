@@ -14615,6 +14615,13 @@ function bindParametresAbonnementEvents() {
     if (company) DB._companiesCache = [company];
     state.abonnementEditingModules = false;
     showToast('Modules mis à jour.');
+    // §retour Betty du 11/09/2026 ("le module ne s'affiche pas") : render() seul ne redessine QUE
+    // #view-root (voir render()/renderInner) — la barre latérale (nouvelle entrée de menu du module
+    // tout juste activé) a sa propre fonction, jamais appelée ici jusqu'à présent. Le premier
+    // "checkout" (nouvel abonnement) l'appelait déjà correctement via navigateTo() côté retour de
+    // Stripe (handleCheckoutReturn) — seul ce chemin "ajouter un module à un abonnement déjà actif"
+    // l'oubliait.
+    renderSidebar();
     render();
   });
 
