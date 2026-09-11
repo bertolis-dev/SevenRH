@@ -831,7 +831,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     reportClientError(evt.reason instanceof Error ? evt.reason : new Error(String(evt.reason)), 'unhandledrejection');
   });
 
-  DB.init();
+  await DB.init();
   bindGlobalEvents();
   bindGlobalSearchEvents();
   bindNotificationEvents();

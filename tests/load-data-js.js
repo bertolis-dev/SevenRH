@@ -13,7 +13,15 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function loadDataJs() {
+/**
+ * `options.indexedDB` (optionnel, voir tests/fake-indexeddb.js) : injecte un faux IndexedDB dans le
+ * bac à sable pour tester le VRAI chemin IndexedDB de DB.init()/saveCompanies() (§retour Betty du
+ * 11/09/2026, point 1 étape 1) — omis par défaut pour TOUS les autres tests, qui continuent
+ * d'exercer le repli synchrone localStorage (idbAvailable() renvoie false), exactement comme avant
+ * ce correctif : c'est ce qui garantit qu'aucun des ~40 fichiers de test existants n'a besoin d'être
+ * modifié pour rester `DB.init()` sans `await`.
+ */
+function loadDataJs(options = {}) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'data.js'), 'utf8');
 
   const store = {};
@@ -25,11 +33,14 @@ function loadDataJs() {
 
   const sandbox = { console, localStorage };
   sandbox.window = sandbox; // data.js référence `window.SupabaseSync` — même objet que le sandbox, pratique pour l'injecter depuis les tests.
+  if (options.indexedDB) sandbox.indexedDB = options.indexedDB;
   vm.createContext(sandbox);
 
   const expose = `
 ;globalThis.__DB = DB;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
+globalThis.__ROOT_KEY = ROOT_KEY;
+globalThis.__HAS_RUN_BEFORE_KEY = HAS_RUN_BEFORE_KEY;
 globalThis.__ROLES = ROLES;
 globalThis.__seedLeaveTypes = seedLeaveTypes;
 globalThis.__ensureDefaultLeaveTypesBackfilled = ensureDefaultLeaveTypesBackfilled;
@@ -60,6 +71,8 @@ globalThis.__markExpensePaid = markExpensePaid;
 globalThis.__refuseRequest = refuseRequest;
 globalThis.__findDuplicateExpense = findDuplicateExpense;
 globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
+globalThis.__idbAvailable = idbAvailable;
+globalThis.__idbGet = idbGet;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -67,6 +80,8 @@ globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
     sandbox,
     DB: sandbox.__DB,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
+    ROOT_KEY: sandbox.__ROOT_KEY,
+    HAS_RUN_BEFORE_KEY: sandbox.__HAS_RUN_BEFORE_KEY,
     ROLES: sandbox.__ROLES,
     seedLeaveTypes: sandbox.__seedLeaveTypes,
     ensureDefaultLeaveTypesBackfilled: sandbox.__ensureDefaultLeaveTypesBackfilled,
@@ -97,6 +112,8 @@ globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
     refuseRequest: sandbox.__refuseRequest,
     findDuplicateExpense: sandbox.__findDuplicateExpense,
     getExpenseRembourseDate: sandbox.__getExpenseRembourseDate,
+    idbAvailable: sandbox.__idbAvailable,
+    idbGet: sandbox.__idbGet,
   };
 }
 

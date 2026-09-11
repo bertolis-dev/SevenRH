@@ -1003,6 +1003,111 @@ function isDuplicateKeyError(err) {
   return Boolean(err && err.code === '23505');
 }
 
+/** §retour Betty du 11/09/2026 (point 1, étape 1 : "plafond de taille bas") : ROOT_KEY (le blob
+ * "companies" — historique de congés/télétravail/frais/documents/tickets par entreprise, de très
+ * loin le plus volumineux) déménage de localStorage (quota fixe ~5-10 Mo selon navigateur, déjà
+ * mesuré comme dépassé en 1 à 3 ans pour 50-250 salariés) vers IndexedDB (couramment plusieurs
+ * centaines de Mo, une fraction de l'espace disque libre) — le geste le moins cher pour éliminer
+ * quasiment tout le risque de perte de données QuotaExceededError, SANS toucher à la façon dont le
+ * reste de l'app lit les données.
+ *
+ * Change UNIQUEMENT ce point de persistance : DB._companiesCache (déjà la source lue par TOUT le
+ * reste du code, déjà invalidée/reposée à chaque saveCompanies) reste une lecture SYNCHRONE comme
+ * avant — seule son alimentation initiale devient asynchrone, un seul `await` au tout premier
+ * chargement de la page (voir DB.init()), jamais ensuite. Le réglage fin du VOLUME téléchargé à
+ * chaque connexion (fenêtre glissante) est un sujet SÉPARÉ, pas traité ici.
+ *
+ * Repli intégral sur le comportement d'avant ce correctif si IndexedDB n'est pas disponible
+ * (bac à sable Node des tests, navigation privée très restrictive d'un vieux navigateur) : dans ce
+ * cas, AUCUN `await` n'est jamais atteint dans les fonctions ci-dessous, donc DB.init()/saveCompanies
+ * s'exécutent de bout en bout de façon synchrone exactement comme avant — c'est ce qui permet à
+ * toute la suite de tests existante (DB.init() jamais attendu avec `await`) de continuer à
+ * fonctionner sans aucune modification. */
+const IDB_DB_NAME = 'sevenrh';
+const IDB_STORE_NAME = 'kv';
+const IDB_VERSION = 1;
+
+function idbAvailable() {
+  return typeof indexedDB !== 'undefined' && indexedDB !== null;
+}
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_DB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE_NAME)) req.result.createObjectStore(IDB_STORE_NAME);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(IDB_STORE_NAME, 'readonly').objectStore(IDB_STORE_NAME).get(key);
+    req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+    tx.objectStore(IDB_STORE_NAME).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDelete(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+    tx.objectStore(IDB_STORE_NAME).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/** Repli synchrone (IndexedDB indisponible OU pas encore migré) — comportement identique à l'ancien
+ * DB.getCompanies() avant ce correctif, jamais modifié. */
+function loadRootCompaniesFromLocalStorageSync() {
+  const raw = localStorage.getItem(ROOT_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Données entreprises corrompues dans localStorage, réinitialisation.', err);
+    return [];
+  }
+}
+
+/** Hydratation depuis IndexedDB, avec migration silencieuse et unique d'un éventuel ancien blob
+ * localStorage (navigateurs ayant déjà utilisé l'app avant ce correctif) — supprimé de localStorage
+ * seulement APRÈS confirmation que la copie IndexedDB a bien été écrite, jamais avant (pour ne
+ * jamais perdre les deux copies si l'écriture IndexedDB échoue en cours de route). */
+async function loadRootCompaniesFromIdb() {
+  try {
+    const fromIdb = await idbGet(ROOT_KEY);
+    if (fromIdb !== null) return fromIdb;
+  } catch (err) {
+    console.error('Lecture IndexedDB impossible, repli sur localStorage pour cette session.', err);
+    return loadRootCompaniesFromLocalStorageSync();
+  }
+  const legacy = loadRootCompaniesFromLocalStorageSync();
+  if (legacy.length) {
+    try {
+      await idbSet(ROOT_KEY, legacy);
+      localStorage.removeItem(ROOT_KEY);
+    } catch (err) {
+      console.error('Migration vers IndexedDB impossible, on continue sur localStorage pour cette session.', err);
+    }
+  }
+  return legacy;
+}
+
 const DB = {
   /** Initialise le stockage au TOUT PREMIER lancement de ce navigateur (seed de démo) : une
    * entreprise, active par défaut. §correctif retour QA du 27/08/2026 : ne re-sème JAMAIS au-delà de
@@ -1012,13 +1117,20 @@ const DB = {
    * démonstration, comme si c'était un premier lancement. Sans conséquence pour restoreSession()
    * (qui écrase toujours ce cache par les vraies données Supabase si une session existe), mais un
    * vestige inutile et potentiellement déroutant sur un poste RH partagé entre deux connexions. */
-  init() {
+  async init() {
     this._loadPendingSync();
+    // §retour Betty du 11/09/2026 (point 1, étape 1) : SEUL point de tout le cycle de vie de l'app
+    // où l'hydratation de _companiesCache est asynchrone (voir idbAvailable() ci-dessus) — dès la
+    // ligne suivante franchie, getCompanies() reste synchrone comme avant pour tout le reste du
+    // code. Si IndexedDB n'est pas disponible, cette ligne n'atteint jamais de véritable `await` :
+    // init() s'exécute alors de bout en bout de façon synchrone, exactement comme avant ce correctif
+    // (voir loadRootCompaniesFromLocalStorageSync).
+    this._companiesCache = idbAvailable() ? (await loadRootCompaniesFromIdb()) : loadRootCompaniesFromLocalStorageSync();
     const hasRunBefore = localStorage.getItem(HAS_RUN_BEFORE_KEY) !== null;
     if (!hasRunBefore) localStorage.setItem(HAS_RUN_BEFORE_KEY, '1');
-    if (!hasRunBefore && (localStorage.getItem(ROOT_KEY) === null || this.getCompanies().length === 0)) {
+    if (!hasRunBefore && this.getCompanies().length === 0) {
       const company = seedCompany();
-      localStorage.setItem(ROOT_KEY, JSON.stringify([company]));
+      this.saveCompanies([company]);
       localStorage.setItem(CURRENT_COMPANY_KEY, company.id);
     }
     if (localStorage.getItem(CURRENT_COMPANY_KEY) === null) {
@@ -1354,8 +1466,25 @@ const DB = {
     if (blobName === 'auditLogClear') return window.SupabaseSync.pushClearAuditLog(company.id);
   },
 
+  /** §retour Betty du 11/09/2026 (point 1, étape 1) : reste une fonction SYNCHRONE (jamais de
+   * `await` requis chez ses ~30 appelants) — this._companiesCache est toujours reposé en premier,
+   * de façon synchrone, donc TOUT le reste de l'app voit la mise à jour immédiatement quel que soit
+   * le sort de la persistance sur disque juste en dessous. Si IndexedDB est disponible, l'écriture
+   * sur disque se fait en tâche de fond (jamais bloquante) ; sinon, comportement identique à avant
+   * ce correctif (écriture localStorage synchrone, même message d'erreur QuotaExceededError). */
   saveCompanies(list) {
     this._companiesCache = list;
+    if (idbAvailable()) {
+      idbSet(ROOT_KEY, list).catch((err) => {
+        console.error('Échec d\'enregistrement IndexedDB, repli sur localStorage.', err);
+        this._saveCompaniesToLocalStorageSync(list);
+      });
+      return;
+    }
+    this._saveCompaniesToLocalStorageSync(list);
+  },
+
+  _saveCompaniesToLocalStorageSync(list) {
     try {
       localStorage.setItem(ROOT_KEY, JSON.stringify(list));
     } catch (err) {
@@ -3310,12 +3439,20 @@ const DB = {
    * connexion refusée (aucune fiche salarié, abonnement suspendu ou résilié) laissait sinon en
    * place le cache du salarié précédent sur cette machine, alors même qu'on vient de refuser
    * l'accès. */
-  _purgeLocalCompanyCache() {
+  async _purgeLocalCompanyCache() {
     this._currentEmployeeId = null;
     this._companiesCache = null;
     this._currentAuthUserId = null;
     localStorage.removeItem(ROOT_KEY);
     localStorage.removeItem(CURRENT_COMPANY_KEY);
+    // §retour Betty du 11/09/2026 (point 1, étape 1) : ROOT_KEY peut désormais vivre dans IndexedDB
+    // (voir idbAvailable() plus haut) — sans cette purge, une donnée d'entreprise resterait lisible
+    // sur disque après déconnexion sur un poste partagé, exactement le défaut corrigé le 23/08/2026
+    // pour localStorage. Ses 4 appelants sont déjà tous dans des fonctions async ; `await` ici pour
+    // garantir que la purge est bien terminée avant qu'un `switchToSavedAccount` ne reprenne la main.
+    if (idbAvailable()) {
+      try { await idbDelete(ROOT_KEY); } catch (err) { console.error('Purge IndexedDB incomplète.', err); }
+    }
   },
 
   /** Déconnexion "façon Gmail" (choix explicite du 21/08/2026) : ne révoque QUE le compte actif,
@@ -3327,7 +3464,7 @@ const DB = {
     const leavingAccountId = this._currentAuthUserId;
     await window.SupabaseSync.signOut();
     if (leavingAccountId) this.removeSavedAccount(leavingAccountId);
-    this._purgeLocalCompanyCache();
+    await this._purgeLocalCompanyCache();
 
     const remaining = this.getSavedAccounts();
     if (remaining.length > 0) {
@@ -3349,13 +3486,13 @@ const DB = {
     const company = await hydrateCurrentCompanyWithMigrations();
     if (!company) {
       await window.SupabaseSync.signOut();
-      this._purgeLocalCompanyCache();
+      await this._purgeLocalCompanyCache();
       return { success: false, error: 'Aucun salarié associé à ce compte.' };
     }
     const statutAbonnement = company.abonnement && company.abonnement.statut;
     if (statutAbonnement === 'suspendu' || statutAbonnement === 'resilie') {
       await window.SupabaseSync.signOut();
-      this._purgeLocalCompanyCache();
+      await this._purgeLocalCompanyCache();
       return {
         success: false,
         error: statutAbonnement === 'resilie'
@@ -3472,7 +3609,7 @@ const DB = {
     // (l'utilisateur atterrirait muettement sur la page d'accueil publique, sans comprendre
     // pourquoi) : on déconnecte et on renseigne un message qu'app.js affichera à la place.
     await window.SupabaseSync.signOut();
-    this._purgeLocalCompanyCache();
+    await this._purgeLocalCompanyCache();
     this._lastAuthError = 'Aucun salarié associé à ce compte. Contactez votre RH pour obtenir un accès.';
     return false;
   },
