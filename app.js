@@ -18649,6 +18649,10 @@ function openPointageScanModal() {
       // §retour Betty du 13/09/2026 : un toast s'efface après ~3s, trop court pour lire/capturer un
       // message de diagnostic (voir enregistrerPointage, data.js) — remplacé temporairement par une
       // modale qui reste ouverte le temps nécessaire, jamais un simple toast fugace pour ce cas précis.
+      // Transmis aussi à client_error_reports (reportClientError, voir 0047_client_error_reports.sql) :
+      // Betty teste depuis son téléphone où copier/coller le message est peu pratique — elle peut
+      // interroger cette table en SQL depuis son ordinateur au lieu de retaper le diagnostic.
+      reportClientError(new Error(result.error), 'pointage-scan');
       modalRoot.innerHTML = `
         <div class="modal modal-small">
           <div class="modal-header"><h2>Pointage refusé</h2></div>
