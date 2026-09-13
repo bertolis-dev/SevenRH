@@ -50,7 +50,7 @@ async function run() {
     const etab = etablissementRepository.getAll()[0];
     assert.strictEqual(etab.pointageToken, null, 'aucun jeton tant que le QR n\'a jamais été généré');
 
-    const token1 = etablissementRepository.regenererPointageToken(etab.id);
+    const token1 = await etablissementRepository.regenererPointageToken(etab.id);
     assert.ok(token1);
     assert.strictEqual(etablissementRepository.getById(etab.id).pointageToken, token1);
 
@@ -62,7 +62,7 @@ async function run() {
     assert.strictEqual(arrivee.type, 'arrivee');
 
     // Régénérer le QR invalide l'ANCIEN jeton, même pour un pointage déjà ouvert avec lui.
-    const token2 = etablissementRepository.regenererPointageToken(etab.id);
+    const token2 = await etablissementRepository.regenererPointageToken(etab.id);
     assert.notStrictEqual(token1, token2);
     const echecAncienJeton = await pointageRepository.enregistrer(rh.id, etab.id, token1);
     assert.strictEqual(echecAncienJeton.success, false, 'l\'ancien jeton doit être rejeté après régénération');
@@ -79,7 +79,7 @@ async function run() {
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const etab = etablissementRepository.getAll()[0];
-    const token = etablissementRepository.regenererPointageToken(etab.id);
+    const token = await etablissementRepository.regenererPointageToken(etab.id);
 
     const r1 = await pointageRepository.enregistrer(rh.id, etab.id, token);
     assert.strictEqual(r1.type, 'arrivee');
@@ -120,7 +120,7 @@ async function run() {
     company.abonnement.offre = 'a_la_carte';
     company.abonnement.modules = [{ key: 'planning' }];
     DB.saveCurrentCompany(company);
-    etablissementRepository.regenererPointageToken(etab.id);
+    await etablissementRepository.regenererPointageToken(etab.id);
     const tokenSansModule = etablissementRepository.getById(etab.id).pointageToken;
     await pointageRepository.enregistrer(employee.id, etab.id, tokenSansModule);
     state.planningVue = 'equipe';
@@ -175,7 +175,9 @@ async function run() {
     DB._currentEmployeeId = rh.id;
     const etab = etablissementRepository.getAll()[0];
 
-    openPointageQrModal(etab.id);
+    // §retour Betty du 13/09/2026 : openPointageQrModal est désormais async (attend la
+    // régénération/synchronisation avant d'afficher la modale, voir son commentaire, app.js).
+    await openPointageQrModal(etab.id);
     const modalHtml = sandbox.document.getElementById('modal-root').innerHTML;
     assert.ok(modalHtml.includes('btn-partager-pointage-qr'), 'la modale doit avoir un bouton "Partager"');
     assert.ok(modalHtml.includes('btn-imprimer-pointage-qr'), 'la modale doit avoir un bouton "Imprimer"');

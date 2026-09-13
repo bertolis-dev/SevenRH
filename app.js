@@ -15072,10 +15072,13 @@ function renderEtablissementCard(etab) {
  * "nexusrh-pointage:<etablissementId>:<pointageToken>" (voir openPointageScanModal, qui reconnaît ce
  * préfixe) — à imprimer/afficher à l'accueil de CET établissement. "Régénérer" invalide
  * immédiatement l'ancien tirage (perdu, photographié/partagé...), voir DB.regenererPointageToken. */
-function openPointageQrModal(etablissementId) {
+async function openPointageQrModal(etablissementId) {
   const etab = etablissementRepository.getById(etablissementId);
   if (!etab) return;
-  if (!etab.pointageToken) etablissementRepository.regenererPointageToken(etablissementId);
+  // §retour Betty du 13/09/2026 : regenererPointageToken est désormais async (attend une
+  // synchronisation serveur immédiate, voir son commentaire) — attendu ici pour que le QR affiché
+  // juste après soit garanti immédiatement scannable, pas seulement "correct en local".
+  if (!etab.pointageToken) await etablissementRepository.regenererPointageToken(etablissementId);
   renderPointageQrModalContent(etablissementId);
 }
 
@@ -15122,8 +15125,10 @@ function renderPointageQrModalContent(etablissementId) {
       message: "L'ancien QR (déjà imprimé/affiché) ne fonctionnera plus dès qu'un nouveau sera généré.",
       confirmLabel: 'Régénérer',
       danger: true,
-      onConfirm: () => {
-        etablissementRepository.regenererPointageToken(etablissementId);
+      onConfirm: async () => {
+        // §retour Betty du 13/09/2026 : attendu avant de réafficher le QR, même raison que dans
+        // openPointageQrModal ci-dessus.
+        await etablissementRepository.regenererPointageToken(etablissementId);
         showToast('QR régénéré.');
         renderPointageQrModalContent(etablissementId);
       }

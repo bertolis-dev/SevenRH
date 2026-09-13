@@ -2047,10 +2047,26 @@ const DB = {
   /** Génère (ou régénère) le jeton du QR de pointage d'un établissement — affiché à l'accueil, ce QR
    * est FIXE (voir le commentaire en tête de section) : régénérer invalide immédiatement tous les
    * tirages précédents (perdu, photographié/partagé, changement d'établissement...), sans jamais
-   * toucher au reste de la fiche établissement. */
-  regenererPointageToken(etablissementId) {
+   * toucher au reste de la fiche établissement.
+   *
+   * §retour Betty du 13/09/2026 ("ça marche toujours pas", même appareil/compte pour générer et
+   * scanner) : updateEtablissement synchronise déjà en arrière-plan (voir saveEtablissements,
+   * jamais attendu — voulu pour la plupart des écritures), mais depuis qu'enregistrerPointage
+   * vérifie le jeton EN DIRECT côté serveur (correctif précédent du même jour), scanner un QR
+   * généré à l'instant pouvait arriver AVANT que ce jeton n'ait fini de se synchroniser, et être
+   * rejeté à tort — la course inverse de celle déjà corrigée : plus le cache local qui est périmé,
+   * mais le SERVEUR qui n'a pas encore reçu l'écriture. Devenue async pour attendre EN PLUS une
+   * synchronisation immédiate ici (l'écriture en arrière-plan continue normalement si celle-ci
+   * échoue, seul un réseau vraiment indisponible retarderait la disponibilité du QR). */
+  async regenererPointageToken(etablissementId) {
     const token = generateId('pqr');
     this.updateEtablissement(etablissementId, { pointageToken: token });
+    try {
+      const company = this.getCurrentCompany();
+      await window.SupabaseSync.pushEtablissements(this.getEtablissements(), company.id);
+    } catch (err) {
+      console.error('Synchronisation immédiate du jeton de pointage impossible, le QR pourrait être rejeté quelques instants (la synchronisation en arrière-plan réessaiera).', err);
+    }
     return token;
   },
 

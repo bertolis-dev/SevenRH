@@ -28,7 +28,7 @@ async function run() {
     const etab = etablissementRepository.getAll()[0];
 
     // Cache local de CET appareil : encore sur l'ANCIEN jeton (jamais rafraîchi depuis).
-    const ancienJetonLocal = etablissementRepository.regenererPointageToken(etab.id);
+    const ancienJetonLocal = await etablissementRepository.regenererPointageToken(etab.id);
     // Le serveur, lui, a déjà un jeton plus récent (régénéré depuis un autre appareil/session) —
     // jamais reflété dans le cache de CET appareil tant qu'il ne se reconnecte pas.
     const nouveauJetonServeur = 'pqr_plus_recent_cote_serveur';
@@ -52,7 +52,7 @@ async function run() {
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const etab = etablissementRepository.getAll()[0];
-    const token = etablissementRepository.regenererPointageToken(etab.id);
+    const token = await etablissementRepository.regenererPointageToken(etab.id);
 
     sandbox.window.SupabaseSync = new Proxy({
       getEtablissementPointageToken: async () => { throw new Error('réseau indisponible'); },
