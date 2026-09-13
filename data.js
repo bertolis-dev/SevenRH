@@ -2060,10 +2060,27 @@ const DB = {
    * supplémentaire : plusieurs pointages fermés le même jour s'additionnent simplement au calcul des
    * heures travaillées. `token` doit correspondre au pointageToken de l'établissement scanné — le QR
    * étant fixe et affiché publiquement, c'est la SEULE vérification qui empêche un QR d'une autre
-   * entreprise (ou inventé) de créer un pointage ; voir regenererPointageToken pour l'invalider. */
-  enregistrerPointage(employeeId, etablissementId, token) {
+   * entreprise (ou inventé) de créer un pointage ; voir regenererPointageToken pour l'invalider.
+   *
+   * §retour Betty du 13/09/2026 ("le QR ne marche pas, ça met invalide/expiré") : vérifiait jusqu'ici
+   * le jeton contre le SEUL cache local de l'appareil qui scanne, hydraté uniquement à la connexion
+   * — un salarié dont la session reste ouverte longtemps (le cas normal d'un téléphone-pointeuse) ne
+   * revoit jamais un jeton régénéré (ou apparu pour la première fois, comme au lancement de cette
+   * fonctionnalité) tant qu'il ne se reconnecte pas, d'où un QR pourtant valide rejeté. Vérifie
+   * maintenant contre la valeur RÉELLE côté serveur (getEtablissementPointageToken) — devenue async
+   * pour ça. Si le réseau est indisponible, repli sur le cache local (mieux qu'un pointage bloqué
+   * pour une coupure réseau passagère) plutôt qu'un échec dur. */
+  async enregistrerPointage(employeeId, etablissementId, token) {
     const etablissement = this.getEtablissementById(etablissementId);
-    if (!etablissement || !etablissement.pointageToken || etablissement.pointageToken !== token) {
+    if (!etablissement) return { success: false, error: 'QR code invalide ou expiré.' };
+    let tokenActuel;
+    try {
+      tokenActuel = await window.SupabaseSync.getEtablissementPointageToken(etablissementId);
+    } catch (err) {
+      console.error('Vérification en ligne du jeton de pointage impossible, repli sur le cache local.', err);
+    }
+    if (tokenActuel == null) tokenActuel = etablissement.pointageToken;
+    if (!tokenActuel || tokenActuel !== token) {
       return { success: false, error: 'QR code invalide ou expiré.' };
     }
     const employee = this.getEmployeeById(employeeId);

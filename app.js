@@ -18631,12 +18631,15 @@ function openPointageScanModal() {
   document.getElementById('btn-close-modal').addEventListener('click', finishClose);
   document.getElementById('btn-cancel-modal').addEventListener('click', finishClose);
 
-  const handleDecodedText = (text) => {
+  const handleDecodedText = async (text) => {
     const match = /^nexusrh-pointage:([^:]+):(.+)$/.exec(text.trim());
     if (!match) return; // pas notre format (ex. un QR affiché par erreur) : on continue de scanner
     stop();
+    statusEl.textContent = 'Vérification...';
     const [, etablissementId, token] = match;
-    const result = pointageRepository.enregistrer(user.id, etablissementId, token);
+    // §retour Betty du 13/09/2026 : enregistrer() vérifie désormais le jeton en ligne (voir son
+    // commentaire, data.js) — devenu async pour ça, jamais instantané comme avant.
+    const result = await pointageRepository.enregistrer(user.id, etablissementId, token);
     if (!result.success) {
       showToast(result.error, 'error');
       closeModal();

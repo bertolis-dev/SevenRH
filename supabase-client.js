@@ -662,6 +662,21 @@ async function fetchCurrentEmployeeRow() {
   return data;
 }
 
+/** §retour Betty du 13/09/2026 ("le QR de la pointeuse ne marche pas, ça met invalide/expiré") :
+ * DB.enregistrerPointage (data.js) comparait le jeton scanné au SEUL cache local de l'appareil qui
+ * scanne — hydraté uniquement à la connexion (voir hydrateCurrentCompany). Un salarié dont la
+ * session reste ouverte des jours/semaines (le cas normal d'un téléphone qui sert de pointeuse) ne
+ * revoit jamais un jeton régénéré (ou apparu pour la première fois, ce qui est arrivé à TOUT le
+ * monde le jour où cette fonctionnalité a été ajoutée) tant qu'il ne se reconnecte pas — d'où
+ * "invalide ou expiré" sur un QR pourtant valide. Lecture directe et à jour depuis Supabase au
+ * moment du scan plutôt que de faire confiance à un cache qui peut être arbitrairement ancien —
+ * RLS (etablissements_select, 0002_rls_policies.sql) restreint déjà à l'entreprise de l'appelant. */
+async function getEtablissementPointageToken(etablissementId) {
+  const { data, error } = await supabase.from('etablissements').select('data').eq('id', etablissementId).maybeSingle();
+  if (error || !data) return null;
+  return (data.data && data.data.pointageToken) || null;
+}
+
 // ---------------------------------------------------------------------------
 // Hydratation complète de l'entreprise courante — reconstruit la forme de makeEmptyCompany()
 // ---------------------------------------------------------------------------
@@ -1414,7 +1429,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getEtablissementPointageToken,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };

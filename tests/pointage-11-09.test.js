@@ -40,7 +40,10 @@ async function run() {
   // ---- Jeton du QR : validation + régénération invalide l'ancien ----
   {
     const { DB, sandbox, etablissementRepository, pointageRepository } = loadAppJs();
-    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    // §retour Betty du 13/09/2026 : enregistrerPointage vérifie désormais le jeton en ligne
+    // (getEtablissementPointageToken) — null ici simule un réseau indisponible, pour retomber sur
+    // le cache local et garder exactement le même comportement que ces tests vérifiaient déjà.
+    sandbox.window.SupabaseSync = new Proxy({ getEtablissementPointageToken: async () => null }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
@@ -51,41 +54,44 @@ async function run() {
     assert.ok(token1);
     assert.strictEqual(etablissementRepository.getById(etab.id).pointageToken, token1);
 
-    const echecMauvaisJeton = pointageRepository.enregistrer(rh.id, etab.id, 'jeton-invente');
+    const echecMauvaisJeton = await pointageRepository.enregistrer(rh.id, etab.id, 'jeton-invente');
     assert.strictEqual(echecMauvaisJeton.success, false, 'un jeton qui ne correspond pas doit être refusé');
 
-    const arrivee = pointageRepository.enregistrer(rh.id, etab.id, token1);
+    const arrivee = await pointageRepository.enregistrer(rh.id, etab.id, token1);
     assert.strictEqual(arrivee.success, true);
     assert.strictEqual(arrivee.type, 'arrivee');
 
     // Régénérer le QR invalide l'ANCIEN jeton, même pour un pointage déjà ouvert avec lui.
     const token2 = etablissementRepository.regenererPointageToken(etab.id);
     assert.notStrictEqual(token1, token2);
-    const echecAncienJeton = pointageRepository.enregistrer(rh.id, etab.id, token1);
+    const echecAncienJeton = await pointageRepository.enregistrer(rh.id, etab.id, token1);
     assert.strictEqual(echecAncienJeton.success, false, 'l\'ancien jeton doit être rejeté après régénération');
   }
 
   // ---- Enchaînement arrivée/départ, y compris une pause déjeuner (sortie puis retour) ----
   {
     const { DB, sandbox, etablissementRepository, pointageRepository } = loadAppJs();
-    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    // §retour Betty du 13/09/2026 : enregistrerPointage vérifie désormais le jeton en ligne
+    // (getEtablissementPointageToken) — null ici simule un réseau indisponible, pour retomber sur
+    // le cache local et garder exactement le même comportement que ces tests vérifiaient déjà.
+    sandbox.window.SupabaseSync = new Proxy({ getEtablissementPointageToken: async () => null }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const etab = etablissementRepository.getAll()[0];
     const token = etablissementRepository.regenererPointageToken(etab.id);
 
-    const r1 = pointageRepository.enregistrer(rh.id, etab.id, token);
+    const r1 = await pointageRepository.enregistrer(rh.id, etab.id, token);
     assert.strictEqual(r1.type, 'arrivee');
-    const r2 = pointageRepository.enregistrer(rh.id, etab.id, token);
+    const r2 = await pointageRepository.enregistrer(rh.id, etab.id, token);
     assert.strictEqual(r2.type, 'depart', 'le deuxième scan de la journée doit fermer le pointage ouvert (départ)');
     assert.ok(typeof r2.dureeMinutes === 'number');
 
     // Pause déjeuner : un troisième scan le même jour rouvre un NOUVEAU pointage (arrivée), pas une
     // erreur — le précédent est déjà fermé.
-    const r3 = pointageRepository.enregistrer(rh.id, etab.id, token);
+    const r3 = await pointageRepository.enregistrer(rh.id, etab.id, token);
     assert.strictEqual(r3.type, 'arrivee', 'un scan après un départ déjà enregistré doit ouvrir un nouveau pointage (retour de pause)');
-    const r4 = pointageRepository.enregistrer(rh.id, etab.id, token);
+    const r4 = await pointageRepository.enregistrer(rh.id, etab.id, token);
     assert.strictEqual(r4.type, 'depart');
 
     const today = new Date().toISOString().slice(0, 10);
@@ -97,7 +103,10 @@ async function run() {
   // ---- renderPlanningPostes : confirmation "Pointé HH:MM" pour AUJOURD'HUI seulement ----
   {
     const { DB, sandbox, etablissementRepository, pointageRepository, renderPlanningPostes, state } = loadAppJs();
-    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    // §retour Betty du 13/09/2026 : enregistrerPointage vérifie désormais le jeton en ligne
+    // (getEtablissementPointageToken) — null ici simule un réseau indisponible, pour retomber sur
+    // le cache local et garder exactement le même comportement que ces tests vérifiaient déjà.
+    sandbox.window.SupabaseSync = new Proxy({ getEtablissementPointageToken: async () => null }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
@@ -113,7 +122,7 @@ async function run() {
     DB.saveCurrentCompany(company);
     etablissementRepository.regenererPointageToken(etab.id);
     const tokenSansModule = etablissementRepository.getById(etab.id).pointageToken;
-    pointageRepository.enregistrer(employee.id, etab.id, tokenSansModule);
+    await pointageRepository.enregistrer(employee.id, etab.id, tokenSansModule);
     state.planningVue = 'equipe';
     const htmlSansModule = renderPlanningPostes();
     assert.ok(!htmlSansModule.includes('poste-shift-pointage'), 'sans le module "pointage" souscrit, aucune confirmation ne doit apparaître');
@@ -131,7 +140,10 @@ async function run() {
   // (RH/Propriétaire uniquement) — un manager n'a pas du tout accès à Paramètres.
   {
     const { DB, sandbox, renderPointeuse } = loadAppJs();
-    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    // §retour Betty du 13/09/2026 : enregistrerPointage vérifie désormais le jeton en ligne
+    // (getEtablissementPointageToken) — null ici simule un réseau indisponible, pour retomber sur
+    // le cache local et garder exactement le même comportement que ces tests vérifiaient déjà.
+    sandbox.window.SupabaseSync = new Proxy({ getEtablissementPointageToken: async () => null }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
     DB.init();
 
     const manager = DB.getEmployees().find(e => e.role === 'manager');
@@ -154,7 +166,10 @@ async function run() {
   // §retour Betty du 11/09/2026 ("un bouton pour partager et imprimer le qr code").
   {
     const { DB, sandbox, etablissementRepository, openPointageQrModal } = loadAppJs();
-    sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+    // §retour Betty du 13/09/2026 : enregistrerPointage vérifie désormais le jeton en ligne
+    // (getEtablissementPointageToken) — null ici simule un réseau indisponible, pour retomber sur
+    // le cache local et garder exactement le même comportement que ces tests vérifiaient déjà.
+    sandbox.window.SupabaseSync = new Proxy({ getEtablissementPointageToken: async () => null }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
