@@ -1791,6 +1791,14 @@ textarea.input { resize: vertical; font-family: inherit; }
   gap: 2px;
   text-align: left;
   cursor: pointer;
+  /* §retour Betty du 13/09/2026 : cette carte n'a jamais eu de vrai glisser-déposer (un clic ouvre
+     juste la modale de modification, voir bindPlanningPostesEvents) — sans ce garde-fou, un clic
+     avec un léger mouvement de souris sélectionne le texte de la carte, et le navigateur en profite
+     pour lancer SON PROPRE glisser natif de cette sélection : une carte fantôme semi-transparente
+     qui suit le curseur et se superpose à la carte d'origine. Même correctif que .photo-crop-stage
+     img plus bas dans ce fichier, pour la même raison. */
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .poste-shift-time { font-weight: 700; font-size: 12.5px; color: var(--color-text); }
 .poste-shift-position { font-size: 11px; color: var(--color-text-muted); }
