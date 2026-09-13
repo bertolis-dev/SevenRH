@@ -18646,8 +18646,17 @@ function openPointageScanModal() {
     // commentaire, data.js) — devenu async pour ça, jamais instantané comme avant.
     const result = await pointageRepository.enregistrer(user.id, etablissementId, token);
     if (!result.success) {
-      showToast(result.error, 'error');
-      closeModal();
+      // §retour Betty du 13/09/2026 : un toast s'efface après ~3s, trop court pour lire/capturer un
+      // message de diagnostic (voir enregistrerPointage, data.js) — remplacé temporairement par une
+      // modale qui reste ouverte le temps nécessaire, jamais un simple toast fugace pour ce cas précis.
+      modalRoot.innerHTML = `
+        <div class="modal modal-small">
+          <div class="modal-header"><h2>Pointage refusé</h2></div>
+          <div class="modal-body"><p style="word-break: break-word;">${escapeHtml(result.error)}</p></div>
+          <div class="modal-footer"><button type="button" class="btn btn-primary" id="btn-close-modal-footer">Fermer</button></div>
+        </div>
+      `;
+      document.getElementById('btn-close-modal-footer').addEventListener('click', closeModal);
       return;
     }
     if (result.type === 'arrivee') {

@@ -2089,17 +2089,30 @@ const DB = {
    * pour ça. Si le réseau est indisponible, repli sur le cache local (mieux qu'un pointage bloqué
    * pour une coupure réseau passagère) plutôt qu'un échec dur. */
   async enregistrerPointage(employeeId, etablissementId, token) {
+    // §retour Betty du 13/09/2026 ("ça marche pas", sans plus de détail, console difficile d'accès
+    // sur le téléphone utilisé) : message d'erreur temporairement enrichi d'un diagnostic complet
+    // (chaque étape de la vérification), pour identifier la cause exacte depuis une simple capture
+    // d'écran plutôt que de continuer à deviner. À ramener à un message simple une fois la cause
+    // confirmée et corrigée.
+    const abrege = (v) => v ? `${String(v).slice(0, 10)}…` : '(aucun)';
     const etablissement = this.getEtablissementById(etablissementId);
-    if (!etablissement) return { success: false, error: 'QR code invalide ou expiré.' };
-    let tokenActuel;
+    if (!etablissement) {
+      return { success: false, error: `QR code invalide ou expiré. [diag: établissement "${etablissementId}" introuvable dans le cache local]` };
+    }
+    let tokenActuel = null;
+    let diagVerif = 'serveur';
     try {
       tokenActuel = await window.SupabaseSync.getEtablissementPointageToken(etablissementId);
+      if (tokenActuel == null) diagVerif = 'serveur (réponse vide)';
     } catch (err) {
-      console.error('Vérification en ligne du jeton de pointage impossible, repli sur le cache local.', err);
+      diagVerif = `échec réseau (${err && err.message})`;
     }
     if (tokenActuel == null) tokenActuel = etablissement.pointageToken;
     if (!tokenActuel || tokenActuel !== token) {
-      return { success: false, error: 'QR code invalide ou expiré.' };
+      return {
+        success: false,
+        error: `QR code invalide ou expiré. [diag: scanné=${abrege(token)} / attendu (${diagVerif})=${abrege(tokenActuel)} / établissement=${etablissement.nom}]`
+      };
     }
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
