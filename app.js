@@ -17607,11 +17607,14 @@ function renderPlanningPostes() {
     const shift = shiftsFor(employee.id, weekday);
     const pointageBadge = pointageBadgeFor(employee.id, weekday, dateStr);
     if (shift && !f.masquerQuartsConfirmes) {
+      // §retour Betty du 13/09/2026 : la pause n'apparaît plus sur la carte (allégée à horaire +
+      // service) — retiré uniquement de cet affichage, shift.pauseMinutes reste saisi dans la
+      // modale (openShiftModal) et continue de compter dans le calcul des heures travaillées
+      // (computeShiftHeures, data.js), jamais touché ici.
       return `<td class="planning-cell">
         <div class="poste-shift-card" data-edit-shift="${shift.id}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
           <div class="poste-shift-position">${escapeHtml(employee.service || '')}</div>
-          ${shift.pauseMinutes ? `<div class="poste-shift-pause">${icon(ICONS.pause, 9)} ${shift.pauseMinutes}m</div>` : ''}
           ${pointageBadge}
         </div>
       </td>`;

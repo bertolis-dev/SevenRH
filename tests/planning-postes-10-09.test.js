@@ -101,6 +101,12 @@ async function run() {
     assert.ok(html.includes('6,50 h'), 'la durée du quart (9h-16h, 30min de pause) doit être calculée à 6,5h');
     assert.ok(html.includes('data-add-shift'), 'une case vide doit proposer un "+" quand "Afficher les quarts à combler" est actif');
 
+    // §retour Betty du 13/09/2026 : la pause n'apparaît plus sur la carte (allégée à horaire +
+    // service) — reste saisie dans la modale et continue de compter dans le calcul ci-dessus
+    // (6,50 h le prouve), seul l'affichage sur la carte change.
+    assert.ok(!html.includes('poste-shift-pause'), 'la pause ne doit plus être affichée sur la carte du quart');
+    assert.ok(!html.includes('30m'), 'la durée de la pause ne doit plus apparaître nulle part sur la carte');
+
     // §retour Betty du 10/09/2026 ("il faut que ce soit le service à cet endroit") : le bandeau de
     // regroupement (voir renderPlanningPostes) affiche le SERVICE du salarié, jamais une "position".
     assert.ok(html.includes('>Comptabilité <span class="text-muted">(1)'), 'le bandeau de groupe doit afficher le service (Comptabilité), pas une position');
