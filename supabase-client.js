@@ -677,6 +677,20 @@ async function getEtablissementPointageToken(etablissementId) {
   return (data.data && data.data.pointageToken) || null;
 }
 
+/** §retour Betty du 13/09/2026 — cause RÉELLE du QR de pointage toujours rejeté, trouvée après deux
+ * correctifs infructueux sur le timing : etablissements_write (0002_rls_policies.sql) exige la
+ * permission gererParametres pour TOUTE écriture sur etablissements, mais le bouton "QR de
+ * pointage" (app.js, écran Pointeuse) est explicitement montré aux MANAGERS — qui n'ont PAS cette
+ * permission par défaut. La régénération s'écrivait donc bien en local, mais jamais côté serveur
+ * (rejetée en silence par RLS), et la vérification en direct ajoutée le même jour la rejetait alors
+ * pour de bon, indéfiniment. Passe par regenerate_pointage_token (0050), une fonction security
+ * definer qui ne touche QUE ce champ, avec sa propre vérification de rôle (manager/rh/proprietaire
+ * — le même critère que l'affichage du bouton, jamais plus large que ça). */
+async function regeneratePointageTokenRemote(etablissementId, token) {
+  const { error } = await supabase.rpc('regenerate_pointage_token', { p_etablissement_id: etablissementId, p_token: token });
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Hydratation complète de l'entreprise courante — reconstruit la forme de makeEmptyCompany()
 // ---------------------------------------------------------------------------
@@ -1429,7 +1443,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getEtablissementPointageToken,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getEtablissementPointageToken, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };

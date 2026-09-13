@@ -2049,23 +2049,25 @@ const DB = {
    * tirages précédents (perdu, photographié/partagé, changement d'établissement...), sans jamais
    * toucher au reste de la fiche établissement.
    *
-   * §retour Betty du 13/09/2026 ("ça marche toujours pas", même appareil/compte pour générer et
-   * scanner) : updateEtablissement synchronise déjà en arrière-plan (voir saveEtablissements,
-   * jamais attendu — voulu pour la plupart des écritures), mais depuis qu'enregistrerPointage
-   * vérifie le jeton EN DIRECT côté serveur (correctif précédent du même jour), scanner un QR
-   * généré à l'instant pouvait arriver AVANT que ce jeton n'ait fini de se synchroniser, et être
-   * rejeté à tort — la course inverse de celle déjà corrigée : plus le cache local qui est périmé,
-   * mais le SERVEUR qui n'a pas encore reçu l'écriture. Devenue async pour attendre EN PLUS une
-   * synchronisation immédiate ici (l'écriture en arrière-plan continue normalement si celle-ci
-   * échoue, seul un réseau vraiment indisponible retarderait la disponibilité du QR). */
+   * §retour Betty du 13/09/2026 — cause RÉELLE trouvée après deux correctifs infructueux sur le
+   * timing (cache client périmé, puis course d'écriture) : etablissements_write
+   * (0002_rls_policies.sql) exige gererParametres pour TOUTE écriture sur etablissements, mais le
+   * bouton "QR de pointage" est explicitement montré aux MANAGERS (écran Pointeuse), qui n'ont PAS
+   * cette permission par défaut. updateEtablissement (écriture locale + synchronisation générique
+   * en arrière-plan) reste utilisé pour la mise à jour locale immédiate et le journal d'audit, mais
+   * sa synchronisation vers Supabase échouait SILENCIEUSEMENT pour un manager (rejetée par RLS) : le
+   * jeton n'atteignait jamais le serveur, quel que soit le nombre de tentatives. Passe désormais par
+   * regenerate_pointage_token (0050), une fonction dédiée qui ne touche QUE ce champ, avec sa
+   * propre vérification de rôle (manager/rh/proprietaire, le même critère que l'affichage du
+   * bouton) — attendue ici pour que le QR affiché juste après soit immédiatement scannable. */
   async regenererPointageToken(etablissementId) {
     const token = generateId('pqr');
     this.updateEtablissement(etablissementId, { pointageToken: token });
     try {
-      const company = this.getCurrentCompany();
-      await window.SupabaseSync.pushEtablissements(this.getEtablissements(), company.id);
+      await window.SupabaseSync.regeneratePointageTokenRemote(etablissementId, token);
     } catch (err) {
-      console.error('Synchronisation immédiate du jeton de pointage impossible, le QR pourrait être rejeté quelques instants (la synchronisation en arrière-plan réessaiera).', err);
+      console.error('Synchronisation du jeton de pointage vers le serveur impossible, le QR sera rejeté au scan tant que ça persiste.', err);
+      if (this.onSaveError) this.onSaveError('Le QR a été généré localement mais n\'a pas pu être synchronisé avec le serveur : il sera rejeté au scan. Réessayez, ou contactez votre RH si ça persiste.');
     }
     return token;
   },
