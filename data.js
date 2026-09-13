@@ -2095,9 +2095,13 @@ const DB = {
     // d'écran plutôt que de continuer à deviner. À ramener à un message simple une fois la cause
     // confirmée et corrigée.
     const abrege = (v) => v ? `${String(v).slice(0, 10)}…` : '(aucun)';
+    // §retour Betty du 13/09/2026 : version embarquée directement dans le message pour lever tout
+    // doute sur un éventuel cache (CDN/navigateur) qui servirait encore un ancien app.js malgré un
+    // rechargement/onglet privé — getAppVersion() lit le "?v=..." réellement chargé par CE navigateur.
+    const versionDiag = (typeof getAppVersion === 'function') ? getAppVersion() : '(getAppVersion introuvable)';
     const etablissement = this.getEtablissementById(etablissementId);
     if (!etablissement) {
-      return { success: false, error: `QR code invalide ou expiré. [diag: établissement "${etablissementId}" introuvable dans le cache local]` };
+      return { success: false, error: `QR code invalide ou expiré. [diag v=${versionDiag} : établissement "${etablissementId}" introuvable dans le cache local]` };
     }
     let tokenActuel = null;
     let diagVerif = 'serveur';
@@ -2111,7 +2115,7 @@ const DB = {
     if (!tokenActuel || tokenActuel !== token) {
       return {
         success: false,
-        error: `QR code invalide ou expiré. [diag: scanné=${abrege(token)} / attendu (${diagVerif})=${abrege(tokenActuel)} / établissement=${etablissement.nom}]`
+        error: `QR code invalide ou expiré. [diag v=${versionDiag} : scanné=${abrege(token)} / attendu (${diagVerif})=${abrege(tokenActuel)} / établissement=${etablissement.nom}]`
       };
     }
     const employee = this.getEmployeeById(employeeId);
