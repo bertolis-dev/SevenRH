@@ -867,6 +867,67 @@ function makeEmptyShift() {
   return { id: null, employeeId: null, weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
 }
 
+/** §retour Betty du 14/09/2026 (Module RH point 1, "modèles de documents avec fusion automatique") :
+ * `corps` est un texte libre (pas de mise en forme riche en v1, volontairement — voir la même
+ * décision pour l'attestation de salaire) contenant des espaces réservés "{{champ}}", remplis à la
+ * génération (voir fusionnerModeleDocument) avec les données réelles du salarié/de l'entreprise.
+ * Jamais de calcul ni de logique dans le modèle lui-même : un simple remplacement texte. */
+function makeEmptyDocumentTemplate() {
+  return { id: null, nom: '', corps: '', dateCreation: null, dateModification: null };
+}
+
+/** Liste des champs de fusion disponibles, dans l'ordre où on veut les proposer à la saisie — sert à
+ * la fois de référence affichée au RH (voir renderModeleDocumentEditor, app.js) et de source de
+ * vérité pour fusionnerModeleDocument ci-dessous : ajouter un champ ne se fait qu'à CET endroit. */
+const CHAMPS_FUSION_MODELE = [
+  { champ: 'civilite', label: 'Civilité' }, { champ: 'prenom', label: 'Prénom' }, { champ: 'nom', label: 'Nom' },
+  { champ: 'matricule', label: 'Matricule' }, { champ: 'poste', label: 'Poste' }, { champ: 'service', label: 'Service' },
+  { champ: 'typeContrat', label: 'Type de contrat' }, { champ: 'dateEmbauche', label: 'Date d\'embauche' },
+  { champ: 'dateNaissance', label: 'Date de naissance' }, { champ: 'lieuNaissance', label: 'Lieu de naissance' },
+  { champ: 'nationalite', label: 'Nationalité' }, { champ: 'numeroSecu', label: 'N° de sécurité sociale' },
+  { champ: 'adresseComplete', label: 'Adresse complète' }, { champ: 'email', label: 'Email' }, { champ: 'telephone', label: 'Téléphone' },
+  { champ: 'salaireBrutMensuel', label: 'Salaire brut mensuel' }, { champ: 'conventionCollective', label: 'Convention collective' },
+  { champ: 'raisonSociale', label: "Raison sociale de l'entreprise" }, { champ: 'siret', label: 'SIRET' },
+  { champ: 'adresseEntreprise', label: "Adresse de l'entreprise" }, { champ: 'dateAujourdhui', label: "Date d'aujourd'hui" }
+];
+
+/** Construit le dictionnaire champ→valeur pour UN salarié donné (jamais de calcul métier ici, que du
+ * formatage d'affichage — formatDate/formatCurrencyFR/personNameHtml vivent côté app.js, donc les
+ * dates/montants restent en valeur brute ou pré-formatée simple ici, reformatées si besoin à
+ * l'affichage). salaireBrutMensuel vide volontairement si le suivi de la masse salariale est
+ * désactivé (settings.masseSalarialeActivee) — même garde que l'attestation de salaire. */
+function construireValeursFusionModele(employee, company) {
+  const adresse = employee.adresse || {};
+  const profile = company || {};
+  const settings = (company && company.settings) || {};
+  return {
+    civilite: employee.civilite || '', prenom: employee.prenom || '', nom: employee.nom || '',
+    matricule: employee.matricule || '', poste: employee.poste || '', service: employee.service || '',
+    typeContrat: employee.typeContrat || '', dateEmbauche: employee.dateEmbauche || '',
+    dateNaissance: employee.dateNaissance || '', lieuNaissance: employee.lieuNaissance || '',
+    nationalite: employee.nationalite || '', numeroSecu: employee.numeroSecu || '',
+    adresseComplete: [adresse.rue, adresse.codePostal, adresse.ville].filter(Boolean).join(', '),
+    email: employee.email || '', telephone: employee.telephone || '',
+    salaireBrutMensuel: settings.masseSalarialeActivee ? (employee.salaireBrutMensuel || '') : '',
+    conventionCollective: employee.conventionCollective || '',
+    raisonSociale: profile.raisonSociale || '', siret: profile.siret || '',
+    adresseEntreprise: profile.adresse || '',
+    dateAujourdhui: toISODate(new Date())
+  };
+}
+
+/** Remplacement texte pur "{{champ}}" → valeur — jamais d'échappement HTML ici (voir
+ * renderGenererDocumentModal, app.js, qui applique escapeHtml à chaque valeur AVANT de rappeler
+ * cette fonction, pour ne jamais laisser un champ salarié injecter du HTML dans le document généré).
+ * Un champ inconnu ou vide devient une chaîne vide plutôt que de laisser "{{...}}" brut dans le
+ * document final — jamais un placeholder oublié visible par un salarié. */
+function fusionnerModeleDocument(corps, valeurs) {
+  return (corps || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, champ) => {
+    const valeur = valeurs[champ];
+    return valeur === undefined || valeur === null ? '' : String(valeur);
+  });
+}
+
 /** Durée effective d'un quart en heures décimales : (fin − début) − pause. Toutes les valeurs sont
  * déjà validées HH:MM à la saisie (submitShiftForm, app.js) — pas de garde supplémentaire ici. */
 function computeShiftHeures(shift) {
@@ -2025,6 +2086,48 @@ const DB = {
     const shift = this.getShiftById(id);
     this.saveShifts(this.getShifts().filter(s => s.id !== id));
     if (shift) this.logAudit('Suppression', 'Quart de planning', `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}`);
+  },
+
+  // ---- Modèles de documents (§retour Betty du 14/09/2026, Module RH point 1) ----
+
+  getDocumentTemplates() {
+    return (this.getCurrentCompany().documentTemplates || []).slice();
+  },
+
+  saveDocumentTemplates(list) {
+    const company = this.getCurrentCompany();
+    company.documentTemplates = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getDocumentTemplateById(id) {
+    return this.getDocumentTemplates().find(t => t.id === id) || null;
+  },
+
+  addDocumentTemplate(data) {
+    const list = this.getDocumentTemplates();
+    const template = Object.assign(makeEmptyDocumentTemplate(), data, { id: generateId('modele'), dateCreation: new Date().toISOString() });
+    list.push(template);
+    this.saveDocumentTemplates(list);
+    this.logAudit('Création', 'Modèle de document', template.nom);
+    return template;
+  },
+
+  updateDocumentTemplate(id, patch) {
+    const list = this.getDocumentTemplates();
+    const index = list.findIndex(t => t.id === id);
+    if (index === -1) return null;
+    list[index] = Object.assign({}, list[index], patch, { dateModification: new Date().toISOString() });
+    this.saveDocumentTemplates(list);
+    this.logAudit('Modification', 'Modèle de document', list[index].nom);
+    return list[index];
+  },
+
+  deleteDocumentTemplate(id) {
+    const template = this.getDocumentTemplateById(id);
+    this.saveDocumentTemplates(this.getDocumentTemplates().filter(t => t.id !== id));
+    if (template) this.logAudit('Suppression', 'Modèle de document', template.nom);
   },
 
   // ---- Pointeuse QR (§11/09/2026) ----
@@ -3798,6 +3901,14 @@ const shiftRepository = {
   create: (data) => DB.addShift(data),
   update: (id, patch) => DB.updateShift(id, patch),
   delete: (id) => DB.deleteShift(id)
+};
+
+const documentTemplateRepository = {
+  getAll: () => DB.getDocumentTemplates(),
+  getById: (id) => DB.getDocumentTemplateById(id),
+  create: (data) => DB.addDocumentTemplate(data),
+  update: (id, patch) => DB.updateDocumentTemplate(id, patch),
+  delete: (id) => DB.deleteDocumentTemplate(id)
 };
 
 const expenseRepository = {

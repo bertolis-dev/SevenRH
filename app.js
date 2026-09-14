@@ -9732,6 +9732,8 @@ function renderEmployeeDetail(id) {
 
       ${renderEmployeeDocumentsCard(e)}
 
+      ${renderGenererDocumentCard(e, canEdit)}
+
       ${canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : ''}
 
       ${canEdit ? (e.offboardingChecklist && e.offboardingChecklist.length
@@ -9764,6 +9766,77 @@ function ensureFraisTotalsLoaded(employeeId) {
   window.SupabaseSync.getExpenseTotalsForEmployee(employeeId).then((result) => {
     state.fraisTotalsCache[employeeId] = result;
     if (state.view === 'employeeDetail') render();
+  });
+}
+
+/** §retour Betty du 14/09/2026 (Module RH point 1, "modèles de documents avec fusion automatique") :
+ * un modèle par bouton plutôt qu'une liste déroulante — cohérent avec le reste de la fiche salarié
+ * (boutons "Attestation employeur"/"Certificat de travail" juste au-dessus), et jamais plus de
+ * quelques modèles en pratique. Même portée que ces boutons existants (canEdit, jamais ouvert au
+ * salarié lui-même : ce sont des documents officiels, pas une auto-consultation). */
+function renderGenererDocumentCard(e, canEdit) {
+  if (!canEdit) return '';
+  const templates = documentTemplateRepository.getAll();
+  return `
+    <div class="card">
+      <h2>Documents à générer</h2>
+      ${templates.length
+        ? `<div class="badge-row" style="gap: 10px;">
+            ${templates.map(t => `<button type="button" class="btn btn-secondary btn-sm" data-generer-document="${t.id}">${icon(ICONS.document, 13)} ${escapeHtml(t.nom)}</button>`).join('')}
+          </div>`
+        : `<p class="text-muted">Aucun modèle configuré, créez-en un dans Paramètres &gt; Modèles de documents.</p>`}
+    </div>
+  `;
+}
+
+/** Fusionne le modèle avec les données RÉELLES de ce salarié (fusionnerModeleDocument/
+ * construireValeursFusionModele, data.js) et affiche le résultat dans une .print-area, même patron
+ * que openAttestationSalaireModal : un document généré n'est jamais enregistré tel quel (recalculé à
+ * chaque ouverture), pour ne jamais figer une donnée salarié devenue fausse depuis. escapeHtml
+ * appliqué à CHAQUE valeur avant fusion : un champ salarié (ex. un poste saisi librement) ne doit
+ * jamais pouvoir injecter du HTML dans le document final. */
+function openGenererDocumentModal(templateId, employeeId) {
+  const template = documentTemplateRepository.getById(templateId);
+  const employee = employeeRepository.getById(employeeId);
+  if (!template || !employee) { showToast('Modèle ou salarié introuvable.', 'error'); return; }
+  const company = DB.getCurrentCompany();
+  const valeursBrutes = construireValeursFusionModele(employee, company);
+  const valeursEchappees = {};
+  Object.keys(valeursBrutes).forEach(champ => { valeursEchappees[champ] = escapeHtml(String(valeursBrutes[champ] ?? '')); });
+  // Le corps du modèle est échappé AVANT la fusion (jamais après, ce qui doublerait l'échappement
+  // des valeurs déjà échappées ci-dessus) : "{{", "}}" et les noms de champs (lettres/chiffres/_)
+  // traversent escapeHtml sans y être touchés, donc les espaces réservés restent reconnaissables.
+  const corpsFusionne = fusionnerModeleDocument(escapeHtml(template.corps), valeursEchappees);
+
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>${escapeHtml(template.nom)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="print-area" id="genere-document-print-area" style="white-space: pre-wrap;">${corpsFusionne}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-genere-document">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-genere-document').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Document généré', `${template.nom} · ${employee.prenom} ${employee.nom}`);
+    window.print();
+  });
+}
+
+function bindGenererDocumentEvents(employeeId) {
+  document.querySelectorAll('[data-generer-document]').forEach(btn => {
+    btn.addEventListener('click', () => openGenererDocumentModal(btn.dataset.genererDocument, employeeId));
   });
 }
 
@@ -10823,6 +10896,7 @@ function bindEmployeeDetailEvents() {
   const certificatBtn = document.getElementById('btn-print-certificat-travail');
   if (certificatBtn) certificatBtn.addEventListener('click', () => openCertificatTravailModal(state.currentEmployeeId));
   bindEmployeeDocumentsEvents(state.currentEmployeeId);
+  bindGenererDocumentEvents(state.currentEmployeeId);
   bindPermissionsCardEvents(state.currentEmployeeId);
   bindMenusAutorisesCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
@@ -13958,6 +14032,7 @@ const PARAMETRES_TABS = [
   { key: 'feries', label: 'Jours fériés', isVisible: canManageParametres, render: renderParametresFeries, bind: bindParametresFeriesEvents },
   { key: 'fermetures', label: 'Fermetures', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
   { key: 'integrations', label: 'Intégrations', isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
+  { key: 'modeles-documents', label: 'Modèles de documents', isVisible: canManageParametres, render: renderParametresModelesDocuments, bind: bindParametresModelesDocumentsEvents },
   { key: 'audit', label: 'Audit', isVisible: canManageParametres, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
   // Seul onglet accessible à TOUT rôle (voir le commentaire au-dessus) — photo de profil visible
   // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé.
@@ -16150,6 +16225,131 @@ function submitSchoolPeriodForm(evt, index) {
 }
 
 // ---- Sous-vue : Jours fériés (calculés automatiquement, lecture seule) ----
+
+/** §retour Betty du 14/09/2026 (Module RH point 1, "modèles de documents avec fusion automatique") :
+ * modèles paramétrables par l'entreprise (contrat, avenant, attestation, courrier...), remplis
+ * automatiquement avec les données du salarié à la génération (voir renderGenererDocumentCard,
+ * openGenererDocumentModal, sur la fiche salarié). Corps en texte libre volontairement (pas d'éditeur
+ * riche en v1, même choix que l'attestation de salaire) : un espace réservé "{{champ}}" par donnée
+ * à insérer, liste de référence affichée à côté du champ de saisie. */
+function renderParametresModelesDocuments() {
+  const templates = documentTemplateRepository.getAll().slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  return `
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Modèles de documents</h2>
+          <p class="text-muted">Contrat, avenant, attestation, courrier... Un modèle par type de document, rempli automatiquement avec les données du salarié au moment de la génération (depuis sa fiche).</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-modele-document">+ Nouveau modèle</button>
+      </div>
+      ${templates.length ? `
+        <table class="table">
+          <thead><tr><th>Nom</th><th>Dernière modification</th><th></th></tr></thead>
+          <tbody>
+            ${templates.map(t => `
+              <tr>
+                <td>${escapeHtml(t.nom)}</td>
+                <td>${t.dateModification ? formatDate(t.dateModification.slice(0, 10)) : (t.dateCreation ? formatDate(t.dateCreation.slice(0, 10)) : '—')}</td>
+                <td>
+                  <button type="button" class="btn-link" data-edit-modele-document="${t.id}">Modifier</button>
+                  <button type="button" class="btn-link btn-link-danger" data-delete-modele-document="${t.id}" data-delete-modele-document-nom="${escapeHtml(t.nom)}">Supprimer</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `<p class="text-muted" style="padding: 0 20px 20px;">Aucun modèle pour l'instant.</p>`}
+    </div>
+  `;
+}
+
+function bindParametresModelesDocumentsEvents() {
+  document.getElementById('btn-add-modele-document').addEventListener('click', () => openModeleDocumentModal(null));
+  document.querySelectorAll('[data-edit-modele-document]').forEach(btn => {
+    btn.addEventListener('click', () => openModeleDocumentModal(documentTemplateRepository.getById(btn.dataset.editModeleDocument)));
+  });
+  document.querySelectorAll('[data-delete-modele-document]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Supprimer ce modèle ?',
+        message: `"${btn.dataset.deleteModeleDocumentNom}" sera définitivement supprimé. Les documents déjà générés n'en sont pas affectés.`,
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          documentTemplateRepository.delete(btn.dataset.deleteModeleDocument);
+          showToast('Modèle supprimé.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+function openModeleDocumentModal(template) {
+  const isEdit = Boolean(template);
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier le modèle' : 'Nouveau modèle de document'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <form id="modele-document-form">
+          <div class="form-group">
+            <label for="f-nom">Nom du modèle</label>
+            <input type="text" class="input" id="f-nom" value="${escapeHtml(template ? template.nom : '')}" required placeholder="Ex. Attestation de travail">
+          </div>
+          <div class="form-group">
+            <label for="f-corps">Corps du document</label>
+            <textarea class="input" id="f-corps" rows="12" placeholder="Ex. Nous attestons que {{prenom}} {{nom}}, matricule {{matricule}}, est employé(e) au poste de {{poste}} depuis le {{dateEmbauche}}.">${escapeHtml(template ? template.corps : '')}</textarea>
+            <p class="form-hint">Insérez un champ en cliquant sur son nom ci-dessous : il sera remplacé par la vraie valeur du salarié à la génération.</p>
+          </div>
+        </form>
+        <div class="badge-row" style="gap: 6px; margin-top: 4px;">
+          ${CHAMPS_FUSION_MODELE.map(c => `<button type="button" class="btn btn-secondary btn-sm" data-insert-champ="{{${c.champ}}}" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="submit" form="modele-document-form" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  const corpsField = document.getElementById('f-corps');
+  document.querySelectorAll('[data-insert-champ]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const insertion = btn.dataset.insertChamp;
+      const debut = corpsField.selectionStart ?? corpsField.value.length;
+      const fin = corpsField.selectionEnd ?? corpsField.value.length;
+      corpsField.value = corpsField.value.slice(0, debut) + insertion + corpsField.value.slice(fin);
+      corpsField.focus();
+      corpsField.selectionStart = corpsField.selectionEnd = debut + insertion.length;
+    });
+  });
+
+  document.getElementById('modele-document-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-nom').value.trim();
+    const corps = document.getElementById('f-corps').value;
+    if (!nom) { showToast('Le nom du modèle est obligatoire.', 'error'); return; }
+    if (isEdit) {
+      documentTemplateRepository.update(template.id, { nom, corps });
+      showToast('Modèle enregistré.');
+    } else {
+      documentTemplateRepository.create({ nom, corps });
+      showToast('Modèle créé.');
+    }
+    closeModal();
+    render();
+  });
+}
 
 function renderParametresFeries() {
   const year = state.parametresFeriesYear;
