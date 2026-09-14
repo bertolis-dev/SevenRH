@@ -8517,6 +8517,10 @@ const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 const ENTRETIEN_STATUT_LABELS = { a_planifier: 'À faire', auto_evaluation_faite: 'En cours', cloture: 'Clôturé' };
 const ENTRETIEN_STATUT_BADGE_CLASS = { a_planifier: 'warning', auto_evaluation_faite: 'info', cloture: 'success' };
 const ENTRETIEN_TYPE_LABELS = { professionnel: 'Entretien professionnel', bilan: 'Bilan (6 ans)' };
+// §retour Betty du 14/09/2026 (Entretiens points 1 et 2, "trames/campagnes par population") :
+// critère volontairement simple (statutPro contient "cadre", rôle manager) — pas un moteur de
+// segmentation complet, cohérent avec la taille de ce chantier v1.
+const POPULATION_LABELS = { tous: 'Tous les salariés', cadres: 'Cadres', managers: 'Managers' };
 
 /** Reflète is_manager_of() côté RLS (0002_rls_policies.sql) — même relation (employee.managerIds),
  * juste côté client pour décider quoi afficher/activer dans l'UI (la donnée reste protégée par la
@@ -8852,8 +8856,15 @@ function renderEntretiens() {
         <h1>Entretiens</h1>
         <p class="view-subtitle">${entretiens.length} entretien${entretiens.length > 1 ? 's' : ''}</p>
       </div>
-      ${canPlan ? '<div class="detail-header-actions"><button class="btn btn-primary" id="btn-planifier-entretien">+ Planifier un entretien</button></div>' : ''}
+      ${canPlan ? `<div class="detail-header-actions">
+        <button class="btn btn-secondary" id="btn-gerer-trames-entretien">Trames</button>
+        <button class="btn btn-secondary" id="btn-lancer-campagne-entretien">Lancer une campagne</button>
+        <button class="btn btn-primary" id="btn-planifier-entretien">+ Planifier un entretien</button>
+      </div>` : ''}
     </div>
+
+    ${canPlan ? renderCampagnesEntretienCard() : ''}
+
     <div class="card">
       <div id="entretiens-list">
         ${entretiens.length === 0 ? '<p class="text-muted">Aucun entretien pour le moment.</p>' : entretiens.map(e => renderEntretienRow(e, canPlan || user.role === ROLES.MANAGER)).join('')}
@@ -8862,9 +8873,43 @@ function renderEntretiens() {
   `;
 }
 
+/** §retour Betty du 14/09/2026 (Entretiens point 2, "gestion de campagne") : progression (X/Y
+ * clôturés) + relance des retardataires (entretiens encore "à faire" après la date limite). */
+function renderCampagnesEntretienCard() {
+  const campagnes = entretienCampagneRepository.getAll().filter(c => c.statut === 'active');
+  if (!campagnes.length) return '';
+  const allEntretiens = entretienRepository.getAll();
+  const today = toISODate(new Date());
+  const rows = campagnes.map(c => {
+    const entretiens = allEntretiens.filter(e => e.campagneId === c.id);
+    const clotures = entretiens.filter(e => e.statut === 'cloture').length;
+    const retardataires = entretiens.filter(e => e.statut !== 'cloture' && c.dateLimite < today);
+    return `
+      <div class="mini-list-item">
+        <span>${escapeHtml(c.nom)} · ${clotures}/${entretiens.length} clôturés · échéance ${formatDate(c.dateLimite)}${retardataires.length ? ` · <span class="text-danger">${retardataires.length} en retard</span>` : ''}</span>
+        ${retardataires.length ? `<button type="button" class="btn-link" data-relancer-campagne="${c.id}">Relancer les retardataires</button>` : ''}
+      </div>
+    `;
+  }).join('');
+  return `<div class="card" style="margin-bottom: 16px;"><h2>Campagnes en cours</h2>${rows}</div>`;
+}
+
 function bindEntretiensEvents() {
   const planBtn = document.getElementById('btn-planifier-entretien');
   if (planBtn) planBtn.addEventListener('click', () => openPlanEntretienModal());
+  const tramesBtn = document.getElementById('btn-gerer-trames-entretien');
+  if (tramesBtn) tramesBtn.addEventListener('click', openGererTramesModal);
+  const campagneBtn = document.getElementById('btn-lancer-campagne-entretien');
+  if (campagneBtn) campagneBtn.addEventListener('click', openLancerCampagneModal);
+  // §retour Betty du 14/09/2026 (Entretiens point 2, "relancer automatiquement les retardataires") :
+  // syncNotifications() régénère déjà ses candidats à chaque connexion depuis l'état réel (entretien
+  // "à planifier" avec une date dépassée) — ce bouton se contente de les mettre en évidence ici,
+  // sans dupliquer ce mécanisme de notification.
+  document.querySelectorAll('[data-relancer-campagne]').forEach(btn => btn.addEventListener('click', () => {
+    const campagne = entretienCampagneRepository.getAll().find(c => c.id === btn.dataset.relancerCampagne);
+    const enRetard = entretienRepository.getAll().filter(e => e.campagneId === campagne.id && e.statut !== 'cloture');
+    showToast(`${enRetard.length} salarié(s) en retard sur cette campagne : une notification leur rappelle déjà l'entretien à planifier.`);
+  }));
   document.querySelectorAll('[data-open-entretien]').forEach(el => {
     el.addEventListener('click', () => navigateTo('entretien-detail', { currentEntretienId: el.dataset.openEntretien }));
   });
@@ -8875,6 +8920,16 @@ function bindEntretiensEvents() {
  * l'utilisateur courant côté "Salariés" (getFilteredSortedEmployees serait trop restrictif ici, on
  * veut toute l'entreprise) — employeeRepository.getAll() convient puisque ce bouton n'est même
  * affiché qu'avec gererEntretiens, déjà un rôle company-wide (RH/Propriétaire). */
+/** §retour Betty du 14/09/2026 (Entretiens point 4, "objectifs reconduits") : le dernier entretien
+ * de ce salarié qui portait des objectifs, le plus récent en premier (voir le tri de
+ * getEntretiensForEmployee, data.js) — extrait en fonction pure pour rester testable sans dépendre
+ * du DOM du formulaire. */
+function getObjectifsReconduits(employeeId) {
+  if (!employeeId) return '';
+  const precedents = entretienRepository.getForEmployee(employeeId).filter(e => e.objectifs);
+  return precedents.length ? precedents[0].objectifs : '';
+}
+
 function openPlanEntretienModal() {
   const employees = employeeRepository.getAll().filter(e => !e.archive).sort((a, b) => a.prenom.localeCompare(b.prenom));
   const html = `
@@ -8925,6 +8980,18 @@ function openPlanEntretienModal() {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  // §retour Betty du 14/09/2026 (Entretiens point 4, "objectifs reconduits dans le temps") : les
+  // objectifs fixés au dernier entretien de CE salarié se pré-remplissent, à charge pour qui
+  // planifie de les ajuster — jamais resaisis depuis zéro ni oubliés. Ne remplace jamais un texte
+  // déjà tapé (même raisonnement que le forfait de notes de frais).
+  const objectifsField = document.getElementById('f-entretien-objectifs');
+  const prefillObjectifsReconduits = () => {
+    if ((objectifsField.value || '').trim()) return;
+    const objectifs = getObjectifsReconduits(document.getElementById('f-entretien-employee').value);
+    if (objectifs) objectifsField.value = objectifs;
+  };
+  document.getElementById('f-entretien-employee').addEventListener('change', prefillObjectifsReconduits);
+  prefillObjectifsReconduits();
   document.getElementById('plan-entretien-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const datePrevue = document.getElementById('f-entretien-date').value;
@@ -8996,6 +9063,11 @@ function renderEntretienDetail(id) {
 
     ${entretien.objectifs ? `<div class="card"><div class="search-section-label" style="padding-left:0;">Objectifs</div><p style="margin:0;">${escapeHtml(entretien.objectifs).replace(/\n/g, '<br>')}</p></div>` : ''}
 
+    <!-- §retour Betty du 14/09/2026 (Entretiens point 3, "préparation croisée") : chacun prépare de
+         son côté, sans voir la réponse de l'autre avant que LES DEUX aient soumis la leur (ou que
+         l'entretien soit clôturé) — c'est précisément ce qui distingue une vraie préparation
+         croisée d'un simple formulaire partagé. Ne masque jamais la propre saisie de son auteur :
+         le salarié voit toujours son propre formulaire, le manager le sien. */ -->
     <div class="card">
       <div class="search-section-label" style="padding-left:0;">Auto-évaluation ${employee ? `— ${escapeHtml(employee.prenom)}` : ''}</div>
       ${isSalarie && !cloture ? `
@@ -9003,9 +9075,11 @@ function renderEntretienDetail(id) {
           <textarea class="input" id="f-entretien-auto-eval" rows="4" placeholder="Votre bilan de la période écoulée, vos réussites, vos difficultés, vos souhaits d'évolution...">${escapeHtml(entretien.autoEvaluation)}</textarea>
           <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;">Enregistrer</button>
         </form>
-      ` : entretien.autoEvaluation
-        ? `<p style="margin:0;">${escapeHtml(entretien.autoEvaluation).replace(/\n/g, '<br>')}</p>`
-        : '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'}
+      ` : !entretien.autoEvaluation
+        ? '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'
+        : (isSalarie || cloture || entretien.retourManager)
+          ? `<p style="margin:0;">${escapeHtml(entretien.autoEvaluation).replace(/\n/g, '<br>')}</p>`
+          : '<p class="text-muted" style="margin:0;">Déjà soumise par le salarié, masquée jusqu\'à ce que vous ayez vous-même soumis votre retour (préparation croisée).</p>'}
     </div>
 
     <div class="card">
@@ -9015,9 +9089,44 @@ function renderEntretienDetail(id) {
           <textarea class="input" id="f-entretien-retour-manager" rows="4" placeholder="Votre appréciation, vos retours, les axes de progression identifiés...">${escapeHtml(entretien.retourManager)}</textarea>
           <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;">Enregistrer</button>
         </form>
-      ` : entretien.retourManager
-        ? `<p style="margin:0;">${escapeHtml(entretien.retourManager).replace(/\n/g, '<br>')}</p>`
-        : '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'}
+      ` : !entretien.retourManager
+        ? '<p class="text-muted" style="margin:0;">Pas encore rempli.</p>'
+        : (isManager || cloture || entretien.autoEvaluation)
+          ? `<p style="margin:0;">${escapeHtml(entretien.retourManager).replace(/\n/g, '<br>')}</p>`
+          : '<p class="text-muted" style="margin:0;">Déjà soumis par le manager, masqué jusqu\'à ce que vous ayez vous-même soumis votre auto-évaluation (préparation croisée).</p>'}
+    </div>
+
+    <!-- §retour Betty du 14/09/2026 (Entretiens point 6, "besoin de formation") : rempli par le
+         manager, remonte dans la restitution consolidée RH (renderRestitutionFormation). -->
+    ${canManageAll || isManager ? `
+      <div class="card">
+        <div class="search-section-label" style="padding-left:0;">Besoin de formation identifié</div>
+        ${isManager && !cloture ? `
+          <form id="entretien-besoins-formation-form">
+            <textarea class="input" id="f-entretien-besoins-formation" rows="2" placeholder="Ex. formation Excel avancé, anglais professionnel...">${escapeHtml(entretien.besoinsFormation)}</textarea>
+            <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:8px;">Enregistrer</button>
+          </form>
+        ` : entretien.besoinsFormation
+          ? `<p style="margin:0;">${escapeHtml(entretien.besoinsFormation)}</p>`
+          : '<p class="text-muted" style="margin:0;">Aucun besoin identifié pour l\'instant.</p>'}
+      </div>
+    ` : ''}
+
+    <!-- §retour Betty du 14/09/2026 (Entretiens point 5, "validation bilatérale") : chaque partie
+         valide de son côté, le salarié peut ajouter un commentaire — jamais un retour en arrière une
+         fois validé. -->
+    <div class="card">
+      <div class="search-section-label" style="padding-left:0;">Validation</div>
+      <p style="margin:0 0 8px;">
+        ${entretien.validationEmploye ? `${icon(ICONS.checkCircle, 13)} Validé par le salarié le ${formatDate(entretien.validationEmploye.date.slice(0, 10))}${entretien.validationEmploye.commentaire ? ` · ${escapeHtml(entretien.validationEmploye.commentaire)}` : ''}` : '<span class="text-muted">En attente de validation par le salarié.</span>'}
+      </p>
+      <p style="margin:0;">
+        ${entretien.validationManager ? `${icon(ICONS.checkCircle, 13)} Validé par le manager le ${formatDate(entretien.validationManager.date.slice(0, 10))}` : '<span class="text-muted">En attente de validation par le manager.</span>'}
+      </p>
+      <div class="detail-header-actions" style="margin-top:8px;">
+        ${isSalarie && !entretien.validationEmploye ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-valider-entretien-employe">Je valide cet entretien</button>' : ''}
+        ${isManager && !entretien.validationManager ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-valider-entretien-manager">Je valide cet entretien</button>' : ''}
+      </div>
     </div>
 
     ${renderTicketHistoryTimeline(entretien.historique)}
@@ -9057,6 +9166,207 @@ function bindEntretienDetailEvents() {
       render();
     });
   }
+
+  const besoinsFormationForm = document.getElementById('entretien-besoins-formation-form');
+  if (besoinsFormationForm) {
+    besoinsFormationForm.addEventListener('submit', (evt) => {
+      evt.preventDefault();
+      entretienRepository.submitBesoinsFormation(state.currentEntretienId, document.getElementById('f-entretien-besoins-formation').value.trim());
+      showToast('Besoin de formation enregistré.');
+      render();
+    });
+  }
+
+  const validerEmployeBtn = document.getElementById('btn-valider-entretien-employe');
+  if (validerEmployeBtn) {
+    validerEmployeBtn.addEventListener('click', () => openValiderEntretienModal(state.currentEntretienId, 'employe'));
+  }
+  const validerManagerBtn = document.getElementById('btn-valider-entretien-manager');
+  if (validerManagerBtn) {
+    validerManagerBtn.addEventListener('click', () => {
+      entretienRepository.valider(state.currentEntretienId, 'manager');
+      showToast('Entretien validé.');
+      render();
+    });
+  }
+}
+
+/** §retour Betty du 14/09/2026 (Entretiens point 1, "trames paramétrables par population") : une
+ * trame par population/type — juste un nom et une liste de questions en v1 (pas de type de champ
+ * différencié texte/échelle, gardé simple : un intitulé, une réponse libre). Sélectionnée à la
+ * planification (openLancerCampagneModal) pour rappeler à chacun quoi préparer, jamais imposée
+ * comme un formulaire rigide qui remplacerait l'auto-évaluation/le retour libres déjà en place. */
+function openGererTramesModal() {
+  const trames = entretienTrameRepository.getAll();
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Trames d'entretien</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div id="trames-list">
+          ${trames.length === 0 ? '<p class="text-muted">Aucune trame pour l\'instant.</p>' : trames.map(t => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(t.nom)} · ${escapeHtml(POPULATION_LABELS[t.population] || t.population)} · ${t.questions.length} question${t.questions.length > 1 ? 's' : ''}</span>
+              <button type="button" class="btn-link btn-link-danger" data-delete-trame="${t.id}">Supprimer</button>
+            </div>
+          `).join('')}
+        </div>
+        <form id="nouvelle-trame-form" style="margin-top: 16px; border-top: 1px solid var(--border-color, #e5e7eb); padding-top: 16px;">
+          <div class="form-grid">
+            <div class="form-field"><label for="f-trame-nom">Nom de la trame</label><input class="input" type="text" id="f-trame-nom" placeholder="Ex. Trame managers" required></div>
+            <div class="form-field">
+              <label for="f-trame-population">Population</label>
+              <select class="input" id="f-trame-population">
+                ${Object.entries(POPULATION_LABELS).map(([k, l]) => `<option value="${k}">${escapeHtml(l)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-trame-questions">Questions (une par ligne)</label>
+            <textarea class="input" id="f-trame-questions" rows="4" placeholder="Quelles ont été vos principales réussites cette année ?&#10;Quels sont vos souhaits d'évolution ?"></textarea>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 8px;">Ajouter cette trame</button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.querySelectorAll('[data-delete-trame]').forEach(btn => btn.addEventListener('click', () => {
+    entretienTrameRepository.delete(btn.dataset.deleteTrame);
+    showToast('Trame supprimée.');
+    openGererTramesModal();
+  }));
+  document.getElementById('nouvelle-trame-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-trame-nom').value.trim();
+    if (!nom) { showToast('Indiquez un nom.', 'error'); return; }
+    const population = document.getElementById('f-trame-population').value;
+    const questions = document.getElementById('f-trame-questions').value.split('\n').map(l => l.trim()).filter(Boolean).map(label => ({ id: generateId('q'), label }));
+    entretienTrameRepository.creer(nom, population, questions);
+    showToast('Trame créée.');
+    openGererTramesModal();
+  });
+}
+
+/** §retour Betty du 14/09/2026 (Entretiens point 2, "gestion de campagne") : résout la population
+ * choisie en liste d'employeeId (réutilise categorieSalarieRepository/employee.service, déjà le
+ * référentiel de l'entreprise) puis délègue la création en boucle à DB.lancerCampagneEntretiens. */
+function resolvePopulationEmployeeIds(population) {
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  if (population === 'managers') return employees.filter(e => e.role === 'manager').map(e => e.id);
+  if (population === 'cadres') return employees.filter(e => (e.statutPro || '').toLowerCase().includes('cadre')).map(e => e.id);
+  return employees.map(e => e.id);
+}
+
+function openLancerCampagneModal() {
+  const trames = entretienTrameRepository.getAll();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Lancer une campagne d'entretiens</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="campagne-form">
+        <div class="modal-body">
+          <div class="form-field"><label for="f-campagne-nom">Nom de la campagne</label><input class="input" type="text" id="f-campagne-nom" placeholder="Ex. Entretiens annuels 2026" required></div>
+          <div class="form-grid" style="margin-top: 12px;">
+            <div class="form-field">
+              <label for="f-campagne-type">Type</label>
+              <select class="input" id="f-campagne-type">
+                <option value="professionnel">Entretien professionnel</option>
+                <option value="bilan">Bilan (6 ans)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-campagne-population">Population</label>
+              <select class="input" id="f-campagne-population">
+                ${Object.entries(POPULATION_LABELS).map(([k, l]) => `<option value="${k}">${escapeHtml(l)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field"><label for="f-campagne-date">Échéance</label><input class="input" type="date" id="f-campagne-date" required></div>
+          </div>
+          ${trames.length ? `
+            <div class="form-field" style="margin-top: 12px;">
+              <label for="f-campagne-trame">Trame (optionnel)</label>
+              <select class="input" id="f-campagne-trame">
+                <option value="">Aucune</option>
+                ${trames.map(t => `<option value="${t.id}">${escapeHtml(t.nom)}</option>`).join('')}
+              </select>
+            </div>
+          ` : ''}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Lancer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('campagne-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-campagne-nom').value.trim();
+    if (!nom) { showToast('Indiquez un nom.', 'error'); return; }
+    const dateLimite = document.getElementById('f-campagne-date').value;
+    if (!dateLimite) { showToast('Indiquez une échéance.', 'error'); return; }
+    const type = document.getElementById('f-campagne-type').value;
+    const population = document.getElementById('f-campagne-population').value;
+    const trameEl = document.getElementById('f-campagne-trame');
+    const employeeIds = resolvePopulationEmployeeIds(population);
+    const result = entretienCampagneRepository.lancer(nom, type, dateLimite, employeeIds, trameEl ? trameEl.value || null : null);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    closeModal();
+    showToast(`Campagne lancée : ${employeeIds.length} entretien(s) créé(s).`);
+    render();
+  });
+}
+
+function openValiderEntretienModal(entretienId, role) {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Valider cet entretien</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="valider-entretien-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-commentaire-validation">Commentaire (optionnel)</label>
+            <textarea class="input" id="f-commentaire-validation" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Valider</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('valider-entretien-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    entretienRepository.valider(entretienId, role, document.getElementById('f-commentaire-validation').value.trim());
+    closeModal();
+    showToast('Entretien validé.');
+    render();
+  });
 }
 
 // ---------------------------------------------------------------------------

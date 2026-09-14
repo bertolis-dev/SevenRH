@@ -180,6 +180,17 @@ globalThis.__renderTeletravailDemandes = renderTeletravailDemandes;
 globalThis.__documentRepository = documentRepository;
 globalThis.__entretienRepository = entretienRepository;
 globalThis.__openPlanEntretienModal = openPlanEntretienModal;
+globalThis.__renderEntretienDetail = renderEntretienDetail;
+globalThis.__bindEntretienDetailEvents = bindEntretienDetailEvents;
+globalThis.__renderEntretiens = renderEntretiens;
+globalThis.__renderCampagnesEntretienCard = renderCampagnesEntretienCard;
+globalThis.__openLancerCampagneModal = openLancerCampagneModal;
+globalThis.__openGererTramesModal = openGererTramesModal;
+globalThis.__entretienTrameRepository = entretienTrameRepository;
+globalThis.__entretienCampagneRepository = entretienCampagneRepository;
+globalThis.__resolvePopulationEmployeeIds = resolvePopulationEmployeeIds;
+globalThis.__openValiderEntretienModal = openValiderEntretienModal;
+globalThis.__getObjectifsReconduits = getObjectifsReconduits;
 globalThis.__openDocumentModal = openDocumentModal;
 globalThis.__canSelfManagePendingExpense = canSelfManagePendingExpense;
 globalThis.__handleEditExpense = handleEditExpense;
@@ -362,6 +373,17 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     documentRepository: sandbox.__documentRepository,
     entretienRepository: sandbox.__entretienRepository,
     openPlanEntretienModal: sandbox.__openPlanEntretienModal,
+    renderEntretienDetail: sandbox.__renderEntretienDetail,
+    bindEntretienDetailEvents: sandbox.__bindEntretienDetailEvents,
+    renderEntretiens: sandbox.__renderEntretiens,
+    renderCampagnesEntretienCard: sandbox.__renderCampagnesEntretienCard,
+    openLancerCampagneModal: sandbox.__openLancerCampagneModal,
+    openGererTramesModal: sandbox.__openGererTramesModal,
+    entretienTrameRepository: sandbox.__entretienTrameRepository,
+    entretienCampagneRepository: sandbox.__entretienCampagneRepository,
+    resolvePopulationEmployeeIds: sandbox.__resolvePopulationEmployeeIds,
+    openValiderEntretienModal: sandbox.__openValiderEntretienModal,
+    getObjectifsReconduits: sandbox.__getObjectifsReconduits,
     openDocumentModal: sandbox.__openDocumentModal,
     canSelfManagePendingExpense: sandbox.__canSelfManagePendingExpense,
     handleEditExpense: sandbox.__handleEditExpense,

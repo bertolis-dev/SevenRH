@@ -273,6 +273,15 @@ function entretienFromRow(row) {
     datePrevue: row.date_prevue, dateRealisee: row.date_realisee,
     statut: row.statut, objectifs: row.objectifs || '', autoEvaluation: row.auto_evaluation || '',
     retourManager: row.retour_manager || '', historique: row.historique || [],
+    // §retour Betty du 14/09/2026 (revue concurrentielle, Entretiens) : trame, préparation croisée,
+    // objectifs reconduits, validation bilatérale, besoin de formation — voir 0054_entretiens_campagne_trame.sql.
+    trameId: row.trame_id || null,
+    reponsesAutoEvaluation: row.reponses_auto_evaluation || {},
+    reponsesRetourManager: row.reponses_retour_manager || {},
+    besoinsFormation: row.besoins_formation || '',
+    validationEmploye: row.validation_employe || null,
+    validationManager: row.validation_manager || null,
+    campagneId: row.campagne_id || null,
     dateCreation: row.created_at, dateModification: row.updated_at
   };
 }
@@ -401,7 +410,14 @@ function entretienToRow(e, companyId) {
     id: e.id, company_id: companyId, employee_id: e.employeeId, type: e.type || 'professionnel',
     date_prevue: e.datePrevue, date_realisee: e.dateRealisee || null, statut: e.statut || 'a_planifier',
     objectifs: e.objectifs || null, auto_evaluation: e.autoEvaluation || null,
-    retour_manager: e.retourManager || null, historique: e.historique || []
+    retour_manager: e.retourManager || null, historique: e.historique || [],
+    trame_id: e.trameId || null,
+    reponses_auto_evaluation: e.reponsesAutoEvaluation || {},
+    reponses_retour_manager: e.reponsesRetourManager || {},
+    besoins_formation: e.besoinsFormation || null,
+    validation_employe: e.validationEmploye || null,
+    validation_manager: e.validationManager || null,
+    campagne_id: e.campagneId || null
   };
 }
 

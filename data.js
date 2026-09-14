@@ -3585,6 +3585,17 @@ const DB = {
       objectifs: data.objectifs || '',
       autoEvaluation: '',
       retourManager: '',
+      // §retour Betty du 14/09/2026 (revue concurrentielle, Entretiens) : trame paramétrable
+      // (point 1), campagne (point 2), objectifs reconduits (point 4, voir openPlanEntretienModal
+      // qui pré-remplit `objectifs` depuis le précédent entretien de ce salarié), validation
+      // bilatérale (point 5) et besoin de formation (point 6).
+      trameId: data.trameId || null,
+      reponsesAutoEvaluation: {},
+      reponsesRetourManager: {},
+      besoinsFormation: '',
+      validationEmploye: null,
+      validationManager: null,
+      campagneId: data.campagneId || null,
       historique: [{ date: now, action: `Entretien ${data.type === 'bilan' ? 'de bilan' : 'professionnel'} planifié pour le ${formatDate(data.datePrevue)}${data.heurePrevue ? ` à ${data.heurePrevue}` : ''}` }],
       dateCreation: now,
       dateModification: now
@@ -3629,6 +3640,90 @@ const DB = {
     this.saveCurrentCompany(company);
     this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
     return entretien;
+  },
+
+  /** §retour Betty du 14/09/2026 (Entretiens point 6, "besoin de formation") : rempli par le
+   * manager, comme retourManager — remonte ensuite dans une vue consolidée RH (voir
+   * renderRestitutionFormation, app.js), plutôt que de rester enfoui dans ce seul entretien. */
+  updateEntretienBesoinsFormation(id, texte) {
+    const company = this.getCurrentCompany();
+    const entretien = (company.entretiens || []).find(e => e.id === id);
+    if (!entretien) return null;
+    entretien.besoinsFormation = texte;
+    entretien.dateModification = new Date().toISOString();
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
+    return entretien;
+  },
+
+  /** §retour Betty du 14/09/2026 (Entretiens point 5, "validation bilatérale") : `role` vaut
+   * 'employe' ou 'manager' — chacun valide de son côté, le salarié peut ajouter un commentaire, le
+   * manager non (il a déjà retourManager pour ça). Jamais un retour en arrière une fois validé. */
+  validerEntretien(id, role, commentaire) {
+    const company = this.getCurrentCompany();
+    const entretien = (company.entretiens || []).find(e => e.id === id);
+    if (!entretien) return { success: false, error: 'Entretien introuvable.' };
+    const champ = role === 'employe' ? 'validationEmploye' : 'validationManager';
+    if (entretien[champ]) return { success: false, error: 'Déjà validé.' };
+    entretien[champ] = role === 'employe' ? { date: new Date().toISOString(), commentaire: commentaire || '' } : { date: new Date().toISOString() };
+    entretien.historique = [...(entretien.historique || []), { date: new Date().toISOString(), action: `Entretien validé par ${role === 'employe' ? 'le salarié' : 'le manager'}${commentaire ? ` (commentaire : ${commentaire})` : ''}` }];
+    entretien.dateModification = new Date().toISOString();
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
+    return { success: true, entretien };
+  },
+
+  // ---- Trames d'entretien (§retour Betty du 14/09/2026, point 1, "trames paramétrables") ----
+
+  getEntretienTrames() {
+    return (this.getCurrentCompany().entretienTrames || []).slice();
+  },
+
+  saveEntretienTrames(list) {
+    const company = this.getCurrentCompany();
+    company.entretienTrames = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  creerTrameEntretien(nom, population, questions) {
+    const list = this.getEntretienTrames();
+    const trame = { id: generateId('trame'), nom, population: population || 'tous', questions: questions || [], dateCreation: new Date().toISOString() };
+    list.push(trame);
+    this.saveEntretienTrames(list);
+    this.logAudit('Création', 'Trame d\'entretien', nom);
+    return trame;
+  },
+
+  deleteTrameEntretien(id) {
+    const trame = this.getEntretienTrames().find(t => t.id === id);
+    this.saveEntretienTrames(this.getEntretienTrames().filter(t => t.id !== id));
+    if (trame) this.logAudit('Suppression', 'Trame d\'entretien', trame.nom);
+  },
+
+  // ---- Campagnes d'entretiens (§retour Betty du 14/09/2026, point 2, "gestion de campagne") ----
+
+  getEntretienCampagnes() {
+    return (this.getCurrentCompany().entretienCampagnes || []).slice();
+  },
+
+  saveEntretienCampagnes(list) {
+    const company = this.getCurrentCompany();
+    company.entretienCampagnes = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  /** Crée UNE convocation par salarié concerné, toutes tagguées `campagneId` — la population est
+   * déjà résolue en liste d'employeeId par l'appelant (app.js, qui connaît le référentiel
+   * catégories de salariés), cette fonction ne fait que la boucle de création + le suivi campagne. */
+  lancerCampagneEntretiens(nom, type, dateLimite, employeeIds, trameId) {
+    if (!employeeIds || !employeeIds.length) return { success: false, error: 'Aucun salarié concerné par cette campagne.' };
+    const campagne = { id: generateId('campagne'), nom, type, dateLimite, employeeIds, statut: 'active', dateCreation: new Date().toISOString() };
+    this.saveEntretienCampagnes([...this.getEntretienCampagnes(), campagne]);
+    const entretiens = employeeIds.map(employeeId => this.addEntretien({ employeeId, type, datePrevue: dateLimite, trameId, campagneId: campagne.id }));
+    this.logAudit('Création', 'Campagne d\'entretiens', `${nom} · ${employeeIds.length} salariés`);
+    return { success: true, campagne, entretiens };
   },
 
   /** Clôture par RH/Propriétaire (gererEntretiens) — fige la date de réalisation si elle n'était pas
@@ -4394,7 +4489,20 @@ const entretienRepository = {
   create: (data) => DB.addEntretien(data),
   submitAutoEvaluation: (id, texte) => DB.updateEntretienAutoEvaluation(id, texte),
   submitRetourManager: (id, texte) => DB.updateEntretienRetourManager(id, texte),
-  cloturer: (id) => DB.clotureEntretien(id)
+  cloturer: (id) => DB.clotureEntretien(id),
+  submitBesoinsFormation: (id, texte) => DB.updateEntretienBesoinsFormation(id, texte),
+  valider: (id, role, commentaire) => DB.validerEntretien(id, role, commentaire)
+};
+
+const entretienTrameRepository = {
+  getAll: () => DB.getEntretienTrames(),
+  creer: (nom, population, questions) => DB.creerTrameEntretien(nom, population, questions),
+  delete: (id) => DB.deleteTrameEntretien(id)
+};
+
+const entretienCampagneRepository = {
+  getAll: () => DB.getEntretienCampagnes(),
+  lancer: (nom, type, dateLimite, employeeIds, trameId) => DB.lancerCampagneEntretiens(nom, type, dateLimite, employeeIds, trameId)
 };
 
 const ideeRepository = {
