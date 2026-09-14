@@ -20230,6 +20230,7 @@ function renderFrais() {
 
     ${renderDraftsCard('frais')}
     ${renderExpenseDossiersCard()}
+    ${canValider ? renderRapprochementBancaireCard() : ''}
 
     <div class="toolbar card">
       <select id="frais-filter-employee" class="input">
@@ -20301,7 +20302,7 @@ function renderExpenseRow(n) {
       <td data-label="Catégorie">${escapeHtml(n.categorie)}</td>
       <td data-label="Libellé">${escapeHtml(n.libelle)}${dossier ? ` <span class="badge badge-info" title="Fait partie du dossier">${icon(ICONS.folder, 10)} ${escapeHtml(dossier.motif)}</span>` : ''}</td>
       <td class="cell-numeric" data-label="Montant TTC">${formatCurrencyFR(n.montantTTC)}</td>
-      <td data-label="Statut">${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}</td>
+      <td data-label="Statut">${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}${releveBancaireRepository.getAll().some(l => l.expenseId === n.id) ? ` <span class="badge badge-success" title="Un mouvement du relevé bancaire importé correspond à cette note">${icon(ICONS.checkCircle, 10)} Rapproché</span>` : ''}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
         <button class="btn-link" data-history="${n.id}">Historique</button>
@@ -20337,6 +20338,108 @@ function renderExpenseDossiersCard() {
   }).filter(Boolean).join('');
   if (!rows) return '';
   return `<div class="card" style="margin-top: 0; margin-bottom: 16px;"><h2>Dossiers de frais</h2>${rows}</div>`;
+}
+
+/** §retour Betty du 14/09/2026 (Notes de frais point 2, "rapprochement bancaire") — import manuel
+ * d'un relevé plutôt qu'un flux automatique payant (Bridge/Budget Insight), voir
+ * DB.importerReleveBancaire (data.js) pour le détail du choix. Toujours affichée (même sans relevé
+ * importé) pour que l'action "Importer" reste trouvable, contrairement à renderExpenseDossiersCard
+ * qui se masque tant qu'il n'y a rien à montrer. */
+function renderRapprochementBancaireCard() {
+  const releves = releveBancaireRepository.getAll();
+  const expenseIdsDejaRapproches = new Set(releves.filter(l => l.expenseId).map(l => l.expenseId));
+  const candidatsCommuns = expenseRepository.getAll().filter(n => !expenseIdsDejaRapproches.has(n.id) && (n.statut === 'Remboursé' || n.statut === 'En attente'));
+  const lignesTriees = releves.slice().sort((a, b) => (a.statut === 'rapproche') - (b.statut === 'rapproche'));
+
+  return `
+    <div class="card" style="margin-top: 0; margin-bottom: 16px;">
+      <div class="view-header-row">
+        <div>
+          <h2>Rapprochement bancaire</h2>
+          <p class="text-muted" style="margin: 4px 0 0;">Importez un relevé bancaire (fichier .csv : date, libellé, montant) pour vérifier que chaque remboursement a bien été payé. Sans compte externe (à la différence d'un flux bancaire automatique type Bridge) : à réimporter manuellement chaque mois.</p>
+        </div>
+        <div class="detail-header-actions">
+          <label class="btn btn-secondary btn-sm" style="cursor: pointer; margin: 0;">Importer un relevé (.csv)<input type="file" id="releve-bancaire-file" accept=".csv,text/csv" style="display: none;"></label>
+          ${releves.some(l => l.statut !== 'rapproche') ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-rapprocher-auto">Rapprocher automatiquement</button>` : ''}
+        </div>
+      </div>
+      ${!releves.length ? '<p class="text-muted" style="margin: 12px 0 0;">Aucun relevé importé pour l\'instant.</p>' : `
+        <div class="mini-list" style="margin-top: 12px;">
+          ${lignesTriees.map(l => {
+            const expense = l.expenseId ? expenseRepository.getById(l.expenseId) : null;
+            const employee = expense ? employeeRepository.getById(expense.employeeId) : null;
+            return `
+              <div class="mini-list-item" style="align-items: flex-start;">
+                <span>
+                  ${formatDate(l.date)} · ${escapeHtml(l.libelle || '—')} · ${formatCurrencyFR(l.montant)}
+                  ${l.statut === 'rapproche' ? `<br><span class="text-muted">↳ ${expense ? `${escapeHtml(expense.libelle)}${employee ? ' · ' + escapeHtml(employee.prenom + ' ' + employee.nom) : ''}` : 'note introuvable (supprimée depuis)'}</span>` : ''}
+                </span>
+                <span style="display: flex; align-items: center; gap: 8px;">
+                  ${l.statut === 'rapproche'
+                    ? `<button type="button" class="btn-link" data-annuler-rapprochement="${l.id}">Annuler</button>`
+                    : `<select class="input" style="width: auto;" data-rapprocher-select="${l.id}">
+                        <option value="">Associer à une note...</option>
+                        ${candidatsCommuns.map(n => `<option value="${n.id}">${escapeHtml(n.libelle)} · ${formatCurrencyFR(n.montantTTC)}${employeeRepository.getById(n.employeeId) ? ' · ' + escapeHtml(employeeRepository.getById(n.employeeId).prenom) : ''}</option>`).join('')}
+                      </select>
+                      <button type="button" class="btn-link btn-link-danger" data-supprimer-ligne-releve="${l.id}" title="Retirer cette ligne">Retirer</button>`}
+                </span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function bindRapprochementBancaireEvents() {
+  const fileInput = document.getElementById('releve-bancaire-file');
+  if (fileInput) fileInput.addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = releveBancaireRepository.importer(String(reader.result || ''));
+      if (!result.success) { showToast('Impossible de lire ce fichier.', 'error'); return; }
+      showToast(`${result.ajoutees} ligne(s) importée(s)${result.ignorees ? `, ${result.ignorees} ignorée(s) (format non reconnu)` : ''}.`);
+      render();
+    };
+    reader.onerror = () => showToast('Impossible de lire ce fichier.', 'error');
+    reader.readAsText(file);
+  });
+
+  const autoBtn = document.getElementById('btn-rapprocher-auto');
+  if (autoBtn) autoBtn.addEventListener('click', () => {
+    const result = releveBancaireRepository.rapprocherAuto();
+    showToast(result.rapprochees > 0 ? `${result.rapprochees} ligne(s) rapprochée(s) automatiquement.` : 'Aucune correspondance évidente trouvée : associez manuellement les lignes restantes.');
+    render();
+  });
+
+  document.querySelectorAll('[data-rapprocher-select]').forEach(select => {
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      const result = releveBancaireRepository.rapprocherManuel(select.dataset.rapprocherSelect, select.value);
+      if (!result.success) { showToast(result.error, 'error'); return; }
+      showToast('Ligne rapprochée.');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-annuler-rapprochement]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      releveBancaireRepository.annuler(btn.dataset.annulerRapprochement);
+      showToast('Rapprochement annulé.');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-supprimer-ligne-releve]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      releveBancaireRepository.supprimer(btn.dataset.supprimerLigneReleve);
+      showToast('Ligne retirée.');
+      render();
+    });
+  });
 }
 
 function openRegrouperDossierModal() {
@@ -20383,6 +20486,7 @@ function openRegrouperDossierModal() {
 function bindFraisEvents() {
   document.getElementById('btn-new-expense').addEventListener('click', () => openExpenseModal());
   document.getElementById('btn-export-frais').addEventListener('click', exportExpensesCSV);
+  bindRapprochementBancaireEvents();
 
   document.querySelectorAll('[data-select-frais]').forEach(cb => cb.addEventListener('change', (e) => {
     const id = cb.dataset.selectFrais;

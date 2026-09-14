@@ -3302,6 +3302,111 @@ const DB = {
     return { success: true, dossier };
   },
 
+  // ---- Rapprochement bancaire (§retour Betty du 14/09/2026, Notes de frais point 2) : import
+  // MANUEL d'un relevé (fichier CSV téléchargé depuis l'espace bancaire de l'entreprise) plutôt
+  // qu'un flux automatique (Bridge/Budget Insight — un compte tiers et un abonnement en plus,
+  // explicitement écartés) : même bénéfice utile (repérer un remboursement jamais parti, ou un
+  // montant qui ne correspond pas), sans compte externe ni coût récurrent supplémentaire. ----
+
+  getRelevesBancaires() {
+    return (this.getCurrentCompany().relevesBancaires || []).slice();
+  },
+
+  saveRelevesBancaires(list) {
+    const company = this.getCurrentCompany();
+    company.relevesBancaires = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  /** Accepte ';' ou ',' comme séparateur (les deux existent selon la banque/le tableur d'export) et
+   * ',' ou '.' comme séparateur décimal. Une ligne qui ne se parse pas (souvent l'en-tête du
+   * fichier) est silencieusement ignorée plutôt que de faire échouer tout l'import pour ça —
+   * comptée séparément pour rester honnête sur ce qui a été traité. Déduplique sur (date, libellé,
+   * montant) EXACTS : réimporter le même fichier (courant si le mois précédent a déjà été traité)
+   * n'ajoute jamais de doublon. */
+  importerReleveBancaire(csvText) {
+    const lignes = (csvText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const existantes = this.getRelevesBancaires();
+    const clesExistantes = new Set(existantes.map(l => `${l.date}|${l.libelle}|${l.montant}`));
+    const nouvelles = [];
+    let ignorees = 0;
+    lignes.forEach(ligne => {
+      const delimiteur = ligne.includes(';') ? ';' : ',';
+      const parts = ligne.split(delimiteur);
+      if (parts.length < 3) { ignorees++; return; }
+      const [datePart, libellePart, montantPart] = parts;
+      const montant = Math.abs(parseFloat(String(montantPart).replace(',', '.').replace(/[^0-9.\-]/g, '')));
+      const date = normaliserDateReleve((datePart || '').trim());
+      if (!date || !Number.isFinite(montant) || montant <= 0) { ignorees++; return; }
+      const cle = `${date}|${(libellePart || '').trim()}|${montant}`;
+      if (clesExistantes.has(cle)) { ignorees++; return; }
+      clesExistantes.add(cle);
+      nouvelles.push(Object.assign(makeEmptyReleveLigne(), {
+        id: generateId('releve'), date, libelle: (libellePart || '').trim(), montant,
+        dateImport: new Date().toISOString()
+      }));
+    });
+    if (nouvelles.length) this.saveRelevesBancaires([...existantes, ...nouvelles]);
+    this.logAudit('Import', 'Relevé bancaire', `${nouvelles.length} ligne(s) importée(s)${ignorees ? `, ${ignorees} ignorée(s)` : ''}`);
+    return { success: true, ajoutees: nouvelles.length, ignorees };
+  },
+
+  /** Un montant identique (± 1 centime) et une date à moins de 10 jours d'écart suffisent à
+   * proposer un rapprochement — mais seulement s'il y a UNE SEULE note candidate : deux notes au
+   * même montant le même mois (ex. deux taxis à 12,50 €) restent délibérément laissées à un
+   * rapprochement manuel plutôt que de risquer d'associer la mauvaise. */
+  rapprocherAutomatiquement() {
+    const releves = this.getRelevesBancaires();
+    const expenses = this.getExpenses().filter(n => n.statut === 'Remboursé' || n.statut === 'En attente');
+    const dejaRapprochees = new Set(releves.filter(l => l.expenseId).map(l => l.expenseId));
+    let rapprochees = 0;
+    releves.forEach(ligne => {
+      if (ligne.statut === 'rapproche') return;
+      const candidates = expenses.filter(n =>
+        !dejaRapprochees.has(n.id) &&
+        Math.abs(n.montantTTC - ligne.montant) < 0.01 &&
+        Math.abs((new Date(ligne.date) - new Date(n.date)) / 86400000) <= 10
+      );
+      if (candidates.length === 1) {
+        ligne.statut = 'rapproche';
+        ligne.expenseId = candidates[0].id;
+        dejaRapprochees.add(candidates[0].id);
+        rapprochees++;
+      }
+    });
+    if (rapprochees) this.saveRelevesBancaires(releves);
+    this.logAudit('Rapprochement', 'Relevé bancaire', `${rapprochees} ligne(s) rapprochée(s) automatiquement`);
+    return { success: true, rapprochees };
+  },
+
+  rapprocherManuellement(ligneId, expenseId) {
+    const releves = this.getRelevesBancaires();
+    const ligne = releves.find(l => l.id === ligneId);
+    if (!ligne) return { success: false, error: 'Ligne introuvable.' };
+    if (ligne.statut === 'rapproche') return { success: false, error: 'Cette ligne est déjà rapprochée.' };
+    if (!expenseId) return { success: false, error: 'Choisissez une note de frais.' };
+    ligne.statut = 'rapproche';
+    ligne.expenseId = expenseId;
+    this.saveRelevesBancaires(releves);
+    return { success: true };
+  },
+
+  annulerRapprochement(ligneId) {
+    const releves = this.getRelevesBancaires();
+    const ligne = releves.find(l => l.id === ligneId);
+    if (!ligne) return { success: false, error: 'Ligne introuvable.' };
+    ligne.statut = 'non_rapproche';
+    ligne.expenseId = null;
+    this.saveRelevesBancaires(releves);
+    return { success: true };
+  },
+
+  supprimerLigneReleve(ligneId) {
+    this.saveRelevesBancaires(this.getRelevesBancaires().filter(l => l.id !== ligneId));
+    return { success: true };
+  },
+
   async addExpense(data) {
     const list = this.getExpenses();
     const now = new Date().toISOString();
@@ -4571,6 +4676,15 @@ const expenseDossierRepository = {
   creer: (employeeId, motif, expenseIds) => DB.creerDossierFrais(employeeId, motif, expenseIds)
 };
 
+const releveBancaireRepository = {
+  getAll: () => DB.getRelevesBancaires(),
+  importer: (csvText) => DB.importerReleveBancaire(csvText),
+  rapprocherAuto: () => DB.rapprocherAutomatiquement(),
+  rapprocherManuel: (ligneId, expenseId) => DB.rapprocherManuellement(ligneId, expenseId),
+  annuler: (ligneId) => DB.annulerRapprochement(ligneId),
+  supprimer: (ligneId) => DB.supprimerLigneReleve(ligneId)
+};
+
 const draftRepository = {
   getById: (id) => DB.getBrouillonById(id),
   getForOwner: (ownerId, type) => DB.getBrouillonsForOwner(ownerId, type),
@@ -5347,6 +5461,23 @@ function makeEmptyExpense() {
     // voir markExpensePaid. "Remboursé" (statut) reste la fin du circuit de VALIDATION, pas du virement.
     datePaiement: null
   };
+}
+
+/** Une ligne de relevé bancaire importée (§retour Betty du 14/09/2026, Notes de frais point 2,
+ * "rapprochement bancaire") — voir DB.importerReleveBancaire. montant toujours positif (valeur
+ * absolue), le sens débit/crédit du fichier d'origine n'étant pas conservé : seul le montant compte
+ * pour le rapprochement face à une note de frais (elle aussi toujours positive). */
+function makeEmptyReleveLigne() {
+  return { id: null, date: '', libelle: '', montant: 0, statut: 'non_rapproche', expenseId: null, dateImport: null };
+}
+
+/** Accepte 'JJ/MM/AAAA' (export bancaire français le plus courant) et 'AAAA-MM-JJ' (déjà
+ * normalisé) — renvoie null pour tout le reste plutôt que de deviner un format ambigu. */
+function normaliserDateReleve(str) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
 }
 
 /** Structure complète d'un document du coffre-fort RH d'un salarié. */
