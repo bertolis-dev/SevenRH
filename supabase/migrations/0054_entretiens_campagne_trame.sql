@@ -15,3 +15,5 @@ alter table entretiens add column if not exists validation_manager jsonb;
 alter table entretiens add column if not exists campagne_id text;
 
 insert into schema_migrations (version) values ('0054_entretiens_campagne_trame') on conflict do nothing;
+
+notify pgrst, 'reload schema';
