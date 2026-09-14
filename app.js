@@ -7868,6 +7868,196 @@ function openImportSoldesInitiauxModal() {
   }
 }
 
+/** §retour Betty du 14/09/2026 ("continue avec un autre point gratuit", Congés) : import Excel de
+ * l'historique des absences — même principe Excel → aperçu → import que les deux blocs ci-dessus,
+ * mais une ligne = UNE demande de congé (comme l'import de salariés ci-dessous), pas une ligne = un
+ * salarié avec une colonne par type (comme l'import de soldes ci-dessus) : chaque absence a ses
+ * propres dates. Voir DB.importerAbsenceHistorique (data.js) pour la création réelle. */
+function guessAbsencesColumnMapping(headers, leaveTypes) {
+  const typeAliases = ['type', 'type de conge', 'type de congé', "type d'absence"];
+  const dateDebutAliases = ['date debut', 'date début', 'debut', 'début', 'date de debut', 'date de début'];
+  const dateFinAliases = ['date fin', 'fin', 'date de fin'];
+  const commentaireAliases = ['commentaire', 'motif', 'note', 'notes'];
+  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, commentaire: undefined };
+  headers.forEach((h, i) => {
+    const norm = normalizeForSearch(h);
+    if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].some(a => normalizeForSearch(a) === norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
+    if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].some(a => normalizeForSearch(a) === norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
+    if (mapping.type === undefined && typeAliases.some(a => normalizeForSearch(a) === norm)) { mapping.type = i; return; }
+    if (mapping.dateDebut === undefined && dateDebutAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateDebut = i; return; }
+    if (mapping.dateFin === undefined && dateFinAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateFin = i; return; }
+    if (mapping.commentaire === undefined && commentaireAliases.some(a => normalizeForSearch(a) === norm)) { mapping.commentaire = i; return; }
+  });
+  return mapping;
+}
+
+function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
+  const settings = settingsRepository.getSettings();
+  const findEmployee = (value) => {
+    if (!value) return null;
+    const norm = normalizeForSearch(value);
+    return employees.find(e => normalizeForSearch(mapping.identifiant.field === 'matricule' ? (e.matricule || '') : (e.email || '')) === norm) || null;
+  };
+  const findType = (value) => {
+    if (!value) return null;
+    const norm = normalizeForSearch(value);
+    return leaveTypes.find(t => normalizeForSearch(t.nom) === norm) || null;
+  };
+  return dataRows.map((cells, i) => {
+    const get = (index) => (index !== undefined ? (cells[index] || '').trim() : '');
+    const idValue = get(mapping.identifiant && mapping.identifiant.index);
+    const employee = findEmployee(idValue);
+    const typeValue = get(mapping.type);
+    const type = findType(typeValue);
+    const dateDebut = parseImportDate(get(mapping.dateDebut));
+    const dateFin = parseImportDate(get(mapping.dateFin)) || dateDebut;
+    const commentaire = get(mapping.commentaire);
+    let status = 'ok', message = '', nbJours = 0;
+    if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
+    else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
+    else if (!typeValue) { status = 'error'; message = 'Type de congé manquant.'; }
+    else if (!type) { status = 'error'; message = `Type "${typeValue}" introuvable parmi les types existants.`; }
+    else if (!dateDebut) { status = 'error'; message = 'Date de début manquante ou invalide.'; }
+    else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
+    else if (dateFin < dateDebut) { status = 'error'; message = 'La date de fin est avant la date de début.'; }
+    else {
+      nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settings, type.uniteDecompte);
+      if (!nbJours) { status = 'error'; message = 'Aucun jour ouvré sur cette période (jours fériés/week-end uniquement).'; }
+    }
+    return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, commentaire, nbJours, status, message };
+  });
+}
+
+function importAbsencesRows(previewRows) {
+  const results = { created: 0, errors: 0 };
+  previewRows.filter(r => r.status === 'ok').forEach(r => {
+    leaveRepository.importerHistorique({
+      employeeId: r.employee.id,
+      typeId: r.type.id,
+      dateDebut: r.dateDebut,
+      dateFin: r.dateFin,
+      nbJours: r.nbJours,
+      commentaire: r.commentaire
+    });
+    results.created++;
+  });
+  results.errors = previewRows.filter(r => r.status === 'error').length;
+  return results;
+}
+
+function openImportAbsencesHistoriqueModal(categorie) {
+  loadXLSXLibrary().catch(() => {});
+  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Importer l'historique des ${categorie === 'conge' ? 'congés' : 'absences'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues : une colonne d'identification (Matricule ou Email), Type (nommé exactement comme un type existant${leaveTypes.length ? ' : ' + leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ') : ''}), Date début, Date fin, Commentaire (facultatif). Chaque ligne crée directement une demande au statut Validé, sans passer par une validation manager : à réserver aux absences déjà passées.</p>
+        <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
+        <div id="import-preview-zone" style="margin-top: 16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-import" style="display: none;">Importer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  let currentPreview = [];
+
+  document.getElementById('f-import-file').addEventListener('change', (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await loadXLSXLibrary();
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      let rows;
+      try {
+        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+          .map(row => row.map(cell => {
+            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
+              const jj = String(cell.getUTCDate()).padStart(2, '0');
+              const mm = String(cell.getUTCMonth() + 1).padStart(2, '0');
+              return `${jj}/${mm}/${cell.getUTCFullYear()}`;
+            }
+            return cell == null ? '' : String(cell);
+          }))
+          .filter(row => row.some(cell => cell !== ''));
+      } catch (err) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
+        return;
+      }
+      if (rows.length < 2) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier vide ou illisible (au moins une ligne d'en-têtes + une ligne de données attendues).</p>`;
+        return;
+      }
+      const [headerRow, ...dataRows] = rows;
+      const mapping = guessAbsencesColumnMapping(headerRow, leaveTypes);
+      if (!mapping.identifiant) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne d'identification reconnue (attendu : « Matricule » ou « Email »).</p>`;
+        return;
+      }
+      if (mapping.type === undefined || mapping.dateDebut === undefined || mapping.dateFin === undefined) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Colonnes attendues manquantes : Type, Date début et Date fin sont obligatoires.</p>`;
+        return;
+      }
+      currentPreview = buildAbsencesPreviewRows(dataRows, mapping, categorie);
+      renderAbsencesPreview(currentPreview);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function renderAbsencesPreview(preview) {
+    const okCount = preview.filter(r => r.status === 'ok').length;
+    const errCount = preview.filter(r => r.status === 'error').length;
+    document.getElementById('import-preview-zone').innerHTML = `
+      <p><span class="badge badge-success">${okCount} ligne${okCount > 1 ? 's' : ''} prête${okCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>Ligne</th><th>Salarié</th><th>Type</th><th>Période</th><th>Jours</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${preview.map(r => `
+              <tr>
+                <td>${r.rowIndex}</td>
+                <td>${r.employee ? escapeHtml(r.employee.prenom) + ' ' + escapeHtml(r.employee.nom) : (escapeHtml(r.idValue) || '—')}</td>
+                <td>${r.type ? escapeHtml(r.type.nom) : (escapeHtml(r.typeValue) || '—')}</td>
+                <td>${r.dateDebut ? formatDate(r.dateDebut) + (r.dateFin && r.dateFin !== r.dateDebut ? ' → ' + formatDate(r.dateFin) : '') : '—'}</td>
+                <td>${r.nbJours || '—'}</td>
+                <td>${r.status === 'ok' ? '<span class="badge badge-success">Prêt</span>' : `<span class="badge badge-danger" title="${escapeHtml(r.message)}">${escapeHtml(r.message)}</span>`}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    const confirmBtn = document.getElementById('btn-confirm-import');
+    confirmBtn.style.display = okCount > 0 ? '' : 'none';
+    confirmBtn.onclick = () => {
+      const results = importAbsencesRows(currentPreview);
+      closeModal();
+      showToast(`${results.created} absence${results.created > 1 ? 's' : ''} importée${results.created > 1 ? 's' : ''}${results.errors ? ` (${results.errors} ligne${results.errors > 1 ? 's' : ''} ignorée${results.errors > 1 ? 's' : ''})` : ''}.`);
+      render();
+    };
+  }
+}
+
 function openImportSalariesModal() {
   // Démarré ici (jamais attendu) plutôt qu'au changement de fichier : le temps que l'utilisateur
   // choisisse son fichier dans la boîte de dialogue système couvre en général tout le téléchargement
@@ -11636,6 +11826,7 @@ const bulkSelection = { conge: new Set(), autre: new Set(), frais: new Set() };
 function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
+  const canImportHistorique = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.MODIFIER_COMPTEURS);
   const employees = getScopedEmployeesForFilters();
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const requests = getFilteredLeaveRequests(categorie);
@@ -11659,6 +11850,7 @@ function renderCongesDemandes(categorie = 'conge') {
       <p class="view-subtitle">${requests.length} demande${requests.length > 1 ? 's' : ''}</p>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-conges">Exporter CSV</button>
+        ${canImportHistorique ? '<button class="btn btn-secondary" id="btn-import-absences-historique">Importer l\'historique</button>' : ''}
         <!-- §refonte "hiérarchie de boutons" du 01/09/2026 : jamais 2 boutons pleins en même temps sur
              cet écran — "Valider la sélection" (ci-dessous) prend le relais dès qu'une sélection est
              active, plus urgent à ce moment que créer une nouvelle demande. -->
@@ -12116,6 +12308,8 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   bindFilterToggleButtons();
   document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
   document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
+  const importHistoriqueBtn = document.getElementById('btn-import-absences-historique');
+  if (importHistoriqueBtn) importHistoriqueBtn.addEventListener('click', () => openImportAbsencesHistoriqueModal(categorie));
   bindDraftsCardEvents((draft) => openLeaveRequestModal(undefined, categorie, draft));
 
   document.getElementById('conges-filter-employee').addEventListener('change', (e) => {

@@ -309,6 +309,10 @@ globalThis.__candidatureToEmployeePrefill = candidatureToEmployeePrefill;
 globalThis.__renderCarrierePage = renderCarrierePage;
 globalThis.__carriereUrlForCompany = carriereUrlForCompany;
 globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
+globalThis.__guessAbsencesColumnMapping = guessAbsencesColumnMapping;
+globalThis.__buildAbsencesPreviewRows = buildAbsencesPreviewRows;
+globalThis.__importAbsencesRows = importAbsencesRows;
+globalThis.__computeWorkingDays = computeWorkingDays;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -533,6 +537,10 @@ globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
     openLeaveRequestModal: sandbox.__openLeaveRequestModal,
     updateLeaveRequestHints: sandbox.__updateLeaveRequestHints,
     submitLeaveRequestForm: sandbox.__submitLeaveRequestForm,
+    guessAbsencesColumnMapping: sandbox.__guessAbsencesColumnMapping,
+    buildAbsencesPreviewRows: sandbox.__buildAbsencesPreviewRows,
+    importAbsencesRows: sandbox.__importAbsencesRows,
+    computeWorkingDays: sandbox.__computeWorkingDays,
   };
 }
 

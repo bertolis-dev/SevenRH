@@ -2825,6 +2825,32 @@ const DB = {
     return request;
   },
 
+  /** §retour Betty du 14/09/2026 ("continue avec un autre point gratuit", Congés) : import Excel de
+   * l'historique des absences — gros gain pour une entreprise qui arrive sur Nexus avec des congés
+   * déjà pris ailleurs, ou pour une saisie groupée par RH plutôt qu'une demande à la fois (voir
+   * l'aperçu/le mapping dans app.js). Toujours Validé, sans chaîne de validation, exactement comme
+   * addFermetureLeaveRequest ci-dessus et pour la même raison : une absence déjà passée n'a plus de
+   * sens à faire "valider" par un manager. Aucun ajustement de compteur séparé requis : le solde
+   * consommé se calcule en filtrant les demandes Validé (voir getQuotasForEmployee, app.js), donc
+   * cette demande s'y ajoute automatiquement comme n'importe quelle autre. */
+  importerAbsenceHistorique(data) {
+    const list = this.getLeaveRequests();
+    const now = new Date().toISOString();
+    const request = Object.assign(makeEmptyLeaveRequest(), data, {
+      id: generateId('lr'),
+      workflow: [],
+      workflowValidatorOverrides: {},
+      etapeIndex: -1,
+      statut: 'Validé',
+      historique: [{ date: now, action: 'Import historique (absence antérieure à l\'utilisation de Nexus)' }],
+      dateCreation: now,
+      dateModification: now
+    });
+    list.push(request);
+    this.saveLeaveRequests(list);
+    return request;
+  },
+
   updateLeaveRequest(id, patch) {
     const list = this.getLeaveRequests();
     const index = list.findIndex(r => r.id === id);
@@ -4623,6 +4649,7 @@ const leaveRepository = {
   getById: (id) => DB.getLeaveRequestById(id),
   getForEmployee: (employeeId) => DB.getLeaveRequestsForEmployee(employeeId),
   create: (data) => DB.addLeaveRequest(data),
+  importerHistorique: (data) => DB.importerAbsenceHistorique(data),
   update: (id, patch) => DB.updateLeaveRequest(id, patch),
   prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif),
   regulariser: (id, patch) => DB.regulariserDemande(id, patch),
