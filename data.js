@@ -2061,13 +2061,15 @@ const DB = {
    * propre vérification de rôle (manager/rh/proprietaire, le même critère que l'affichage du
    * bouton) — attendue ici pour que le QR affiché juste après soit immédiatement scannable. */
   async regenererPointageToken(etablissementId) {
+    // §retour Betty du 14/09/2026 : ce secret n'est plus jamais conservé côté client (voir
+    // enregistrerPointage et openPointageQrModal, app.js) — rien à écrire en local ici, seulement le
+    // transmettre au serveur (pointage_secrets, 0051_pointage_rotation.sql).
     const token = generateId('pqr');
-    this.updateEtablissement(etablissementId, { pointageToken: token });
     try {
       await window.SupabaseSync.regeneratePointageTokenRemote(etablissementId, token);
     } catch (err) {
-      console.error('Synchronisation du jeton de pointage vers le serveur impossible, le QR sera rejeté au scan tant que ça persiste.', err);
-      if (this.onSaveError) this.onSaveError('Le QR a été généré localement mais n\'a pas pu être synchronisé avec le serveur : il sera rejeté au scan. Réessayez, ou contactez votre RH si ça persiste.');
+      console.error('Synchronisation du secret de pointage vers le serveur impossible.', err);
+      if (this.onSaveError) this.onSaveError('Le secret n\'a pas pu être régénéré côté serveur. Réessayez, ou contactez votre RH si ça persiste.');
     }
     return token;
   },
@@ -2076,47 +2078,29 @@ const DB = {
    * OUVERT (arrivée sans départ) pour ce salarié aujourd'hui, ce scan le CLÔTURE (départ) ; sinon il
    * en ouvre un nouveau (arrivée). Gère ainsi une pause déjeuner (sortie puis retour) sans logique
    * supplémentaire : plusieurs pointages fermés le même jour s'additionnent simplement au calcul des
-   * heures travaillées. `token` doit correspondre au pointageToken de l'établissement scanné — le QR
-   * étant fixe et affiché publiquement, c'est la SEULE vérification qui empêche un QR d'une autre
-   * entreprise (ou inventé) de créer un pointage ; voir regenererPointageToken pour l'invalider.
+   * heures travaillées.
    *
-   * §retour Betty du 13/09/2026 ("le QR ne marche pas, ça met invalide/expiré") : vérifiait jusqu'ici
-   * le jeton contre le SEUL cache local de l'appareil qui scanne, hydraté uniquement à la connexion
-   * — un salarié dont la session reste ouverte longtemps (le cas normal d'un téléphone-pointeuse) ne
-   * revoit jamais un jeton régénéré (ou apparu pour la première fois, comme au lancement de cette
-   * fonctionnalité) tant qu'il ne se reconnecte pas, d'où un QR pourtant valide rejeté. Vérifie
-   * maintenant contre la valeur RÉELLE côté serveur (getEtablissementPointageToken) — devenue async
-   * pour ça. Si le réseau est indisponible, repli sur le cache local (mieux qu'un pointage bloqué
-   * pour une coupure réseau passagère) plutôt qu'un échec dur. */
-  async enregistrerPointage(employeeId, etablissementId, token) {
-    // §retour Betty du 13/09/2026 ("ça marche pas", sans plus de détail, console difficile d'accès
-    // sur le téléphone utilisé) : message d'erreur temporairement enrichi d'un diagnostic complet
-    // (chaque étape de la vérification), pour identifier la cause exacte depuis une simple capture
-    // d'écran plutôt que de continuer à deviner. À ramener à un message simple une fois la cause
-    // confirmée et corrigée.
-    const abrege = (v) => v ? `${String(v).slice(0, 10)}…` : '(aucun)';
-    // §retour Betty du 13/09/2026 : version embarquée directement dans le message pour lever tout
-    // doute sur un éventuel cache (CDN/navigateur) qui servirait encore un ancien app.js malgré un
-    // rechargement/onglet privé — getAppVersion() lit le "?v=..." réellement chargé par CE navigateur.
-    const versionDiag = (typeof getAppVersion === 'function') ? getAppVersion() : '(getAppVersion introuvable)';
+   * §retour Betty du 14/09/2026 (revue concurrentielle, Pointeuse QR point 1, "empêcher le pointage à
+   * distance") : `code` n'est plus un jeton fixe comparé à une valeur en cache — il change toutes les
+   * 30 secondes (voir openPointageQrModal, app.js) et sa validité est vérifiée ENTIÈREMENT côté
+   * serveur (verifier_pointage_code, 0051_pointage_rotation.sql), qui ne renvoie jamais le secret
+   * lui-même. Contrepartie assumée : sans connexion réseau au moment du scan, un pointage ne peut
+   * plus être validé du tout (il n'y a plus de secret côté client sur lequel se replier) — un mode
+   * hors ligne, s'il est construit un jour, devra composer avec cette contrainte plutôt que la
+   * contourner. */
+  async enregistrerPointage(employeeId, etablissementId, code) {
     const etablissement = this.getEtablissementById(etablissementId);
     if (!etablissement) {
-      return { success: false, error: `QR code invalide ou expiré. [diag v=${versionDiag} : établissement "${etablissementId}" introuvable dans le cache local]` };
+      return { success: false, error: 'QR code invalide ou expiré.' };
     }
-    let tokenActuel = null;
-    let diagVerif = 'serveur';
+    let valide = false;
     try {
-      tokenActuel = await window.SupabaseSync.getEtablissementPointageToken(etablissementId);
-      if (tokenActuel == null) diagVerif = 'serveur (réponse vide)';
+      valide = await window.SupabaseSync.verifierPointageCode(etablissementId, code);
     } catch (err) {
-      diagVerif = `échec réseau (${err && err.message})`;
+      return { success: false, error: 'Connexion au serveur indisponible : le QR ne peut pas être vérifié pour le moment, réessayez.' };
     }
-    if (tokenActuel == null) tokenActuel = etablissement.pointageToken;
-    if (!tokenActuel || tokenActuel !== token) {
-      return {
-        success: false,
-        error: `QR code invalide ou expiré. [diag v=${versionDiag} : scanné=${abrege(token)} / attendu (${diagVerif})=${abrege(tokenActuel)} / établissement=${etablissement.nom}]`
-      };
+    if (!valide) {
+      return { success: false, error: 'QR code invalide ou expiré.' };
     }
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
@@ -4154,11 +4138,7 @@ function makeEmptyEtablissement() {
     telephone: '',
     responsableId: null,
     principal: false,
-    actif: true,
-    // §demande Betty du 11/09/2026 (Pointeuse QR) — voir DB.regenererPointageToken/makeEmptyPointage
-    // un peu plus bas : jeton du QR fixe affiché à l'accueil de CET établissement, null tant qu'il
-    // n'a jamais été généré.
-    pointageToken: null
+    actif: true
   };
 }
 

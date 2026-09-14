@@ -662,30 +662,31 @@ async function fetchCurrentEmployeeRow() {
   return data;
 }
 
-/** §retour Betty du 13/09/2026 ("le QR de la pointeuse ne marche pas, ça met invalide/expiré") :
- * DB.enregistrerPointage (data.js) comparait le jeton scanné au SEUL cache local de l'appareil qui
- * scanne — hydraté uniquement à la connexion (voir hydrateCurrentCompany). Un salarié dont la
- * session reste ouverte des jours/semaines (le cas normal d'un téléphone qui sert de pointeuse) ne
- * revoit jamais un jeton régénéré (ou apparu pour la première fois, ce qui est arrivé à TOUT le
- * monde le jour où cette fonctionnalité a été ajoutée) tant qu'il ne se reconnecte pas — d'où
- * "invalide ou expiré" sur un QR pourtant valide. Lecture directe et à jour depuis Supabase au
- * moment du scan plutôt que de faire confiance à un cache qui peut être arbitrairement ancien —
- * RLS (etablissements_select, 0002_rls_policies.sql) restreint déjà à l'entreprise de l'appelant. */
-async function getEtablissementPointageToken(etablissementId) {
-  const { data, error } = await supabase.from('etablissements').select('data').eq('id', etablissementId).maybeSingle();
-  if (error || !data) return null;
-  return (data.data && data.data.pointageToken) || null;
+/** §retour Betty du 14/09/2026 (revue concurrentielle, Pointeuse QR point 1, "empêcher le pointage à
+ * distance") : jusqu'ici le QR encodait le secret lui-même en clair — une seule photo suffisait pour
+ * pointer depuis chez soi indéfiniment. Le secret ne quitte plus jamais aucun client (voir
+ * 0051_pointage_rotation.sql, table pointage_secrets sans policy RLS d'aucune sorte, seulement
+ * lisible par les fonctions security definer ci-dessous) : get_pointage_qr_code calcule un code
+ * dérivé (HMAC) qui change toutes les 30 secondes, réservé aux rôles qui affichent déjà ce QR
+ * (manager/rh/propriétaire, même critère que le bouton). verifier_pointage_code fait l'inverse côté
+ * scan, ouvert à tout salarié (n'importe qui doit pouvoir pointer) mais ne renvoie jamais le secret,
+ * seulement vrai/faux. */
+async function getPointageQrCode(etablissementId) {
+  const { data, error } = await supabase.rpc('get_pointage_qr_code', { p_etablissement_id: etablissementId });
+  if (error) throw error;
+  return data;
 }
 
-/** §retour Betty du 13/09/2026 — cause RÉELLE du QR de pointage toujours rejeté, trouvée après deux
- * correctifs infructueux sur le timing : etablissements_write (0002_rls_policies.sql) exige la
- * permission gererParametres pour TOUTE écriture sur etablissements, mais le bouton "QR de
- * pointage" (app.js, écran Pointeuse) est explicitement montré aux MANAGERS — qui n'ont PAS cette
- * permission par défaut. La régénération s'écrivait donc bien en local, mais jamais côté serveur
- * (rejetée en silence par RLS), et la vérification en direct ajoutée le même jour la rejetait alors
- * pour de bon, indéfiniment. Passe par regenerate_pointage_token (0050), une fonction security
- * definer qui ne touche QUE ce champ, avec sa propre vérification de rôle (manager/rh/proprietaire
- * — le même critère que l'affichage du bouton, jamais plus large que ça). */
+async function verifierPointageCode(etablissementId, code) {
+  const { data, error } = await supabase.rpc('verifier_pointage_code', { p_etablissement_id: etablissementId, p_code: code });
+  if (error) throw error;
+  return data === true;
+}
+
+/** Régénère le secret lui-même (jamais le code affiché, qui tourne déjà tout seul) — utile en
+ * secours si le secret est suspecté compromis (accès serveur, sauvegarde...), pas pour l'usage
+ * courant. Toujours restreint à manager/rh/propriétaire (regenerate_pointage_token, 0050, mis à jour
+ * le 14/09/2026 pour écrire dans pointage_secrets plutôt que etablissements.data). */
 async function regeneratePointageTokenRemote(etablissementId, token) {
   const { error } = await supabase.rpc('regenerate_pointage_token', { p_etablissement_id: etablissementId, p_token: token });
   if (error) throw error;
@@ -1443,7 +1444,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getEtablissementPointageToken, regeneratePointageTokenRemote,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };

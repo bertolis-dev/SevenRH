@@ -15093,23 +15093,57 @@ function renderEtablissementCard(etab) {
   `;
 }
 
-/** §demande Betty du 11/09/2026 (Pointeuse QR, "un QR fixe par établissement") : QR encodant
- * "nexusrh-pointage:<etablissementId>:<pointageToken>" (voir openPointageScanModal, qui reconnaît ce
- * préfixe) — à imprimer/afficher à l'accueil de CET établissement. "Régénérer" invalide
- * immédiatement l'ancien tirage (perdu, photographié/partagé...), voir DB.regenererPointageToken. */
+/** §demande Betty du 11/09/2026 (Pointeuse QR), révisé le 14/09/2026 (revue concurrentielle,
+ * Pointeuse QR point 1, "empêcher le pointage à distance") : le QR encodait jusqu'ici le secret de
+ * l'établissement en clair — une seule photo suffisait pour pointer depuis chez soi indéfiniment. Le
+ * QR encode maintenant "nexusrh-pointage:<etablissementId>:<code>" où `code` est dérivé du secret
+ * (voir get_pointage_qr_code, 0051_pointage_rotation.sql) et change automatiquement toutes les 30
+ * secondes — le secret lui-même n'est plus jamais transmis à aucun client. Conséquence directe :
+ * CE QR doit rester affiché en DIRECT sur un écran à l'accueil, il ne peut plus être imprimé ni
+ * partagé comme image (voir la disparition de ces deux boutons, devenus trompeurs). "Régénérer le
+ * secret" reste utile en secours (fuite du secret lui-même), pas pour l'usage courant. */
 async function openPointageQrModal(etablissementId) {
   const etab = etablissementRepository.getById(etablissementId);
   if (!etab) return;
-  // §retour Betty du 13/09/2026 : regenererPointageToken est désormais async (attend une
-  // synchronisation serveur immédiate, voir son commentaire) — attendu ici pour que le QR affiché
-  // juste après soit garanti immédiatement scannable, pas seulement "correct en local".
-  if (!etab.pointageToken) await etablissementRepository.regenererPointageToken(etablissementId);
-  renderPointageQrModalContent(etablissementId);
+  const ok = await refreshPointageQrModalContent(etablissementId, true);
+  if (!ok) return;
+  // Rafraîchissement automatique tant que la modale reste ouverte à l'accueil — le code affiché doit
+  // rester scannable en continu, pas seulement à l'ouverture. S'auto-arrête dès que la modale a été
+  // fermée (le nœud du QR n'existe alors plus), sans dépendre d'un hook sur les boutons de fermeture.
+  // Gardé par `typeof setInterval` : absent du bac à sable minimal des tests (voir load-app-js.js),
+  // qui n'émule pas les minuteurs répétés — jamais un problème en navigateur réel.
+  if (typeof setInterval === 'function') {
+    const intervalId = setInterval(() => {
+      if (!document.getElementById('pointage-qr-print-area')) { clearInterval(intervalId); return; }
+      refreshPointageQrModalContent(etablissementId, false);
+    }, 30000);
+  }
 }
 
-function renderPointageQrModalContent(etablissementId) {
+async function refreshPointageQrModalContent(etablissementId, premiereOuverture) {
   const etab = etablissementRepository.getById(etablissementId);
-  const payload = `nexusrh-pointage:${etab.id}:${etab.pointageToken}`;
+  if (!etab) return false;
+  let code;
+  try {
+    code = await window.SupabaseSync.getPointageQrCode(etablissementId);
+  } catch (err) {
+    if (!premiereOuverture) return true; // coupure réseau passagère en arrière-plan : le prochain rafraîchissement réessaiera, jamais remplacer un QR encore affiché par une erreur.
+    // Premier affichage jamais régénéré pour cet établissement (secret pas encore initialisé) :
+    // régénère puis réessaie une seule fois, même geste qu'avant ce correctif.
+    await etablissementRepository.regenererPointageToken(etablissementId);
+    try {
+      code = await window.SupabaseSync.getPointageQrCode(etablissementId);
+    } catch (err2) {
+      showToast('Impossible de générer le QR de pointage : connexion au serveur indisponible.', 'error');
+      return false;
+    }
+  }
+  renderPointageQrModalContent(etab, code);
+  return true;
+}
+
+function renderPointageQrModalContent(etab, code) {
+  const payload = `nexusrh-pointage:${etab.id}:${code}`;
   const qr = qrcode(0, 'M');
   qr.addData(payload);
   qr.make();
@@ -15122,19 +15156,14 @@ function renderPointageQrModalContent(etablissementId) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body" style="text-align: center;">
-        <p class="text-muted">À imprimer ou afficher à l'accueil de cet établissement : chaque salarié le scanne (bouton "Pointeuse") pour enregistrer son arrivée puis son départ.</p>
-        <!-- §retour Betty du 11/09/2026 ("un bouton pour partager et imprimer") : .print-area (déjà
-             utilisée par la Fiche PDF/attestation, voir style.css) isole ce seul contenu à
-             l'impression — jamais le reste de l'application (barre latérale, en-tête...). -->
+        <p class="text-muted">À afficher en direct sur un écran à l'accueil de cet établissement (tablette, ordinateur) : ce QR change automatiquement toutes les 30 secondes, il ne peut plus être imprimé sur papier. Chaque salarié le scanne (bouton "Pointeuse") pour enregistrer son arrivée puis son départ.</p>
         <div class="print-area" id="pointage-qr-print-area" style="margin: 16px 0;">
           <h3 style="margin: 0 0 12px;">Pointage — ${escapeHtml(etab.nom)}</h3>
           ${qrSvg}
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="btn-regenerer-pointage-qr">Régénérer (invalide l'ancien)</button>
-        <button type="button" class="btn btn-secondary" id="btn-partager-pointage-qr">${icon(ICONS.share, 14)} Partager</button>
-        <button type="button" class="btn btn-secondary" id="btn-imprimer-pointage-qr">${icon(ICONS.printer, 14)} Imprimer</button>
+        <button type="button" class="btn btn-secondary" id="btn-regenerer-pointage-qr">Régénérer le secret</button>
         <button type="button" class="btn btn-primary" id="btn-close-modal-footer">Fermer</button>
       </div>
     </div>
@@ -15146,66 +15175,17 @@ function renderPointageQrModalContent(etablissementId) {
   document.getElementById('btn-close-modal-footer').addEventListener('click', closeModal);
   document.getElementById('btn-regenerer-pointage-qr').addEventListener('click', () => {
     openConfirm({
-      title: 'Régénérer ce QR ?',
-      message: "L'ancien QR (déjà imprimé/affiché) ne fonctionnera plus dès qu'un nouveau sera généré.",
+      title: 'Régénérer le secret de ce QR ?',
+      message: "Utile seulement en cas de doute sur une fuite du secret lui-même (accès serveur compromis, par exemple) : le code affiché change déjà automatiquement toutes les 30 secondes.",
       confirmLabel: 'Régénérer',
       danger: true,
       onConfirm: async () => {
-        // §retour Betty du 13/09/2026 : attendu avant de réafficher le QR, même raison que dans
-        // openPointageQrModal ci-dessus.
-        await etablissementRepository.regenererPointageToken(etablissementId);
-        showToast('QR régénéré.');
-        renderPointageQrModalContent(etablissementId);
+        await etablissementRepository.regenererPointageToken(etab.id);
+        showToast('Secret régénéré.');
+        refreshPointageQrModalContent(etab.id, true);
       }
     });
   });
-  document.getElementById('btn-imprimer-pointage-qr').addEventListener('click', () => window.print());
-  document.getElementById('btn-partager-pointage-qr').addEventListener('click', () => sharePointageQrImage(etab));
-}
-
-/** §retour Betty du 11/09/2026 ("un bouton pour partager") : le QR est un <svg> (qrcode.js), pas un
- * fichier — le convertit en PNG (via <canvas>) pour pouvoir le partager comme une vraie image
- * (WhatsApp, email...), plutôt qu'un texte ou un lien qui n'a pas de sens ici (le QR encode un jeton
- * interne, pas une URL ouvrable). navigator.share n'existe que sur HTTPS/contextes sécurisés et
- * certains navigateurs (surtout mobile) : repli sur un message clair plutôt qu'un échec silencieux. */
-async function sharePointageQrImage(etab) {
-  const svgEl = document.querySelector('#pointage-qr-print-area svg');
-  if (!svgEl) return;
-  if (!navigator.share) {
-    showToast("Le partage n'est pas disponible sur ce navigateur, utilisez Imprimer.", 'error');
-    return;
-  }
-  const svgData = new XMLSerializer().serializeToString(svgEl);
-  const url = URL.createObjectURL(new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' }));
-  try {
-    const img = await new Promise((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = url;
-    });
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width || 400;
-    canvas.height = img.height || 400;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    const file = new File([blob], `qr-pointage-${etab.nom}.png`, { type: 'image/png' });
-    const shareData = { title: `QR de pointage — ${etab.nom}`, files: [file] };
-    if (navigator.canShare && !navigator.canShare(shareData)) {
-      // Partage de fichier non supporté par ce navigateur (voir canShare) : repli sur un partage
-      // texte simple plutôt qu'un échec silencieux — au moins le nom de l'établissement est transmis.
-      await navigator.share({ title: shareData.title, text: `QR de pointage pour ${etab.nom} (voir la pièce jointe imprimée, ou Paramètres > Établissements dans Nexus).` });
-      return;
-    }
-    await navigator.share(shareData);
-  } catch (err) {
-    if (err && err.name !== 'AbortError') showToast('Impossible de partager ce QR.', 'error');
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function bindParametresEtablissementsEvents() {

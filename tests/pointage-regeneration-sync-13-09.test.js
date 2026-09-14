@@ -1,17 +1,13 @@
 /**
  * Seven RH — retour Betty du 13/09/2026 ("ça marche toujours pas", même compte/appareil pour
- * générer ET scanner) : le premier correctif du jour (vérifier le jeton EN DIRECT côté serveur,
- * voir pointage-jeton-live-13-09.test.js) réglait un cache client périmé, mais ouvrait une NOUVELLE
- * course dans l'autre sens — regenererPointageToken synchronise le nouveau jeton vers Supabase EN
- * ARRIÈRE-PLAN (jamais attendu, comportement voulu pour la plupart des écritures de l'app) : scanner
- * un QR tout juste généré pouvait arriver AVANT que le serveur n'ait reçu ce nouveau jeton, et être
- * rejeté par la toute nouvelle vérification en direct — alors même que rien n'avait jamais quitté
- * le même appareil/compte.
+ * générer ET scanner) : regenererPointageToken synchronise le secret vers Supabase — scanner un QR
+ * tout juste généré pouvait arriver AVANT que le serveur n'ait reçu ce nouveau secret, et être rejeté
+ * — alors même que rien n'avait jamais quitté le même appareil/compte.
  *
- * Ce fichier simule un "serveur" en mémoire (le dernier jeton reçu par pushEtablissements) pour
- * vérifier que regenererPointageToken() ATTEND bien cette synchronisation avant de renvoyer le
- * nouveau jeton — un scan immédiatement après doit donc toujours réussir, sans dépendre d'un délai
- * arbitraire.
+ * §retour Betty du 14/09/2026 (revue concurrentielle, Pointeuse QR point 1) : mocks mis à jour pour
+ * le nouveau mécanisme (code dérivé, rotatif, vérifié par verifier_pointage_code — voir
+ * pointage-rotation-14-09.test.js pour la propriété de sécurité elle-même) ; le comportement testé
+ * ici (regenererPointageToken ATTEND la synchronisation avant de renvoyer) est inchangé.
  */
 const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
@@ -19,14 +15,12 @@ const { loadAppJs } = require('./load-app-js');
 async function run() {
   const { DB, sandbox, etablissementRepository, pointageRepository } = loadAppJs();
 
-  // "Serveur" en mémoire : ne connaît que ce que pushEtablissements lui a explicitement transmis.
-  let jetonCoteServeur = null;
+  // "Serveur" en mémoire : ne connaît que ce que regeneratePointageTokenRemote lui a transmis.
+  let secretCoteServeur = null;
   sandbox.window.SupabaseSync = new Proxy({
-    pushEtablissements: async (list) => {
-      const etab = list[0];
-      jetonCoteServeur = etab ? etab.pointageToken : null;
-    },
-    getEtablissementPointageToken: async () => jetonCoteServeur,
+    regeneratePointageTokenRemote: async (etablissementId, token) => { secretCoteServeur = token; },
+    getPointageQrCode: async () => { if (secretCoteServeur === null) throw new Error('secret non initialisé'); return `code-${secretCoteServeur}`; },
+    verifierPointageCode: async (etablissementId, code) => secretCoteServeur !== null && code === `code-${secretCoteServeur}`,
   }, { get(target, prop) { return prop in target ? target[prop] : async () => ({ success: true }); } });
 
   DB.init();
@@ -34,14 +28,15 @@ async function run() {
   DB._currentEmployeeId = rh.id;
   const etab = etablissementRepository.getAll()[0];
 
-  const token = await etablissementRepository.regenererPointageToken(etab.id);
+  await etablissementRepository.regenererPointageToken(etab.id);
 
-  // Le "serveur" doit déjà connaître ce jeton une fois regenererPointageToken() résolue — pas
-  // besoin d'attendre quoi que ce soit d'autre avant de considérer le QR utilisable.
-  assert.strictEqual(jetonCoteServeur, token, 'la synchronisation vers le serveur doit être terminée avant que regenererPointageToken() ne renvoie');
+  // Le "serveur" doit déjà connaître ce secret une fois regenererPointageToken() résolue — pas
+  // besoin d'attendre quoi que ce soit d'autre avant que le QR devienne utilisable.
+  const code = await sandbox.window.SupabaseSync.getPointageQrCode(etab.id);
+  assert.ok(code, 'la synchronisation vers le serveur doit être terminée avant que regenererPointageToken() ne renvoie');
 
-  const resultat = await pointageRepository.enregistrer(rh.id, etab.id, token);
-  assert.strictEqual(resultat.success, true, 'un scan immédiatement après la génération doit réussir : le serveur a déjà le jeton à jour, pas de course possible');
+  const resultat = await pointageRepository.enregistrer(rh.id, etab.id, code);
+  assert.strictEqual(resultat.success, true, 'un scan immédiatement après la génération doit réussir : le serveur a déjà le secret à jour, pas de course possible');
 
   console.log('OK — pointage-regeneration-sync-13-09.test.js (régénération attend la synchronisation serveur, un scan immédiat après génération réussit toujours)');
 }
