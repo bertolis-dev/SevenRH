@@ -107,6 +107,12 @@ globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__LANDING_ALACARTE_MODULES = LANDING_ALACARTE_MODULES;
 globalThis.__renderPointeuse = renderPointeuse;
+globalThis.__renderPointeuseEquipe = renderPointeuseEquipe;
+globalThis.__openRegulariserPointageModal = openRegulariserPointageModal;
+globalThis.__renderEcartsPointageCard = renderEcartsPointageCard;
+globalThis.__renderRapportMensuelPointageCard = renderRapportMensuelPointageCard;
+globalThis.__bindPointeuseEvents = bindPointeuseEvents;
+globalThis.__canRegulariserPointages = canRegulariserPointages;
 globalThis.__openPointageQrModal = openPointageQrModal;
 globalThis.__openModeleDocumentModal = openModeleDocumentModal;
 globalThis.__openGenererDocumentModal = openGenererDocumentModal;
@@ -155,6 +161,9 @@ globalThis.__renderDashboardActionCenter = renderDashboardActionCenter;
 globalThis.__renderCalendrierValidationsCard = renderCalendrierValidationsCard;
 globalThis.__exportTicketsCSV = exportTicketsCSV;
 globalThis.__getTicketsRows = getTicketsRows;
+globalThis.__genererFichierCommandeTickets = genererFichierCommandeTickets;
+globalThis.__openCorrigerTicketsModal = openCorrigerTicketsModal;
+globalThis.__renderTicketsEquipe = renderTicketsEquipe;
 globalThis.__canSelfCancelPendingRequest = canSelfCancelPendingRequest;
 globalThis.__handleSelfCancelLeaveRequest = handleSelfCancelLeaveRequest;
 globalThis.__handleEditTelework = handleEditTelework;
@@ -286,6 +295,12 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     LANDING_ALACARTE_MODULES: sandbox.__LANDING_ALACARTE_MODULES,
     renderPointeuse: sandbox.__renderPointeuse,
+    renderPointeuseEquipe: sandbox.__renderPointeuseEquipe,
+    openRegulariserPointageModal: sandbox.__openRegulariserPointageModal,
+    renderEcartsPointageCard: sandbox.__renderEcartsPointageCard,
+    renderRapportMensuelPointageCard: sandbox.__renderRapportMensuelPointageCard,
+    bindPointeuseEvents: sandbox.__bindPointeuseEvents,
+    canRegulariserPointages: sandbox.__canRegulariserPointages,
     openPointageQrModal: sandbox.__openPointageQrModal,
     getVisibleEmployeeIdsForCurrentUser: sandbox.__getVisibleEmployeeIdsForCurrentUser,
     isCurrentWorkflowStepFor: sandbox.__isCurrentWorkflowStepFor,
@@ -322,6 +337,9 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     renderCalendrierValidationsCard: sandbox.__renderCalendrierValidationsCard,
     exportTicketsCSV: sandbox.__exportTicketsCSV,
     getTicketsRows: sandbox.__getTicketsRows,
+    genererFichierCommandeTickets: sandbox.__genererFichierCommandeTickets,
+    openCorrigerTicketsModal: sandbox.__openCorrigerTicketsModal,
+    renderTicketsEquipe: sandbox.__renderTicketsEquipe,
     canSelfCancelPendingRequest: sandbox.__canSelfCancelPendingRequest,
     handleSelfCancelLeaveRequest: sandbox.__handleSelfCancelLeaveRequest,
     handleEditTelework: sandbox.__handleEditTelework,

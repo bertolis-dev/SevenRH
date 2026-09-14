@@ -983,6 +983,35 @@ function verifierControlesLegauxPlanning(employeeId, shifts) {
   return violations;
 }
 
+/** §retour Betty du 14/09/2026 (Pointeuse QR point 5, "écarts et alertes") : compare le quart
+ * PRÉVU (planning) au pointage RÉEL d'un jour donné — retards, oublis, dépassements. `tolerance`
+ * (minutes) évite de signaler un simple bruit de quelques minutes comme un vrai écart. Retourne un
+ * tableau de constats, jamais un jugement pré-formaté ("mauvais salarié") — juste les faits, au
+ * manager d'apprécier. */
+function calculerEcartsPointageJour(employeeId, dateStr, weekday, shifts, pointagesJour, toleranceMinutes) {
+  const tolerance = toleranceMinutes == null ? 10 : toleranceMinutes;
+  const shift = shifts.find(s => s.employeeId === employeeId && s.weekday === weekday);
+  if (!shift) return [];
+  if (!pointagesJour.length) {
+    return [{ type: 'oubli', message: `Quart prévu ${shift.heureDebut}-${shift.heureFin}, aucun pointage ce jour-là.` }];
+  }
+  const ecarts = [];
+  const heureArriveeMin = shiftPlagesMinutes({ heureDebut: pointagesJour[0].heureArrivee, heureFin: pointagesJour[0].heureArrivee }).debut;
+  const debutPrevuMin = shiftPlagesMinutes(shift).debut;
+  if (heureArriveeMin > debutPrevuMin + tolerance) {
+    ecarts.push({ type: 'retard', message: `Arrivée à ${pointagesJour[0].heureArrivee}, quart prévu à ${shift.heureDebut} (retard de ${heureArriveeMin - debutPrevuMin} min).` });
+  }
+  const dernier = pointagesJour[pointagesJour.length - 1];
+  if (dernier.heureDepart) {
+    const departMin = shiftPlagesMinutes({ heureDebut: dernier.heureDepart, heureFin: dernier.heureDepart }).debut;
+    const finPrevueMin = shiftPlagesMinutes(shift).fin;
+    if (departMin > finPrevueMin + tolerance) {
+      ecarts.push({ type: 'depassement', message: `Départ à ${dernier.heureDepart}, quart prévu jusqu'à ${shift.heureFin} (dépassement de ${departMin - finPrevueMin} min).` });
+    }
+  }
+  return ecarts;
+}
+
 /** §retour Betty du 14/09/2026 (Planning point 4) : chevauchement entre UN quart et les
  * indisponibilités récurrentes déclarées par le salarié — même logique de chevauchement d'horaires
  * que shiftPlagesMinutes ci-dessus, jamais un blocage (voir son commentaire, app.js). */
@@ -1149,7 +1178,7 @@ function seedExampleShifts(company) {
 // ---------------------------------------------------------------------------
 
 function makeEmptyPointage() {
-  return { id: null, employeeId: null, etablissementId: null, date: '', heureArrivee: null, heureDepart: null };
+  return { id: null, employeeId: null, etablissementId: null, date: '', heureArrivee: null, heureDepart: null, regularisation: null };
 }
 
 /** Durée travaillée d'UN pointage fermé (arrivée + départ), en minutes — 0 si encore ouvert (pas de
@@ -2505,6 +2534,64 @@ const DB = {
     return { success: true, type: 'arrivee', heure };
   },
 
+  /** §retour Betty du 14/09/2026 (Pointeuse QR point 2, "régularisation par le manager") : un
+   * salarié oublie de pointer, ça arrive tous les jours. Corrige un pointage EXISTANT (jamais une
+   * création libre sans lien avec un vrai jour travaillé — voir openRegulariserPointageModal côté
+   * UI, qui liste les pointages du salarié plutôt que de laisser saisir une date au hasard),
+   * toujours avec un motif obligatoire et une trace d'auteur, même principe que "Régulariser" côté
+   * congés. */
+  regulariserPointage(pointageId, patch, motif, auteurId) {
+    const list = this.getPointages();
+    const index = list.findIndex(p => p.id === pointageId);
+    if (index === -1) return { success: false, error: 'Pointage introuvable.' };
+    if (!motif || !motif.trim()) return { success: false, error: 'Indiquez un motif pour cette régularisation.' };
+    const avant = list[index];
+    list[index] = Object.assign({}, avant, patch, {
+      regularisation: { auteurId, motif: motif.trim(), date: new Date().toISOString(), avant: { heureArrivee: avant.heureArrivee, heureDepart: avant.heureDepart } }
+    });
+    this.savePointages(list);
+    const employee = this.getEmployeeById(avant.employeeId);
+    this.logAudit('Modification', 'Pointage', `${employee ? `${employee.prenom} ${employee.nom}` : avant.employeeId} · ${avant.date} · régularisation manager · ${motif.trim()}`);
+    return { success: true, pointage: list[index] };
+  },
+
+  /** Crée un pointage manquant pour un jour donné (l'oubli TOTAL, pas seulement une heure fausse) —
+   * même garde-fous que regulariserPointage (motif obligatoire, trace d'auteur). */
+  ajouterPointageOublie(employeeId, etablissementId, date, heureArrivee, heureDepart, motif, auteurId) {
+    if (!motif || !motif.trim()) return { success: false, error: 'Indiquez un motif pour cette régularisation.' };
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const list = this.getPointages();
+    const pointage = Object.assign(makeEmptyPointage(), {
+      id: generateId('pointage'), employeeId, etablissementId, date, heureArrivee, heureDepart: heureDepart || null,
+      regularisation: { auteurId, motif: motif.trim(), date: new Date().toISOString(), avant: null }
+    });
+    list.push(pointage);
+    this.savePointages(list);
+    this.logAudit('Création', 'Pointage', `${employee.prenom} ${employee.nom} · ${date} · ajouté par le manager (oubli) · ${motif.trim()}`);
+    return { success: true, pointage };
+  },
+
+  /** §retour Betty du 14/09/2026 (Pointeuse QR point 4, "rapport mensuel validé par le salarié") :
+   * { 'AAAA-MM': { statut, commentaire, date } } sur le salarié — même patron que
+   * ticketsAjustements/variablesPaie (mois-clé, remplace plutôt qu'accumule). C'est cette
+   * confirmation explicite qui donne sa valeur probante au décompte en cas de litige, pas un
+   * silence qui vaudrait acceptation tacite. */
+  validerPointagesMensuels(employeeId, year, month, statut, commentaire) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    if (statut === 'conteste' && !(commentaire || '').trim()) {
+      return { success: false, error: 'Indiquez ce qui vous semble incorrect pour contester ce mois.' };
+    }
+    const monthKey = ticketsMonthKey(year, month);
+    const validations = Object.assign({}, employee.pointageValidationsMensuelles, {
+      [monthKey]: { statut, commentaire: (commentaire || '').trim(), date: new Date().toISOString() }
+    });
+    this.updateEmployee(employeeId, { pointageValidationsMensuelles: validations });
+    this.logAudit(statut === 'valide' ? 'Validation' : 'Contestation', 'Pointage mensuel', `${employee.prenom} ${employee.nom} · ${monthKey}${commentaire ? ' · ' + commentaire.trim() : ''}`);
+    return { success: true };
+  },
+
   // ---- Vacances scolaires (paramétrables par zone) ----
 
   getSchoolHolidays() {
@@ -2847,6 +2934,24 @@ const DB = {
     this.updateEmployee(employeeId, { ticketsAjustements });
     this.logAudit('Modification', 'Tickets restaurant', `${employee.prenom} ${employee.nom} · ${ticketsMonthKey(year, month)} · correction ${value >= 0 ? '+' : ''}${value}${motif ? ' · ' + motif : ''}`);
     return { success: true };
+  },
+
+  /** §retour Betty du 14/09/2026 (Tickets restaurant point 3) : snapshot du nombre de titres
+   * calculé pour CHAQUE salarié à l'instant où le fichier de commande est généré — voir
+   * calculerEcartRegularisationTickets, qui compare ce nombre au calcul refait plus tard pour
+   * proposer une régularisation automatique si une absence a été déclarée après coup. */
+  enregistrerCommandeTickets(year, month, leaveRequests, teleworkRequests) {
+    const settings = this.getSettings();
+    const monthKey = ticketsMonthKey(year, month);
+    const employees = this.getEmployees();
+    const misesAJour = employees.map(employee => {
+      const result = calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings);
+      return Object.assign({}, employee, {
+        ticketsCommandesEnregistrees: Object.assign({}, employee.ticketsCommandesEnregistrees, { [monthKey]: result.nbTickets })
+      });
+    });
+    this.saveEmployees(misesAJour);
+    this.logAudit('Export', 'Fichier de commande tickets restaurant', monthKey);
   },
 
   /** Sprint SIRH premium §6 : "Variables" du récapitulatif de Préparation de paie (primes, heures
@@ -4277,7 +4382,9 @@ const etablissementRepository = {
 const pointageRepository = {
   getAll: () => DB.getPointages(),
   getForEmployeeOnDate: (employeeId, date) => DB.getPointagesForEmployeeOnDate(employeeId, date),
-  enregistrer: (employeeId, etablissementId, token) => DB.enregistrerPointage(employeeId, etablissementId, token)
+  enregistrer: (employeeId, etablissementId, token) => DB.enregistrerPointage(employeeId, etablissementId, token),
+  regulariser: (pointageId, patch, motif, auteurId) => DB.regulariserPointage(pointageId, patch, motif, auteurId),
+  ajouterOublie: (employeeId, etablissementId, date, heureArrivee, heureDepart, motif, auteurId) => DB.ajouterPointageOublie(employeeId, etablissementId, date, heureArrivee, heureDepart, motif, auteurId)
 };
 
 const companyRepository = {
@@ -4500,7 +4607,15 @@ function makeEmptyEmployee() {
 
     compteurs: {},
     ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
+    // §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois
+    // précédent") : { 'AAAA-MM': nbTickets } — nombre de titres tel que calculé au moment où le
+    // fichier de commande a été généré pour ce mois (voir enregistrerCommandeTickets). Si une
+    // absence déclarée après coup change le calcul, comparer ce nombre au calcul actuel permet de
+    // proposer automatiquement la correction plutôt que d'attendre qu'un humain remarque l'écart.
+    ticketsCommandesEnregistrees: {},
     variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
+    // §retour Betty du 14/09/2026 (Pointeuse QR point 4) : { 'AAAA-MM': { statut, commentaire, date } } — voir DB.validerPointagesMensuels().
+    pointageValidationsMensuelles: {},
     heuresSupplementaires: {}, // { 'AAAA-MM': heures } — heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
     // §retour QA du 26/08/2026 (point 7.21) : { 'AAAA-MM': heures } — heures de repos compensateur
     // PRISES ce mois-ci (saisie manuelle, même principe que heuresSupplementaires ci-dessus, aucun
@@ -5213,6 +5328,22 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
   const partEmployeur = round2(montantTotal * settings.ticketsPartEmployeurPct / 100);
   const partSalarie = round2(montantTotal - partEmployeur);
   return { nbTickets, montantTotal, partEmployeur, partSalarie, ajustement };
+}
+
+/** §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois
+ * précédent") : compare le nombre de titres tel que COMMANDÉ (snapshot au moment de la génération
+ * du fichier de commande, voir DB.enregistrerCommandeTickets) au calcul ACTUEL — si une absence
+ * déclarée après coup a changé le résultat, l'écart apparaît ici. Retourne null si rien n'a jamais
+ * été commandé pour ce mois, ou si le calcul actuel correspond déjà (une correction manuelle a pu
+ * déjà résorber l'écart entre-temps). */
+function calculerEcartRegularisationTickets(employee, year, month, leaveRequests, teleworkRequests, settings) {
+  const monthKey = ticketsMonthKey(year, month);
+  const commande = employee.ticketsCommandesEnregistrees && employee.ticketsCommandesEnregistrees[monthKey];
+  if (commande == null) return null;
+  const actuel = calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings);
+  const ecart = actuel.nbTickets - commande;
+  if (ecart === 0) return null;
+  return { commande, actuel: actuel.nbTickets, ecart };
 }
 
 /**

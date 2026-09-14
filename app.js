@@ -19212,6 +19212,14 @@ function bindTeletravailPlanningEvents() {
  * pointé aujourd'hui, ici — même portée que scopeToVisibleEmployees (soi-même exclu, un manager ne
  * voit que son équipe, RH/Propriétaire/Comptabilité voient tout le monde). Retourne '' (pas de
  * carte) pour un salarié sans personne à voir, plutôt qu'une carte vide sans intérêt. */
+/** §retour Betty du 14/09/2026 (Pointeuse QR point 2, "régularisation par le manager") : même
+ * critère que qui affiche/régénère le QR (manager/rh/propriétaire) — un salarié ne corrige jamais
+ * le pointage d'un tiers, encore moins le sien. */
+function canRegulariserPointages() {
+  const user = authRepository.getCurrentUser();
+  return ['manager', 'rh', 'proprietaire'].includes(user.role);
+}
+
 function renderPointeuseEquipe() {
   const user = authRepository.getCurrentUser();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -19220,6 +19228,7 @@ function renderPointeuseEquipe() {
     .sort((a, b) => a.nom.localeCompare(b.nom));
   if (!employees.length) return '';
 
+  const canRegulariser = canRegulariserPointages();
   const today = toISODate(new Date());
   const rows = employees.map(e => {
     const pointagesDuJour = pointageRepository.getForEmployeeOnDate(e.id, today);
@@ -19229,18 +19238,108 @@ function renderPointeuseEquipe() {
       : !dernierDuJour.heureDepart
         ? `<span class="badge badge-success">${icon(ICONS.checkCircle, 12)} Arrivé à ${escapeHtml(dernierDuJour.heureArrivee)}</span>`
         : `<span class="badge badge-muted">Départ à ${escapeHtml(dernierDuJour.heureDepart)}</span>`;
-    return `<tr><td>${personNameHtml(e)}</td><td>${statutHtml}</td></tr>`;
+    return `<tr><td>${personNameHtml(e)}</td><td>${statutHtml}</td><td>${canRegulariser ? `<button type="button" class="btn-link" data-regulariser-pointage="${e.id}">Régulariser</button>` : ''}</td></tr>`;
   }).join('');
 
   return `
     <div class="card" style="margin-top: 16px;">
       <h2>Qui a pointé aujourd'hui</h2>
       <table class="table">
-        <thead><tr><th>Salarié</th><th>Statut</th></tr></thead>
+        <thead><tr><th>Salarié</th><th>Statut</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${canRegulariser ? renderEcartsPointageCard(employees) : ''}
   `;
+}
+
+/** §retour Betty du 14/09/2026 (Pointeuse QR point 5, "écarts et alertes") : constats des 7
+ * derniers jours (hier inclus, jamais aujourd'hui — une journée en cours n'a pas encore de "départ"
+ * à comparer). Purement informatif, jamais un blocage ni une notation du salarié. */
+function renderEcartsPointageCard(employees) {
+  const allShifts = shiftRepository.getAll();
+  const constats = [];
+  for (let i = 1; i <= 7; i++) {
+    const date = addDays(new Date(), -i);
+    const dateStr = toISODate(date);
+    const weekday = WEEKDAY_LABELS[(date.getDay() + 6) % 7];
+    employees.forEach(e => {
+      const ecarts = calculerEcartsPointageJour(e.id, dateStr, weekday, allShifts, pointageRepository.getForEmployeeOnDate(e.id, dateStr));
+      ecarts.forEach(ecart => constats.push({ employee: e, date: dateStr, ecart }));
+    });
+  }
+  if (!constats.length) return '';
+  constats.sort((a, b) => b.date.localeCompare(a.date));
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <h2>Écarts constatés (7 derniers jours)</h2>
+      ${constats.slice(0, 20).map(c => `
+        <div class="mini-list-item">
+          <span>${formatDate(c.date)} · ${personNameHtml(c.employee)} · ${escapeHtml(c.ecart.message)}</span>
+          <span class="badge badge-${c.ecart.type === 'oubli' ? 'muted' : 'warning'}">${c.ecart.type === 'oubli' ? 'Oubli' : c.ecart.type === 'retard' ? 'Retard' : 'Dépassement'}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function openRegulariserPointageModal(employeeId, dateStr) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) return;
+  const date = dateStr || toISODate(new Date());
+  const pointagesDuJour = pointageRepository.getForEmployeeOnDate(employeeId, date);
+  const dernier = pointagesDuJour[pointagesDuJour.length - 1];
+  const etablissements = etablissementRepository.getAll();
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Régulariser le pointage</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="regulariser-pointage-form">
+        <div class="modal-body">
+          <p class="text-muted">${personNameHtml(employee)} — ${formatDate(date)}</p>
+          ${!dernier ? `<p class="text-muted">Aucun pointage ce jour-là : cette action en crée un.</p>
+            <div class="form-field"><label for="f-etablissement">Établissement</label>
+              <select class="input" id="f-etablissement">${etablissements.map(et => `<option value="${et.id}">${escapeHtml(et.nom)}</option>`).join('')}</select>
+            </div>` : ''}
+          <div class="form-grid">
+            <div class="form-field"><label for="f-heure-arrivee">Arrivée</label><input class="input" type="time" id="f-heure-arrivee" value="${dernier ? escapeHtml(dernier.heureArrivee || '') : ''}" required></div>
+            <div class="form-field"><label for="f-heure-depart">Départ</label><input class="input" type="time" id="f-heure-depart" value="${dernier ? escapeHtml(dernier.heureDepart || '') : ''}"></div>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-motif-regularisation">Motif *</label>
+            <input class="input" type="text" id="f-motif-regularisation" placeholder="Ex. oubli de pointage" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('regulariser-pointage-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const motif = document.getElementById('f-motif-regularisation').value.trim();
+    if (!motif) { showToast('Indiquez un motif.', 'error'); return; }
+    const heureArrivee = document.getElementById('f-heure-arrivee').value;
+    const heureDepart = document.getElementById('f-heure-depart').value || null;
+    const auteurId = authRepository.getCurrentUser().id;
+    const result = dernier
+      ? pointageRepository.regulariser(dernier.id, { heureArrivee, heureDepart }, motif, auteurId)
+      : pointageRepository.ajouterOublie(employeeId, document.getElementById('f-etablissement').value, date, heureArrivee, heureDepart, motif, auteurId);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Pointage régularisé.');
+    closeModal();
+    render();
+  });
 }
 
 function renderPointeuse() {
@@ -19306,6 +19405,42 @@ function renderPointeuse() {
         </table>
       </div>
     ` : ''}
+
+    ${renderRapportMensuelPointageCard(user)}
+  `;
+}
+
+/** §retour Betty du 14/09/2026 (Pointeuse QR point 4, "rapport mensuel validé par le salarié") :
+ * proposé pour le mois PRÉCÉDENT une fois celui-ci terminé (jamais le mois en cours, encore
+ * incomplet) — le salarié confirme ("c'est exact") ou conteste (avec un commentaire obligatoire).
+ * C'est cette confirmation explicite qui donne sa valeur probante au décompte en cas de litige. */
+function renderRapportMensuelPointageCard(user) {
+  const now = new Date();
+  const moisPrecedent = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const year = moisPrecedent.getFullYear();
+  const month = moisPrecedent.getMonth();
+  const monthKey = ticketsMonthKey(year, month);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const pointagesDuMois = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = toISODate(new Date(year, month, day));
+    pointageRepository.getForEmployeeOnDate(user.id, dateStr).forEach(p => pointagesDuMois.push(p));
+  }
+  if (!pointagesDuMois.length) return '';
+  const totalHeures = round2(pointagesDuMois.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0) / 60);
+  const validation = (user.pointageValidationsMensuelles || {})[monthKey];
+
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <h2>Rapport mensuel — ${MONTH_NAMES[month]} ${year}</h2>
+      <p class="text-muted">${pointagesDuMois.length} pointage${pointagesDuMois.length > 1 ? 's' : ''} · ${formatNumberFR(totalHeures)} h travaillées au total.</p>
+      ${validation
+        ? `<p class="${validation.statut === 'valide' ? '' : 'text-danger'}">${icon(validation.statut === 'valide' ? ICONS.checkCircle : ICONS.warningTriangle, 14)} ${validation.statut === 'valide' ? 'Validé' : 'Contesté'} le ${formatDate(validation.date.slice(0, 10))}${validation.commentaire ? ` · ${escapeHtml(validation.commentaire)}` : ''}</p>`
+        : `<div class="detail-header-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-valider-pointage-mensuel">C'est exact</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-contester-pointage-mensuel">Contester</button>
+          </div>`}
+    </div>
   `;
 }
 
@@ -19316,6 +19451,61 @@ function bindPointeuseEvents() {
   // d'afficher/régénérer ce QR — un manager n'a pas accès à Paramètres du tout. Réutilise la même
   // modale (openPointageQrModal) plutôt que d'en dupliquer une.
   document.querySelectorAll('[data-pointage-qr-etablissement]').forEach(btn => btn.addEventListener('click', () => openPointageQrModal(btn.dataset.pointageQrEtablissement)));
+  document.querySelectorAll('[data-regulariser-pointage]').forEach(btn => btn.addEventListener('click', () => openRegulariserPointageModal(btn.dataset.regulariserPointage)));
+
+  const validerBtn = document.getElementById('btn-valider-pointage-mensuel');
+  if (validerBtn) validerBtn.addEventListener('click', () => {
+    const now = new Date();
+    const moisPrecedent = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const user = authRepository.getCurrentUser();
+    const result = DB.validerPointagesMensuels(user.id, moisPrecedent.getFullYear(), moisPrecedent.getMonth(), 'valide', '');
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Rapport validé.');
+    render();
+  });
+  const contesterBtn = document.getElementById('btn-contester-pointage-mensuel');
+  if (contesterBtn) contesterBtn.addEventListener('click', openContesterPointageMensuelModal);
+}
+
+function openContesterPointageMensuelModal() {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Contester le rapport mensuel</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="contester-pointage-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-commentaire-contestation">Ce qui vous semble incorrect *</label>
+            <textarea class="input" id="f-commentaire-contestation" rows="4" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Envoyer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('contester-pointage-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const commentaire = document.getElementById('f-commentaire-contestation').value.trim();
+    if (!commentaire) { showToast('Indiquez ce qui vous semble incorrect.', 'error'); return; }
+    const now = new Date();
+    const moisPrecedent = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const user = authRepository.getCurrentUser();
+    const result = DB.validerPointagesMensuels(user.id, moisPrecedent.getFullYear(), moisPrecedent.getMonth(), 'conteste', commentaire);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Contestation envoyée.');
+    closeModal();
+    render();
+  });
 }
 
 /** Lecture caméra en local (jsQR) — chaque frame vidéo est dessinée dans un <canvas> hors-écran
@@ -20404,7 +20594,12 @@ function getTicketsRows() {
 
   return employees.map(e => ({
     employee: e,
-    result: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings)
+    result: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings),
+    // §retour Betty du 14/09/2026 (point 3, "régularisation automatique") : null si rien à régulariser.
+    ecartRegularisation: calculerEcartRegularisationTickets(e, year, month, leaveRequests, teleworkRequests, settings),
+    // §retour Betty du 14/09/2026 (point 2, "suivi des bénéficiaires") : entrée/sortie DANS le mois affiché.
+    entreeDansLeMois: e.dateEmbauche >= monthStart && e.dateEmbauche <= monthEnd ? e.dateEmbauche : null,
+    sortieDansLeMois: e.dateDepart && e.dateDepart >= monthStart && e.dateDepart <= monthEnd ? e.dateDepart : null
   }));
 }
 
@@ -20422,6 +20617,13 @@ function renderTicketsEquipe() {
     partSalarie: acc.partSalarie + r.result.partSalarie
   }), { nbTickets: 0, montantTotal: 0, partEmployeur: 0, partSalarie: 0 });
 
+  // §retour Betty du 14/09/2026 (point 4, "contrôle du plafond d'exonération") : le contrôle
+  // existait déjà (PLAFOND_EXONERATION_URSSAF_2026), mais seulement dans le formulaire de Paramètres
+  // au moment de CONFIGURER les valeurs — jamais rappelé ensuite sur l'écran mensuel où RH regarde
+  // vraiment le résultat. Même constante, jamais une seconde valeur à maintenir séparément.
+  const partEmployeurParTitre = round2(settings.ticketsValeurFaciale * settings.ticketsPartEmployeurPct / 100);
+  const depassePlafond = partEmployeurParTitre > PLAFOND_EXONERATION_URSSAF_2026;
+
   return `
     <div class="view-header view-header-row">
       <div>
@@ -20433,8 +20635,15 @@ function renderTicketsEquipe() {
         <button class="btn btn-secondary btn-sm" id="btn-tickets-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-tickets-next">Suivant →</button>
         <button class="btn btn-secondary" id="btn-export-tickets">Exporter CSV</button>
+        <button class="btn btn-primary" id="btn-fichier-commande-tickets">Fichier de commande</button>
       </div>
     </div>
+
+    ${depassePlafond ? `
+      <div class="card" style="border-left: 3px solid var(--color-danger); margin-bottom: 16px;">
+        <p class="text-danger" style="margin: 0;">${icon(ICONS.warningTriangle, 13)} La part employeur par titre (${formatCurrencyFR(partEmployeurParTitre)}) dépasse le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}) : l'excédent devient un avantage en nature à réintégrer. Ajustez la valeur faciale ou la part employeur dans Paramètres.</p>
+      </div>
+    ` : ''}
 
     <div class="kpi-grid">
       ${kpiCard('Tickets à émettre', totals.nbTickets, ICONS.utensils)}
@@ -20445,15 +20654,16 @@ function renderTicketsEquipe() {
 
     <div class="card table-card">
       <table class="table mobile-cards">
-        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
+        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th><th></th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
-              <td class="row-title" data-label="Salarié">${personNameHtml(r.employee)}</td>
+              <td class="row-title" data-label="Salarié">${personNameHtml(r.employee)}${r.entreeDansLeMois ? ` <span class="badge badge-info">Entrée ${formatDate(r.entreeDansLeMois)}</span>` : ''}${r.sortieDansLeMois ? ` <span class="badge badge-muted">Sortie ${formatDate(r.sortieDansLeMois)}</span>` : ''}</td>
               <td class="cell-numeric" data-label="Tickets">${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
               <td class="cell-numeric" data-label="Montant total">${formatCurrencyFR(r.result.montantTotal)}</td>
               <td class="cell-numeric" data-label="Part employeur">${formatCurrencyFR(r.result.partEmployeur)}</td>
               <td class="cell-numeric" data-label="Part salarié">${formatCurrencyFR(r.result.partSalarie)}</td>
+              <td>${r.ecartRegularisation && canCorriger ? `<button class="btn-link" data-regulariser-auto-tickets="${r.employee.id}" data-ecart="${r.ecartRegularisation.ecart}" title="Une absence déclarée après la commande change le calcul : ${r.ecartRegularisation.commande} commandés, ${r.ecartRegularisation.actuel} calculés maintenant.">${icon(ICONS.warningTriangle, 12)} Régulariser (${r.ecartRegularisation.ecart >= 0 ? '+' : ''}${r.ecartRegularisation.ecart})</button>` : ''}</td>
               ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
@@ -20463,13 +20673,17 @@ function renderTicketsEquipe() {
   `;
 }
 
-function openCorrigerTicketsModal(employeeId) {
+/** `deltaSuggere` (§retour Betty du 14/09/2026, point 3, "régularisation automatique... proposée")
+ * : pré-remplit le champ avec l'écart détecté par calculerEcartRegularisationTickets plutôt que la
+ * correction actuelle — RH garde la main (motif toujours obligatoire, formulaire inchangé), jamais
+ * une écriture silencieuse. Sans ce paramètre, comportement identique à avant ce correctif. */
+function openCorrigerTicketsModal(employeeId, deltaSuggere) {
   const employee = employeeRepository.getById(employeeId);
   if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const year = state.ticketsYear;
   const month = state.ticketsMonth;
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const current = (employee.ticketsAjustements && employee.ticketsAjustements[monthKey]) || 0;
+  const current = deltaSuggere != null ? deltaSuggere : ((employee.ticketsAjustements && employee.ticketsAjustements[monthKey]) || 0);
 
   const html = `
     <div class="modal modal-small">
@@ -20479,7 +20693,7 @@ function openCorrigerTicketsModal(employeeId) {
       </div>
       <form id="corriger-tickets-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.${deltaSuggere != null ? ' Valeur pré-remplie suggérée automatiquement (absence déclarée après la génération du fichier de commande) : vérifiez avant de valider.' : ''}</p>
           <div class="form-field">
             <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
             <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
@@ -20531,10 +20745,30 @@ function bindTicketsEquipeEvents() {
     render();
   });
   document.getElementById('btn-export-tickets').addEventListener('click', exportTicketsCSV);
+  document.getElementById('btn-fichier-commande-tickets').addEventListener('click', genererFichierCommandeTickets);
 
   document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
     btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.corrigerTickets));
   });
+  document.querySelectorAll('[data-regulariser-auto-tickets]').forEach(btn => {
+    btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.regulariserAutoTickets, Number(btn.dataset.ecart)));
+  });
+}
+
+/** §retour Betty du 14/09/2026 (point 1, "fichier de commande mensuel") : export allégé, aux seuls
+ * champs utiles pour déposer une commande chez un émetteur (Swile/Edenred/Up...) — contrairement à
+ * exportTicketsCSV (comptabilité, tous les montants). Chaque émetteur a son propre format exact de
+ * dépôt ; ce fichier couvre le socle commun (identité + nombre de titres), à adapter si besoin.
+ * Enregistre aussi le nombre commandé pour CE mois (voir DB.enregistrerCommandeTickets) : c'est ce
+ * qui permet ensuite de proposer une régularisation automatique si une absence est déclarée après. */
+function genererFichierCommandeTickets() {
+  const rows = getTicketsRows();
+  const headers = ['Matricule', 'Nom', 'Prénom', 'Email', 'Nombre de titres'];
+  const data = rows.map(r => [r.employee.matricule, r.employee.nom, r.employee.prenom, r.employee.email, r.result.nbTickets]);
+  exportRowsToCSV(headers, data, `commande-tickets-restaurant-${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}.csv`);
+  DB.enregistrerCommandeTickets(state.ticketsYear, state.ticketsMonth, leaveRepository.getAll(), teleworkRepository.getAll());
+  showToast('Fichier de commande généré.');
+  render();
 }
 
 function shiftTicketsMonth(delta) {

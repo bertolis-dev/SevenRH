@@ -90,6 +90,9 @@ globalThis.__calculerTauxHoraireEmploye = calculerTauxHoraireEmploye;
 globalThis.__calculerCoutShifts = calculerCoutShifts;
 globalThis.__shiftChevaucheIndisponibilite = shiftChevaucheIndisponibilite;
 globalThis.__JOURS_SEMAINE_PLANNING = JOURS_SEMAINE_PLANNING;
+globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
+globalThis.__ticketsMonthKey = ticketsMonthKey;
+globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -148,6 +151,9 @@ globalThis.__JOURS_SEMAINE_PLANNING = JOURS_SEMAINE_PLANNING;
     calculerCoutShifts: sandbox.__calculerCoutShifts,
     shiftChevaucheIndisponibilite: sandbox.__shiftChevaucheIndisponibilite,
     JOURS_SEMAINE_PLANNING: sandbox.__JOURS_SEMAINE_PLANNING,
+    calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
+    ticketsMonthKey: sandbox.__ticketsMonthKey,
+    calculerEcartsPointageJour: sandbox.__calculerEcartsPointageJour,
   };
 }
 
