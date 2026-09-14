@@ -22555,7 +22555,12 @@ function renderEmbauche() {
       </div>
     </div>
     ${renderPostesOuvertsCard(settings.postesOuverts)}
-    <div class="card table-card" style="margin-top: 16px;">
+    <!-- §correctif visuel du 14/09/2026 : .table-card (padding:0, pensé pour un <table> qui a déjà
+         son propre padding par cellule) laissait le titre et le message vide coller aux bords de la
+         carte, sans la moindre marge — .idees-board (le tableau par étapes ci-dessous) a de toute
+         façon déjà son propre overflow-x:auto (voir style.css), .table-card n'apportait donc rien
+         ici. Simple .card, comme la Boîte à idées qui suit exactement le même patron. -->
+    <div class="card" style="margin-top: 16px;">
       <h2>Candidatures reçues</h2>
       <div id="embauche-candidatures-list">${renderSkeletonLines(4)}</div>
     </div>
