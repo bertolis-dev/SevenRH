@@ -776,6 +776,11 @@ function bindPosteDropdownEvents() {
     toggle.setAttribute('aria-expanded', String(open));
   });
   panel.querySelectorAll('.cand-poste-checkbox').forEach(cb => cb.addEventListener('change', updateLabel));
+  // §correctif visuel du 14/09/2026 : arrivé depuis la page carrière avec un poste présélectionné
+  // (?poste=..., voir populateCandidatureCompanyHeader), la case était bien cochée mais le bouton
+  // affichait quand même "Sélectionner un ou plusieurs postes" tant que personne n'y touchait — le
+  // libellé ne se mettait à jour que sur un événement "change", jamais à l'affichage initial.
+  updateLabel();
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.poste-dropdown')) {
       panel.classList.remove('open');
@@ -21626,7 +21631,7 @@ function renderExportPaiePreparationTab(rows) {
     <div class="card table-card">
       <h3 style="padding: 14px 14px 0;">Récapitulatif par salarié</h3>
       ${!rows.length ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucun salarié pour ce mois.</p></div>` : `
-        <table class="table">
+        <table class="table table-nowrap">
           <thead>
             <tr>
               <th>Salarié</th>

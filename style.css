@@ -909,6 +909,18 @@ p { margin: 0; line-height: 1.5; }
    verticalement alignée d'une ligne à l'autre, plutôt que des chiffres calés à gauche comme du texte. */
 .table td.cell-numeric, .table th.cell-numeric { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* §correctif visuel du 14/09/2026 : une table à beaucoup de colonnes (ex. le récapitulatif de
+   Préparation de paie, 11 colonnes) forçait .table (width:100%, sans table-layout:fixed) à
+   COMPRESSER ses colonnes les plus étroites plutôt que de dépasser la largeur de la carte — un nom
+   de salarié se coupait sur deux lignes ("Julien" / "Moreau"), et une icône d'ajustement (crayon)
+   retombait sous son montant. .table-card a pourtant déjà overflow-x:auto : il suffit d'empêcher le
+   retour à la ligne pour que le tableau grandisse au-delà de la carte et devienne DÉFILABLE
+   horizontalement, comme prévu, plutôt que de comprimer son contenu. Classe à part (jamais sur
+   .table par défaut) : un tableau avec du texte long à faire tenir dans une cellule (ex. un
+   commentaire) doit continuer à pouvoir passer à la ligne normalement. */
+.table-nowrap { width: auto; min-width: 100%; }
+.table-nowrap th, .table-nowrap td { white-space: nowrap; }
+
 .table-row { cursor: pointer; transition: background-color 0.1s ease; }
 .table-row:hover { background: var(--color-muted-soft); }
 .table-row:last-child td { border-bottom: none; }
@@ -1028,10 +1040,18 @@ p { margin: 0; line-height: 1.5; }
   display: flex;
   align-items: center;
   gap: 16px;
+  /* §correctif visuel du 14/09/2026 : sans ce flex-wrap, .detail-header-actions (5-7 boutons sur une
+     fiche salarié) réclamait sa largeur de contenu complète ("auto") avant que .detail-header-info
+     ne reçoive le moindre espace en grow — le nom du salarié se retrouvait écrasé sur quelques
+     dizaines de pixels et se coupait sur plusieurs lignes ("Sarah" / "Benali") même en plein écran,
+     alors qu'il restait largement la place de tout afficher en repassant les actions à la ligne.
+     Auparavant réservé à @media (max-width: 860px) — mais le même écrasement se produit largement
+     au-dessus de ce seuil dès qu'il y a assez de boutons, donc plus la peine de le limiter au mobile. */
+  flex-wrap: wrap;
 }
 
 .detail-header .avatar { width: 56px; height: 56px; font-size: 18px; }
-.detail-header-info { flex: 1; }
+.detail-header-info { flex: 1; min-width: 220px; }
 .detail-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .detail-grid {
@@ -1932,7 +1952,12 @@ textarea.input { resize: vertical; font-family: inherit; }
    initiales à gauche du nom, colonne "Total" à droite de la semaine) — même avatar déjà utilisé
    partout ailleurs dans l'appli (renderAvatar), même calcul que le total de service (computeDailyHours). */
 .planning-employee-cell { display: flex; align-items: center; gap: 10px; }
-.planning-employee-info { display: flex; flex-direction: column; gap: 2px; }
+/* §correctif visuel du 14/09/2026 : sans white-space:nowrap, le nom du salarié (ex. "Julien
+   Moreau") se coupait en deux lignes dans cette colonne — le tableau du planning a déjà assez de
+   colonnes de jours pour que l'algorithme de mise en page (table-layout:auto) préfère rétrécir
+   cette colonne texte plutôt que d'élargir le tableau, alors même que .table-card/.table-scroll
+   permettent déjà de défiler horizontalement (voir le même correctif sur .table-nowrap). */
+.planning-employee-info { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
 .planning-total-cell { white-space: nowrap; }
 
 /* §demande Betty du 09/09/2026 : bandeau plein (au lieu d'un simple fond gris discret) pour chaque
@@ -3646,7 +3671,8 @@ textarea.input { resize: vertical; font-family: inherit; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
   .topbar-search { max-width: none; }
-  .detail-header { flex-wrap: wrap; }
+  /* flex-wrap: wrap est maintenant la règle de base (voir .detail-header ci-dessus, plus haut dans
+     ce fichier) — ne reste ici que ce qui est vraiment spécifique au mobile. */
   .detail-header-actions { width: 100%; }
   /* Sur mobile, .tabs (Congés/Télétravail...) défilait horizontalement sans aucun indice visuel
      qu'il y avait "plus à droite" — un simple tap avec un léger mouvement du doigt faisait glisser
