@@ -503,7 +503,13 @@ const DEFAULT_SETTINGS = {
   workflowCongesDefault: ['manager', 'rh'],
   workflowTeletravail: ['manager'],
   workflowFrais: ['manager', 'comptabilite'],
-  categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Titre de séjour', 'Visite médicale', 'Habilitation', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
+  categoriesDocuments: ['Contrat', 'Avenant', 'Permis', 'CNI', 'Passeport', 'Titre de séjour', 'Visite médicale', 'Habilitation', 'Autorisation de conduite', 'Diplôme', 'Attestation', 'Bulletin de paie', 'Autre'],
+  // §retour Betty du 14/09/2026 (Module RH point 5, "alertes de renouvellement complètes") : seuil
+  // (en jours avant l'échéance) déclenchant le badge d'alerte sur TOUT document ayant une date
+  // d'expiration (permis, habilitation, autorisation de conduite, visite médicale...) — voir
+  // documentExpirationInfo, app.js. Un seul seuil pour l'entreprise entière en v1 (pas encore un
+  // seuil différent par catégorie de document, chantier séparé si le besoin se confirme).
+  delaiPrevenanceDocumentsJours: 30,
   // Jours fériés en plus des 11 fériés nationaux calculés automatiquement (getFrenchPublicHolidays)
   // — ex. jours fériés locaux (Alsace-Moselle), fermeture d'entreprise, pont. { date: 'AAAA-MM-JJ', label }.
   joursFeriesPersonnalises: [],

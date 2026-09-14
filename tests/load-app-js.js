@@ -109,6 +109,7 @@ globalThis.__openPointageQrModal = openPointageQrModal;
 globalThis.__openModeleDocumentModal = openModeleDocumentModal;
 globalThis.__openGenererDocumentModal = openGenererDocumentModal;
 globalThis.__confirmerAccuseLectureDocument = confirmerAccuseLectureDocument;
+globalThis.__documentExpirationInfo = documentExpirationInfo;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
@@ -250,6 +251,7 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,
     confirmerAccuseLectureDocument: sandbox.__confirmerAccuseLectureDocument,
+    documentExpirationInfo: sandbox.__documentExpirationInfo,
     employeeRepository: sandbox.__employeeRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,

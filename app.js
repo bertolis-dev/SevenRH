@@ -5153,7 +5153,10 @@ async function syncNotifications() {
     // courant — sinon la fraction de journée déjà écoulée décale daysUntil d'un jour selon l'heure
     // qu'il est (même bug que celui corrigé sur getUpcomingBirthdays cette session).
     const daysUntil = Math.round((new Date(d.dateExpiration) - new Date(toISODate(new Date()))) / 86400000);
-    if (daysUntil > 30) return;
+    // §retour Betty du 14/09/2026 (Module RH point 5) : même seuil paramétrable que
+    // documentExpirationInfo (renderDocumentRow) — un seuil différent ici aurait signalé une
+    // échéance en notification sans jamais montrer le badge correspondant sur la fiche, ou l'inverse.
+    if (daysUntil > (settingsRepository.getSettings().delaiPrevenanceDocumentsJours || 30)) return;
     const employee = employeeRepository.getById(d.employeeId);
     if (!employee) return;
     const title = daysUntil < 0 ? 'Document expiré' : 'Document arrivant à expiration';
@@ -8247,12 +8250,17 @@ function canManageDocumentsFor() {
   return hasPermission(user, PERMISSIONS.GERER_UTILISATEURS);
 }
 
-function documentExpirationInfo(dateExpiration) {
+/** §retour Betty du 14/09/2026 (Module RH point 5, "délai de prévenance paramétrable") : le seuil
+ * était fixé à 30 jours en dur — vient maintenant de settings.delaiPrevenanceDocumentsJours (un seul
+ * seuil pour toute l'entreprise en v1), avec 30 comme repli si jamais absent (entreprise créée avant
+ * ce correctif, jamais resauvegardée depuis). */
+function documentExpirationInfo(dateExpiration, delaiPrevenanceJours) {
   if (!dateExpiration) return null;
+  const seuil = delaiPrevenanceJours || 30;
   // Même correction que syncNotifications : comparer au format date-only des deux côtés.
   const daysUntil = Math.round((new Date(dateExpiration) - new Date(toISODate(new Date()))) / 86400000);
   if (daysUntil < 0) return { label: `Expiré le ${formatDate(dateExpiration)}`, level: 'danger' };
-  if (daysUntil <= 30) return { label: `Expire le ${formatDate(dateExpiration)}`, level: 'warning' };
+  if (daysUntil <= seuil) return { label: `Expire le ${formatDate(dateExpiration)}`, level: 'warning' };
   return { label: `Expire le ${formatDate(dateExpiration)}`, level: 'muted' };
 }
 
@@ -8278,7 +8286,7 @@ function renderAccuseLectureBadge(doc) {
 }
 
 function renderDocumentRow(doc, canManage) {
-  const expiration = documentExpirationInfo(doc.dateExpiration);
+  const expiration = documentExpirationInfo(doc.dateExpiration, settingsRepository.getSettings().delaiPrevenanceDocumentsJours);
   const user = authRepository.getCurrentUser();
   const peutConfirmer = doc.accuseLectureRequis && !doc.accuseLectureAt && user.id === doc.employeeId;
   return `
@@ -15629,6 +15637,11 @@ function renderParametresListes() {
           <input class="input" type="number" min="1" step="1" id="f-duree-conservation" value="${escapeHtml(settings.dureeConservationSalariesPartisAnnees)}">
           <p class="form-hint">Passé ce délai après son départ, la fiche d'un salarié est anonymisée automatiquement (jamais supprimée : les compteurs/historiques restent exploitables pour vos rapports, seules les données personnelles identifiantes sont retirées). Valeur par défaut indicative, à faire confirmer par votre juriste/DPO.</p>
         </div>
+        <div class="form-field">
+          <label for="f-delai-prevenance-documents">Alerte de renouvellement des documents (jours avant échéance)</label>
+          <input class="input" type="number" min="1" step="1" id="f-delai-prevenance-documents" value="${escapeHtml(settings.delaiPrevenanceDocumentsJours)}">
+          <p class="form-hint">S'applique à tout document ayant une date d'expiration (permis, habilitation, autorisation de conduite, visite médicale, titre de séjour...).</p>
+        </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
           <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
@@ -15862,6 +15875,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
   bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
+  bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
   bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
