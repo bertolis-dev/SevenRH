@@ -23247,7 +23247,26 @@ async function bindCandidatureDetailEvents(id) {
         </div>
       ` : ''}
     </div>
+    ${renderCandidatureCreneauxCard(candidature)}
+    ${renderCandidatureEvaluationsCard(candidature)}
   `;
+
+  const btnProposerCreneaux = document.getElementById('btn-proposer-creneaux');
+  if (btnProposerCreneaux) btnProposerCreneaux.addEventListener('click', () => openProposerCreneauxModal(candidature));
+  document.querySelectorAll('[data-choisir-creneau]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await candidatureRepository.choisirCreneau(candidature.id, btn.dataset.choisirCreneau);
+      } catch {
+        showToast('Impossible d\'enregistrer la confirmation.', 'error');
+        return;
+      }
+      showToast('Créneau marqué confirmé.');
+      bindCandidatureDetailEvents(candidature.id);
+    });
+  });
+  const btnAjouterEvaluation = document.getElementById('btn-ajouter-evaluation');
+  if (btnAjouterEvaluation) btnAjouterEvaluation.addEventListener('click', () => openAjouterEvaluationModal(candidature));
 
   const embaucherBtn = document.getElementById('btn-embaucher-candidature');
   if (embaucherBtn) embaucherBtn.addEventListener('click', () => {
@@ -23354,6 +23373,194 @@ function candidatureToEmployeePrefill(candidature) {
     telephone: candidature.telephone,
     poste: (candidature.postes || [])[0] || ''
   };
+}
+
+/** §retour Betty du 14/09/2026 ("embauche tu peux augmenté") : les deux derniers points écartés par
+ * choix de conception (voir Feuille de route modules) — limités ici au suivi CÔTÉ RH, jamais un
+ * vrai self-service candidat (aucun compte candidat dans Nexus, ça resterait un chantier à part
+ * avec sa propre fonction Edge publique). Voir 0056_candidature_creneaux_evaluations.sql.
+ *
+ * Proposer de nouveaux créneaux repart toujours d'une liste vide côté serveur (voir
+ * candidatureRepository.proposerCreneaux) : un id généré ici n'a donc jamais besoin d'être stable
+ * entre deux propositions successives. */
+function buildCreneauPropose(date, heureDebut, heureFin) {
+  return { id: generateId('cr'), date, heureDebut, heureFin };
+}
+
+const EVALUATION_CANDIDATURE_CRITERES = ['Compétences techniques', 'Communication', 'Motivation', 'Adéquation avec le poste'];
+
+function buildEvaluationRecord(evaluateurId, evaluateurNom, criteres, commentaire) {
+  return {
+    id: generateId('ev'),
+    evaluateurId,
+    evaluateurNom,
+    date: new Date().toISOString(),
+    criteres,
+    commentaire: (commentaire || '').trim()
+  };
+}
+
+/** Moyenne sur les seuls critères réellement notés (0 = "non renseigné", jamais compté) — une
+ * évaluation partielle ne doit jamais fausser la moyenne vers le bas. */
+function computeEvaluationMoyenne(evaluation) {
+  const notes = (evaluation.criteres || []).map(c => Number(c.note)).filter(n => Number.isFinite(n) && n > 0);
+  if (!notes.length) return null;
+  return round2(notes.reduce((a, b) => a + b, 0) / notes.length);
+}
+
+function renderCandidatureCreneauxCard(candidature) {
+  const creneaux = candidature.creneauxProposes || [];
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <div class="view-header-row">
+        <h2>Créneaux d'entretien</h2>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-proposer-creneaux">${creneaux.length ? 'Proposer d\'autres créneaux' : '+ Proposer des créneaux'}</button>
+      </div>
+      <p class="text-muted" style="margin: 0 0 8px;">À communiquer au candidat par téléphone ou email (aucun compte candidat dans Nexus) — cochez ensuite celui qu'il confirme.</p>
+      ${creneaux.length === 0 ? '<p class="text-muted">Aucun créneau proposé pour l\'instant.</p>' : creneaux.map(c => {
+        const choisi = candidature.creneauChoisiId === c.id;
+        return `
+          <div class="mini-list-item">
+            <span>${formatDate(c.date)} · ${escapeHtml(c.heureDebut)}–${escapeHtml(c.heureFin)}${choisi ? ' <span class="badge badge-success">Confirmé par le candidat</span>' : ''}</span>
+            ${choisi ? '' : `<button type="button" class="btn-link" data-choisir-creneau="${c.id}">Marquer confirmé</button>`}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderCandidatureEvaluationsCard(candidature) {
+  const evaluations = candidature.evaluations || [];
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <div class="view-header-row">
+        <h2>Évaluation de l'entretien</h2>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-evaluation">+ Ajouter une évaluation</button>
+      </div>
+      ${evaluations.length === 0 ? '<p class="text-muted">Aucune évaluation pour l\'instant.</p>' : evaluations.map(ev => {
+        const moyenne = computeEvaluationMoyenne(ev);
+        return `
+          <div class="mini-list-item" style="align-items: flex-start; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; width: 100%;">
+              <strong>${escapeHtml(ev.evaluateurNom || '—')}</strong>
+              <span class="text-muted">${formatDate(ev.date)}${moyenne !== null ? ` · ${moyenne}/5` : ''}</span>
+            </div>
+            <p class="text-muted" style="margin: 0;">${(ev.criteres || []).map(c => `${escapeHtml(c.label)} : ${escapeHtml(String(c.note))}/5`).join(' · ')}</p>
+            ${ev.commentaire ? `<p style="margin: 0; white-space: pre-wrap;">${escapeHtml(ev.commentaire)}</p>` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openProposerCreneauxModal(candidature) {
+  const lignes = [0, 1, 2];
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Proposer des créneaux</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="proposer-creneaux-form">
+        <div class="modal-body">
+          <p class="text-muted">Jusqu'à 3 créneaux, au moins un complet (date + heure de début + heure de fin).</p>
+          ${lignes.map(i => `
+            <div class="detail-grid" style="margin-top: 12px;">
+              <div class="form-field"><label for="f-creneau-date-${i}">Date</label><input type="date" class="input" id="f-creneau-date-${i}"></div>
+              <div class="form-field"><label for="f-creneau-debut-${i}">De</label><input type="time" class="input" id="f-creneau-debut-${i}"></div>
+              <div class="form-field"><label for="f-creneau-fin-${i}">À</label><input type="time" class="input" id="f-creneau-fin-${i}"></div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('proposer-creneaux-form').addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const creneaux = lignes
+      .map(i => ({
+        date: document.getElementById(`f-creneau-date-${i}`).value,
+        heureDebut: document.getElementById(`f-creneau-debut-${i}`).value,
+        heureFin: document.getElementById(`f-creneau-fin-${i}`).value
+      }))
+      .filter(l => l.date && l.heureDebut && l.heureFin)
+      .map(l => buildCreneauPropose(l.date, l.heureDebut, l.heureFin));
+    if (!creneaux.length) { showToast('Renseignez au moins un créneau complet.', 'error'); return; }
+    try {
+      await candidatureRepository.proposerCreneaux(candidature.id, creneaux);
+    } catch {
+      showToast('Impossible d\'enregistrer les créneaux.', 'error');
+      return;
+    }
+    closeModal();
+    showToast('Créneaux enregistrés.');
+    bindCandidatureDetailEvents(candidature.id);
+  });
+}
+
+function openAjouterEvaluationModal(candidature) {
+  const user = authRepository.getCurrentUser();
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Évaluer l'entretien</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="ajouter-evaluation-form">
+        <div class="modal-body">
+          ${EVALUATION_CANDIDATURE_CRITERES.map((label, i) => `
+            <div class="form-field" style="margin-top: 12px;">
+              <label for="f-critere-${i}">${escapeHtml(label)}</label>
+              <select class="input" id="f-critere-${i}">
+                <option value="">Non noté</option>
+                ${[1, 2, 3, 4, 5].map(n => `<option value="${n}">${n}/5</option>`).join('')}
+              </select>
+            </div>
+          `).join('')}
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-evaluation-commentaire">Commentaire</label>
+            <textarea class="input" id="f-evaluation-commentaire" rows="4"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer l'évaluation</button>
+        </div>
+      </form>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('ajouter-evaluation-form').addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const criteres = EVALUATION_CANDIDATURE_CRITERES
+      .map((label, i) => ({ label, note: Number(document.getElementById(`f-critere-${i}`).value) || 0 }))
+      .filter(c => c.note > 0);
+    if (!criteres.length) { showToast('Notez au moins un critère.', 'error'); return; }
+    const commentaire = document.getElementById('f-evaluation-commentaire').value;
+    const nouvelle = buildEvaluationRecord(user.id, `${user.prenom} ${user.nom}`, criteres, commentaire);
+    try {
+      await candidatureRepository.ajouterEvaluation(candidature.id, [...(candidature.evaluations || []), nouvelle]);
+    } catch {
+      showToast('Impossible d\'enregistrer l\'évaluation.', 'error');
+      return;
+    }
+    closeModal();
+    showToast('Évaluation enregistrée.');
+    bindCandidatureDetailEvents(candidature.id);
+  });
 }
 
 /** prefill/candidatureId (voir bindEmbaucheEvents) : pré-remplit un NOUVEAU salarié depuis une

@@ -1028,6 +1028,7 @@ async function submitCandidature(formData) {
 }
 
 function candidatureFromRow(row) {
+  const data = row.data || {};
   return {
     id: row.id,
     nom: row.nom,
@@ -1040,7 +1041,11 @@ function candidatureFromRow(row) {
     lettreTexte: row.lettre_texte,
     statut: row.statut,
     employeeId: row.employee_id,
-    dateSoumission: row.created_at
+    dateSoumission: row.created_at,
+    // §retour Betty du 14/09/2026 ("embauche tu peux augmenté") : voir 0056_candidature_creneaux_evaluations.sql.
+    creneauxProposes: data.creneauxProposes || [],
+    creneauChoisiId: data.creneauChoisiId || null,
+    evaluations: data.evaluations || []
   };
 }
 
@@ -1052,6 +1057,14 @@ async function getCandidatures(companyId) {
 
 async function setCandidatureStatut(id, statut, employeeId) {
   const { error } = await supabase.rpc('set_candidature_statut', { p_id: id, p_statut: statut, p_employee_id: employeeId || null });
+  if (error) throw error;
+}
+
+/** §retour Betty du 14/09/2026 ("embauche tu peux augmenté") : porte d'écriture unique pour les
+ * créneaux d'entretien et les évaluations (voir 0056_candidature_creneaux_evaluations.sql) — même
+ * raison que setCandidatureStatut, jamais un .update() direct sur candidatures. */
+async function setCandidatureData(id, patch) {
+  const { error } = await supabase.rpc('set_candidature_data', { p_id: id, p_patch: patch });
   if (error) throw error;
 }
 
@@ -1459,7 +1472,7 @@ window.SupabaseSync = {
   pushIdees, toggleIdeeVote, setIdeeStatut,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
-  submitCandidature, getCandidatures, setCandidatureStatut, getCandidatureFileUrl, rejectCandidature,
+  submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow

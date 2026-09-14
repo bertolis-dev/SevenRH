@@ -313,6 +313,12 @@ globalThis.__guessAbsencesColumnMapping = guessAbsencesColumnMapping;
 globalThis.__buildAbsencesPreviewRows = buildAbsencesPreviewRows;
 globalThis.__importAbsencesRows = importAbsencesRows;
 globalThis.__computeWorkingDays = computeWorkingDays;
+globalThis.__buildCreneauPropose = buildCreneauPropose;
+globalThis.__EVALUATION_CANDIDATURE_CRITERES = EVALUATION_CANDIDATURE_CRITERES;
+globalThis.__buildEvaluationRecord = buildEvaluationRecord;
+globalThis.__computeEvaluationMoyenne = computeEvaluationMoyenne;
+globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
+globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -541,6 +547,12 @@ globalThis.__computeWorkingDays = computeWorkingDays;
     buildAbsencesPreviewRows: sandbox.__buildAbsencesPreviewRows,
     importAbsencesRows: sandbox.__importAbsencesRows,
     computeWorkingDays: sandbox.__computeWorkingDays,
+    buildCreneauPropose: sandbox.__buildCreneauPropose,
+    EVALUATION_CANDIDATURE_CRITERES: sandbox.__EVALUATION_CANDIDATURE_CRITERES,
+    buildEvaluationRecord: sandbox.__buildEvaluationRecord,
+    computeEvaluationMoyenne: sandbox.__computeEvaluationMoyenne,
+    renderCandidatureCreneauxCard: sandbox.__renderCandidatureCreneauxCard,
+    renderCandidatureEvaluationsCard: sandbox.__renderCandidatureEvaluationsCard,
   };
 }
 
