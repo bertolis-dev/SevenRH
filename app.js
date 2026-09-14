@@ -15134,7 +15134,11 @@ async function refreshPointageQrModalContent(etablissementId, premiereOuverture)
     try {
       code = await window.SupabaseSync.getPointageQrCode(etablissementId);
     } catch (err2) {
-      showToast('Impossible de générer le QR de pointage : connexion au serveur indisponible.', 'error');
+      // §diagnostic temporaire du 14/09/2026 : message enrichi de l'erreur réelle (RPC) pour
+      // identifier la cause exacte plutôt que deviner — à ramener à un message simple une fois
+      // confirmée et corrigée (même méthode que le précédent correctif du pointage, 13/09/2026).
+      reportClientError(err2, 'pointage-qr-generation');
+      showToast(`Impossible de générer le QR de pointage : ${(err2 && err2.message) || 'connexion au serveur indisponible'}.`, 'error');
       return false;
     }
   }
