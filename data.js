@@ -4658,6 +4658,13 @@ function makeEmptyDocument() {
     nom: '',
     dateExpiration: '', // optionnel — utilisé pour les alertes d'échéance (permis, CNI, visite médicale...)
     fichier: null, // { nom, dataUrl } | null
+    // §retour Betty du 14/09/2026 (Module RH point 4, "accusé de lecture") : un document remis au
+    // salarié (règlement intérieur, note de service...) peut exiger sa confirmation de prise de
+    // connaissance — accuseLectureAt/accuseLecturePar restent null tant que LE SALARIÉ CONCERNÉ
+    // lui-même (jamais un tiers, voir confirmerAccuseLectureDocument, app.js) ne confirme.
+    accuseLectureRequis: false,
+    accuseLectureAt: null,
+    accuseLecturePar: null,
     dateCreation: null,
     dateModification: null
   };

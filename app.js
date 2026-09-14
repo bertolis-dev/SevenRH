@@ -8265,13 +8265,29 @@ function downloadDataUrl(dataUrl, filename) {
   document.body.removeChild(a);
 }
 
+/** §retour Betty du 14/09/2026 (Module RH point 4, "accusé de lecture") : un horodatage + une
+ * confirmation suffisent, pas de signature électronique ici (chantier séparé, plus lourd — voir la
+ * feuille de route). Le bouton de confirmation n'apparaît QUE pour le salarié concerné lui-même
+ * (jamais RH/Propriétaire à sa place : la valeur probante vient précisément du fait que c'est LUI
+ * qui confirme), et seulement tant que ce n'est pas déjà fait. */
+function renderAccuseLectureBadge(doc) {
+  if (!doc.accuseLectureRequis) return '';
+  return doc.accuseLectureAt
+    ? `<span class="badge badge-success">Lu le ${formatDate(doc.accuseLectureAt.slice(0, 10))}</span>`
+    : `<span class="badge badge-warning">En attente de lecture</span>`;
+}
+
 function renderDocumentRow(doc, canManage) {
   const expiration = documentExpirationInfo(doc.dateExpiration);
+  const user = authRepository.getCurrentUser();
+  const peutConfirmer = doc.accuseLectureRequis && !doc.accuseLectureAt && user.id === doc.employeeId;
   return `
     <div class="mini-list-item">
       <span>${escapeHtml(doc.categorie)} · ${escapeHtml(doc.nom)}</span>
       <span class="detail-header-actions">
         ${expiration ? `<span class="badge badge-${expiration.level}">${escapeHtml(expiration.label)}</span>` : ''}
+        ${renderAccuseLectureBadge(doc)}
+        ${peutConfirmer ? `<button type="button" class="btn btn-secondary btn-sm" data-confirmer-accuse-lecture="${doc.id}">J'en ai pris connaissance</button>` : ''}
         ${doc.fichier ? `<button type="button" class="btn-link" data-download-document="${doc.id}">Télécharger</button>` : ''}
         ${canManage ? `<button type="button" class="btn-link btn-link-danger" data-delete-document="${doc.id}">Supprimer</button>` : ''}
       </span>
@@ -8316,6 +8332,25 @@ function bindDocumentRowEvents(scopeSelector) {
       });
     });
   });
+  document.querySelectorAll(`${scopeSelector} [data-confirmer-accuse-lecture]`).forEach(btn => {
+    btn.addEventListener('click', () => confirmerAccuseLectureDocument(btn.dataset.confirmerAccuseLecture));
+  });
+}
+
+/** Défense en profondeur (même raisonnement que openRegulariserModal, etc.) : rejoue la même
+ * condition que le bouton (renderDocumentRow) au cas où l'appelant serait sollicité autrement qu'en
+ * cliquant ce bouton précis. */
+function confirmerAccuseLectureDocument(documentId) {
+  const doc = documentRepository.getById(documentId);
+  const user = authRepository.getCurrentUser();
+  if (!doc || !doc.accuseLectureRequis || doc.accuseLectureAt || user.id !== doc.employeeId) {
+    showToast('Action non autorisée.', 'error');
+    return;
+  }
+  documentRepository.update(documentId, { accuseLectureAt: new Date().toISOString(), accuseLecturePar: user.id });
+  auditLogRepository.logAudit('Confirmation', 'Accusé de lecture', doc.nom);
+  showToast('Confirmation enregistrée.');
+  render();
 }
 
 function renderEmployeeDocumentsCard(employee) {
@@ -8362,6 +8397,13 @@ function openDocumentModal(employeeId) {
             <label for="f-fichier">Fichier</label>
             <input class="input" type="file" id="f-fichier" required>
           </div>
+          <!-- §retour Betty du 14/09/2026 (Module RH point 4, "accusé de lecture") : pour un
+               règlement intérieur, une note de service... la case doit rester décochée par défaut,
+               la plupart des documents (contrat déjà signé, justificatif administratif) n'en ont
+               jamais besoin. -->
+          <div class="form-field" style="margin-top: 14px;">
+            <label><input type="checkbox" id="f-accuse-lecture-requis"> Nécessite un accusé de lecture du salarié</label>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
@@ -8387,11 +8429,13 @@ function openDocumentModal(employeeId) {
     const formData = new FormData(evt.target);
     const categorie = formData.get('categorie');
     const nom = formData.get('nom');
+    const accuseLectureRequis = document.getElementById('f-accuse-lecture-requis').checked;
     const finalizeAddDocument = () => {
       const createdDocument = documentRepository.create({
         employeeId, categorie, nom,
         dateExpiration: formData.get('dateExpiration') || '',
-        fichier: state.pendingAttachment
+        fichier: state.pendingAttachment,
+        accuseLectureRequis
       });
       uploadJustificatifBestEffort({
         uploader: window.SupabaseSync.uploadEmployeeDocumentFile,

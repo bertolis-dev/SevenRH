@@ -108,6 +108,7 @@ globalThis.__renderPointeuse = renderPointeuse;
 globalThis.__openPointageQrModal = openPointageQrModal;
 globalThis.__openModeleDocumentModal = openModeleDocumentModal;
 globalThis.__openGenererDocumentModal = openGenererDocumentModal;
+globalThis.__confirmerAccuseLectureDocument = confirmerAccuseLectureDocument;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
@@ -248,6 +249,7 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,
+    confirmerAccuseLectureDocument: sandbox.__confirmerAccuseLectureDocument,
     employeeRepository: sandbox.__employeeRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,
