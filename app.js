@@ -17723,11 +17723,17 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
       : `<span class="planning-off-dash">—</span>`;
     return `<td class="planning-cell" title="${escapeHtml(status.title)}">${card}</td>`;
   }
-  const subtext = showHoraires && (status.level === 'office' || status.level === 'remote') ? formatHorairesRange(employee) : '';
+  // §correctif visuel du 14/09/2026 : "09:00-12:00 · 13:00-17:00" (matin + après-midi détaillés,
+  // 25 caractères) se coupait en 4-5 fragments illisibles dans une colonne de jour, aussi étroite
+  // que la grille de quarts (même correctif que .poste-shift-pointage — voir renderPlanningPostes).
+  // La version courte (premier début → dernière fin) tient sur une ligne dans bien plus de cas ; le
+  // détail matin/après-midi complet reste disponible au survol (title), jamais perdu.
+  const subtext = showHoraires && (status.level === 'office' || status.level === 'remote') ? formatHorairesRangeCourt(employee) : '';
+  const subtextTitle = subtext ? ` title="${escapeHtml(formatHorairesRange(employee))}"` : '';
   const card = showHoraires ? `
     <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
       <div class="planning-shift-caption">${escapeHtml(status.title)}</div>
-      ${subtext ? `<div class="planning-shift-subtext">${escapeHtml(subtext)}</div>` : ''}
+      ${subtext ? `<div class="planning-shift-subtext"${subtextTitle}>${escapeHtml(subtext)}</div>` : ''}
       <span class="planning-shift-corner-icon">${escapeIcon(status.icon)}</span>
     </div>
   ` : `
@@ -17746,6 +17752,15 @@ function formatHorairesRange(employee) {
   const matin = employee.horaireMatinDebut && employee.horaireMatinFin ? `${employee.horaireMatinDebut}-${employee.horaireMatinFin}` : null;
   const apresMidi = employee.horaireApresMidiDebut && employee.horaireApresMidiFin ? `${employee.horaireApresMidiDebut}-${employee.horaireApresMidiFin}` : null;
   return [matin, apresMidi].filter(Boolean).join(' · ');
+}
+
+/** Version courte de formatHorairesRange (premier début → dernière fin, sans le détail matin/
+ * après-midi) — voir renderPlanningStatusCell : le détail complet reste au survol (title), jamais
+ * perdu, seulement pas affiché en dur dans une case de planning trop étroite pour lui. */
+function formatHorairesRangeCourt(employee) {
+  const debut = employee.horaireMatinDebut || employee.horaireApresMidiDebut;
+  const fin = employee.horaireApresMidiFin || employee.horaireMatinFin;
+  return debut && fin ? `${debut}-${fin}` : '';
 }
 
 /** §demande Betty du 10/09/2026 ("même design que [référence Combo], mais les couleurs actuelles") :
