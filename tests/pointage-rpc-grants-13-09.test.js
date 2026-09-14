@@ -40,6 +40,21 @@ function run() {
   assert.ok(!/create policy[^;]*on pointage_secrets/i.test(allSql),
     'pointage_secrets ne doit avoir AUCUNE policy RLS : le secret ne doit être lisible/écrit que via les fonctions security definer, jamais par un select/update direct d\'un client, quel que soit son rôle');
 
+  // §retour Betty du 14/09/2026 ("function hmac(text, text, unknown) does not exist", corrigé par
+  // 0052_pointage_hmac_search_path.sql) : pgcrypto (hmac) vit dans le schéma "extensions" sur
+  // Supabase, jamais "public" seul — les 2 fonctions qui appellent hmac() doivent inclure ce schéma
+  // dans leur search_path, sinon elles échouent en production malgré un `npm run ci` vert (aucun
+  // test ne peut exécuter du vrai SQL Postgres ici, voir le commentaire en tête de fichier).
+  ['get_pointage_qr_code', 'verifier_pointage_code'].forEach((nom) => {
+    // Plusieurs migrations peuvent redéfinir la même fonction (create or replace) : seule la
+    // DERNIÈRE définition dans l'ordre d'application est réellement active — jamais la première.
+    const blocs = allSql.match(new RegExp(`create (or replace )?function\\s+${nom}\\s*\\([\\s\\S]*?\\$\\$;`, 'gi'));
+    assert.ok(blocs && blocs.length, `${nom} introuvable pour vérifier son search_path`);
+    const derniereDefinition = blocs[blocs.length - 1];
+    assert.ok(/set search_path\s*=\s*public\s*,\s*extensions/i.test(derniereDefinition),
+      `${nom} appelle hmac() (pgcrypto) : sa DERNIÈRE définition doit inclure "extensions" dans le search_path (schéma d'installation par défaut sur Supabase), pas seulement "public"`);
+  });
+
   console.log('OK — pointage-rpc-grants-13-09.test.js (regenerate_pointage_token/get_pointage_qr_code/verifier_pointage_code verrouillées sur le bon motif anon/authenticated, pointage_secrets sans aucune policy RLS)');
 }
 
