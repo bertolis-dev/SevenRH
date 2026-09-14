@@ -18527,6 +18527,42 @@ function bindTeletravailPlanningEvents() {
 // jsqr.js, même patron que qrcode.js pour la génération) : aucune image envoyée à un serveur.
 // ---------------------------------------------------------------------------
 
+/** §retour Betty du 14/09/2026 ("il faut que pour la pointeuse sur la page on voit qui a pointé") :
+ * qui peut voir l'équipe ailleurs dans l'app (Congés, Notes de frais...) peut désormais voir qui a
+ * pointé aujourd'hui, ici — même portée que scopeToVisibleEmployees (soi-même exclu, un manager ne
+ * voit que son équipe, RH/Propriétaire/Comptabilité voient tout le monde). Retourne '' (pas de
+ * carte) pour un salarié sans personne à voir, plutôt qu'une carte vide sans intérêt. */
+function renderPointeuseEquipe() {
+  const user = authRepository.getCurrentUser();
+  const visibleIds = getVisibleEmployeeIdsForCurrentUser();
+  const employees = employeeRepository.getAll()
+    .filter(e => e.id !== user.id && !e.archive && (visibleIds === null || visibleIds.includes(e.id)))
+    .sort((a, b) => a.nom.localeCompare(b.nom));
+  if (!employees.length) return '';
+
+  const today = toISODate(new Date());
+  const rows = employees.map(e => {
+    const pointagesDuJour = pointageRepository.getForEmployeeOnDate(e.id, today);
+    const dernierDuJour = pointagesDuJour[pointagesDuJour.length - 1];
+    const statutHtml = !dernierDuJour
+      ? `<span class="badge badge-muted">Non pointé</span>`
+      : !dernierDuJour.heureDepart
+        ? `<span class="badge badge-success">${icon(ICONS.checkCircle, 12)} Arrivé à ${escapeHtml(dernierDuJour.heureArrivee)}</span>`
+        : `<span class="badge badge-muted">Départ à ${escapeHtml(dernierDuJour.heureDepart)}</span>`;
+    return `<tr><td>${personNameHtml(e)}</td><td>${statutHtml}</td></tr>`;
+  }).join('');
+
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <h2>Qui a pointé aujourd'hui</h2>
+      <table class="table">
+        <thead><tr><th>Salarié</th><th>Statut</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderPointeuse() {
   const user = authRepository.getCurrentUser();
   const today = toISODate(new Date());
@@ -18561,7 +18597,7 @@ function renderPointeuse() {
     ${['manager', 'proprietaire'].includes(user.role) ? `
       <div class="card" style="margin-top: 16px;">
         <h2>QR de pointage</h2>
-        <p class="text-muted" style="margin: 0 0 12px;">À imprimer ou afficher à l'accueil, jusqu'ici accessible uniquement depuis Paramètres &gt; Établissements (RH/Propriétaire).</p>
+        <p class="text-muted" style="margin: 0 0 12px;">À afficher en direct sur un écran à l'accueil (jamais imprimé, voir la fenêtre du QR), jusqu'ici accessible uniquement depuis Paramètres &gt; Établissements (RH/Propriétaire).</p>
         <div class="badge-row" style="gap: 10px;">
           ${etablissementRepository.getAll().map(etab => `
             <button type="button" class="btn btn-secondary btn-sm" data-pointage-qr-etablissement="${etab.id}">${icon(ICONS.scanFrame, 13)} ${escapeHtml(etab.nom)}</button>
@@ -18569,6 +18605,8 @@ function renderPointeuse() {
         </div>
       </div>
     ` : ''}
+
+    ${renderPointeuseEquipe()}
 
     ${historique.length ? `
       <div class="card" style="margin-top: 16px;">
