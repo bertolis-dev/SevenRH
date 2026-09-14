@@ -231,6 +231,7 @@ globalThis.__renderRequestActions = renderRequestActions;
 globalThis.__openAttestationSalaireModal = openAttestationSalaireModal;
 globalThis.__TYPE_ARRET_LABELS = TYPE_ARRET_LABELS;
 globalThis.__isArretTravailType = isArretTravailType;
+globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArret;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -372,6 +373,7 @@ globalThis.__isArretTravailType = isArretTravailType;
     openAttestationSalaireModal: sandbox.__openAttestationSalaireModal,
     TYPE_ARRET_LABELS: sandbox.__TYPE_ARRET_LABELS,
     isArretTravailType: sandbox.__isArretTravailType,
+    calculerEstimationIndemnitesArret: sandbox.__calculerEstimationIndemnitesArret,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

@@ -75,6 +75,13 @@ globalThis.__getExpenseRembourseDate = getExpenseRembourseDate;
 globalThis.__idbAvailable = idbAvailable;
 globalThis.__idbGet = idbGet;
 globalThis.__isArretTravailType = isArretTravailType;
+globalThis.__calculerJoursCarenceArret = calculerJoursCarenceArret;
+globalThis.__calculerSalaireJournalierBase = calculerSalaireJournalierBase;
+globalThis.__calculerIJSecuEstimee = calculerIJSecuEstimee;
+globalThis.__calculerPlafondSJBIndicatif = calculerPlafondSJBIndicatif;
+globalThis.__getJoursMaintienDejaConsommes12Mois = getJoursMaintienDejaConsommes12Mois;
+globalThis.__calculerMaintienSalaireEstime = calculerMaintienSalaireEstime;
+globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArret;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -118,6 +125,13 @@ globalThis.__isArretTravailType = isArretTravailType;
     idbAvailable: sandbox.__idbAvailable,
     idbGet: sandbox.__idbGet,
     isArretTravailType: sandbox.__isArretTravailType,
+    calculerJoursCarenceArret: sandbox.__calculerJoursCarenceArret,
+    calculerSalaireJournalierBase: sandbox.__calculerSalaireJournalierBase,
+    calculerIJSecuEstimee: sandbox.__calculerIJSecuEstimee,
+    calculerPlafondSJBIndicatif: sandbox.__calculerPlafondSJBIndicatif,
+    getJoursMaintienDejaConsommes12Mois: sandbox.__getJoursMaintienDejaConsommes12Mois,
+    calculerMaintienSalaireEstime: sandbox.__calculerMaintienSalaireEstime,
+    calculerEstimationIndemnitesArret: sandbox.__calculerEstimationIndemnitesArret,
   };
 }
 

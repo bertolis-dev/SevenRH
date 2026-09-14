@@ -5355,6 +5355,149 @@ function isArretTravailType(leaveType) {
   return Boolean(leaveType) && leaveTypeNameMatches(leaveType.nom, 'Maladie');
 }
 
+/** §retour Betty du 13/09/2026 (point 4.1 v2a, chiffrage validé) : première tranche du calcul
+ * IJ/carence — carence + IJ sécu approximative + maintien de salaire LÉGAL (L1226-1, pas de barème
+ * conventionnel spécifique : une entreprise Syntec reste sur ce barème légal en v2a). Basée sur
+ * employee.salaireBrutMensuel, un salaire de référence unique — pas la moyenne réelle des 3 derniers
+ * mois avec primes/heures sup que retient la CPAM. Approximation assumée et TOUJOURS affichée comme
+ * telle (voir openAttestationSalaireModal, app.js), jamais un montant garanti. Majoration IJ à 66,66%
+ * pour 3 enfants à charge et gestion de la rechute (pas de nouvelle carence) volontairement hors
+ * scope v2a : données non collectées par Nexus aujourd'hui. */
+
+// ⚠️ INDICATIF — SMIC brut mensuel (35h), à vérifier/mettre à jour chaque année. Sert uniquement à
+// approximer le plafond légal de l'IJ sécurité sociale (1,8 SMIC), même esprit que les barèmes
+// kilométriques moto/cyclomoteur : valeur affichée comme estimation, jamais comme un montant CPAM
+// garanti.
+const SMIC_MENSUEL_BRUT_INDICATIF = 1801.80;
+
+const CARENCE_JOURS_MALADIE_ORDINAIRE = 3;
+const TAUX_IJ_MALADIE_ORDINAIRE = 0.5;
+const TAUX_IJ_ATMP_INITIAL = 0.6;
+const TAUX_IJ_ATMP_APRES_28J = 0.8;
+const SEUIL_JOURS_ATMP_TAUX_MAJORE = 28;
+
+// ⚠️ INDICATIF — barème légal de maintien de salaire (mensualisation, art. L1226-1), à vérifier avant
+// utilisation en production. `jours` s'applique aux DEUX périodes (plein traitement puis demi
+// traitement) : ex. 1 à 5 ans d'ancienneté = 30 jours à 90% PUIS 30 jours à 66,66%, soit 60 jours de
+// capacité totale sur 12 mois glissants. Une convention collective peut prévoir mieux (Syntec par
+// exemple) : non implémenté ici en v2a, seul ce minimum légal est calculé.
+const BAREME_MAINTIEN_SALAIRE_LEGAL = [
+  { ancienneteMin: 1, jours: 30 },
+  { ancienneteMin: 6, jours: 40 },
+  { ancienneteMin: 11, jours: 50 },
+  { ancienneteMin: 16, jours: 60 },
+  { ancienneteMin: 21, jours: 70 },
+  { ancienneteMin: 26, jours: 80 },
+  { ancienneteMin: 31, jours: 90 }
+];
+const TAUX_MAINTIEN_PLEIN = 0.9;
+const TAUX_MAINTIEN_DEMI = 0.6666;
+
+function isArretSansCarence(typeArret) {
+  return typeArret === 'accidentTravail' || typeArret === 'accidentTrajet' || typeArret === 'maladieProfessionnelle';
+}
+
+function calculerJoursCarenceArret(typeArret) {
+  return isArretSansCarence(typeArret) ? 0 : CARENCE_JOURS_MALADIE_ORDINAIRE;
+}
+
+/** Salaire journalier de base approximatif — méthode CPAM (moyenne des 3 derniers mois / 91,25)
+ * appliquée au seul salaireBrutMensuel disponible dans Nexus : ×3 puis /91,25 équivaut à une moyenne
+ * stable sur 3 mois identiques, voir le commentaire d'en-tête sur cette approximation assumée. */
+function calculerSalaireJournalierBase(salaireBrutMensuel) {
+  if (!salaireBrutMensuel) return 0;
+  return round2(salaireBrutMensuel * 3 / 91.25);
+}
+
+function calculerPlafondSJBIndicatif() {
+  return round2(SMIC_MENSUEL_BRUT_INDICATIF * 1.8 * 3 / 91.25);
+}
+
+function calculerIJSecuEstimee(typeArret, salaireBrutMensuel, nbJoursIndemnisables) {
+  if (nbJoursIndemnisables <= 0) return 0;
+  const sjb = Math.min(calculerSalaireJournalierBase(salaireBrutMensuel), calculerPlafondSJBIndicatif());
+  if (isArretSansCarence(typeArret)) {
+    const joursInitiaux = Math.min(nbJoursIndemnisables, SEUIL_JOURS_ATMP_TAUX_MAJORE);
+    const joursApres = Math.max(0, nbJoursIndemnisables - SEUIL_JOURS_ATMP_TAUX_MAJORE);
+    return round2(joursInitiaux * sjb * TAUX_IJ_ATMP_INITIAL + joursApres * sjb * TAUX_IJ_ATMP_APRES_28J);
+  }
+  return round2(nbJoursIndemnisables * sjb * TAUX_IJ_MALADIE_ORDINAIRE);
+}
+
+function getBaremeMaintienPourAnciennete(ancienneteAnneesEntieres) {
+  let retenu = null;
+  BAREME_MAINTIEN_SALAIRE_LEGAL.forEach(palier => {
+    if (ancienneteAnneesEntieres >= palier.ancienneteMin) retenu = palier;
+  });
+  return retenu;
+}
+
+/** Jours de maintien (avant répartition plein/demi) déjà consommés par CE salarié sur les 12 mois
+ * glissants précédant le début de CET arrêt — même logique de cumul que le barème kilométrique
+ * (getKilometrageDejaDeclareAnnee) : les arrêts plus anciens que 12 mois ne comptent plus, la demande
+ * en cours d'édition (excludeRequestId) ne se compte jamais elle-même. */
+function getJoursMaintienDejaConsommes12Mois(employeeId, dateDebutArret, allLeaveRequests, excludeRequestId) {
+  const dateArretRef = parseISODateLocal(dateDebutArret);
+  const debutFenetre = new Date(dateArretRef);
+  debutFenetre.setFullYear(debutFenetre.getFullYear() - 1);
+  let total = 0;
+  (allLeaveRequests || []).forEach(req => {
+    if (req.id === excludeRequestId) return;
+    if (req.employeeId !== employeeId || !req.arretTravail || req.statut !== 'Validé') return;
+    const debutReq = parseISODateLocal(req.dateDebut);
+    if (debutReq < debutFenetre || debutReq >= dateArretRef) return;
+    const finReq = parseISODateLocal(req.dateFin);
+    const nbJoursCalendaires = Math.round((finReq - debutReq) / 86400000) + 1;
+    const carence = calculerJoursCarenceArret(req.arretTravail.typeArret);
+    total += Math.max(0, nbJoursCalendaires - carence);
+  });
+  return total;
+}
+
+function calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursIndemnisables, joursDejaConsommes, salaireBrutMensuel) {
+  const bareme = getBaremeMaintienPourAnciennete(ancienneteAnneesEntieres);
+  if (!bareme) {
+    return { ancienneteInsuffisante: true, joursPlein: 0, joursDemi: 0, joursNonCouverts: joursIndemnisables, montant: 0 };
+  }
+  const capaciteTotale = bareme.jours * 2;
+  const pleinRestant = Math.max(0, bareme.jours - joursDejaConsommes);
+  const totalRestant = Math.max(0, capaciteTotale - joursDejaConsommes);
+
+  const joursPlein = Math.min(joursIndemnisables, pleinRestant);
+  const resteApresPlein = joursIndemnisables - joursPlein;
+  const demiRestant = Math.max(0, totalRestant - pleinRestant);
+  const joursDemi = Math.min(resteApresPlein, demiRestant);
+  const joursNonCouverts = joursIndemnisables - joursPlein - joursDemi;
+
+  const salaireJournalierBrutApprox = round2(salaireBrutMensuel * 12 / 365);
+  const montant = round2(joursPlein * salaireJournalierBrutApprox * TAUX_MAINTIEN_PLEIN + joursDemi * salaireJournalierBrutApprox * TAUX_MAINTIEN_DEMI);
+
+  return { ancienneteInsuffisante: false, joursPlein, joursDemi, joursNonCouverts, montant };
+}
+
+/** Orchestrateur v2a : renseigné uniquement si un salaire de référence existe (sinon impossible à
+ * estimer, voir openAttestationSalaireModal qui gère déjà ce cas honnêtement pour l'affichage du
+ * salaire seul). Ne modifie JAMAIS la demande elle-même — recalculé à chaque affichage, comme le
+ * recalcul kilométrique, pour ne jamais servir un montant figé si le barème ou le salaire changent. */
+function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests) {
+  const arret = request && request.arretTravail;
+  if (!arret || !employee || !employee.salaireBrutMensuel) return null;
+  const debut = parseISODateLocal(request.dateDebut);
+  const fin = parseISODateLocal(request.dateFin);
+  const nbJoursCalendaires = Math.round((fin - debut) / 86400000) + 1;
+  const joursCarence = calculerJoursCarenceArret(arret.typeArret);
+  const joursIndemnisables = Math.max(0, nbJoursCalendaires - joursCarence);
+  const ijSecuEstimee = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, joursIndemnisables);
+  const ancienneteAnneesEntieres = Math.floor(calculateAncienneteYears(employee, request.dateDebut));
+  const joursDejaConsommes = getJoursMaintienDejaConsommes12Mois(employee.id, request.dateDebut, allLeaveRequests, request.id);
+  const maintien = calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursIndemnisables, joursDejaConsommes, employee.salaireBrutMensuel);
+  const complementEmployeurEstime = Math.max(0, round2(maintien.montant - ijSecuEstimee));
+  return {
+    nbJoursCalendaires, joursCarence, joursIndemnisables, ijSecuEstimee,
+    ancienneteAnneesEntieres, maintien, complementEmployeurEstime
+  };
+}
+
 /** §correctif retour QA du 27/08/2026 (point 2.4) : leaveType.proratisationTempsPartiel n'existait
  * pas avant ce correctif — un type déjà en base (donc sans ce champ) retombe ici sur une inférence
  * par nom (même technique que deduireRTT/deduireCP au-dessus) plutôt qu'une migration d'écriture :

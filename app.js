@@ -11675,6 +11675,30 @@ function openLeaveAttestationModal(requestId) {
  * un impact financier réel pour le salarié, contrairement à un document mal mis en page — à ne
  * jamais automatiser sans validation par quelqu'un de compétent en paie. Nexus alimente la paie, il
  * ne la fait pas (position de Betty, cf. le reste de ce sujet). */
+/** §retour Betty du 13/09/2026 (point 4.1 v2a, chiffrage validé) : estimation IJ/carence/maintien
+ * calculée à la volée (calculerEstimationIndemnitesArret, data.js) — jamais persistée, jamais
+ * présentée sans l'avertissement "estimation indicative" (voir sa raison d'être : basée sur le seul
+ * salaireBrutMensuel, pas la moyenne réelle des 3 derniers mois). Rendu séparé de l'attestation
+ * elle-même pour rester lisible même si l'estimation est indisponible (pas de salaire renseigné). */
+function renderEstimationIndemnitesArret(r, employee) {
+  if (!employee.salaireBrutMensuel) {
+    return `<h2>Estimation des indemnités</h2><p class="text-muted">Non calculable : aucun salaire brut mensuel renseigné sur la fiche salarié.</p>`;
+  }
+  const allRequestsEmployee = leaveRepository.getForEmployee(employee.id);
+  const estimation = calculerEstimationIndemnitesArret(r, employee, allRequestsEmployee);
+  if (!estimation) return '';
+  const m = estimation.maintien;
+  return `
+    <h2>Estimation des indemnités <span class="badge badge-warning">Indicatif, non contractuel</span></h2>
+    <p class="text-muted">${icon(ICONS.warningTriangle, 12)} Estimation calculée à partir du seul salaire brut mensuel de la fiche salarié (${formatCurrencyFR(employee.salaireBrutMensuel)}), pas de la moyenne réelle des 3 derniers mois (primes, heures supplémentaires...) que retient la CPAM. Ne remplace jamais le décompte officiel de la CPAM ni le calcul de votre gestionnaire de paie.</p>
+    <p>Carence : <strong>${estimation.joursCarence} jour(s)</strong> · Jours indemnisables : <strong>${estimation.joursIndemnisables}</strong> sur ${estimation.nbJoursCalendaires} jours calendaires</p>
+    <p>IJ sécurité sociale estimée : <strong>${formatCurrencyFR(estimation.ijSecuEstimee)}</strong></p>
+    ${m.ancienneteInsuffisante
+      ? `<p>Maintien de salaire employeur : <strong>aucun</strong> (ancienneté inférieure à 1 an, minimum légal L1226-1, une convention collective peut prévoir mieux, non appliqué ici).</p>`
+      : `<p>Maintien de salaire employeur (ancienneté retenue : ${estimation.ancienneteAnneesEntieres} an(s)) : <strong>${m.joursPlein}</strong> jour(s) à 90% + <strong>${m.joursDemi}</strong> jour(s) à 66,66%${m.joursNonCouverts > 0 ? ` · <strong>${m.joursNonCouverts}</strong> jour(s) hors capacité 12 mois glissants` : ''} — maintien total estimé <strong>${formatCurrencyFR(m.montant)}</strong>, dont complément employeur (au-delà de l'IJ sécu) estimé à <strong>${formatCurrencyFR(estimation.complementEmployeurEstime)}</strong>.</p>`}
+  `;
+}
+
 function openAttestationSalaireModal(requestId) {
   const r = leaveRepository.getById(requestId);
   if (!r) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
@@ -11714,6 +11738,7 @@ function openAttestationSalaireModal(requestId) {
           ${settings.masseSalarialeActivee && employee.salaireBrutMensuel
             ? `<p>Salaire brut mensuel actuel (fiche salarié) : ${formatCurrencyFR(employee.salaireBrutMensuel)} — à vérifier sur les 3 derniers mois réels avant transmission (primes, heures supplémentaires, changement de taux...), Nexus n'alimentant pas votre historique de paie détaillé.</p>`
             : `<p class="text-muted">Non renseigné dans Nexus (suivi de la masse salariale désactivé, ou champ vide sur la fiche salarié) — à compléter manuellement avec votre gestionnaire de paie.</p>`}
+          ${settings.masseSalarialeActivee ? renderEstimationIndemnitesArret(r, employee) : ''}
           <div class="print-signature">
             <span>Fait pour servir et valoir ce que de droit.</span>
             <span class="print-signature-line">Signature et cachet de l'entreprise</span>
