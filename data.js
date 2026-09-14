@@ -571,6 +571,14 @@ const DEFAULT_SETTINGS = {
   // Index de l'égalité professionnelle femmes-hommes (voir DB.enregistrerIndexEgalite) : { [année]:
   // { note, datePublication, mesuresCorrectives } }, une entrée par année civile déclarée.
   indexEgaliteProfessionnelle: {},
+  // §retour Betty du 14/09/2026 (Rémunération point 5, "coût employeur complet") : pourcentage de
+  // charges patronales à ajouter au salaire brut pour estimer le coût réel pour l'entreprise. 42% =
+  // ordre de grandeur usuel non-cadre en France en 2026, PAS un taux officiel unique — varie en
+  // réalité selon la convention collective, les effectifs et les exonérations (allègements
+  // Fillon...) — exactement la même réserve que tauxReposCompensateur ci-dessous : une estimation à
+  // affiner avec le gestionnaire de paie, jamais un calcul de cotisations à prendre pour argent
+  // comptant.
+  tauxChargesPatronalesEstime: 0.42,
   // Postes actuellement recrutés (demande du 17/08/2026) — gérés depuis l'écran Embauche (pas
   // Paramètres) via le même composant chip-add/remove que les listes de référence
   // (renderSettingsListCard/bindChipListEvents). Proposés au candidat sur la page publique de
@@ -1044,6 +1052,14 @@ function calculerCoutShifts(shifts, employees) {
     if (!employee) return sum;
     return sum + computeShiftHeures(s) * calculerTauxHoraireEmploye(employee);
   }, 0));
+}
+
+/** Coût employeur complet (§retour Betty du 14/09/2026, Rémunération point 5) : brut + charges
+ * patronales estimées (settings.tauxChargesPatronalesEstime, voir DEFAULT_SETTINGS pour la réserve
+ * sur ce taux). */
+function calculerCoutEmployeurComplet(salaireBrutMensuel, tauxChargesPatronalesEstime) {
+  if (!salaireBrutMensuel) return 0;
+  return round2(salaireBrutMensuel * (1 + (tauxChargesPatronalesEstime || 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1869,11 +1885,24 @@ const DB = {
     return employee;
   },
 
-  updateEmployee(id, patch) {
+  /** `motifSalaire` n'est jamais un champ du formulaire générique d'édition (patch.motif serait
+   * ambigu avec d'autres motifs de l'app) — seul l'appelant qui connaît le contexte d'un changement
+   * de salaire (ex. validerRevisionSalariale) le fournit ; une édition manuelle classique du champ
+   * "Salaire brut mensuel" laisse ce motif vide plutôt que d'obliger à le saisir à chaque fois. */
+  updateEmployee(id, patch, motifSalaire = '') {
     const list = this.getEmployees();
     const index = list.findIndex(e => e.id === id);
     if (index === -1) return null;
-    list[index] = Object.assign({}, list[index], patch, { dateModification: new Date().toISOString() });
+    const avant = list[index];
+    // §retour Betty du 14/09/2026 (Rémunération point 1, "historique des salaires") : trace TOUT
+    // changement de salaireBrutMensuel, quel que soit le chemin qui l'a déclenché (formulaire
+    // d'édition générique ou validation d'une campagne de révision) — un seul point de passage
+    // (updateEmployee) plutôt qu'une trace ajoutée séparément à chaque appelant, pour ne jamais en
+    // oublier un.
+    const historiqueSalaire = (patch.salaireBrutMensuel !== undefined && Number(patch.salaireBrutMensuel) !== Number(avant.salaireBrutMensuel || 0))
+      ? [...(avant.historiqueSalaire || []), { date: new Date().toISOString(), ancienMontant: avant.salaireBrutMensuel || 0, nouveauMontant: Number(patch.salaireBrutMensuel), motif: motifSalaire || '', auteurId: this._currentEmployeeId }]
+      : avant.historiqueSalaire;
+    list[index] = Object.assign({}, avant, patch, { historiqueSalaire, dateModification: new Date().toISOString() });
     this.saveEmployees(list);
     this.logAudit('Modification', 'Salarié', `${list[index].prenom} ${list[index].nom}`);
     return list[index];
@@ -3726,6 +3755,87 @@ const DB = {
     return { success: true, campagne, entretiens };
   },
 
+  // ---- Campagne de révision salariale annuelle (§retour Betty du 14/09/2026, Rémunération point 2,
+  // le plus gros chantier de ce module) : une proposition par salarié concerné, jamais appliquée au
+  // salaire tant qu'elle n'est pas validée individuellement. ----
+
+  getCampagnesRevisionSalariale() {
+    return (this.getCurrentCompany().campagnesRevisionSalariale || []).slice();
+  },
+
+  saveCampagnesRevisionSalariale(list) {
+    const company = this.getCurrentCompany();
+    company.campagnesRevisionSalariale = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  /** `salaireActuel` fige la référence au moment du lancement (même si le salaire du salarié change
+   * ailleurs entre-temps, la proposition reste comparable à ce qu'elle était à l'ouverture de la
+   * campagne) — jamais recalculé dynamiquement depuis la fiche salarié. */
+  lancerCampagneRevisionSalariale(nom, anneeReference, dateLimite, employeeIds) {
+    if (!employeeIds || !employeeIds.length) return { success: false, error: 'Aucun salarié concerné par cette campagne.' };
+    const employees = this.getEmployees();
+    const propositions = employeeIds.map(employeeId => {
+      const employee = employees.find(e => e.id === employeeId);
+      return { employeeId, salaireActuel: (employee && employee.salaireBrutMensuel) || 0, salairePropose: null, motif: '', statut: 'en_attente', dateValidation: null };
+    });
+    const campagne = { id: generateId('revision'), nom, anneeReference, dateLimite, propositions, statut: 'active', dateCreation: new Date().toISOString() };
+    this.saveCampagnesRevisionSalariale([...this.getCampagnesRevisionSalariale(), campagne]);
+    this.logAudit('Création', 'Campagne de révision salariale', `${nom} · ${employeeIds.length} salariés`);
+    return { success: true, campagne };
+  },
+
+  proposerRevisionSalariale(campagneId, employeeId, salairePropose, motif) {
+    const list = this.getCampagnesRevisionSalariale();
+    const campagne = list.find(c => c.id === campagneId);
+    if (!campagne) return { success: false, error: 'Campagne introuvable.' };
+    const proposition = (campagne.propositions || []).find(p => p.employeeId === employeeId);
+    if (!proposition) return { success: false, error: 'Ce salarié n\'est pas concerné par cette campagne.' };
+    if (proposition.statut === 'validee') return { success: false, error: 'Cette révision a déjà été validée et appliquée : elle ne peut plus être modifiée.' };
+    proposition.salairePropose = Number(salairePropose);
+    proposition.motif = motif || '';
+    proposition.statut = 'proposee';
+    this.saveCampagnesRevisionSalariale(list);
+    const salarieCible = this.getEmployeeById(employeeId);
+    this.logAudit('Modification', 'Proposition de révision salariale', `${salarieCible ? salarieCible.prenom + ' ' + salarieCible.nom : employeeId} → ${proposition.salairePropose} €`);
+    return { success: true, campagne };
+  },
+
+  /** Seule action qui modifie réellement le salaire du salarié — passe par updateEmployee (avec un
+   * motif) pour que l'historique des salaires (employee.historiqueSalaire) trace le changement,
+   * exactement comme n'importe quelle autre modification de salaireBrutMensuel. */
+  validerRevisionSalariale(campagneId, employeeId) {
+    const list = this.getCampagnesRevisionSalariale();
+    const campagne = list.find(c => c.id === campagneId);
+    if (!campagne) return { success: false, error: 'Campagne introuvable.' };
+    const proposition = (campagne.propositions || []).find(p => p.employeeId === employeeId);
+    if (!proposition) return { success: false, error: 'Ce salarié n\'est pas concerné par cette campagne.' };
+    if (proposition.statut !== 'proposee') return { success: false, error: 'Aucune proposition en attente de validation pour ce salarié : proposez d\'abord un montant.' };
+    this.updateEmployee(employeeId, { salaireBrutMensuel: proposition.salairePropose }, `Révision salariale — ${campagne.nom}${proposition.motif ? ` (${proposition.motif})` : ''}`);
+    proposition.statut = 'validee';
+    proposition.dateValidation = new Date().toISOString();
+    this.saveCampagnesRevisionSalariale(list);
+    const salarieValide = this.getEmployeeById(employeeId);
+    this.logAudit('Validation', 'Révision salariale', `${salarieValide ? salarieValide.prenom + ' ' + salarieValide.nom : employeeId} → ${proposition.salairePropose} €`);
+    return { success: true, campagne };
+  },
+
+  refuserRevisionSalariale(campagneId, employeeId, motifRefus) {
+    const list = this.getCampagnesRevisionSalariale();
+    const campagne = list.find(c => c.id === campagneId);
+    if (!campagne) return { success: false, error: 'Campagne introuvable.' };
+    const proposition = (campagne.propositions || []).find(p => p.employeeId === employeeId);
+    if (!proposition) return { success: false, error: 'Ce salarié n\'est pas concerné par cette campagne.' };
+    if (proposition.statut === 'validee') return { success: false, error: 'Cette révision a déjà été validée et appliquée.' };
+    proposition.statut = 'refusee';
+    if (motifRefus) proposition.motif = motifRefus;
+    this.saveCampagnesRevisionSalariale(list);
+    const salarieRefuse = this.getEmployeeById(employeeId);
+    this.logAudit('Refus', 'Révision salariale', salarieRefuse ? `${salarieRefuse.prenom} ${salarieRefuse.nom}` : employeeId);
+    return { success: true, campagne };
+  },
+
   /** Clôture par RH/Propriétaire (gererEntretiens) — fige la date de réalisation si elle n'était pas
    * déjà renseignée (coalesce local, comme dateLivraison pour les tickets support). */
   clotureEntretien(id) {
@@ -4505,6 +4615,14 @@ const entretienCampagneRepository = {
   lancer: (nom, type, dateLimite, employeeIds, trameId) => DB.lancerCampagneEntretiens(nom, type, dateLimite, employeeIds, trameId)
 };
 
+const revisionSalarialeRepository = {
+  getAll: () => DB.getCampagnesRevisionSalariale(),
+  lancer: (nom, anneeReference, dateLimite, employeeIds) => DB.lancerCampagneRevisionSalariale(nom, anneeReference, dateLimite, employeeIds),
+  proposer: (campagneId, employeeId, salairePropose, motif) => DB.proposerRevisionSalariale(campagneId, employeeId, salairePropose, motif),
+  valider: (campagneId, employeeId) => DB.validerRevisionSalariale(campagneId, employeeId),
+  refuser: (campagneId, employeeId, motifRefus) => DB.refuserRevisionSalariale(campagneId, employeeId, motifRefus)
+};
+
 const ideeRepository = {
   getAll: () => DB.getIdees(),
   getById: (id) => DB.getIdeeById(id),
@@ -4755,6 +4873,10 @@ function makeEmptyEmployee() {
 
     // Champs sensibles, réservés au Propriétaire, affichés uniquement si le réglage correspondant est activé
     salaireBrutMensuel: 0,
+    // §retour Betty du 14/09/2026 (Rémunération point 1) : [{ date, ancienMontant, nouveauMontant,
+    // motif, auteurId }], alimenté automatiquement par updateEmployee dès que salaireBrutMensuel
+    // change — jamais saisi à la main, jamais réécrit une fois consigné.
+    historiqueSalaire: [],
     genre: '',
 
     compteurs: {},

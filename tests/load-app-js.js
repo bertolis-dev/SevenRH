@@ -95,6 +95,9 @@ globalThis.__seedExampleShifts = seedExampleShifts;
 globalThis.__pointageRepository = pointageRepository;
 globalThis.__etablissementRepository = etablissementRepository;
 globalThis.__computeDureeTravailleeMinutes = computeDureeTravailleeMinutes;
+globalThis.__calculerCoutEmployeurComplet = calculerCoutEmployeurComplet;
+globalThis.__revisionSalarialeRepository = revisionSalarialeRepository;
+globalThis.__settingsRepository = settingsRepository;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -274,6 +277,13 @@ globalThis.__openAttestationSalaireModal = openAttestationSalaireModal;
 globalThis.__TYPE_ARRET_LABELS = TYPE_ARRET_LABELS;
 globalThis.__isArretTravailType = isArretTravailType;
 globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArret;
+globalThis.__renderRemuneration = renderRemuneration;
+globalThis.__bindRemunerationEvents = bindRemunerationEvents;
+globalThis.__renderRevisionSalarialeCard = renderRevisionSalarialeCard;
+globalThis.__openLancerRevisionSalarialeModal = openLancerRevisionSalarialeModal;
+globalThis.__openProposerRevisionModal = openProposerRevisionModal;
+globalThis.__renderConfidentialEmployeeCard = renderConfidentialEmployeeCard;
+globalThis.__REVISION_STATUT_LABELS = REVISION_STATUT_LABELS;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -304,6 +314,9 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     pointageRepository: sandbox.__pointageRepository,
     etablissementRepository: sandbox.__etablissementRepository,
     computeDureeTravailleeMinutes: sandbox.__computeDureeTravailleeMinutes,
+    calculerCoutEmployeurComplet: sandbox.__calculerCoutEmployeurComplet,
+    revisionSalarialeRepository: sandbox.__revisionSalarialeRepository,
+    settingsRepository: sandbox.__settingsRepository,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,
@@ -458,6 +471,13 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     TYPE_ARRET_LABELS: sandbox.__TYPE_ARRET_LABELS,
     isArretTravailType: sandbox.__isArretTravailType,
     calculerEstimationIndemnitesArret: sandbox.__calculerEstimationIndemnitesArret,
+    renderRemuneration: sandbox.__renderRemuneration,
+    bindRemunerationEvents: sandbox.__bindRemunerationEvents,
+    renderRevisionSalarialeCard: sandbox.__renderRevisionSalarialeCard,
+    openLancerRevisionSalarialeModal: sandbox.__openLancerRevisionSalarialeModal,
+    openProposerRevisionModal: sandbox.__openProposerRevisionModal,
+    renderConfidentialEmployeeCard: sandbox.__renderConfidentialEmployeeCard,
+    REVISION_STATUT_LABELS: sandbox.__REVISION_STATUT_LABELS,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,

@@ -8522,6 +8522,12 @@ const ENTRETIEN_TYPE_LABELS = { professionnel: 'Entretien professionnel', bilan:
 // segmentation complet, cohérent avec la taille de ce chantier v1.
 const POPULATION_LABELS = { tous: 'Tous les salariés', cadres: 'Cadres', managers: 'Managers' };
 
+// §retour Betty du 14/09/2026 (Rémunération point 2, "campagne de révision annuelle") :
+// 'en_attente' = pas encore de montant proposé, 'proposee' = en attente de décision, 'validee' =
+// appliquée à la fiche salarié (jamais réversible depuis cet écran), 'refusee' = classée sans suite.
+const REVISION_STATUT_LABELS = { en_attente: 'À proposer', proposee: 'Proposée', validee: 'Validée', refusee: 'Refusée' };
+const REVISION_STATUT_BADGE_CLASS = { en_attente: 'muted', proposee: 'warning', validee: 'success', refusee: 'danger' };
+
 /** Reflète is_manager_of() côté RLS (0002_rls_policies.sql) — même relation (employee.managerIds),
  * juste côté client pour décider quoi afficher/activer dans l'UI (la donnée reste protégée par la
  * policy serveur quoi qu'il arrive). */
@@ -10692,11 +10698,26 @@ function renderConfidentialEmployeeCard(e, user) {
   if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
   const settings = settingsRepository.getSettings();
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
+  // §retour Betty du 14/09/2026 (Rémunération point 1, "historique des salaires") : les 5 derniers
+  // changements, les plus récents en premier — alimenté automatiquement par updateEmployee, jamais
+  // saisi à la main ici (voir DB.updateEmployee, data.js).
+  const historique = (e.historiqueSalaire || []).slice().reverse().slice(0, 5);
   return `
     <div class="card">
       <h2>Confidentiel</h2>
       ${settings.masseSalarialeActivee ? infoRow('Salaire brut mensuel', formatCurrencyFR(e.salaireBrutMensuel || 0)) : ''}
+      ${settings.masseSalarialeActivee && e.salaireBrutMensuel ? infoRow('Coût employeur complet (estimé)', formatCurrencyFR(calculerCoutEmployeurComplet(e.salaireBrutMensuel, settings.tauxChargesPatronalesEstime))) : ''}
       ${settings.suiviGenreActive ? infoRow('Genre', e.genre || '—') : ''}
+      ${settings.masseSalarialeActivee && historique.length ? `
+        <div class="search-section-label" style="padding-left:0; margin-top:12px;">Historique des salaires</div>
+        <div class="mini-list">
+          ${historique.map(h => `
+            <div class="mini-list-item">
+              <span>${formatDate(h.date.slice(0, 10))} · ${formatCurrencyFR(h.ancienMontant)} → ${formatCurrencyFR(h.nouveauMontant)}${h.motif ? ` · ${escapeHtml(h.motif)}` : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -16057,6 +16078,11 @@ function renderParametresListes() {
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-masse-salariale" ${settings.masseSalarialeActivee ? 'checked' : ''}> Suivre la masse salariale (salaire brut mensuel par salarié)</label>
         </div>
+        <div class="form-field">
+          <label for="f-taux-charges-patronales">Taux de charges patronales estimé (%)</label>
+          <input class="input" type="number" min="0" max="100" step="0.1" id="f-taux-charges-patronales" value="${escapeHtml(Math.round(settings.tauxChargesPatronalesEstime * 1000) / 10)}">
+          <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...) — à faire valider par votre gestionnaire de paie.</p>
+        </div>
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Suivre la répartition Hommes / Femmes</label>
         </div>
@@ -16303,6 +16329,16 @@ function bindParametresListesEvents() {
     updateTicketsUrssafNote();
   }
   bindCheckboxField('f-masse-salariale', 'masseSalarialeActivee', 'Réglage mis à jour.');
+  const tauxChargesEl = document.getElementById('f-taux-charges-patronales');
+  if (tauxChargesEl) {
+    tauxChargesEl.addEventListener('change', (evt) => {
+      // Champ saisi en pourcentage (ex. 42), stocké en fraction (0,42) — voir DEFAULT_SETTINGS.tauxChargesPatronalesEstime.
+      const settings = settingsRepository.getSettings();
+      settings.tauxChargesPatronalesEstime = (Number(evt.target.value) || 0) / 100;
+      settingsRepository.saveSettings(settings);
+      showToast('Taux mis à jour.');
+    });
+  }
   bindCheckboxField('f-suivi-genre', 'suiviGenreActive', 'Réglage mis à jour.');
   bindCheckboxField('f-suivi-age', 'suiviAgeActive', 'Réglage mis à jour.');
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
@@ -21730,12 +21766,19 @@ function renderRemuneration() {
     <div class="view-header">
       <h1>Rémunération</h1>
       <p class="view-subtitle">${renseignes.length} salarié${renseignes.length > 1 ? 's' : ''} avec un salaire renseigné sur ${employees.length}</p>
+      <div class="detail-header-actions">
+        <button type="button" class="btn btn-secondary" id="btn-index-egalite-remuneration">${icon(ICONS.scale, 14)} Index égalité pro</button>
+        <button type="button" class="btn btn-primary" id="btn-lancer-revision-salariale">Lancer une campagne de révision</button>
+      </div>
     </div>
     <div class="kpi-grid">
       ${kpiCard('Masse salariale mensuelle', formatCurrencyFR(total), ICONS.coin)}
+      ${kpiCard('Coût employeur complet (estimé)', formatCurrencyFR(calculerCoutEmployeurComplet(total, settings.tauxChargesPatronalesEstime)), ICONS.coin)}
       ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), ICONS.chart)}
       ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), ICONS.trendingUp)}
     </div>
+    <p class="form-hint">Coût employeur estimé avec un taux de charges patronales de ${Math.round(settings.tauxChargesPatronalesEstime * 100)}% (Paramètres > Entreprise) — un ordre de grandeur, à affiner avec votre gestionnaire de paie. <button type="button" class="btn-link" id="btn-variables-paie-remuneration">Éléments variables du mois →</button></p>
+    ${renderRevisionSalarialeCard()}
     ${renderRadarTresorerieCard(getRadarTresorerieRH(employees, new Date()))}
     <div class="card table-card">
       <table class="table">
@@ -21763,11 +21806,198 @@ function renderRemuneration() {
   `;
 }
 
+/** §retour Betty du 14/09/2026 (Rémunération point 2, "campagne de révision annuelle") : une
+ * proposition par salarié concerné, jamais appliquée au salaire tant qu'elle n'est pas validée
+ * individuellement — voir DB.validerRevisionSalariale (data.js). */
+function renderRevisionSalarialeCard() {
+  const campagnes = revisionSalarialeRepository.getAll().filter(c => c.statut === 'active');
+  if (!campagnes.length) return '';
+  const employees = employeeRepository.getAll();
+  return campagnes.map(c => {
+    const total = (c.propositions || []).length;
+    const validees = c.propositions.filter(p => p.statut === 'validee').length;
+    const propositionsHtml = c.propositions.map(p => {
+      const employee = employees.find(e => e.id === p.employeeId);
+      if (!employee) return '';
+      // §retour Betty du 14/09/2026 (Rémunération point 6, "lien avec les entretiens") : simple
+      // rappel de contexte au moment de la décision — jamais une automatisation qui déciderait du
+      // montant à la place du manager/RH.
+      const dernierEntretien = entretienRepository.getForEmployee(p.employeeId)[0];
+      return `
+        <div class="mini-list-item" style="align-items:flex-start;">
+          <span>
+            <strong>${escapeHtml(employee.prenom + ' ' + employee.nom)}</strong>
+            <span class="badge badge-${REVISION_STATUT_BADGE_CLASS[p.statut]}">${escapeHtml(REVISION_STATUT_LABELS[p.statut])}</span><br>
+            ${formatCurrencyFR(p.salaireActuel)} → ${p.salairePropose != null ? formatCurrencyFR(p.salairePropose) : '<span class="text-muted">à proposer</span>'}
+            ${p.motif ? `· ${escapeHtml(p.motif)}` : ''}
+            ${dernierEntretien ? `<br><button type="button" class="btn-link" data-open-entretien="${dernierEntretien.id}">Dernier entretien du ${formatDate(dernierEntretien.datePrevue)}${dernierEntretien.besoinsFormation ? ' · besoin de formation identifié' : ''}</button>` : ''}
+          </span>
+          <span>
+            ${p.statut !== 'validee' ? `<button type="button" class="btn-link" data-revision-action="proposer" data-campagne="${c.id}" data-employee="${p.employeeId}">${p.statut === 'en_attente' ? 'Proposer' : 'Modifier'}</button>` : ''}
+            ${p.statut === 'proposee' ? `<button type="button" class="btn-link" data-revision-action="valider" data-campagne="${c.id}" data-employee="${p.employeeId}">Valider</button> <button type="button" class="btn-link" data-revision-action="refuser" data-campagne="${c.id}" data-employee="${p.employeeId}">Refuser</button>` : ''}
+          </span>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="card" style="margin-bottom:16px;">
+        <h2>${escapeHtml(c.nom)} <span class="text-muted" style="font-weight:400;">· ${validees}/${total} validées · échéance ${formatDate(c.dateLimite)}</span></h2>
+        ${propositionsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
 function bindRemunerationEvents() {
   const activerBtn = document.getElementById('btn-activer-masse-salariale');
   if (activerBtn) activerBtn.addEventListener('click', () => navigateTo('parametres', { parametresTab: 'entreprise' }));
+  const indexEgaliteBtn = document.getElementById('btn-index-egalite-remuneration');
+  if (indexEgaliteBtn) indexEgaliteBtn.addEventListener('click', openIndexEgaliteModal);
+  const variablesBtn = document.getElementById('btn-variables-paie-remuneration');
+  if (variablesBtn) variablesBtn.addEventListener('click', () => navigateTo('export-paie', { paieTab: 'preparation' }));
+  const lancerRevisionBtn = document.getElementById('btn-lancer-revision-salariale');
+  if (lancerRevisionBtn) lancerRevisionBtn.addEventListener('click', openLancerRevisionSalarialeModal);
   document.querySelectorAll('[data-open-employee]').forEach(row => {
     row.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: row.dataset.openEmployee }));
+  });
+  document.querySelectorAll('[data-open-entretien]').forEach(el => {
+    el.addEventListener('click', () => navigateTo('entretien-detail', { currentEntretienId: el.dataset.openEntretien }));
+  });
+  document.querySelectorAll('[data-revision-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const campagneId = btn.dataset.campagne;
+      const employeeId = btn.dataset.employee;
+      const action = btn.dataset.revisionAction;
+      if (action === 'proposer') { openProposerRevisionModal(campagneId, employeeId); return; }
+      if (action === 'valider') {
+        openConfirm({
+          title: 'Valider cette révision salariale ?',
+          message: 'Le nouveau salaire brut mensuel sera appliqué immédiatement à la fiche du salarié et tracé dans son historique des salaires.',
+          confirmLabel: 'Valider',
+          onConfirm: () => {
+            const result = revisionSalarialeRepository.valider(campagneId, employeeId);
+            if (!result.success) { showToast(result.error, 'error'); return; }
+            showToast('Révision validée et appliquée.');
+            render();
+          }
+        });
+        return;
+      }
+      if (action === 'refuser') {
+        openConfirm({
+          title: 'Refuser cette proposition ?',
+          message: 'Le salaire du salarié restera inchangé.',
+          confirmLabel: 'Refuser',
+          danger: true,
+          onConfirm: () => {
+            revisionSalarialeRepository.refuser(campagneId, employeeId);
+            showToast('Proposition refusée.');
+            render();
+          }
+        });
+      }
+    });
+  });
+}
+
+/** Modal de proposition/modification de montant — réutilisée tant que la proposition n'est pas
+ * validée (voir DB.proposerRevisionSalariale, qui refuse toute modification après validation). */
+function openProposerRevisionModal(campagneId, employeeId) {
+  const campagne = revisionSalarialeRepository.getAll().find(c => c.id === campagneId);
+  const proposition = campagne && (campagne.propositions || []).find(p => p.employeeId === employeeId);
+  if (!campagne || !proposition) { showToast('Cette proposition n\'est plus disponible.', 'error'); return; }
+  const employee = employeeRepository.getById(employeeId);
+  const dernierEntretien = entretienRepository.getForEmployee(employeeId)[0];
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Révision salariale — ${escapeHtml(employee ? employee.prenom + ' ' + employee.nom : '')}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="revision-form">
+        <div class="modal-body">
+          <p class="text-muted">Salaire brut mensuel actuel : ${formatCurrencyFR(proposition.salaireActuel)}.</p>
+          ${dernierEntretien ? `<p class="text-muted">Dernier entretien le ${formatDate(dernierEntretien.datePrevue)}${dernierEntretien.besoinsFormation ? ` — besoin de formation identifié : ${escapeHtml(dernierEntretien.besoinsFormation)}` : ''}.</p>` : ''}
+          <div class="form-field">
+            <label for="f-revision-montant">Nouveau salaire brut mensuel (€) *</label>
+            <input class="input" type="number" step="0.01" id="f-revision-montant" value="${proposition.salairePropose != null ? proposition.salairePropose : proposition.salaireActuel}" required>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-revision-motif">Motif</label>
+            <input class="input" type="text" id="f-revision-motif" value="${escapeHtml(proposition.motif || '')}" placeholder="Ex. atteinte des objectifs, alignement marché...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer la proposition</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('revision-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const montant = document.getElementById('f-revision-montant').value;
+    const motif = document.getElementById('f-revision-motif').value.trim();
+    const result = revisionSalarialeRepository.proposer(campagneId, employeeId, montant, motif);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    showToast('Proposition enregistrée.');
+    closeModal();
+    render();
+  });
+}
+
+/** Population = tous les salariés actifs avec un salaire déjà renseigné (une révision sans salaire
+ * de départ n'aurait pas de sens) — pas de découpage cadres/managers ici, contrairement aux
+ * campagnes d'entretiens : une révision salariale annuelle est typiquement lancée pour tout le
+ * monde à la fois, chaque proposition individuelle permettant déjà d'ajuster ou de refuser au cas
+ * par cas. */
+function openLancerRevisionSalarialeModal() {
+  const renseignes = employeeRepository.getAll().filter(e => !e.archive && e.salaireBrutMensuel > 0);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Lancer une campagne de révision salariale</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="revision-campagne-form">
+        <div class="modal-body">
+          <p class="text-muted">${renseignes.length} salarié${renseignes.length > 1 ? 's' : ''} avec un salaire renseigné seront concerné${renseignes.length > 1 ? 's' : ''}.</p>
+          <div class="form-field"><label for="f-revision-campagne-nom">Nom de la campagne</label><input class="input" type="text" id="f-revision-campagne-nom" placeholder="Ex. Révision annuelle 2026" required></div>
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="form-field"><label for="f-revision-campagne-annee">Année de référence</label><input class="input" type="number" id="f-revision-campagne-annee" value="${new Date().getFullYear()}" required></div>
+            <div class="form-field"><label for="f-revision-campagne-date">Échéance</label><input class="input" type="date" id="f-revision-campagne-date" required></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Lancer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('revision-campagne-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-revision-campagne-nom').value.trim();
+    if (!nom) { showToast('Indiquez un nom.', 'error'); return; }
+    const anneeReference = document.getElementById('f-revision-campagne-annee').value;
+    const dateLimite = document.getElementById('f-revision-campagne-date').value;
+    if (!dateLimite) { showToast('Indiquez une échéance.', 'error'); return; }
+    const employeeIds = renseignes.map(e => e.id);
+    const result = revisionSalarialeRepository.lancer(nom, anneeReference, dateLimite, employeeIds);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    closeModal();
+    showToast(`Campagne lancée : ${employeeIds.length} salarié(s) concerné(s).`);
+    render();
   });
 }
 
