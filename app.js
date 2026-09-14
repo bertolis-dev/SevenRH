@@ -18431,14 +18431,22 @@ function renderPlanningPostes() {
   // semaine affichée. Masqué si le module n'est pas souscrit (aucun pointage ne peut alors exister
   // de toute façon, mais évite un accès superflu au repository).
   const todayStr = toISODate(new Date());
-  const pointageBadgeFor = (employeeId, weekday, dateStr) => {
-    if (!hasModule('pointage') || dateStr !== todayStr) return '';
+  /** §correctif visuel du 14/09/2026 : une case de jour est étroite (7 jours + la colonne du nom
+   * sur la même largeur), avec une hauteur de ligne FIXE (déterminée par la colonne du nom, jamais
+   * par le contenu de .poste-shift-card lui-même — carte en position:absolute, donc hors du flux
+   * normal). Un quart déjà affiché (horaire + service, 2 lignes) n'a quasiment plus de marge :
+   * ajouter la confirmation de pointage en 3e ligne texte ("Pointé 08:52 → 17:03") débordait
+   * carrément de la carte, la seconde heure se retrouvant visuellement affichée par-dessus la ligne
+   * suivante du tableau — exactement le repère envoyé par Betty. Un simple point vert au survol
+   * (title, jamais de texte en dur) n'ajoute AUCUNE ligne : ne peut plus jamais déborder, quelle que
+   * soit la hauteur réellement disponible. Seule la carte SANS quart planifié (rien d'autre à
+   * montrer, donc bien plus de place) garde l'affichage complet en toutes lettres. */
+  const getDernierPointage = (employeeId, dateStr) => {
+    if (!hasModule('pointage') || dateStr !== todayStr) return null;
     const pointages = pointageRepository.getForEmployeeOnDate(employeeId, dateStr);
-    if (!pointages.length) return '';
-    const dernier = pointages[pointages.length - 1];
-    const texte = dernier.heureDepart ? `${dernier.heureArrivee} → ${dernier.heureDepart}` : `${dernier.heureArrivee}`;
-    return `<div class="poste-shift-pointage">${icon(ICONS.checkCircle, 10)} Pointé ${escapeHtml(texte)}</div>`;
+    return pointages.length ? pointages[pointages.length - 1] : null;
   };
+  const pointageTexte = (dernier) => dernier.heureDepart ? `${dernier.heureArrivee} → ${dernier.heureDepart}` : `arrivée ${dernier.heureArrivee}`;
 
   // §retour Betty du 10/09/2026 ("exactement ça sauf en bleu et doré") : carte flottante avec
   // marge/ombre/accent gauche (voir .poste-shift-card, style.css) plutôt que le remplissage bord à
@@ -18446,7 +18454,7 @@ function renderPlanningPostes() {
   // référence visuelle, ils n'ont pas à se ressembler entre eux.
   const renderCell = (employee, weekday, dateStr) => {
     const shift = shiftsFor(employee.id, weekday);
-    const pointageBadge = pointageBadgeFor(employee.id, weekday, dateStr);
+    const dernierPointage = getDernierPointage(employee.id, dateStr);
     if (shift && !f.masquerQuartsConfirmes) {
       // §retour Betty du 13/09/2026 : la pause n'apparaît plus sur la carte (allégée à horaire +
       // service) — retiré uniquement de cet affichage, shift.pauseMinutes reste saisi dans la
@@ -18455,19 +18463,23 @@ function renderPlanningPostes() {
       // §retour Betty du 14/09/2026 (Planning point 4) : signale (jamais un blocage) un quart posé
       // sur une indisponibilité déclarée par CE salarié (voir Mon compte > Disponibilités).
       const conflitIndisponibilite = shiftChevaucheIndisponibilite(shift, employee.indisponibilitesRecurrentes);
+      const pointageDot = dernierPointage ? `<span class="poste-shift-pointage-dot" title="Pointé : ${escapeHtml(pointageTexte(dernierPointage))}">${icon(ICONS.checkCircle, 10)}</span>` : '';
       return `<td class="planning-cell">
         <div class="poste-shift-card" data-edit-shift="${shift.id}" ${conflitIndisponibilite ? 'style="border-left-color: var(--color-danger);"' : ''} title="${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée' : ''}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
-          <div class="poste-shift-position">${escapeHtml(employee.service || '')}</div>
+          <div class="poste-shift-position">${escapeHtml(employee.service || '')}${pointageDot}</div>
           ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
-          ${pointageBadge}
         </div>
       </td>`;
     }
-    if (pointageBadge) {
+    if (dernierPointage) {
       // Un pointage réel existe aujourd'hui même sans quart programmé (ex. quart non renseigné) —
-      // reste visible plutôt que masqué derrière un "+" ou une case vide.
-      return `<td class="planning-cell"><div class="poste-shift-card poste-shift-pointage-only">${pointageBadge}</div></td>`;
+      // reste visible plutôt que masqué derrière un "+" ou une case vide. Rien d'autre à afficher
+      // dans cette carte : la place ne manque pas pour l'heure en toutes lettres, sur sa propre ligne.
+      return `<td class="planning-cell"><div class="poste-shift-card poste-shift-pointage-only">
+        <div class="poste-shift-pointage">${icon(ICONS.checkCircle, 10)} Pointé</div>
+        <div class="poste-shift-pointage-heures">${escapeHtml(pointageTexte(dernierPointage))}</div>
+      </div></td>`;
     }
     if (f.afficherQuartsACombler && canManage) {
       return `<td class="planning-cell"><button type="button" class="poste-shift-add" data-add-shift="${employee.id}|${weekday}" title="Ajouter un quart">+</button></td>`;
@@ -18692,9 +18704,13 @@ function renderComparaisonPrevuRealiseCard(employees, weekDates, weekStartStr, w
   }).filter(Boolean).join('');
 
   if (!rows) return '';
+  // §correctif visuel du 14/09/2026 : .card seul (sans .table-card, sans overflow-x:auto) laissait
+  // ce tableau déborder de sa carte sur un écran étroit — la carte elle-même débordait alors de la
+  // page entière (aucun overflow:hidden), forçant TOUTE la page à défiler horizontalement. Même
+  // classe .table-card que tous les autres tableaux de l'appli, jamais un cas particulier.
   return `
-    <div class="card" style="margin-top: 16px;">
-      <h2>Prévu / réalisé (jusqu'à aujourd'hui)</h2>
+    <div class="card table-card" style="margin-top: 16px;">
+      <h2 style="padding: 18px 22px 0;">Prévu / réalisé (jusqu'à aujourd'hui)</h2>
       <table class="table">
         <thead><tr><th>Salarié</th><th>Planifié</th><th>Pointé</th><th>Écart</th></tr></thead>
         <tbody>${rows}</tbody>

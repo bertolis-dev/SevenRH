@@ -1827,10 +1827,23 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* §demande Betty du 11/09/2026 (Pointeuse QR, "dire dans le planning que l'employé est bien
    présent") : confirmation réelle (pointage scanné), distincte du quart simplement PRÉVU — vert
-   plutôt que le gris neutre du reste de la carte, jamais confondue avec l'horaire planifié. */
+   plutôt que le gris neutre du reste de la carte, jamais confondue avec l'horaire planifié.
+   Utilisée seulement quand la carte n'a rien d'autre à montrer (pas de quart planifié) — voir
+   .poste-shift-pointage-dot ci-dessous pour la carte avec un quart, trop étroite pour une ligne
+   texte de plus. */
 .poste-shift-pointage { font-size: 10px; font-weight: 700; color: var(--color-success); display: flex; align-items: center; gap: 3px; margin-top: 2px; }
 .poste-shift-pointage svg { width: 9px; height: 9px; }
 .poste-shift-pointage-only { justify-content: center; align-items: center; }
+/* L'heure elle-même, sous "Pointé" — ligne séparée plutôt qu'un seul texte "Pointé 08:52 → 17:03"
+   qui débordait de la case en se coupant au milieu (correctif visuel du 14/09/2026) : deux lignes
+   courtes et prévisibles, jamais un retour à la ligne au hasard en plein milieu de l'heure. */
+.poste-shift-pointage-heures { font-size: 10px; font-weight: 700; color: var(--color-success); text-align: center; line-height: 1.3; }
+/* §correctif visuel du 14/09/2026 : une carte AVEC un quart planifié (horaire + service, déjà 2
+   lignes dans une case de hauteur fixe) n'a plus de place pour une ligne de texte en plus — ce
+   simple point vert (au survol : l'heure exacte, voir title) confirme le pointage sans jamais
+   ajouter de ligne, donc sans jamais pouvoir déborder de la carte. */
+.poste-shift-pointage-dot { display: inline-flex; vertical-align: middle; margin-left: 3px; color: var(--color-success); cursor: help; }
+.poste-shift-pointage-dot svg { width: 9px; height: 9px; display: block; }
 
 /* §retour Betty du 10/09/2026 ("vérifie que ça correspond bien à l'image") : la référence ne montre
    AUCUN "+" visible dans ses cases vides (juste une case nue) — invisible par défaut, révélé au
