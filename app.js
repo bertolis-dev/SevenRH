@@ -12807,8 +12807,14 @@ function updateLeaveRequestHints() {
       const end = parseISODateLocal(dateFin);
       while (cursor <= end) {
         const dateStr = toISODate(cursor);
-        if (countAbsentsForQuota(quota, dateStr, employee.id) + 1 >= quota.maxSimultane) {
-          quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''})`;
+        // §retour Betty du 14/09/2026 (Congés, "vue de l'équipe au moment de poser") : nommer QUI
+        // est déjà absent ce jour-là, pas seulement dire que le quota est atteint — la personne qui
+        // pose sa demande sait tout de suite si elle peut se coordonner avec un collègue plutôt que
+        // de devoir aller chercher l'information ailleurs.
+        const dejaAbsents = getAbsentsForQuota(quota, dateStr, employee.id);
+        if (dejaAbsents.length + 1 >= quota.maxSimultane) {
+          const noms = dejaAbsents.map(e => `${e.prenom} ${e.nom}`).join(', ');
+          quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''}${noms ? ` : déjà absent${dejaAbsents.length > 1 ? 's' : ''} ce jour-là — ${noms}` : ''})`;
           break;
         }
         cursor.setDate(cursor.getDate() + 1);
@@ -14999,18 +15005,26 @@ function openQuotaSimultaneModal(existing) {
  * repère calendrier, jamais dupliqué entre les deux. `excludeEmployeeId` : ignore le salarié qui
  * dépose LUI-MÊME la demande (déjà compté par définition, ne doit pas se compter deux fois si son
  * propre calendrier affiche le repère du jour concerné). */
-function countAbsentsForQuota(quota, dateStr, excludeEmployeeId) {
+/** §retour Betty du 14/09/2026 (Congés point "vue de l'équipe au moment de poser") : le calcul
+ * existait déjà (countAbsentsForQuota, ci-dessous, qui n'en gardait que la taille) — extrait ici en
+ * fonction à part pour que l'aide à la saisie (updateLeaveRequestHints) puisse aussi afficher QUI
+ * est concerné, pas seulement combien. */
+function getAbsentsForQuota(quota, dateStr, excludeEmployeeId) {
   const employees = employeeRepository.getAll().filter(e => !e.archive
     && (quota.scope === 'equipe' ? e.equipe === quota.scopeValue : e.service === quota.scopeValue)
     && e.id !== excludeEmployeeId);
-  if (!employees.length) return 0;
+  if (!employees.length) return [];
   const employeeIds = new Set(employees.map(e => e.id));
   const isActive = (r) => r.statut === 'Validé' || r.statut === 'En attente';
   const overlaps = (r) => r.dateDebut <= dateStr && r.dateFin >= dateStr;
   // Télétravail délibérément exclu : ce n'est pas une absence physique, hors périmètre du quota.
   const absentIds = new Set();
   leaveRepository.getAll().forEach(r => { if (employeeIds.has(r.employeeId) && isActive(r) && overlaps(r)) absentIds.add(r.employeeId); });
-  return absentIds.size;
+  return employees.filter(e => absentIds.has(e.id));
+}
+
+function countAbsentsForQuota(quota, dateStr, excludeEmployeeId) {
+  return getAbsentsForQuota(quota, dateStr, excludeEmployeeId).length;
 }
 
 /** Quotas dont le périmètre couvre ce salarié — un salarié peut apparaître dans un quota "service"
