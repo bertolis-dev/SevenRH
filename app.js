@@ -5812,6 +5812,7 @@ function renderDashboardHero(title, subtitle, actionsHtml) {
 function bindDashboardEvents() {
   const btn = document.getElementById('btn-customize-dashboard');
   if (btn) btn.addEventListener('click', openDashboardCustomizeModal);
+  bindVisitesRepriseEvents();
 
   const declarerInterventionBtn = document.getElementById('btn-declarer-intervention-astreinte');
   if (declarerInterventionBtn) {
@@ -5979,6 +5980,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const visitesMedicales = getUpcomingVisitesMedicales(60, employees);
   const contingentHeuresSup = getEmployeesNearingContingentHeuresSup(employees);
   const absencesLonguesDuree = hasModule('conges') ? getEmployeesOnLongAbsence(employees) : [];
+  const visitesReprise = hasModule('conges') ? getVisitesRepriseAFaire(employees, leaveRepository.getAll(), settingsRepository.getSettings()) : [];
 
   const user = authRepository.getCurrentUser();
   const showPresenceCard = user && [ROLES.MANAGER, ROLES.RH, ROLES.PROPRIETAIRE].includes(user.role) && isDashboardWidgetVisible(user, 'presence');
@@ -6025,6 +6027,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
       ${ifModule('rh', renderUpcomingVisitesMedicalesCard(visitesMedicales))}
       ${ifModule('remuneration', renderContingentHeuresSupCard(contingentHeuresSup))}
       ${ifModule('conges', renderLongAbsenceSuspensionCard(absencesLonguesDuree))}
+      ${ifModule('conges', renderVisitesRepriseCard(visitesReprise))}
     </div>
     ` : ''}
 
@@ -6733,6 +6736,35 @@ function getUpcomingVisitesMedicales(daysAhead = 60, employees, limit = 5) {
     .slice(0, limit);
 }
 
+/** §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") : une visite de
+ * reprise (Code du travail L4624-2-1) est obligatoire au retour d'un arrêt de travail assez long,
+ * ou de toute maladie professionnelle quelle que soit sa durée — voir le disclaimer sur
+ * settings.seuilVisiteRepriseJours (data.js) pour la réserve sur ce seuil, volontairement laissé
+ * approximatif plutôt que de modéliser chaque nuance (accident du travail/trajet/maladie ordinaire)
+ * sans certitude sur le seuil exact applicable à chacune. */
+function necessiteVisiteReprise(request, seuilJours) {
+  if (!request.arretTravail) return false;
+  if (request.arretTravail.typeArret === 'maladieProfessionnelle') return true;
+  const dureeJours = Math.round((parseISODateLocal(request.dateFin) - parseISODateLocal(request.dateDebut)) / 86400000) + 1;
+  return dureeJours >= seuilJours;
+}
+
+/** Un seul rappel par salarié (le plus récent arrêt concerné pas encore régularisé) — inutile
+ * d'empiler plusieurs lignes pour la même personne si elle a eu plusieurs arrêts qualifiants sans
+ * qu'aucune visite n'ait jamais été enregistrée entre-temps. */
+function getVisitesRepriseAFaire(employees, leaveRequests, settings) {
+  const seuil = settings.seuilVisiteRepriseJours || 30;
+  const todayStr = toISODate(new Date());
+  const result = [];
+  (employees || employeeRepository.getAll()).filter(e => !e.archive).forEach(employee => {
+    const candidats = (leaveRequests || leaveRepository.getAll())
+      .filter(r => r.employeeId === employee.id && r.statut === 'Validé' && r.dateFin < todayStr && !r.visiteRepriseDate && necessiteVisiteReprise(r, seuil))
+      .sort((a, b) => b.dateFin.localeCompare(a.dateFin));
+    if (candidats.length) result.push({ employee, request: candidats[0] });
+  });
+  return result.sort((a, b) => a.request.dateFin.localeCompare(b.request.dateFin));
+}
+
 // ---- Astreintes (§correctif audit du 23/08/2026, §7.21) ----
 
 function makeEmptyAstreinte() {
@@ -7034,6 +7066,38 @@ function renderUpcomingVisitesMedicalesCard(visitesMedicales) {
       `}
     </div>
   `;
+}
+
+/** §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") — jamais affichée
+ * vide (contrairement à renderUpcomingVisitesMedicalesCard, une échéance périodique attendue même
+ * sans rien à signaler) : un rappel n'a de sens que s'il y a réellement quelque chose en attente. */
+function renderVisitesRepriseCard(visitesReprise) {
+  if (!visitesReprise.length) return '';
+  const TYPE_ARRET_LABELS_COURT = { maladie: 'maladie', accidentTravail: 'accident du travail', accidentTrajet: 'accident de trajet', maladieProfessionnelle: 'maladie professionnelle' };
+  return `
+    <div class="card">
+      <h2>${icon(ICONS.warningTriangle, 15)} Visites de reprise à programmer</h2>
+      <p class="text-muted" style="margin-top: 4px;">Obligatoire (Code du travail) après un arrêt assez long ou une maladie professionnelle, seuil indicatif : voir Paramètres &gt; Référentiels.</p>
+      <div class="mini-list" style="margin-top: 8px;">
+        ${visitesReprise.map(x => `
+          <div class="mini-list-item">
+            <span>${personNameHtml(x.employee)} <span class="text-muted">— ${escapeHtml(TYPE_ARRET_LABELS_COURT[x.request.arretTravail.typeArret] || x.request.arretTravail.typeArret)}, retour le ${formatDate(x.request.dateFin)}</span></span>
+            <button type="button" class="btn-link" data-marquer-visite-reprise="${x.request.id}">Marquer comme faite</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindVisitesRepriseEvents() {
+  document.querySelectorAll('[data-marquer-visite-reprise]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      leaveRepository.update(btn.dataset.marquerVisiteReprise, { visiteRepriseDate: toISODate(new Date()) });
+      showToast('Visite de reprise enregistrée.');
+      render();
+    });
+  });
 }
 
 /**
@@ -16127,6 +16191,11 @@ function renderParametresListes() {
           <input class="input" type="number" min="1" id="f-visite-medicale-periodicite" value="${escapeHtml(settings.visiteMedicalePerioditeMois)}">
         </div>
         <div class="form-field">
+          <label for="f-seuil-visite-reprise">Durée d'arrêt déclenchant une visite de reprise (jours)</label>
+          <input class="input" type="number" min="1" id="f-seuil-visite-reprise" value="${escapeHtml(settings.seuilVisiteRepriseJours)}">
+          <p class="form-hint">Une maladie professionnelle déclenche toujours le rappel, quelle que soit sa durée. Seuil indicatif pour les autres arrêts, à faire confirmer par votre médecine du travail/juriste.</p>
+        </div>
+        <div class="form-field">
           <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
         </div>
@@ -16391,6 +16460,7 @@ function bindParametresListesEvents() {
 
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
   bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
+  bindNumberField('f-seuil-visite-reprise', 'seuilVisiteRepriseJours', 30, 'Seuil mis à jour.');
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
   bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');

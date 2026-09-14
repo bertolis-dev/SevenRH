@@ -545,6 +545,15 @@ const DEFAULT_SETTINGS = {
   // Voir getUpcomingVisitesMedicales (app.js) : la toute première visite (à l'embauche) reste fixée
   // à 3 mois par la loi, non paramétrable, indépendamment de ce réglage.
   visiteMedicalePerioditeMois: 60,
+  // §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") : durée d'un arrêt
+  // de travail (maladie/accident) à partir de laquelle une visite de reprise devient obligatoire au
+  // retour du salarié (Code du travail L4624-2-1). 30 jours = seuil le plus souvent cité, mais la
+  // durée exacte dépend du type d'arrêt et a été modifiée par décret ces dernières années — VALEUR
+  // INDICATIVE, à faire confirmer par votre médecine du travail/juriste avant de s'y fier, comme
+  // tauxReposCompensateur ci-dessus pour les sujets paie. Une maladie professionnelle déclenche
+  // toujours le rappel, quelle que soit sa durée (voir necessiteVisiteReprise, app.js) — seul cas où
+  // ce seuil ne s'applique pas.
+  seuilVisiteRepriseJours: 30,
   // Contingent annuel légal d'heures supplémentaires (Code du travail, à défaut d'accord de
   // branche/entreprise fixant un autre plafond) : 220h/salarié/an par défaut en 2026. Au-delà, un
   // repos compensateur obligatoire s'applique (taux variable selon l'effectif — voir
@@ -5412,6 +5421,12 @@ function makeEmptyLeaveRequest() {
     // Betty elle-même) : juste de quoi éviter qu'un prospect ne voie rien du tout sur ce sujet, et
     // préparer les données pour l'attestation de salaire (voir openAttestationSalaireModal, app.js).
     arretTravail: null,
+    // §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") : renseigné une
+    // fois la visite de reprise (Code du travail, obligatoire après certains arrêts) confirmée
+    // faite pour CETTE absence précise — voir DB.marquerVisiteRepriseEffectuee, getVisitesRepriseAFaire
+    // (app.js). Distinct de employee.dateDerniereVisiteMedicale (suivi périodique, sans rapport avec
+    // une absence donnée) : les deux obligations ne se confondent jamais entre elles.
+    visiteRepriseDate: null,
     dateCreation: null,
     dateModification: null
   };

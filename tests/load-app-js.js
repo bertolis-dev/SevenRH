@@ -285,6 +285,10 @@ globalThis.__isArretTravailType = isArretTravailType;
 globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArret;
 globalThis.__releveBancaireRepository = releveBancaireRepository;
 globalThis.__getAbsentsForQuota = getAbsentsForQuota;
+globalThis.__necessiteVisiteReprise = necessiteVisiteReprise;
+globalThis.__getVisitesRepriseAFaire = getVisitesRepriseAFaire;
+globalThis.__renderVisitesRepriseCard = renderVisitesRepriseCard;
+globalThis.__bindVisitesRepriseEvents = bindVisitesRepriseEvents;
 globalThis.__getQuotasForEmployee = getQuotasForEmployee;
 globalThis.__renderRapprochementBancaireCard = renderRapprochementBancaireCard;
 globalThis.__bindRapprochementBancaireEvents = bindRapprochementBancaireEvents;
@@ -494,6 +498,10 @@ globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
     calculerEstimationIndemnitesArret: sandbox.__calculerEstimationIndemnitesArret,
     releveBancaireRepository: sandbox.__releveBancaireRepository,
     getAbsentsForQuota: sandbox.__getAbsentsForQuota,
+    necessiteVisiteReprise: sandbox.__necessiteVisiteReprise,
+    getVisitesRepriseAFaire: sandbox.__getVisitesRepriseAFaire,
+    renderVisitesRepriseCard: sandbox.__renderVisitesRepriseCard,
+    bindVisitesRepriseEvents: sandbox.__bindVisitesRepriseEvents,
     getQuotasForEmployee: sandbox.__getQuotasForEmployee,
     renderRapprochementBancaireCard: sandbox.__renderRapprochementBancaireCard,
     bindRapprochementBancaireEvents: sandbox.__bindRapprochementBancaireEvents,
