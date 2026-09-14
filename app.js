@@ -9646,7 +9646,7 @@ function renderEmployeeDetail(id) {
           ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
           ${e.anonymise ? '<span class="badge badge-muted" title="Données personnelles retirées automatiquement après le départ (durée de conservation, voir Paramètres > Listes)">Anonymisé</span>' : ''}
         </div>
-        ${e.anonymise ? `<p class="text-muted" style="margin-top: 6px;">Fiche anonymisée le ${formatDate(e.dateAnonymisation)} (durée de conservation dépassée) : les données personnelles ont été retirées, les compteurs/historiques restent conservés pour vos rapports.</p>` : ''}
+        ${e.anonymise ? `<p class="text-muted" style="margin-top: 6px;">Fiche anonymisée le ${formatDate(e.dateAnonymisation)} (durée de conservation dépassée) : coordonnées et informations personnelles retirées (email, téléphone, adresse, numéro de sécurité sociale...). Nom, prénom, sexe, date de naissance, nationalité et dates d'entrée/sortie sont volontairement conservés : le registre unique du personnel doit pouvoir les présenter à un contrôle même après ce délai.</p>` : ''}
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Propriétaire peut modifier votre propre fiche.</p>' : ''}
       </div>
       <div class="detail-header-actions">
@@ -14085,6 +14085,7 @@ const PARAMETRES_TABS = [
   { key: 'fermetures', label: 'Fermetures', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
   { key: 'integrations', label: 'Intégrations', isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
   { key: 'modeles-documents', label: 'Modèles de documents', isVisible: canManageParametres, render: renderParametresModelesDocuments, bind: bindParametresModelesDocumentsEvents },
+  { key: 'registre-personnel', label: 'Registre du personnel', isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRegistrePersonnel, bind: bindParametresRegistrePersonnelEvents },
   { key: 'audit', label: 'Audit', isVisible: canManageParametres, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
   // Seul onglet accessible à TOUT rôle (voir le commentaire au-dessus) — photo de profil visible
   // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé.
@@ -16821,6 +16822,52 @@ function getFilteredAuditLog() {
 // la même question de fond ("est-ce que tout est en ordre ?"). Le sous-onglet "Journal des
 // actions" reste réservé à VOIR_JOURNAL_AUDIT (comme l'onglet "audit" avant la fusion) ; "Contrôle
 // des dossiers" reste ouvert à qui peut déjà voir Paramètres, comme "Qualité des données" avant.
+/** §retour Betty du 14/09/2026 (Module RH point 6, "registre du personnel toujours à jour") : les
+ * mentions obligatoires (Code du travail, art. L1221-13/D1221-23) — nom, prénom, sexe, date de
+ * naissance, nationalité, emploi, dates d'entrée/sortie, type de contrat — pour CHAQUE salarié ayant
+ * travaillé dans l'entreprise, y compris parti depuis longtemps (voir 0053_anonymize_conserve_registre.sql,
+ * qui préserve exactement ces champs de l'anonymisation RGPD pour cette raison). Civilité utilisée
+ * comme mention de sexe : c'est la seule donnée de ce type que Nexus collecte. Trié par date d'entrée
+ * (ordre chronologique attendu d'un registre), présentable tel quel à un contrôle (bouton Imprimer). */
+function renderParametresRegistrePersonnel() {
+  const employees = employeeRepository.getAll().slice().sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
+  return `
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Registre unique du personnel</h2>
+          <p class="text-muted">Nom, prénom, sexe, date de naissance, nationalité, emploi, dates d'entrée/sortie, type de contrat : les mentions obligatoires pour chaque salarié ayant travaillé dans l'entreprise, y compris parti.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-imprimer-registre">${icon(ICONS.printer, 14)} Imprimer</button>
+      </div>
+      <div class="print-area" id="registre-personnel-print-area">
+        <table class="table">
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Sexe</th><th>Date de naissance</th><th>Nationalité</th><th>Emploi</th><th>Entrée</th><th>Sortie</th><th>Type de contrat</th></tr></thead>
+          <tbody>
+            ${employees.map(e => `
+              <tr>
+                <td>${escapeHtml(e.nom)}</td>
+                <td>${escapeHtml(e.prenom)}</td>
+                <td>${escapeHtml(e.civilite || '—')}</td>
+                <td>${e.dateNaissance ? formatDate(e.dateNaissance) : '—'}</td>
+                <td>${escapeHtml(e.nationalite || '—')}</td>
+                <td>${escapeHtml(e.poste || '—')}</td>
+                <td>${e.dateEmbauche ? formatDate(e.dateEmbauche) : '—'}</td>
+                <td>${e.dateDepart ? formatDate(e.dateDepart) : '—'}</td>
+                <td>${escapeHtml(e.typeContrat || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function bindParametresRegistrePersonnelEvents() {
+  document.getElementById('btn-imprimer-registre').addEventListener('click', () => window.print());
+}
+
 function renderParametresAuditHub() {
   const canSeeAudit = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT);
   const sousTab = (state.parametresAuditSousTab === 'journal' && canSeeAudit) ? 'journal' : 'controle';
