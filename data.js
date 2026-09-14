@@ -510,6 +510,9 @@ const DEFAULT_SETTINGS = {
   // documentExpirationInfo, app.js. Un seul seuil pour l'entreprise entière en v1 (pas encore un
   // seuil différent par catégorie de document, chantier séparé si le besoin se confirme).
   delaiPrevenanceDocumentsJours: 30,
+  // §retour Betty du 14/09/2026 (Planning point 2, "coût du planning en direct") : 0 = pas de
+  // budget fixé (le coût s'affiche sans comparaison). N'a d'effet que si masseSalarialeActivee.
+  budgetHebdomadairePlanningEuros: 0,
   // Jours fériés en plus des 11 fériés nationaux calculés automatiquement (getFrenchPublicHolidays)
   // — ex. jours fériés locaux (Alsace-Moselle), fermeture d'entreprise, pont. { date: 'AAAA-MM-JJ', label }.
   joursFeriesPersonnalises: [],
@@ -871,6 +874,166 @@ function migrateCompanyAbonnement(company) {
 
 function makeEmptyShift() {
   return { id: null, employeeId: null, weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
+}
+
+// ---------------------------------------------------------------------------
+// Contrôles légaux de durée du travail (§retour Betty du 14/09/2026, revue concurrentielle,
+// Planning point 1, "le planning doit refuser ou au moins signaler en rouge") : calculés sur le
+// modèle hebdomadaire RÉCURRENT (shifts) traité comme un cycle qui se répète — le repos entre
+// dimanche et lundi de la semaine suivante est vérifié comme celui entre deux jours consécutifs
+// quelconques. Jamais un blocage : les violations sont signalées (renderPlanningPostes, app.js),
+// jamais empêchées, pour laisser le manager corriger lui-même en connaissance de cause.
+// ---------------------------------------------------------------------------
+
+const JOURS_SEMAINE_PLANNING = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const REPOS_QUOTIDIEN_MIN_MINUTES = 11 * 60; // Code du travail L3131-1
+const REPOS_HEBDOMADAIRE_MIN_MINUTES = 35 * 60; // L3132-2 (24h) + L3131-1 (11h)
+const DUREE_MAX_QUOTIDIENNE_MINUTES = 10 * 60; // L3121-18 (repli légal, dérogeable par accord/convention)
+const DUREE_MAX_HEBDOMADAIRE_MINUTES = 48 * 60; // L3121-20 (plafond absolu)
+const SEUIL_PAUSE_OBLIGATOIRE_MINUTES = 6 * 60; // L3121-16
+const PAUSE_OBLIGATOIRE_MIN_MINUTES = 20;
+
+function shiftPlagesMinutes(shift) {
+  const [dh, dm] = shift.heureDebut.split(':').map(Number);
+  const [fh, fm] = shift.heureFin.split(':').map(Number);
+  return { debut: dh * 60 + dm, fin: fh * 60 + fm };
+}
+
+function getShiftsParJour(employeeId, shifts) {
+  const parJour = {};
+  JOURS_SEMAINE_PLANNING.forEach(jour => {
+    parJour[jour] = shifts.filter(s => s.employeeId === employeeId && s.weekday === jour)
+      .slice().sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+  });
+  return parJour;
+}
+
+/** Vérifie l'ensemble des règles ci-dessus pour UN salarié sur son modèle hebdomadaire. Retourne un
+ * tableau de violations ({ type, jour?, message }), jamais lui-même bloquant. */
+function verifierControlesLegauxPlanning(employeeId, shifts) {
+  const violations = [];
+  const parJour = getShiftsParJour(employeeId, shifts);
+  let totalHebdoMinutes = 0;
+
+  JOURS_SEMAINE_PLANNING.forEach(jour => {
+    const shiftsDuJour = parJour[jour];
+    if (!shiftsDuJour.length) return;
+    const dureeTravailleeMinutes = shiftsDuJour.reduce((sum, s) => sum + Math.round(computeShiftHeures(s) * 60), 0);
+    totalHebdoMinutes += dureeTravailleeMinutes;
+    if (dureeTravailleeMinutes > DUREE_MAX_QUOTIDIENNE_MINUTES) {
+      violations.push({ type: 'duree-max-quotidienne', jour, message: `${jour} : ${round2(dureeTravailleeMinutes / 60)} h travaillées, au-delà des 10 h maximum légales par jour (L3121-18).` });
+    }
+    if (dureeTravailleeMinutes > SEUIL_PAUSE_OBLIGATOIRE_MINUTES) {
+      const pauseTotale = shiftsDuJour.reduce((sum, s) => sum + (s.pauseMinutes || 0), 0);
+      if (pauseTotale < PAUSE_OBLIGATOIRE_MIN_MINUTES) {
+        violations.push({ type: 'pause-obligatoire', jour, message: `${jour} : plus de 6 h de travail sans au moins 20 minutes de pause (L3121-16).` });
+      }
+    }
+    const debut = Math.min(...shiftsDuJour.map(s => shiftPlagesMinutes(s).debut));
+    const fin = Math.max(...shiftsDuJour.map(s => shiftPlagesMinutes(s).fin));
+    if (fin - debut > 24 * 60 - REPOS_QUOTIDIEN_MIN_MINUTES) {
+      violations.push({ type: 'amplitude', jour, message: `${jour} : amplitude de ${round2((fin - debut) / 60)} h entre le premier début et le dernier départ, incompatible avec les 11 h de repos quotidien (L3131-1).` });
+    }
+  });
+
+  if (totalHebdoMinutes > DUREE_MAX_HEBDOMADAIRE_MINUTES) {
+    violations.push({ type: 'duree-max-hebdomadaire', message: `${round2(totalHebdoMinutes / 60)} h sur la semaine, au-delà des 48 h maximum absolues (L3121-20).` });
+  }
+
+  for (let i = 0; i < 7; i++) {
+    const jourA = JOURS_SEMAINE_PLANNING[i];
+    const jourB = JOURS_SEMAINE_PLANNING[(i + 1) % 7];
+    const shiftsA = parJour[jourA];
+    const shiftsB = parJour[jourB];
+    if (!shiftsA.length || !shiftsB.length) continue;
+    const finA = Math.max(...shiftsA.map(s => shiftPlagesMinutes(s).fin));
+    const debutB = Math.min(...shiftsB.map(s => shiftPlagesMinutes(s).debut));
+    const reposMinutes = (24 * 60 - finA) + debutB;
+    if (reposMinutes < REPOS_QUOTIDIEN_MIN_MINUTES) {
+      violations.push({ type: 'repos-quotidien', jour: jourB, message: `${jourA} → ${jourB} : seulement ${round2(reposMinutes / 60)} h de repos entre les deux journées, en dessous des 11 h minimum (L3131-1).` });
+    }
+  }
+
+  // Pas de "< 7" ici : travailler les 7 jours de la semaine est justement le cas le plus grave
+  // (aucune coupure possible), il doit être détecté, pas ignoré.
+  const joursTravailles = JOURS_SEMAINE_PLANNING.filter(j => parJour[j].length);
+  if (joursTravailles.length > 0) {
+    let plusGrandeCoupureMinutes = 0;
+    for (let i = 0; i < 7; i++) {
+      const jourA = JOURS_SEMAINE_PLANNING[i];
+      if (!parJour[jourA].length) continue;
+      const finA = Math.max(...parJour[jourA].map(s => shiftPlagesMinutes(s).fin));
+      let minutesEcoulees = 24 * 60 - finA;
+      for (let decalage = 1; decalage <= 7; decalage++) {
+        const jourSuivant = JOURS_SEMAINE_PLANNING[(i + decalage) % 7];
+        if (parJour[jourSuivant].length) {
+          const debutSuivant = Math.min(...parJour[jourSuivant].map(s => shiftPlagesMinutes(s).debut));
+          minutesEcoulees += debutSuivant;
+          break;
+        }
+        minutesEcoulees += 24 * 60;
+      }
+      plusGrandeCoupureMinutes = Math.max(plusGrandeCoupureMinutes, minutesEcoulees);
+    }
+    if (plusGrandeCoupureMinutes < REPOS_HEBDOMADAIRE_MIN_MINUTES) {
+      violations.push({ type: 'repos-hebdomadaire', message: `Aucune coupure d'au moins 35 h consécutives sur la semaine (la plus longue fait ${round2(plusGrandeCoupureMinutes / 60)} h) : repos hebdomadaire minimum non respecté (L3132-2).` });
+    }
+  }
+
+  return violations;
+}
+
+/** §retour Betty du 14/09/2026 (Planning point 4) : chevauchement entre UN quart et les
+ * indisponibilités récurrentes déclarées par le salarié — même logique de chevauchement d'horaires
+ * que shiftPlagesMinutes ci-dessus, jamais un blocage (voir son commentaire, app.js). */
+function shiftChevaucheIndisponibilite(shift, indisponibilites) {
+  return (indisponibilites || []).some(indispo => {
+    if (indispo.weekday !== shift.weekday) return false;
+    const s = shiftPlagesMinutes(shift);
+    const [ih, im] = indispo.heureDebut.split(':').map(Number);
+    const [fh, fm] = indispo.heureFin.split(':').map(Number);
+    const indispoDebut = ih * 60 + im, indispoFin = fh * 60 + fm;
+    return s.debut < indispoFin && s.fin > indispoDebut;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Coût du planning en direct (§retour Betty du 14/09/2026, Planning point 2)
+// ---------------------------------------------------------------------------
+
+/** Taux horaire approximatif — même conversion que le standard 35h (151,67 = 35 × 52 / 12), même
+ * esprit d'approximation assumée que le reste des calculs dérivés de salaireBrutMensuel (IJ, coût
+ * employeur...). Masqué en amont par l'appelant si settings.masseSalarialeActivee est désactivé. */
+function calculerTauxHoraireEmploye(employee) {
+  if (!employee || !employee.salaireBrutMensuel) return 0;
+  return round2(employee.salaireBrutMensuel / 151.67);
+}
+
+function calculerCoutShifts(shifts, employees) {
+  return round2(shifts.reduce((sum, s) => {
+    const employee = employees.find(e => e.id === s.employeeId);
+    if (!employee) return sum;
+    return sum + computeShiftHeures(s) * calculerTauxHoraireEmploye(employee);
+  }, 0));
+}
+
+// ---------------------------------------------------------------------------
+// Échange de créneaux entre salariés (§retour Betty du 14/09/2026, Planning point 3) : un salarié
+// propose l'un de ses quarts, un collègue le prend, le manager valide (ou refuse) — jamais de
+// réaffectation effective avant cette validation.
+// ---------------------------------------------------------------------------
+
+function makeEmptyShiftSwapRequest() {
+  return { id: null, shiftId: null, employeeId: null, destinataireId: null, statut: 'proposé', dateCreation: null, dateTraitement: null };
+}
+
+// ---------------------------------------------------------------------------
+// Modèles de semaine (§retour Betty du 14/09/2026, Planning point 5) : snapshot des quarts
+// existants, réappliqué en un clic plutôt que resaisi chaque semaine.
+// ---------------------------------------------------------------------------
+
+function makeEmptyWeekTemplate() {
+  return { id: null, nom: '', shifts: [], dateCreation: null };
 }
 
 /** §retour Betty du 14/09/2026 (Module RH point 1, "modèles de documents avec fusion automatique") :
@@ -2092,6 +2255,112 @@ const DB = {
     const shift = this.getShiftById(id);
     this.saveShifts(this.getShifts().filter(s => s.id !== id));
     if (shift) this.logAudit('Suppression', 'Quart de planning', `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}`);
+  },
+
+  // ---- Échanges de créneaux (§retour Betty du 14/09/2026, Planning point 3) ----
+
+  getShiftSwapRequests() {
+    return (this.getCurrentCompany().shiftSwapRequests || []).slice();
+  },
+
+  saveShiftSwapRequests(list) {
+    const company = this.getCurrentCompany();
+    company.shiftSwapRequests = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getShiftSwapRequestById(id) {
+    return this.getShiftSwapRequests().find(r => r.id === id) || null;
+  },
+
+  proposerEchangeShift(shiftId, employeeId) {
+    const list = this.getShiftSwapRequests();
+    const request = Object.assign(makeEmptyShiftSwapRequest(), { id: generateId('echange'), shiftId, employeeId, dateCreation: new Date().toISOString() });
+    list.push(request);
+    this.saveShiftSwapRequests(list);
+    this.logAudit('Création', 'Échange de créneau', `Proposé par ${this.getEmployeeById(employeeId).prenom} ${this.getEmployeeById(employeeId).nom}`);
+    return request;
+  },
+
+  accepterEchangeShift(requestId, destinataireId) {
+    const list = this.getShiftSwapRequests();
+    const index = list.findIndex(r => r.id === requestId);
+    if (index === -1 || list[index].statut !== 'proposé') return null;
+    list[index] = Object.assign({}, list[index], { destinataireId, statut: 'accepté' });
+    this.saveShiftSwapRequests(list);
+    return list[index];
+  },
+
+  /** `accepter` : true valide (réaffecte réellement le quart au destinataire), false refuse (le
+   * quart reste chez le proposant). Jamais de réaffectation avant cette étape — voir le commentaire
+   * en tête de section. */
+  traiterEchangeShift(requestId, accepter) {
+    const list = this.getShiftSwapRequests();
+    const index = list.findIndex(r => r.id === requestId);
+    if (index === -1 || list[index].statut !== 'accepté') return null;
+    const request = list[index];
+    if (accepter) {
+      this.updateShift(request.shiftId, { employeeId: request.destinataireId });
+      list[index] = Object.assign({}, request, { statut: 'validé', dateTraitement: new Date().toISOString() });
+      this.logAudit('Validation', 'Échange de créneau', `Quart réaffecté à ${this.getEmployeeById(request.destinataireId).prenom} ${this.getEmployeeById(request.destinataireId).nom}`);
+    } else {
+      list[index] = Object.assign({}, request, { statut: 'refusé', dateTraitement: new Date().toISOString() });
+      this.logAudit('Refus', 'Échange de créneau', '');
+    }
+    this.saveShiftSwapRequests(list);
+    return list[index];
+  },
+
+  // ---- Modèles de semaine (§retour Betty du 14/09/2026, Planning point 5) ----
+
+  getWeekTemplates() {
+    return (this.getCurrentCompany().weekTemplates || []).slice();
+  },
+
+  saveWeekTemplates(list) {
+    const company = this.getCurrentCompany();
+    company.weekTemplates = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getWeekTemplateById(id) {
+    return this.getWeekTemplates().find(t => t.id === id) || null;
+  },
+
+  enregistrerModeleSemaine(nom, shifts) {
+    const list = this.getWeekTemplates();
+    // Copie des quarts SANS leur id (un modèle réappliqué génère de nouveaux id, jamais un
+    // doublon d'id avec les quarts d'origine qui peuvent encore exister par ailleurs).
+    const template = Object.assign(makeEmptyWeekTemplate(), {
+      id: generateId('modelesem'), nom,
+      shifts: shifts.map(({ employeeId, weekday, heureDebut, heureFin, pauseMinutes }) => ({ employeeId, weekday, heureDebut, heureFin, pauseMinutes })),
+      dateCreation: new Date().toISOString()
+    });
+    list.push(template);
+    this.saveWeekTemplates(list);
+    this.logAudit('Création', 'Modèle de semaine', nom);
+    return template;
+  },
+
+  deleteWeekTemplate(id) {
+    const template = this.getWeekTemplateById(id);
+    this.saveWeekTemplates(this.getWeekTemplates().filter(t => t.id !== id));
+    if (template) this.logAudit('Suppression', 'Modèle de semaine', template.nom);
+  },
+
+  /** Remplace les quarts des salariés CONCERNÉS PAR LE MODÈLE (jamais toute l'entreprise) par ceux
+   * du modèle — un salarié absent du modèle garde ses quarts existants intacts. */
+  appliquerModeleSemaine(templateId) {
+    const template = this.getWeekTemplateById(templateId);
+    if (!template) return null;
+    const employeeIdsConcernes = new Set(template.shifts.map(s => s.employeeId));
+    const shiftsConserves = this.getShifts().filter(s => !employeeIdsConcernes.has(s.employeeId));
+    const nouveauxShifts = template.shifts.map(s => Object.assign(makeEmptyShift(), s, { id: generateId('shift') }));
+    this.saveShifts([...shiftsConserves, ...nouveauxShifts]);
+    this.logAudit('Application', 'Modèle de semaine', template.nom);
+    return nouveauxShifts;
   },
 
   // ---- Modèles de documents (§retour Betty du 14/09/2026, Module RH point 1) ----
@@ -3909,6 +4178,22 @@ const shiftRepository = {
   delete: (id) => DB.deleteShift(id)
 };
 
+const shiftSwapRepository = {
+  getAll: () => DB.getShiftSwapRequests(),
+  getById: (id) => DB.getShiftSwapRequestById(id),
+  proposer: (shiftId, employeeId) => DB.proposerEchangeShift(shiftId, employeeId),
+  accepter: (requestId, destinataireId) => DB.accepterEchangeShift(requestId, destinataireId),
+  traiter: (requestId, accepter) => DB.traiterEchangeShift(requestId, accepter)
+};
+
+const weekTemplateRepository = {
+  getAll: () => DB.getWeekTemplates(),
+  getById: (id) => DB.getWeekTemplateById(id),
+  enregistrer: (nom, shifts) => DB.enregistrerModeleSemaine(nom, shifts),
+  appliquer: (id) => DB.appliquerModeleSemaine(id),
+  delete: (id) => DB.deleteWeekTemplate(id)
+};
+
 const documentTemplateRepository = {
   getAll: () => DB.getDocumentTemplates(),
   getById: (id) => DB.getDocumentTemplateById(id),
@@ -4180,6 +4465,11 @@ function makeEmptyEmployee() {
     // salarié modifier SA PROPRE ligne, ce qui suffit pour qu'il déclare lui-même une intervention sur
     // SA propre astreinte sans nouvelle policy à écrire. Voir openAjouterAstreinteModal (app.js).
     astreintes: [],
+    // §retour Betty du 14/09/2026 (Planning point 4, "déclaration de disponibilités et de
+    // contraintes") : récurrentes (par jour de semaine), pas des dates précises — [{ id, weekday,
+    // heureDebut, heureFin, motif }]. Le planning signale (sans jamais bloquer, même logique que
+    // les contrôles légaux) un quart posé sur une plage déclarée indisponible.
+    indisponibilitesRecurrentes: [],
 
     tempsTravail: 'Temps plein',
     pourcentageActivite: 100,

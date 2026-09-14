@@ -85,6 +85,11 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
 globalThis.__fusionnerModeleDocument = fusionnerModeleDocument;
 globalThis.__construireValeursFusionModele = construireValeursFusionModele;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
+globalThis.__verifierControlesLegauxPlanning = verifierControlesLegauxPlanning;
+globalThis.__calculerTauxHoraireEmploye = calculerTauxHoraireEmploye;
+globalThis.__calculerCoutShifts = calculerCoutShifts;
+globalThis.__shiftChevaucheIndisponibilite = shiftChevaucheIndisponibilite;
+globalThis.__JOURS_SEMAINE_PLANNING = JOURS_SEMAINE_PLANNING;
 `;
   vm.runInContext(source + expose, sandbox, { filename: 'data.js' });
 
@@ -138,6 +143,11 @@ globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
     fusionnerModeleDocument: sandbox.__fusionnerModeleDocument,
     construireValeursFusionModele: sandbox.__construireValeursFusionModele,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
+    verifierControlesLegauxPlanning: sandbox.__verifierControlesLegauxPlanning,
+    calculerTauxHoraireEmploye: sandbox.__calculerTauxHoraireEmploye,
+    calculerCoutShifts: sandbox.__calculerCoutShifts,
+    shiftChevaucheIndisponibilite: sandbox.__shiftChevaucheIndisponibilite,
+    JOURS_SEMAINE_PLANNING: sandbox.__JOURS_SEMAINE_PLANNING,
   };
 }
 

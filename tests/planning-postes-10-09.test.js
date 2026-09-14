@@ -122,13 +122,14 @@ async function run() {
     assert.ok(!htmlMasque.includes('09:00-16:00'), 'masquer les quarts confirmés doit cacher la carte du quart existant');
     state.planningPostesFilters.masquerQuartsConfirmes = false;
 
-    // Budget : ligne de synthèse visible seulement si l'option est cochée, total = somme des heures.
-    const htmlSansBudget = renderPlanningPostes();
-    assert.ok(!htmlSansBudget.includes('poste-budget-row'));
-    state.planningPostesFilters.afficherBudget = true;
-    const htmlAvecBudget = renderPlanningPostes();
-    assert.ok(htmlAvecBudget.includes('poste-budget-row'));
-    assert.ok(htmlAvecBudget.includes('Budget (heures planifiées)'));
+    // §retour Betty du 14/09/2026 (Planning point 2, "voir le coût de la semaine se cumuler") :
+    // cette ligne de synthèse (heures planifiées) est désormais TOUJOURS visible — afficherBudget
+    // n'avait plus aucun moyen d'être activé depuis le retrait du panneau de filtres (§10/09/2026),
+    // elle était donc devenue invisible pour de bon. Voir planning-ui-14-09.test.js pour la ligne de
+    // coût (€) qui s'y ajoute quand la masse salariale est suivie.
+    const htmlAvecHeures = renderPlanningPostes();
+    assert.ok(htmlAvecHeures.includes('poste-budget-row'));
+    assert.ok(htmlAvecHeures.includes('Heures planifiées'));
 
     shiftRepository.delete(shift.id);
   }

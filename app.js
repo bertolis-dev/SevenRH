@@ -14147,6 +14147,30 @@ function renderParametres() {
  * par renderAvatar() partout dans l'app (Planning, listes de salariés...), il ne manquait qu'un
  * moyen de le renseigner. Même patron que le logo d'entreprise (renderParametresEntreprise) : aperçu
  * + bouton qui déclenche un input file caché. */
+/** §retour Betty du 14/09/2026 (Planning point 4, "déclaration de disponibilités et de
+ * contraintes") : chacun déclare SES PROPRES indisponibilités récurrentes ici (jamais un tiers,
+ * même raisonnement que l'accusé de lecture ou la proposition d'échange de quart) — le planning les
+ * signale (jamais un blocage, voir renderPlanningPostes/shiftChevaucheIndisponibilite). */
+function renderIndisponibilitesCard(user) {
+  if (!hasModule('planning')) return '';
+  const indisponibilites = user.indisponibilitesRecurrentes || [];
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <div class="view-header-row">
+        <h2>Disponibilités</h2>
+        <button class="btn btn-secondary btn-sm" id="btn-add-indisponibilite">+ Déclarer une indisponibilité</button>
+      </div>
+      <p class="text-muted" style="margin: 0 0 8px;">Récurrent chaque semaine (pas une date précise) — le planning signale un quart posé dessus, sans jamais bloquer sa création.</p>
+      ${indisponibilites.length === 0 ? '<p class="text-muted">Aucune indisponibilité déclarée.</p>' : indisponibilites.map(i => `
+        <div class="mini-list-item">
+          <span>${escapeHtml(i.weekday)} ${escapeHtml(i.heureDebut)}-${escapeHtml(i.heureFin)}${i.motif ? ` · ${escapeHtml(i.motif)}` : ''}</span>
+          <button type="button" class="btn-link btn-link-danger" data-delete-indisponibilite="${i.id}">Supprimer</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderParametresMonCompte() {
   const user = authRepository.getCurrentUser();
   return `
@@ -14161,6 +14185,7 @@ function renderParametresMonCompte() {
         </div>
       </div>
     </div>
+    ${renderIndisponibilitesCard(user)}
   `;
 }
 
@@ -14187,6 +14212,67 @@ function bindParametresMonCompteEvents() {
         showToast(err.message || 'Impossible de mettre à jour la photo.', 'error');
       }
     });
+  });
+
+  const addIndisponibiliteBtn = document.getElementById('btn-add-indisponibilite');
+  if (addIndisponibiliteBtn) addIndisponibiliteBtn.addEventListener('click', () => openIndisponibiliteModal(user.id));
+  document.querySelectorAll('[data-delete-indisponibilite]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const liste = (user.indisponibilitesRecurrentes || []).filter(i => i.id !== btn.dataset.deleteIndisponibilite);
+      employeeRepository.update(user.id, { indisponibilitesRecurrentes: liste });
+      showToast('Indisponibilité supprimée.');
+      render();
+    });
+  });
+}
+
+function openIndisponibiliteModal(employeeId) {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Déclarer une indisponibilité</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="indisponibilite-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="f-indispo-weekday">Jour</label>
+              <select class="input" id="f-indispo-weekday">
+                ${WEEKDAY_LABELS.map(w => `<option value="${w}">${w}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field"><label for="f-indispo-debut">Début</label><input class="input" type="time" id="f-indispo-debut" value="09:00" required></div>
+            <div class="form-field"><label for="f-indispo-fin">Fin</label><input class="input" type="time" id="f-indispo-fin" value="12:00" required></div>
+            <div class="form-field"><label for="f-indispo-motif">Motif (optionnel)</label><input class="input" type="text" id="f-indispo-motif" placeholder="Ex. cours du soir"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('indisponibilite-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const heureDebut = document.getElementById('f-indispo-debut').value;
+    const heureFin = document.getElementById('f-indispo-fin').value;
+    if (heureFin <= heureDebut) { showToast('L\'heure de fin doit être après l\'heure de début.', 'error'); return; }
+    const employee = employeeRepository.getById(employeeId);
+    const nouvelle = {
+      id: generateId('indispo'), weekday: document.getElementById('f-indispo-weekday').value,
+      heureDebut, heureFin, motif: document.getElementById('f-indispo-motif').value.trim()
+    };
+    employeeRepository.update(employeeId, { indisponibilitesRecurrentes: [...(employee.indisponibilitesRecurrentes || []), nouvelle] });
+    closeModal();
+    showToast('Indisponibilité déclarée.');
+    render();
   });
 }
 
@@ -15643,6 +15729,11 @@ function renderParametresListes() {
           <input class="input" type="number" min="1" step="1" id="f-delai-prevenance-documents" value="${escapeHtml(settings.delaiPrevenanceDocumentsJours)}">
           <p class="form-hint">S'applique à tout document ayant une date d'expiration (permis, habilitation, autorisation de conduite, visite médicale, titre de séjour...).</p>
         </div>
+        <div class="form-field">
+          <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
+          <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
+          <p class="form-hint">0 = pas de budget fixé (le coût de la semaine s'affiche sans comparaison, voir Planning). N'a d'effet que si le suivi de la masse salariale est activé (carte "Indicateurs Direction" ci-dessous).</p>
+        </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
           <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
@@ -15877,6 +15968,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
   bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
   bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
+  bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
   bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
@@ -17930,10 +18022,14 @@ function renderPlanningPostes() {
       // service) — retiré uniquement de cet affichage, shift.pauseMinutes reste saisi dans la
       // modale (openShiftModal) et continue de compter dans le calcul des heures travaillées
       // (computeShiftHeures, data.js), jamais touché ici.
+      // §retour Betty du 14/09/2026 (Planning point 4) : signale (jamais un blocage) un quart posé
+      // sur une indisponibilité déclarée par CE salarié (voir Mon compte > Disponibilités).
+      const conflitIndisponibilite = shiftChevaucheIndisponibilite(shift, employee.indisponibilitesRecurrentes);
       return `<td class="planning-cell">
-        <div class="poste-shift-card" data-edit-shift="${shift.id}">
+        <div class="poste-shift-card" data-edit-shift="${shift.id}" ${conflitIndisponibilite ? 'style="border-left-color: var(--color-danger);"' : ''} title="${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée' : ''}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
           <div class="poste-shift-position">${escapeHtml(employee.service || '')}</div>
+          ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
           ${pointageBadge}
         </div>
       </td>`;
@@ -17949,12 +18045,20 @@ function renderPlanningPostes() {
     return `<td class="planning-cell"></td>`;
   };
 
-  const renderEmployeeRow = (employee) => `
+  // §retour Betty du 14/09/2026 (Planning point 1, "le planning doit refuser ou au moins signaler
+  // en rouge") : calculé une seule fois par salarié affiché, jamais par cellule (les règles portent
+  // sur la semaine entière du salarié, pas sur un jour isolé) — voir verifierControlesLegauxPlanning,
+  // data.js. Jamais bloquant : un badge d'alerte, jamais un empêchement d'enregistrer un quart.
+  const violationsFor = (employeeId) => verifierControlesLegauxPlanning(employeeId, allShifts);
+
+  const renderEmployeeRow = (employee) => {
+    const violations = violationsFor(employee.id);
+    return `
     <tr>
       <td class="planning-employee-cell">
         ${renderAvatar(employee)}
         <div class="planning-employee-info">
-          <div>${personNameHtml(employee)}</div>
+          <div>${personNameHtml(employee)} ${violations.length ? `<span class="badge badge-danger" title="${escapeHtml(violations.map(v => v.message).join(' · '))}">${icon(ICONS.warningTriangle, 11)} ${violations.length}</span>` : ''}</div>
           <div class="poste-employee-hours">${formatNumberFR(employeeWeekHeures(employee.id))} h</div>
         </div>
       </td>
@@ -17962,6 +18066,7 @@ function renderPlanningPostes() {
       <td class="planning-total-cell"><strong>${formatNumberFR(employeeWeekHeures(employee.id))} h</strong></td>
     </tr>
   `;
+  };
 
   // §retour Betty du 10/09/2026 ("il faut que ce soit le service à cet endroit") : regroupement par
   // SERVICE (champ déjà existant sur la fiche salarié), plus par Position (concept retiré). Un
@@ -17989,17 +18094,35 @@ function renderPlanningPostes() {
     `;
   }).join('');
 
-  const budgetRow = f.afficherBudget ? `
+  // §retour Betty du 14/09/2026 (Planning point 2, "voir le coût de la semaine se cumuler pendant
+  // qu'on place les créneaux") : afficherBudget restait toujours à false depuis le retrait du
+  // panneau de filtres qui seul pouvait l'activer (§retour Betty du 10/09/2026) — cette ligne
+  // "heures planifiées" était donc devenue invisible pour de bon. Toujours affichée maintenant ;
+  // une seconde ligne "coût" s'ajoute si la masse salariale est suivie.
+  const shiftsVisibles = allShifts.filter(s => employees.some(e => e.id === s.employeeId));
+  const settings = settingsRepository.getSettings();
+  const coutSemaine = settings.masseSalarialeActivee ? calculerCoutShifts(shiftsVisibles, employees) : null;
+  const budgetFixe = settings.budgetHebdomadairePlanningEuros || 0;
+  const budgetRow = `
     <tr class="poste-budget-row">
-      <td><strong>Budget (heures planifiées)</strong></td>
+      <td><strong>Heures planifiées</strong></td>
       ${weekDates.map(d => {
         const weekday = WEEKDAY_LABELS[(d.getDay() + 6) % 7];
         const total = allShifts.filter(s => s.weekday === weekday && employees.some(e => e.id === s.employeeId)).reduce((sum, s) => sum + computeShiftHeures(s), 0);
         return `<td><strong>${formatNumberFR(round2(total))} h</strong></td>`;
       }).join('')}
-      <td><strong>${formatNumberFR(round2(allShifts.filter(s => employees.some(e => e.id === s.employeeId)).reduce((sum, s) => sum + computeShiftHeures(s), 0)))} h</strong></td>
+      <td><strong>${formatNumberFR(round2(shiftsVisibles.reduce((sum, s) => sum + computeShiftHeures(s), 0)))} h</strong></td>
     </tr>
-  ` : '';
+    ${coutSemaine !== null ? `
+      <tr class="poste-budget-row">
+        <td><strong>Coût de la semaine</strong></td>
+        <td colspan="${weekDates.length}" class="${budgetFixe > 0 && coutSemaine > budgetFixe ? 'text-danger' : ''}">
+          <strong>${formatCurrencyFR(coutSemaine)}${budgetFixe > 0 ? ` / ${formatCurrencyFR(budgetFixe)} budgété` : ''}</strong>
+        </td>
+        <td class="${budgetFixe > 0 && coutSemaine > budgetFixe ? 'text-danger' : ''}"><strong>${formatCurrencyFR(coutSemaine)}</strong></td>
+      </tr>
+    ` : ''}
+  `;
 
   // §retour Betty du 10/09/2026 ("enlève tous les boutons, fais juste le design du planning [...],
   // pas ce qu'il y a autour") : plus de panneau de filtres, plus de barre d'outils (recherche,
@@ -18009,6 +18132,15 @@ function renderPlanningPostes() {
   // (state.planningPostesFilters), simplement plus modifiables depuis cet écran.
   return `
     <div class="card table-card planning-scroll-card poste-grid-card">
+      ${canManage ? `
+        <div class="view-header-row" style="padding: 14px 20px 0;">
+          <div></div>
+          <div class="detail-header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-enregistrer-modele-semaine">Enregistrer comme modèle</button>
+            ${weekTemplateRepository.getAll().length ? `<button class="btn btn-secondary btn-sm" id="btn-appliquer-modele-semaine">Appliquer un modèle</button>` : ''}
+          </div>
+        </div>
+      ` : ''}
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table">
           <thead>
@@ -18025,6 +18157,119 @@ function renderPlanningPostes() {
         </table>
       `}
     </div>
+
+    ${renderShiftSwapCard(user, employees)}
+
+    ${hasModule('pointage') ? renderComparaisonPrevuRealiseCard(employees, weekDates, weekStartStr, weekEndStr) : ''}
+  `;
+}
+
+/** §retour Betty du 14/09/2026 (Planning point 3, "échange de créneaux entre salariés") : un
+ * salarié propose l'un de SES quarts (voir le bouton dans openShiftModal), n'importe quel autre
+ * salarié visible peut le prendre, le manager valide (réaffectation réelle) ou refuse. Jamais de
+ * réaffectation avant la validation manager — voir DB.traiterEchangeShift. */
+function renderShiftSwapCard(user, employeesVisibles) {
+  const canManage = hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
+  const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé');
+  if (!requests.length) return '';
+  const nomDe = (id) => { const e = employeeRepository.getById(id); return e ? `${e.prenom} ${e.nom}` : '—'; };
+  const describeShift = (shiftId) => {
+    const shift = shiftRepository.getById(shiftId);
+    return shift ? `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}` : 'Quart supprimé';
+  };
+
+  const rows = requests.map(r => {
+    const estProposant = r.employeeId === user.id;
+    const peutAccepter = r.statut === 'proposé' && !estProposant;
+    const peutTraiter = r.statut === 'accepté' && canManage;
+    return `
+      <div class="mini-list-item">
+        <span>${describeShift(r.shiftId)} · proposé par ${escapeHtml(nomDe(r.employeeId))}${r.destinataireId ? ` → repris par ${escapeHtml(nomDe(r.destinataireId))}` : ''}</span>
+        <span class="detail-header-actions">
+          <span class="badge badge-${r.statut === 'proposé' ? 'info' : 'warning'}">${r.statut === 'proposé' ? 'Ouvert' : 'En attente de validation'}</span>
+          ${peutAccepter ? `<button type="button" class="btn btn-secondary btn-sm" data-accepter-echange="${r.id}">Prendre ce créneau</button>` : ''}
+          ${peutTraiter ? `<button type="button" class="btn btn-secondary btn-sm" data-valider-echange="${r.id}">Valider</button><button type="button" class="btn-link btn-link-danger" data-refuser-echange="${r.id}">Refuser</button>` : ''}
+        </span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <h2>Échanges de créneaux</h2>
+      <div id="shift-swap-list">${rows}</div>
+    </div>
+  `;
+}
+
+function bindShiftSwapCardEvents() {
+  const user = authRepository.getCurrentUser();
+  document.querySelectorAll('[data-accepter-echange]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      shiftSwapRepository.accepter(btn.dataset.accepterEchange, user.id);
+      showToast('Créneau pris, en attente de validation par le manager.');
+      render();
+    });
+  });
+  document.querySelectorAll('[data-valider-echange]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      shiftSwapRepository.traiter(btn.dataset.validerEchange, true);
+      showToast('Échange validé, le quart a été réaffecté.');
+      render();
+    });
+  });
+  document.querySelectorAll('[data-refuser-echange]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      shiftSwapRepository.traiter(btn.dataset.refuserEchange, false);
+      showToast('Échange refusé.');
+      render();
+    });
+  });
+}
+
+/** §retour Betty du 14/09/2026 (Planning point 6, "comparaison prévu et réalisé") : heures
+ * PLANIFIÉES (shifts, modèle récurrent appliqué aux dates de la semaine affichée) contre heures
+ * RÉELLEMENT POINTÉES (pointageRepository) — seulement pour les jours déjà passés (ou aujourd'hui),
+ * jamais un jour futur qui n'a logiquement aucun pointage encore. Masquée si le module Pointeuse
+ * n'est pas souscrit (voir l'appelant, renderPlanningPostes). */
+function renderComparaisonPrevuRealiseCard(employees, weekDates, weekStartStr, weekEndStr) {
+  const todayStr = toISODate(new Date());
+  const joursPasses = weekDates.filter(d => toISODate(d) <= todayStr);
+  if (!joursPasses.length) return '';
+  const allShifts = shiftRepository.getAll();
+
+  const rows = employees.map(employee => {
+    let planifieMinutes = 0;
+    let realiseMinutes = 0;
+    joursPasses.forEach(d => {
+      const weekday = WEEKDAY_LABELS[(d.getDay() + 6) % 7];
+      const shift = allShifts.find(s => s.employeeId === employee.id && s.weekday === weekday);
+      if (shift) planifieMinutes += Math.round(computeShiftHeures(shift) * 60);
+      const pointages = pointageRepository.getForEmployeeOnDate(employee.id, toISODate(d));
+      realiseMinutes += pointages.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0);
+    });
+    if (planifieMinutes === 0 && realiseMinutes === 0) return '';
+    const ecartMinutes = realiseMinutes - planifieMinutes;
+    const ecartSignificatif = Math.abs(ecartMinutes) >= 15;
+    return `
+      <tr>
+        <td>${personNameHtml(employee)}</td>
+        <td>${formatNumberFR(round2(planifieMinutes / 60))} h</td>
+        <td>${formatNumberFR(round2(realiseMinutes / 60))} h</td>
+        <td class="${ecartSignificatif ? 'text-danger' : ''}">${ecartMinutes >= 0 ? '+' : ''}${formatNumberFR(round2(ecartMinutes / 60))} h</td>
+      </tr>
+    `;
+  }).filter(Boolean).join('');
+
+  if (!rows) return '';
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <h2>Prévu / réalisé (jusqu'à aujourd'hui)</h2>
+      <table class="table">
+        <thead><tr><th>Salarié</th><th>Planifié</th><th>Pointé</th><th>Écart</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -18035,7 +18280,8 @@ function renderPlanningPostes() {
  * (options de la position) a disparu avec la position elle-même — un groupe est désormais un Service,
  * qui se gère déjà depuis Paramètres > Services. */
 function bindPlanningPostesEvents() {
-  document.getElementById('btn-poste-sort-name').addEventListener('click', () => {
+  const sortBtn = document.getElementById('btn-poste-sort-name');
+  if (sortBtn) sortBtn.addEventListener('click', () => {
     state.planningPostesSortDir = state.planningPostesSortDir === 'desc' ? 'asc' : 'desc';
     render();
   });
@@ -18049,6 +18295,109 @@ function bindPlanningPostesEvents() {
       openShiftModal(null, { employeeId, weekday });
     });
   });
+
+  const enregistrerModeleBtn = document.getElementById('btn-enregistrer-modele-semaine');
+  if (enregistrerModeleBtn) enregistrerModeleBtn.addEventListener('click', openEnregistrerModeleSemaineModal);
+  const appliquerModeleBtn = document.getElementById('btn-appliquer-modele-semaine');
+  if (appliquerModeleBtn) appliquerModeleBtn.addEventListener('click', openAppliquerModeleSemaineModal);
+
+  bindShiftSwapCardEvents();
+}
+
+function openEnregistrerModeleSemaineModal() {
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Enregistrer comme modèle</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="modele-semaine-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-nom-modele">Nom du modèle</label>
+            <input type="text" class="input" id="f-nom-modele" required placeholder="Ex. Semaine type été">
+          </div>
+          <p class="text-muted">Enregistre TOUS les quarts actuellement définis (tous salariés confondus), pas seulement ceux affichés à l'écran.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('modele-semaine-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-nom-modele').value.trim();
+    if (!nom) { showToast('Le nom du modèle est obligatoire.', 'error'); return; }
+    weekTemplateRepository.enregistrer(nom, shiftRepository.getAll());
+    closeModal();
+    showToast('Modèle enregistré.');
+    render();
+  });
+}
+
+function openAppliquerModeleSemaineModal() {
+  const templates = weekTemplateRepository.getAll();
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Appliquer un modèle</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Remplace les quarts des salariés concernés par le modèle choisi, les autres salariés (absents du modèle) gardent leurs quarts actuels.</p>
+        <div id="modele-semaine-list">
+          ${templates.map(t => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(t.nom)} <span class="text-muted">(${t.shifts.length} quart${t.shifts.length > 1 ? 's' : ''})</span></span>
+              <span class="detail-header-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-appliquer-modele="${t.id}">Appliquer</button>
+                <button type="button" class="btn-link btn-link-danger" data-delete-modele-semaine="${t.id}">Supprimer</button>
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.querySelectorAll('[data-appliquer-modele]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const template = weekTemplateRepository.getById(btn.dataset.appliquerModele);
+      openConfirm({
+        title: 'Appliquer ce modèle ?',
+        message: `Les quarts actuels des salariés concernés par "${template.nom}" seront remplacés.`,
+        confirmLabel: 'Appliquer',
+        danger: true,
+        onConfirm: () => {
+          weekTemplateRepository.appliquer(template.id);
+          closeModal();
+          showToast('Modèle appliqué.');
+          render();
+        }
+      });
+    });
+  });
+  document.querySelectorAll('[data-delete-modele-semaine]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      weekTemplateRepository.delete(btn.dataset.deleteModeleSemaine);
+      showToast('Modèle supprimé.');
+      openAppliquerModeleSemaineModal();
+    });
+  });
 }
 
 /** `shift` = quart existant à modifier (null pour une création) ; `preset` = valeurs initiales pour
@@ -18058,6 +18407,13 @@ function openShiftModal(shift, preset) {
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const values = shift || Object.assign(makeEmptyShiftDraft(), preset || {});
+  // §retour Betty du 14/09/2026 (Planning point 3, "échange de créneaux") : seul LE SALARIÉ
+  // CONCERNÉ par ce quart peut en proposer l'échange, jamais un tiers (même raisonnement que
+  // l'accusé de lecture, Module RH point 4) — et seulement s'il n'y a pas déjà une proposition en
+  // cours pour ce même quart.
+  const user = authRepository.getCurrentUser();
+  const echangeDejaPropose = shift && shiftSwapRepository.getAll().some(r => r.shiftId === shift.id && r.statut !== 'refusé' && r.statut !== 'validé');
+  const peutProposerEchange = shift && user.id === shift.employeeId && !echangeDejaPropose;
 
   const html = `
     <div class="modal">
@@ -18089,6 +18445,7 @@ function openShiftModal(shift, preset) {
         </div>
         <div class="modal-footer">
           ${shift ? `<button type="button" class="btn btn-secondary" id="btn-delete-shift" style="margin-right: auto;">Supprimer</button>` : ''}
+          ${peutProposerEchange ? `<button type="button" class="btn btn-secondary" id="btn-proposer-echange-shift">Proposer l'échange</button>` : ''}
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
           <button type="submit" class="btn btn-primary">${shift ? 'Enregistrer' : 'Ajouter'}</button>
         </div>
@@ -18100,6 +18457,13 @@ function openShiftModal(shift, preset) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const proposerEchangeBtn = document.getElementById('btn-proposer-echange-shift');
+  if (proposerEchangeBtn) proposerEchangeBtn.addEventListener('click', () => {
+    shiftSwapRepository.proposer(shift.id, user.id);
+    closeModal();
+    showToast('Échange proposé, visible par vos collègues.');
+    render();
+  });
   const deleteBtn = document.getElementById('btn-delete-shift');
   if (deleteBtn) deleteBtn.addEventListener('click', () => {
     openConfirm({
@@ -18126,9 +18490,20 @@ function openShiftModal(shift, preset) {
     };
     if (!data.employeeId) { showToast('Sélectionnez un salarié.', 'error'); return; }
     if (data.heureFin <= data.heureDebut) { showToast('L\'heure de fin doit être après l\'heure de début.', 'error'); return; }
-    if (shift) shiftRepository.update(shift.id, data); else shiftRepository.create(data);
+    const savedShift = shift ? shiftRepository.update(shift.id, data) : shiftRepository.create(data);
     closeModal();
     showToast(shift ? 'Quart modifié.' : 'Quart ajouté.');
+    // §retour Betty du 14/09/2026 (Planning point 1, "signaler en rouge au moment où on le
+    // construit, pas après") : contrôles légaux + indisponibilité déclarée, vérifiés dès la
+    // sauvegarde de CE quart, jamais un blocage (le quart est déjà enregistré ci-dessus).
+    const employeeConcerne = employeeRepository.getById(data.employeeId);
+    const violations = verifierControlesLegauxPlanning(data.employeeId, shiftRepository.getAll());
+    if (violations.length) {
+      const suffixe = violations.length > 1 ? ` (+${violations.length - 1} autre${violations.length > 2 ? 's' : ''} contrôle${violations.length > 2 ? 's' : ''})` : '';
+      showToast(`Attention, ${employeeConcerne.prenom} ${employeeConcerne.nom} : ${violations[0].message}${suffixe}`, 'error');
+    } else if (shiftChevaucheIndisponibilite(savedShift, employeeConcerne.indisponibilitesRecurrentes)) {
+      showToast(`Attention : ce quart chevauche une indisponibilité déclarée par ${employeeConcerne.prenom} ${employeeConcerne.nom}.`, 'error');
+    }
     render();
   });
 }

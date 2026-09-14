@@ -85,6 +85,8 @@ function loadAppJs() {
 ;globalThis.__DB = DB;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
 globalThis.__shiftRepository = shiftRepository;
+globalThis.__shiftSwapRepository = shiftSwapRepository;
+globalThis.__weekTemplateRepository = weekTemplateRepository;
 globalThis.__documentTemplateRepository = documentTemplateRepository;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
 globalThis.__employeeRepository = employeeRepository;
@@ -111,6 +113,13 @@ globalThis.__openGenererDocumentModal = openGenererDocumentModal;
 globalThis.__confirmerAccuseLectureDocument = confirmerAccuseLectureDocument;
 globalThis.__documentExpirationInfo = documentExpirationInfo;
 globalThis.__renderParametresRegistrePersonnel = renderParametresRegistrePersonnel;
+globalThis.__renderShiftSwapCard = renderShiftSwapCard;
+globalThis.__renderComparaisonPrevuRealiseCard = renderComparaisonPrevuRealiseCard;
+globalThis.__openEnregistrerModeleSemaineModal = openEnregistrerModeleSemaineModal;
+globalThis.__openAppliquerModeleSemaineModal = openAppliquerModeleSemaineModal;
+globalThis.__openIndisponibiliteModal = openIndisponibiliteModal;
+globalThis.__renderParametresMonCompte = renderParametresMonCompte;
+globalThis.__bindParametresMonCompteEvents = bindParametresMonCompteEvents;
 globalThis.__getVisibleEmployeeIdsForCurrentUser = getVisibleEmployeeIdsForCurrentUser;
 globalThis.__isCurrentWorkflowStepFor = isCurrentWorkflowStepFor;
 globalThis.__parisDateFromISO = parisDateFromISO;
@@ -247,6 +256,8 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     DB: sandbox.__DB,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
     shiftRepository: sandbox.__shiftRepository,
+    shiftSwapRepository: sandbox.__shiftSwapRepository,
+    weekTemplateRepository: sandbox.__weekTemplateRepository,
     documentTemplateRepository: sandbox.__documentTemplateRepository,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
@@ -254,6 +265,13 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     confirmerAccuseLectureDocument: sandbox.__confirmerAccuseLectureDocument,
     documentExpirationInfo: sandbox.__documentExpirationInfo,
     renderParametresRegistrePersonnel: sandbox.__renderParametresRegistrePersonnel,
+    renderShiftSwapCard: sandbox.__renderShiftSwapCard,
+    renderComparaisonPrevuRealiseCard: sandbox.__renderComparaisonPrevuRealiseCard,
+    openEnregistrerModeleSemaineModal: sandbox.__openEnregistrerModeleSemaineModal,
+    openAppliquerModeleSemaineModal: sandbox.__openAppliquerModeleSemaineModal,
+    openIndisponibiliteModal: sandbox.__openIndisponibiliteModal,
+    renderParametresMonCompte: sandbox.__renderParametresMonCompte,
+    bindParametresMonCompteEvents: sandbox.__bindParametresMonCompteEvents,
     employeeRepository: sandbox.__employeeRepository,
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,
