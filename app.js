@@ -8666,9 +8666,21 @@ const REVISION_STATUT_BADGE_CLASS = { en_attente: 'muted', proposee: 'warning', 
 /** Reflète is_manager_of() côté RLS (0002_rls_policies.sql) — même relation (employee.managerIds),
  * juste côté client pour décider quoi afficher/activer dans l'UI (la donnée reste protégée par la
  * policy serveur quoi qu'il arrive). */
-function isManagerOfEmployee(managerId, targetEmployeeId) {
+/** §retour Betty du 14/09/2026 (Congés, "délégation de validation") : un manager absent peut
+ * désigner un remplaçant pour une période donnée (voir renderDelegationCard/openDelegationModal) —
+ * le remplaçant hérite alors de TOUT ce que le manager délégant pouvait faire pour son équipe
+ * pendant cette période (validations, mais aussi tout autre endroit qui s'appuie sur cette même
+ * fonction), pas seulement une demande précise. `dateStr` par défaut à aujourd'hui : une délégation
+ * n'a d'effet que pendant sa propre fenêtre, jamais rétroactivement ni au-delà. */
+function isManagerOfEmployee(managerId, targetEmployeeId, dateStr) {
   const target = employeeRepository.getById(targetEmployeeId);
-  return Boolean(target && (target.managerIds || []).includes(managerId));
+  if (!target) return false;
+  if ((target.managerIds || []).includes(managerId)) return true;
+  const today = dateStr || toISODate(new Date());
+  return (target.managerIds || []).some(mid => {
+    const manager = employeeRepository.getById(mid);
+    return Boolean(manager && (manager.delegations || []).some(d => d.delegataireId === managerId && d.dateDebut <= today && d.dateFin >= today));
+  });
 }
 
 /** Libellé humain de l'écran courant, utilisé comme contexte auto-capturé à la création d'un
@@ -14643,6 +14655,86 @@ function renderIndisponibilitesCard(user) {
   `;
 }
 
+/** §retour Betty du 14/09/2026 (Congés, "délégation de validation") : "3 semaines d'absence d'un
+ * manager gèle l'équipe" — réservé au rôle manager, seul rôle dont l'autorité de validation repose
+ * sur managerIds (RH/Propriétaire valident déjà via une permission globale, pas via une relation
+ * d'équipe : les déléguer poserait un problème différent, une vraie extension de permission plutôt
+ * qu'une simple relation d'équipe temporaire — hors périmètre ici). */
+function renderDelegationCard(user) {
+  if (user.role !== ROLES.MANAGER) return '';
+  const delegations = user.delegations || [];
+  const todayStr = toISODate(new Date());
+  return `
+    <div class="card" style="margin-top: 16px;">
+      <div class="view-header-row">
+        <h2>Délégation de validation</h2>
+        <button class="btn btn-secondary btn-sm" id="btn-add-delegation">+ Déléguer temporairement</button>
+      </div>
+      <p class="text-muted" style="margin: 0 0 8px;">Pendant votre absence, la personne désignée peut valider les congés/notes de frais de votre équipe à votre place, avec les mêmes droits que vous sur cette équipe (rien en dehors).</p>
+      ${delegations.length === 0 ? '<p class="text-muted">Aucune délégation en cours.</p>' : delegations.slice().sort((a, b) => b.dateFin.localeCompare(a.dateFin)).map(d => {
+        const delegataire = employeeRepository.getById(d.delegataireId);
+        const active = d.dateDebut <= todayStr && d.dateFin >= todayStr;
+        return `
+          <div class="mini-list-item">
+            <span>${delegataire ? personNameHtml(delegataire) : '<span class="text-muted">Salarié supprimé</span>'} · ${formatDate(d.dateDebut)} → ${formatDate(d.dateFin)}${active ? ' <span class="badge badge-success">active</span>' : ''}</span>
+            <button type="button" class="btn-link btn-link-danger" data-delete-delegation="${d.id}">Supprimer</button>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openDelegationModal() {
+  const user = authRepository.getCurrentUser();
+  const collegues = employeeRepository.getAll().filter(e => !e.archive && e.id !== user.id);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Déléguer ma validation</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="delegation-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-delegation-employee">À qui ? *</label>
+            <select class="input" id="f-delegation-employee" required>
+              <option value="">Sélectionner...</option>
+              ${collegues.map(e => `<option value="${e.id}">${escapeHtml(e.prenom + ' ' + e.nom)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-grid" style="margin-top: 12px;">
+            <div class="form-field"><label for="f-delegation-debut">Du *</label><input class="input" type="date" id="f-delegation-debut" required></div>
+            <div class="form-field"><label for="f-delegation-fin">Au *</label><input class="input" type="date" id="f-delegation-fin" required></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Déléguer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('delegation-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const delegataireId = document.getElementById('f-delegation-employee').value;
+    const dateDebut = document.getElementById('f-delegation-debut').value;
+    const dateFin = document.getElementById('f-delegation-fin').value;
+    if (!delegataireId) { showToast('Choisissez un salarié.', 'error'); return; }
+    if (!dateDebut || !dateFin || dateFin < dateDebut) { showToast('La date de fin doit être après la date de début.', 'error'); return; }
+    const delegation = { id: generateId('deleg'), delegataireId, dateDebut, dateFin, dateCreation: new Date().toISOString() };
+    employeeRepository.update(user.id, { delegations: [...(user.delegations || []), delegation] });
+    showToast('Délégation enregistrée.');
+    closeModal();
+    render();
+  });
+}
+
 function renderParametresMonCompte() {
   const user = authRepository.getCurrentUser();
   return `
@@ -14658,6 +14750,7 @@ function renderParametresMonCompte() {
       </div>
     </div>
     ${renderIndisponibilitesCard(user)}
+    ${renderDelegationCard(user)}
   `;
 }
 
@@ -14693,6 +14786,17 @@ function bindParametresMonCompteEvents() {
       const liste = (user.indisponibilitesRecurrentes || []).filter(i => i.id !== btn.dataset.deleteIndisponibilite);
       employeeRepository.update(user.id, { indisponibilitesRecurrentes: liste });
       showToast('Indisponibilité supprimée.');
+      render();
+    });
+  });
+
+  const addDelegationBtn = document.getElementById('btn-add-delegation');
+  if (addDelegationBtn) addDelegationBtn.addEventListener('click', openDelegationModal);
+  document.querySelectorAll('[data-delete-delegation]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const liste = (user.delegations || []).filter(d => d.id !== btn.dataset.deleteDelegation);
+      employeeRepository.update(user.id, { delegations: liste });
+      showToast('Délégation supprimée.');
       render();
     });
   });

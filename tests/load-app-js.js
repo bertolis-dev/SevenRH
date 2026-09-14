@@ -286,6 +286,8 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
 globalThis.__releveBancaireRepository = releveBancaireRepository;
 globalThis.__getAbsentsForQuota = getAbsentsForQuota;
 globalThis.__necessiteVisiteReprise = necessiteVisiteReprise;
+globalThis.__renderDelegationCard = renderDelegationCard;
+globalThis.__openDelegationModal = openDelegationModal;
 globalThis.__getVisitesRepriseAFaire = getVisitesRepriseAFaire;
 globalThis.__renderVisitesRepriseCard = renderVisitesRepriseCard;
 globalThis.__bindVisitesRepriseEvents = bindVisitesRepriseEvents;
@@ -499,6 +501,8 @@ globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
     releveBancaireRepository: sandbox.__releveBancaireRepository,
     getAbsentsForQuota: sandbox.__getAbsentsForQuota,
     necessiteVisiteReprise: sandbox.__necessiteVisiteReprise,
+    renderDelegationCard: sandbox.__renderDelegationCard,
+    openDelegationModal: sandbox.__openDelegationModal,
     getVisitesRepriseAFaire: sandbox.__getVisitesRepriseAFaire,
     renderVisitesRepriseCard: sandbox.__renderVisitesRepriseCard,
     bindVisitesRepriseEvents: sandbox.__bindVisitesRepriseEvents,

@@ -4982,6 +4982,10 @@ function makeEmptyEmployee() {
     // heureDebut, heureFin, motif }]. Le planning signale (sans jamais bloquer, même logique que
     // les contrôles légaux) un quart posé sur une plage déclarée indisponible.
     indisponibilitesRecurrentes: [],
+    // §retour Betty du 14/09/2026 (Congés, "délégation de validation") : [{ id, delegataireId,
+    // dateDebut, dateFin, dateCreation }] — porté par CE manager (le délégant), jamais par le
+    // délégataire. Voir isManagerOfEmployee (app.js), seul endroit qui les lit.
+    delegations: [],
 
     tempsTravail: 'Temps plein',
     pourcentageActivite: 100,
