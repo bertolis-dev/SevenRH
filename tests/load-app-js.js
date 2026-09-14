@@ -152,6 +152,12 @@ globalThis.__getExpensePayableMonthKey = getExpensePayableMonthKey;
 globalThis.__updateExpenseKmHint = updateExpenseKmHint;
 globalThis.__submitExpenseForm = submitExpenseForm;
 globalThis.__openExpenseModal = openExpenseModal;
+globalThis.__expenseDossierRepository = expenseDossierRepository;
+globalThis.__openRegrouperDossierModal = openRegrouperDossierModal;
+globalThis.__updateExpenseCategoryFields = updateExpenseCategoryFields;
+globalThis.__renderExpenseDossiersCard = renderExpenseDossiersCard;
+globalThis.__handleApproveExpense = handleApproveExpense;
+globalThis.__refuseRequest = refuseRequest;
 globalThis.__expenseRepository = expenseRepository;
 globalThis.__renderFrais = renderFrais;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
@@ -328,6 +334,12 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
     updateExpenseKmHint: sandbox.__updateExpenseKmHint,
     submitExpenseForm: sandbox.__submitExpenseForm,
     openExpenseModal: sandbox.__openExpenseModal,
+    expenseDossierRepository: sandbox.__expenseDossierRepository,
+    openRegrouperDossierModal: sandbox.__openRegrouperDossierModal,
+    updateExpenseCategoryFields: sandbox.__updateExpenseCategoryFields,
+    renderExpenseDossiersCard: sandbox.__renderExpenseDossiersCard,
+    handleApproveExpense: sandbox.__handleApproveExpense,
+    refuseRequest: sandbox.__refuseRequest,
     expenseRepository: sandbox.__expenseRepository,
     renderFrais: sandbox.__renderFrais,
     renderAbsencesHub: sandbox.__renderAbsencesHub,

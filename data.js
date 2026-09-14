@@ -3229,6 +3229,44 @@ const DB = {
     return this.getExpenses().filter(n => n.employeeId === employeeId);
   },
 
+  // ---- Dossiers de notes de frais (§retour Betty du 14/09/2026, point 5, "note de frais groupée") ----
+
+  getExpenseDossiers() {
+    return (this.getCurrentCompany().expenseDossiers || []).slice();
+  },
+
+  saveExpenseDossiers(list) {
+    const company = this.getCurrentCompany();
+    company.expenseDossiers = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getExpenseDossierById(id) {
+    return this.getExpenseDossiers().find(d => d.id === id) || null;
+  },
+
+  /** Regroupe des notes DÉJÀ EXISTANTES (jamais une création) sous un même dossier/motif — un
+   * déplacement professionnel donne le train, deux repas, une nuit d'hôtel, un taxi : cinq notes
+   * indépendantes jusqu'ici, validées désormais en une fois (voir validerDossierFrais/
+   * refuserDossierFrais). Toutes les notes doivent appartenir au MÊME salarié — un dossier mélangeant
+   * plusieurs salariés n'aurait aucun sens (une seule chaîne de validation, un seul "motif"). */
+  creerDossierFrais(employeeId, motif, expenseIds) {
+    if (!motif || !motif.trim()) return { success: false, error: 'Indiquez un motif pour ce dossier.' };
+    if (!expenseIds || expenseIds.length < 2) return { success: false, error: 'Sélectionnez au moins deux notes à regrouper.' };
+    const expenses = this.getExpenses().filter(e => expenseIds.includes(e.id));
+    if (expenses.length !== expenseIds.length) return { success: false, error: 'Une note sélectionnée n\'est plus disponible.' };
+    if (expenses.some(e => e.employeeId !== employeeId)) return { success: false, error: 'Un dossier ne peut regrouper que les notes d\'un même salarié.' };
+    if (expenses.some(e => e.dossierId)) return { success: false, error: 'Une note sélectionnée appartient déjà à un autre dossier.' };
+
+    const dossier = { id: generateId('dossier'), employeeId, motif: motif.trim(), dateCreation: new Date().toISOString() };
+    this.saveExpenseDossiers([...this.getExpenseDossiers(), dossier]);
+    const list = this.getExpenses().map(e => expenseIds.includes(e.id) ? Object.assign({}, e, { dossierId: dossier.id }) : e);
+    this.saveExpenses(list);
+    this.logAudit('Création', 'Dossier de frais', `${motif.trim()} (${expenseIds.length} notes)`);
+    return { success: true, dossier };
+  },
+
   async addExpense(data) {
     const list = this.getExpenses();
     const now = new Date().toISOString();
@@ -4316,6 +4354,12 @@ const expenseRepository = {
   recalculerIndemnitesKilometriques: (employeeId, annee) => DB.recalculerIndemnitesKilometriques(employeeId, annee)
 };
 
+const expenseDossierRepository = {
+  getAll: () => DB.getExpenseDossiers(),
+  getById: (id) => DB.getExpenseDossierById(id),
+  creer: (employeeId, motif, expenseIds) => DB.creerDossierFrais(employeeId, motif, expenseIds)
+};
+
 const draftRepository = {
   getById: (id) => DB.getBrouillonById(id),
   getForOwner: (ownerId, type) => DB.getBrouillonsForOwner(ownerId, type),
@@ -5047,6 +5091,9 @@ function makeEmptyExpense() {
     tauxTVA: 20,
     kilometrage: null, // { distanceKm, puissanceFiscale } | null — renseigné pour la catégorie "Kilométrique"
     justificatif: null, // { nom, dataUrl } | null
+    // §retour Betty du 14/09/2026 (Notes de frais point 5, "note de frais groupée") : null tant que
+    // cette note n'appartient à aucun dossier — voir expenseDossierRepository/DB.creerDossierFrais.
+    dossierId: null,
     commentaire: '',
     statut: 'En attente', // 'En attente' | 'Remboursé' | 'Refusé' | 'Annulé'
     workflow: [], // ex. ['manager','comptabilite'], copié depuis settings.workflowFrais à la création

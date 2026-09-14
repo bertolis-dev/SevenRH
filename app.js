@@ -11153,7 +11153,7 @@ function getFilteredLeaveRequests(categorie = 'conge') {
 // §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
 // (congés / autres absences partagent la même fonction de rendu mais jamais la même sélection —
 // cocher une ligne "congé" ne doit rien présélectionner en revenant sur l'onglet "autres absences").
-const bulkSelection = { conge: new Set(), autre: new Set() };
+const bulkSelection = { conge: new Set(), autre: new Set(), frais: new Set() };
 
 function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
@@ -15866,7 +15866,7 @@ function renderCategoriesFraisConfigCard(settings) {
       <p class="text-muted">Le plafond déclenche un avertissement à la saisie, jamais un blocage. La TVA déductible reste un simple indicateur, à confirmer avec votre expert-comptable : les règles réelles varient selon la nature exacte de la dépense.</p>
       <div style="overflow-x: auto;">
         <table class="table">
-          <thead><tr><th>Catégorie</th><th>Justificatif obligatoire</th><th>Obligatoire au-delà de (€)</th><th>Plafond, avertissement au-delà de (€)</th><th>TVA déductible</th></tr></thead>
+          <thead><tr><th>Catégorie</th><th>Justificatif obligatoire</th><th>Obligatoire au-delà de (€)</th><th>Plafond, avertissement au-delà de (€)</th><th>TVA déductible</th><th>Forfait (montant fixe, €)</th></tr></thead>
           <tbody>
             ${categories.map(cat => {
               const c = config[cat] || {};
@@ -15877,6 +15877,7 @@ function renderCategoriesFraisConfigCard(settings) {
                   <td><input class="input" type="number" min="0" step="0.01" style="width:110px;" data-cat-seuil-justif="${escapeHtml(cat)}" value="${c.seuilJustificatif != null ? c.seuilJustificatif : ''}" placeholder="Aucun"></td>
                   <td><input class="input" type="number" min="0" step="0.01" style="width:110px;" data-cat-plafond="${escapeHtml(cat)}" value="${c.plafond != null ? c.plafond : ''}" placeholder="Aucun"></td>
                   <td><input type="checkbox" data-cat-tva-deductible="${escapeHtml(cat)}" ${c.tvaDeductible !== false ? 'checked' : ''}></td>
+                  <td><input class="input" type="number" min="0" step="0.01" style="width:110px;" data-cat-forfait="${escapeHtml(cat)}" value="${c.montantForfaitaire != null ? c.montantForfaitaire : ''}" placeholder="Réel" title="Si renseigné, ce montant se pré-remplit automatiquement pour cette catégorie (ex. forfait repas/nuitée) plutôt que de rembourser le réel."></td>
                 </tr>
               `;
             }).join('')}
@@ -16093,6 +16094,12 @@ function bindChipListEvents() {
   }));
   document.querySelectorAll('[data-cat-tva-deductible]').forEach(el => el.addEventListener('change', (e) => {
     updateCategorieFraisConfig(el.dataset.catTvaDeductible, { tvaDeductible: e.target.checked });
+  }));
+  // §retour Betty du 14/09/2026 (Notes de frais point 3, "forfaits journaliers") : réutilise
+  // categoriesFraisConfig plutôt qu'un nouveau réglage séparé — voir updateExpenseMontantForfait,
+  // app.js, qui pré-remplit le montant à la saisie quand cette valeur est renseignée.
+  document.querySelectorAll('[data-cat-forfait]').forEach(el => el.addEventListener('change', (e) => {
+    updateCategorieFraisConfig(el.dataset.catForfait, { montantForfaitaire: e.target.value === '' ? null : Number(e.target.value) });
   }));
 }
 
@@ -19762,11 +19769,13 @@ function renderFrais() {
         ${canValider ? `<button type="button" class="btn btn-secondary" id="btn-frais-a-valider">Voir les notes à valider</button>` : ''}
         ${canExportCongesFraisMoisLeger(user) ? `<button type="button" class="btn btn-secondary" id="btn-export-conges-frais-leger" title="Congés payés, RTT et notes de frais remboursées du mois en cours, sans le module RH">Exporter congés + frais du mois</button>` : ''}
         <button class="btn btn-secondary" id="btn-export-frais">Exporter CSV</button>
+        ${bulkSelection.frais.size >= 2 ? `<button type="button" class="btn btn-secondary" id="btn-regrouper-dossier-frais">Regrouper en dossier (${bulkSelection.frais.size})</button>` : ''}
         <button class="btn btn-primary" id="btn-new-expense">+ Nouvelle note</button>
       </div>
     </div>
 
     ${renderDraftsCard('frais')}
+    ${renderExpenseDossiersCard()}
 
     <div class="toolbar card">
       <select id="frais-filter-employee" class="input">
@@ -19788,7 +19797,7 @@ function renderFrais() {
       ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
         <table class="table mobile-cards">
           <thead>
-            <tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
+            <tr><th></th><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
           </thead>
           <tbody>${pageItems.map(renderExpenseRow).join('')}</tbody>
         </table>
@@ -19823,12 +19832,20 @@ function renderExpenseRow(n) {
         ${canManageRequestFor(n.employeeId, 'frais') ? `<button class="btn-link btn-link-danger" data-cancel-nf="${n.id}">Annuler</button>` : ''}
       ` : '';
 
+  // §retour Betty du 14/09/2026 (Notes de frais point 5, "note de frais groupée") : la case de
+  // sélection n'apparaît que pour une note qu'on peut encore regrouper (en attente, pas déjà dans un
+  // dossier, et modifiable par la personne qui regarde — même portée que "Modifier"/"Annuler").
+  const dossier = n.dossierId ? expenseDossierRepository.getById(n.dossierId) : null;
+  const peutSelectionner = n.statut === 'En attente' && !n.dossierId && canSelfManage;
+  const selection = bulkSelection.frais;
+
   return `
     <tr>
+      <td>${peutSelectionner ? `<input type="checkbox" data-select-frais="${n.id}" data-select-frais-employee="${n.employeeId}" ${selection.has(n.id) ? 'checked' : ''}>` : ''}</td>
       <td class="row-title" data-label="Salarié">${personNameHtml(employee)}</td>
       <td data-label="Date">${formatDate(n.date)}</td>
       <td data-label="Catégorie">${escapeHtml(n.categorie)}</td>
-      <td data-label="Libellé">${escapeHtml(n.libelle)}</td>
+      <td data-label="Libellé">${escapeHtml(n.libelle)}${dossier ? ` <span class="badge badge-info" title="Fait partie du dossier">${icon(ICONS.folder, 10)} ${escapeHtml(dossier.motif)}</span>` : ''}</td>
       <td class="cell-numeric" data-label="Montant TTC">${formatCurrencyFR(n.montantTTC)}</td>
       <td data-label="Statut">${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}</td>
       <td class="table-actions">
@@ -19840,9 +19857,115 @@ function renderExpenseRow(n) {
   `;
 }
 
+/** §retour Betty du 14/09/2026 (Notes de frais point 5) : un dossier avec AU MOINS UNE note déjà
+ * traitée (validée/refusée/annulée) ne propose plus d'action groupée — jamais une double
+ * validation, jamais une action qui écraserait un statut déjà décidé individuellement. */
+function renderExpenseDossiersCard() {
+  const dossiers = expenseDossierRepository.getAll();
+  if (!dossiers.length) return '';
+  const user = authRepository.getCurrentUser();
+  const rows = dossiers.map(d => {
+    const notes = expenseRepository.getAll().filter(n => n.dossierId === d.id);
+    if (!notes.length) return '';
+    const toutesEnAttente = notes.every(n => n.statut === 'En attente');
+    const peutValiderTout = toutesEnAttente && notes.every(n => canActOnRequestFor(n, 'frais'));
+    const peutRefuserTout = toutesEnAttente && notes.every(n => canRefuserRequestFor(n, 'frais'));
+    const total = notes.reduce((sum, n) => sum + n.montantTTC, 0);
+    return `
+      <div class="mini-list-item">
+        <span>${icon(ICONS.folder, 12)} ${escapeHtml(d.motif)} · ${notes.length} note${notes.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)}${!toutesEnAttente ? ' <span class="text-muted">(déjà traité en partie)</span>' : ''}</span>
+        <span class="detail-header-actions">
+          ${peutValiderTout ? `<button type="button" class="btn-link" data-valider-dossier="${d.id}">Valider tout le dossier</button>` : ''}
+          ${peutRefuserTout ? `<button type="button" class="btn-link btn-link-danger" data-refuser-dossier="${d.id}">Refuser tout le dossier</button>` : ''}
+        </span>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  return `<div class="card" style="margin-top: 0; margin-bottom: 16px;"><h2>Dossiers de frais</h2>${rows}</div>`;
+}
+
+function openRegrouperDossierModal() {
+  const employeeId = [...bulkSelection.frais].map(id => expenseRepository.getById(id)).find(Boolean).employeeId;
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Regrouper en dossier</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="dossier-frais-form">
+        <div class="modal-body">
+          <p class="text-muted">${bulkSelection.frais.size} notes sélectionnées seront regroupées et validées en une fois.</p>
+          <div class="form-field">
+            <label for="f-motif-dossier">Motif du dossier *</label>
+            <input class="input" type="text" id="f-motif-dossier" placeholder="Ex. Déplacement client Lyon 12-14 sept." required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Regrouper</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('dossier-frais-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const motif = document.getElementById('f-motif-dossier').value.trim();
+    if (!motif) { showToast('Indiquez un motif.', 'error'); return; }
+    const result = expenseDossierRepository.creer(employeeId, motif, [...bulkSelection.frais]);
+    if (!result.success) { showToast(result.error, 'error'); return; }
+    bulkSelection.frais.clear();
+    showToast('Dossier créé.');
+    closeModal();
+    render();
+  });
+}
+
 function bindFraisEvents() {
   document.getElementById('btn-new-expense').addEventListener('click', () => openExpenseModal());
   document.getElementById('btn-export-frais').addEventListener('click', exportExpensesCSV);
+
+  document.querySelectorAll('[data-select-frais]').forEach(cb => cb.addEventListener('change', (e) => {
+    const id = cb.dataset.selectFrais;
+    const employeeId = cb.dataset.selectFraisEmployee;
+    // §retour Betty du 14/09/2026 : un dossier ne peut regrouper que les notes d'UN SEUL salarié
+    // (voir DB.creerDossierFrais) — cocher une note d'un autre salarié viderait la sélection en
+    // cours plutôt que de créer une sélection mixte qui échouerait silencieusement à la validation.
+    if (bulkSelection.frais.size > 0) {
+      const premiereId = [...bulkSelection.frais][0];
+      const premiereNote = expenseRepository.getById(premiereId);
+      if (premiereNote && premiereNote.employeeId !== employeeId) {
+        showToast('Un dossier ne peut regrouper que les notes d\'un même salarié : sélection réinitialisée.', 'error');
+        bulkSelection.frais.clear();
+      }
+    }
+    if (e.target.checked) bulkSelection.frais.add(id); else bulkSelection.frais.delete(id);
+    render();
+  }));
+  const regrouperBtn = document.getElementById('btn-regrouper-dossier-frais');
+  if (regrouperBtn) regrouperBtn.addEventListener('click', openRegrouperDossierModal);
+  document.querySelectorAll('[data-valider-dossier]').forEach(btn => btn.addEventListener('click', () => {
+    const notes = expenseRepository.getAll().filter(n => n.dossierId === btn.dataset.validerDossier && n.statut === 'En attente');
+    notes.forEach(n => handleApproveExpense(n.id));
+  }));
+  document.querySelectorAll('[data-refuser-dossier]').forEach(btn => btn.addEventListener('click', () => {
+    const notes = expenseRepository.getAll().filter(n => n.dossierId === btn.dataset.refuserDossier && n.statut === 'En attente');
+    openRefuseModal({
+      title: 'Refuser tout le dossier ?',
+      message: `${notes.length} note(s) seront refusées, le salarié sera informé.`,
+      onConfirm: (motif) => {
+        notes.forEach(n => expenseRepository.update(n.id, refuseRequest(n, motif)));
+        auditLogRepository.logAudit('Refus', 'Dossier de frais', `${notes.length} notes`, auditDetailsForActor());
+        showToast('Dossier refusé.');
+        render();
+      }
+    });
+  }));
   const btnExportLeger = document.getElementById('btn-export-conges-frais-leger');
   if (btnExportLeger) btnExportLeger.addEventListener('click', exportCongesFraisMoisCSV);
   bindDraftsCardEvents((draft) => openExpenseModal(undefined, draft));
@@ -20086,6 +20209,10 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
               </select>
             </div>
           </div>
+          <!-- §retour Betty du 14/09/2026 (Notes de frais point 3, "forfaits journaliers") : montant
+               pré-rempli automatiquement quand la catégorie a un forfait configuré (Paramètres),
+               reste modifiable — jamais imposé si le réel diffère légèrement du forfait. -->
+          <p class="text-muted" id="expense-forfait-hint" style="margin-top: 6px;"></p>
 
           <!-- §retour Betty du 11/09/2026 (point 5, "barème paramétrable par motorisation") : la
                puissance fiscale n'a de sens que pour voiture/moto (les cyclomoteurs < 50 cm3 n'ont
@@ -20170,10 +20297,26 @@ function updateExpenseJustificatifLabel() {
 }
 
 function updateExpenseCategoryFields() {
-  const isKm = document.getElementById('f-categorie').value === 'Kilométrique';
+  const categorie = document.getElementById('f-categorie').value;
+  const isKm = categorie === 'Kilométrique';
   document.getElementById('expense-standard-fields').style.display = isKm ? 'none' : 'grid';
   document.getElementById('expense-km-fields').style.display = isKm ? 'grid' : 'none';
   if (isKm) { updateExpensePuissanceFiscaleVisibility(); updateExpenseKmHint(); } else document.getElementById('expense-km-hint').textContent = '';
+
+  // §retour Betty du 14/09/2026 (Notes de frais point 3, "forfaits journaliers, appliqués
+  // automatiquement") : ne remplace jamais une valeur déjà tapée par l'utilisateur, seulement le
+  // champ encore vide — changer de catégorie par erreur après avoir déjà saisi un montant réel ne
+  // doit jamais l'effacer silencieusement.
+  const forfaitHint = document.getElementById('expense-forfait-hint');
+  const settings = settingsRepository.getSettings();
+  const config = (settings.categoriesFraisConfig || {})[categorie];
+  if (!isKm && config && config.montantForfaitaire != null) {
+    const montantField = document.getElementById('f-montantTTC');
+    if (!montantField.value) montantField.value = config.montantForfaitaire;
+    forfaitHint.textContent = `Forfait "${categorie}" : ${formatCurrencyFR(config.montantForfaitaire)} (modifiable si le montant réel diffère).`;
+  } else if (forfaitHint) {
+    forfaitHint.textContent = '';
+  }
 }
 
 /** §retour Betty du 11/09/2026 (point 5, barème paramétrable par motorisation) : un cyclomoteur
