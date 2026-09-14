@@ -568,6 +568,12 @@ const DEFAULT_SETTINGS = {
   // confirmer par votre juriste/DPO avant de s'y fier, exactement comme tauxReposCompensateur
   // ci-dessus pour les sujets paie. Modifiable par entreprise (Paramètres > Listes > Salariés).
   dureeConservationSalariesPartisAnnees: 5,
+  // §retour Betty du 14/09/2026 (Embauche point 3, "conformité") : même principe que
+  // dureeConservationSalariesPartisAnnees ci-dessus, mais pour une candidature RÉSOLUE (embauchée ou
+  // archivée) — voir anonymize_stale_candidatures, 0055_embauche_pipeline_retention.sql. 2 ans =
+  // ordre de grandeur usuel CNIL pour une candidature non retenue, PAS une durée officielle unique —
+  // même réserve que ci-dessus, à faire confirmer par votre juriste/DPO.
+  dureeConservationCandidaturesAnnees: 2,
   // Index de l'égalité professionnelle femmes-hommes (voir DB.enregistrerIndexEgalite) : { [année]:
   // { note, datePublication, mesuresCorrectives } }, une entrée par année civile déclarée.
   indexEgaliteProfessionnelle: {},
@@ -4713,6 +4719,12 @@ const candidatureRepository = {
   getAll: () => window.SupabaseSync.getCandidatures(DB.getCurrentCompany().id),
   marquerEmbauchee: (id, employeeId) => window.SupabaseSync.setCandidatureStatut(id, 'embauchee', employeeId),
   archiver: (id) => window.SupabaseSync.setCandidatureStatut(id, 'archivee', null),
+  // §retour Betty du 14/09/2026 (Embauche point 1, "suivi par étapes réel") : fait avancer une
+  // candidature d'une étape intermédiaire à l'autre (nouvelle → entretien → offre) — jamais vers
+  // embauchee/archivee, qui restent réservées à marquerEmbauchee/reject (chacune a sa propre
+  // conséquence : création de la fiche salarié, ou email au candidat) plutôt qu'un simple changement
+  // de statut silencieux.
+  avancerStatut: (id, statut) => window.SupabaseSync.setCandidatureStatut(id, statut, null),
   getFileUrl: (path) => window.SupabaseSync.getCandidatureFileUrl(path),
   /** "Pas intéressé" (demande du 17/08/2026) : envoie le message par email au candidat PUIS
    * archive — jamais un archivage silencieux (voir candidature-reject, Edge Function/Resend). */

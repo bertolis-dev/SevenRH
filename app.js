@@ -659,6 +659,11 @@ async function populateCandidatureCompanyHeader(companyId) {
     const postesField = document.getElementById('candidature-postes-field');
     if (postesField && info && Array.isArray(info.postesOuverts) && info.postesOuverts.length > 0) {
       const postes = info.postesOuverts.map(normalizePoste);
+      // §retour Betty du 14/09/2026 (Embauche point 2) : venu de la page carrière avec un poste
+      // précis (?poste=...), le candidat n'a pas à le resélectionner — jamais imposé pour autant
+      // (un candidat arrivant directement par le lien de candidature général reste libre de tout
+      // choisir lui-même).
+      const posteParam = new URLSearchParams(window.location.search).get('poste');
       postesField.innerHTML = `
         <div class="form-field">
           <label>Poste(s) souhaité(s)</label>
@@ -670,7 +675,7 @@ async function populateCandidatureCompanyHeader(companyId) {
             <div class="poste-dropdown-panel" id="poste-dropdown-panel">
               ${postes.map((poste, i) => `
                 <label class="poste-dropdown-option">
-                  <input type="checkbox" class="cand-poste-checkbox" value="${escapeHtml(poste.nom)}">
+                  <input type="checkbox" class="cand-poste-checkbox" value="${escapeHtml(poste.nom)}" ${posteParam === poste.nom ? 'checked' : ''}>
                   <span>${escapeHtml(poste.nom)}</span>
                   <span class="text-muted" style="font-size: 12px;">${poste.quantite} poste${poste.quantite > 1 ? 's' : ''} dispo.</span>
                 </label>
@@ -683,6 +688,59 @@ async function populateCandidatureCompanyHeader(companyId) {
     }
   } catch {
     // Repli silencieux sur la marque Nexus déjà affichée — jamais bloquer le formulaire pour ça.
+  }
+}
+
+/** Page carrière publique (§retour Betty du 14/09/2026, Embauche point 2) : liste les postes
+ * ouverts un par un, chacun renvoyant vers le formulaire de candidature déjà existant avec le poste
+ * présélectionné — même écran autonome que renderCandidatureForm (pas de DB.init(), pas de compte),
+ * réutilise get_company_public_info (déjà public, 0027_candidature_postes.sql), aucun nouvel accès
+ * serveur nécessaire. */
+async function renderCarrierePage(companyId) {
+  const root = document.getElementById('candidature-root');
+  document.getElementById('login-root').style.display = 'none';
+  document.getElementById('landing-root').style.display = 'none';
+  root.style.display = 'flex';
+  root.innerHTML = `
+    <div class="login-card">
+      <div class="login-logo" id="carriere-company-header">${NEXUS_LOGO_MARK} Nexus</div>
+      <h1>Nos postes ouverts</h1>
+      <p class="text-muted" id="carriere-postes-intro">Chargement des offres...</p>
+      <div id="carriere-postes-list"></div>
+    </div>
+  `;
+  if (!window.SupabaseSync) {
+    document.getElementById('carriere-postes-intro').textContent = 'Impossible de charger les offres (problème réseau). Rechargez la page.';
+    return;
+  }
+  try {
+    const info = await window.SupabaseSync.getCompanyPublicInfo(companyId);
+    const header = document.getElementById('carriere-company-header');
+    if (header && info && info.raisonSociale) {
+      header.innerHTML = `
+        ${info.logo ? `<img src="${escapeHtml(info.logo)}" alt="${escapeHtml(info.raisonSociale)}" style="max-width: 40px; max-height: 40px; border-radius: var(--radius-sm);">` : ''}
+        <span>${escapeHtml(info.raisonSociale)}</span>
+      `;
+    }
+    const postes = (info && Array.isArray(info.postesOuverts) ? info.postesOuverts : []).map(normalizePoste);
+    const introEl = document.getElementById('carriere-postes-intro');
+    const listEl = document.getElementById('carriere-postes-list');
+    if (!postes.length) {
+      introEl.textContent = 'Aucun poste ouvert au recrutement pour le moment.';
+      return;
+    }
+    introEl.textContent = `${postes.length} poste${postes.length > 1 ? 's' : ''} à pourvoir actuellement.`;
+    listEl.innerHTML = postes.map(poste => `
+      <div class="card" style="text-align: left; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+        <div>
+          <strong>${escapeHtml(poste.nom)}</strong><br>
+          <span class="text-muted" style="font-size: 12px;">${poste.quantite} poste${poste.quantite > 1 ? 's' : ''} disponible${poste.quantite > 1 ? 's' : ''}</span>
+        </div>
+        <a class="btn btn-primary btn-sm" href="?candidature=${encodeURIComponent(companyId)}&poste=${encodeURIComponent(poste.nom)}">Postuler</a>
+      </div>
+    `).join('');
+  } catch {
+    document.getElementById('carriere-postes-intro').textContent = 'Impossible de charger les offres pour le moment.';
   }
 }
 
@@ -788,6 +846,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ni compte, ni entreprise locale, ni SupabaseSync (le dépôt de candidature passe par un simple
   // fetch() vers l'Edge Function, jamais par le client Supabase authentifié). Sortie immédiate pour
   // ne jamais laisser DB.init()/le routage normal s'exécuter sur cette page sans rapport.
+  // Page carrière publique (?carriere=<companyId>, voir renderCarrierePage) : même routage précoce
+  // que la candidature ci-dessous, testée EN PREMIER (une URL ne porte jamais les deux paramètres à
+  // la fois, mais autant garder un ordre explicite).
+  const carriereCompanyId = new URLSearchParams(window.location.search).get('carriere');
+  if (carriereCompanyId) {
+    renderCarrierePage(carriereCompanyId);
+    return;
+  }
   const candidatureCompanyId = new URLSearchParams(window.location.search).get('candidature');
   if (candidatureCompanyId) {
     renderCandidatureForm(candidatureCompanyId);
@@ -16056,6 +16122,11 @@ function renderParametresListes() {
           <p class="form-hint">Passé ce délai après son départ, la fiche d'un salarié est anonymisée automatiquement (jamais supprimée : les compteurs/historiques restent exploitables pour vos rapports, seules les données personnelles identifiantes sont retirées). Valeur par défaut indicative, à faire confirmer par votre juriste/DPO.</p>
         </div>
         <div class="form-field">
+          <label for="f-duree-conservation-candidatures">Durée de conservation des candidatures non retenues (années)</label>
+          <input class="input" type="number" min="1" step="1" id="f-duree-conservation-candidatures" value="${escapeHtml(settings.dureeConservationCandidaturesAnnees)}">
+          <p class="form-hint">Passé ce délai après la décision (embauche ou refus), la candidature est anonymisée automatiquement (CV/lettre non conservés). 2 ans = ordre de grandeur usuel CNIL, à faire confirmer par votre juriste/DPO.</p>
+        </div>
+        <div class="form-field">
           <label for="f-delai-prevenance-documents">Alerte de renouvellement des documents (jours avant échéance)</label>
           <input class="input" type="number" min="1" step="1" id="f-delai-prevenance-documents" value="${escapeHtml(settings.delaiPrevenanceDocumentsJours)}">
           <p class="form-hint">S'applique à tout document ayant une date d'expiration (permis, habilitation, autorisation de conduite, visite médicale, titre de séjour...).</p>
@@ -16304,6 +16375,7 @@ function bindParametresListesEvents() {
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
   bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
+  bindNumberField('f-duree-conservation-candidatures', 'dureeConservationCandidaturesAnnees', 2, 'Durée de conservation mise à jour.');
   bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
   bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
   bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
@@ -22308,13 +22380,30 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
 // Vue : Embauche (QR code de candidature)
 // ---------------------------------------------------------------------------
 
-const CANDIDATURE_STATUT_LABELS = { nouvelle: 'Nouvelle', embauchee: 'Embauchée', archivee: 'Archivée' };
-const CANDIDATURE_STATUT_BADGE_CLASS = { nouvelle: 'badge-info', embauchee: 'badge-success', archivee: 'badge-muted' };
+// §retour Betty du 14/09/2026 (Embauche point 1, "suivi par étapes réel") : deux étapes
+// intermédiaires ajoutées entre le dépôt et la décision finale (voir set_candidature_statut,
+// 0055_embauche_pipeline_retention.sql) — reste volontairement un pipeline SIMPLE, pas un ATS
+// complet (scoring, entretiens multiples...), cohérent avec l'analyse concurrentielle du 14/08/2026.
+const CANDIDATURE_STATUT_LABELS = { nouvelle: 'Nouvelle', entretien: 'Entretien', offre: 'Offre', embauchee: 'Embauchée', archivee: 'Archivée' };
+const CANDIDATURE_STATUT_BADGE_CLASS = { nouvelle: 'badge-info', entretien: 'badge-warning', offre: 'badge-warning', embauchee: 'badge-success', archivee: 'badge-muted' };
+// nouvelle → entretien → offre : un simple changement de statut, réversible en un clic. offre →
+// embauchee/archivee n'apparaît jamais ici : ces deux transitions ont une vraie conséquence
+// (création de la fiche salarié, email au candidat) et passent par leurs propres boutons dédiés
+// dans le détail de la candidature (Embaucher / Pas intéressé), jamais un simple "avancer".
+const CANDIDATURE_STATUT_NEXT = { nouvelle: 'entretien', entretien: 'offre' };
 
 /** URL publique de candidature pour cette entreprise — ?candidature=<companyId>, détecté tout en
  * haut de DOMContentLoaded (avant même DB.init()) pour router vers renderCandidatureForm(). */
 function candidatureUrlForCompany(companyId) {
   return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}?candidature=${encodeURIComponent(companyId)}`;
+}
+
+/** §retour Betty du 14/09/2026 (Embauche point 2, "page carrière publique") : jusqu'ici, aucune
+ * page ne listait les postes ouverts — seul le formulaire de candidature existait (avec les postes
+ * en simples cases à cocher). Cette page liste les postes un par un et renvoie vers ce même
+ * formulaire, avec le poste déjà présélectionné (voir ?poste= ci-dessous et renderCandidatureForm). */
+function carriereUrlForCompany(companyId) {
+  return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}?carriere=${encodeURIComponent(companyId)}`;
 }
 
 /** §demande 18/08/2026 : chaque poste ouvert porte désormais un nombre de places disponibles, pas
@@ -22399,6 +22488,7 @@ function renderEmbauche() {
   const company = companyRepository.getCurrent();
   const settings = settingsRepository.getSettings();
   const url = candidatureUrlForCompany(company.id);
+  const carriereUrl = carriereUrlForCompany(company.id);
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
@@ -22412,11 +22502,19 @@ function renderEmbauche() {
     <div class="card" style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
       <div style="flex-shrink: 0; line-height: 0;">${qrSvg}</div>
       <div style="flex: 1; min-width: 240px;">
-        <p class="text-muted" style="margin-bottom: 8px;">Lien de candidature</p>
+        <p class="text-muted" style="margin-bottom: 8px;">Lien de candidature directe (un seul poste, ou libre)</p>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <input type="text" class="input" id="embauche-link" value="${escapeHtml(url)}" readonly style="flex: 1; min-width: 0;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-share-embauche-link">${icon(ICONS.link, 13)} Partager</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-embauche-link">Copier</button>
+        </div>
+        <!-- §retour Betty du 14/09/2026 (Embauche point 2, "page carrière publique") : lien distinct
+             du précédent — celui-ci liste les postes un par un (voir renderCarrierePage), pensé pour
+             être partagé sur un site web/réseau social plutôt qu'affiché en QR à l'accueil. -->
+        <p class="text-muted" style="margin: 12px 0 8px;">Page carrière publique (liste des postes ouverts)</p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <input type="text" class="input" id="carriere-link" value="${escapeHtml(carriereUrl)}" readonly style="flex: 1; min-width: 0;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-carriere-link">Copier</button>
         </div>
       </div>
     </div>
@@ -22428,24 +22526,41 @@ function renderEmbauche() {
   `;
 }
 
-function renderCandidaturesTable(candidatures) {
-  if (!candidatures.length) return '<p class="text-muted">Aucune candidature reçue pour le moment.</p>';
+/** Une colonne par étape (même patron que renderIdees/idees-board) — le clic sur la carte ouvre le
+ * détail complet (CV, message...), le bouton "→ étape suivante" évite cet aller-retour pour le cas
+ * courant d'un simple changement de statut. */
+function renderCandidatureCard(c) {
+  const nextStatut = CANDIDATURE_STATUT_NEXT[c.statut];
   return `
-    <table class="table">
-      <thead><tr><th>Candidat</th><th>Contact</th><th>Poste(s)</th><th>Reçue le</th><th>Statut</th><th></th></tr></thead>
-      <tbody>
-        ${candidatures.map(c => `
-          <tr>
-            <td>${personNameHtml(c)}</td>
-            <td>${escapeHtml(c.email)}${c.telephone ? `<br><span class="text-muted">${escapeHtml(c.telephone)}</span>` : ''}</td>
-            <td>${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '<span class="text-muted">—</span>'}</td>
-            <td>${formatDate(c.dateSoumission)}</td>
-            <td><span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[c.statut] || 'badge-muted'}">${escapeHtml(CANDIDATURE_STATUT_LABELS[c.statut] || c.statut)}</span></td>
-            <td><button type="button" class="btn btn-secondary btn-sm" data-voir-candidature="${escapeHtml(c.id)}">Voir</button></td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
+    <div class="idee-card" data-open-candidature="${escapeHtml(c.id)}">
+      <div class="idee-card-title">${personNameHtml(c)}</div>
+      <div class="idee-card-meta">
+        <span class="text-muted">${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '—'} · ${formatDate(c.dateSoumission)}</span>
+      </div>
+      ${nextStatut ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" data-avancer-candidature="${escapeHtml(c.id)}" data-next-statut="${nextStatut}">→ ${escapeHtml(CANDIDATURE_STATUT_LABELS[nextStatut])}</button>` : ''}
+    </div>
+  `;
+}
+
+function renderCandidaturesBoard(candidatures) {
+  if (!candidatures.length) return '<p class="text-muted">Aucune candidature reçue pour le moment.</p>';
+  const columns = Object.keys(CANDIDATURE_STATUT_LABELS).map(statut => ({
+    statut,
+    label: CANDIDATURE_STATUT_LABELS[statut],
+    items: candidatures.filter(c => c.statut === statut)
+  }));
+  return `
+    <div class="idees-board">
+      ${columns.map(col => `
+        <div class="idees-column">
+          <div class="idees-column-header">
+            <span>${escapeHtml(col.label)}</span>
+            <span class="badge ${CANDIDATURE_STATUT_BADGE_CLASS[col.statut] || 'badge-muted'}">${col.items.length}</span>
+          </div>
+          ${col.items.length === 0 ? '<p class="text-muted" style="font-size:13px; margin:0;">Aucune candidature</p>' : col.items.map(renderCandidatureCard).join('')}
+        </div>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -22454,9 +22569,25 @@ async function refreshEmbaucheCandidaturesList() {
   if (!listEl) return;
   try {
     const candidatures = await candidatureRepository.getAll();
-    listEl.innerHTML = renderCandidaturesTable(candidatures);
-    document.querySelectorAll('[data-voir-candidature]').forEach(btn => {
-      btn.addEventListener('click', () => navigateTo('candidature-detail', { currentCandidatureId: btn.dataset.voirCandidature }));
+    listEl.innerHTML = renderCandidaturesBoard(candidatures);
+    document.querySelectorAll('[data-open-candidature]').forEach(card => {
+      card.addEventListener('click', (evt) => {
+        if (evt.target.closest('[data-avancer-candidature]')) return;
+        navigateTo('candidature-detail', { currentCandidatureId: card.dataset.openCandidature });
+      });
+    });
+    document.querySelectorAll('[data-avancer-candidature]').forEach(btn => {
+      btn.addEventListener('click', async (evt) => {
+        evt.stopPropagation();
+        btn.disabled = true;
+        try {
+          await candidatureRepository.avancerStatut(btn.dataset.avancerCandidature, btn.dataset.nextStatut);
+          refreshEmbaucheCandidaturesList();
+        } catch (err) {
+          showToast(err.message || 'Impossible de changer le statut.', 'error');
+          btn.disabled = false;
+        }
+      });
     });
   } catch (err) {
     listEl.innerHTML = '<p class="text-muted">Impossible de charger les candidatures.</p>';
@@ -22495,6 +22626,17 @@ function bindEmbaucheEvents() {
       showToast('Lien copié.');
     } catch {
       showToast('Impossible de partager automatiquement, copiez le lien manuellement.', 'error');
+    }
+  });
+  const copyCarriereBtn = document.getElementById('btn-copy-carriere-link');
+  if (copyCarriereBtn) copyCarriereBtn.addEventListener('click', async () => {
+    const link = document.getElementById('carriere-link');
+    try {
+      await navigator.clipboard.writeText(link.value);
+      showToast('Lien copié.');
+    } catch {
+      link.select();
+      showToast('Sélectionnez et copiez le lien manuellement.', 'error');
     }
   });
   bindPostesOuvertsEvents();
@@ -22571,7 +22713,7 @@ async function bindCandidatureDetailEvents(id) {
           <p style="white-space: pre-wrap;">${escapeHtml(candidature.lettreTexte)}</p>
         </div>
       ` : ''}
-      ${candidature.statut === 'nouvelle' ? `
+      ${['nouvelle', 'entretien', 'offre'].includes(candidature.statut) ? `
         <div class="detail-header-actions" style="margin-top: 20px;">
           <button type="button" class="btn btn-primary" id="btn-embaucher-candidature">Embaucher</button>
           <button type="button" class="btn btn-secondary" id="btn-pas-interesse-candidature">Pas intéressé</button>
@@ -22582,12 +22724,9 @@ async function bindCandidatureDetailEvents(id) {
 
   const embaucherBtn = document.getElementById('btn-embaucher-candidature');
   if (embaucherBtn) embaucherBtn.addEventListener('click', () => {
-    openEmployeeModal(null, {
-      nom: candidature.nom,
-      prenom: candidature.prenom,
-      email: candidature.email,
-      telephone: candidature.telephone
-    }, candidature.id);
+    // cvUrl n'est PAS un champ du formulaire salarié : juste transmis pour afficher un accès rapide
+    // au CV pendant la saisie, sans devoir rouvrir cet onglet en parallèle.
+    openEmployeeModal(null, candidatureToEmployeePrefill(candidature), candidature.id, cvUrl);
   });
 
   const pasInteresseBtn = document.getElementById('btn-pas-interesse-candidature');
@@ -22675,11 +22814,26 @@ function bindFormSummaryNav() {
   });
 }
 
+/** §retour Betty du 14/09/2026 (Embauche point 4, "candidat → salarié sans ressaisie") : le poste
+ * souhaité par le candidat pré-remplit directement le poste de la fiche salarié (premier poste
+ * choisi s'il y en a plusieurs — un seul poste par salarié dans Nexus). Extraite en fonction pure
+ * (plutôt qu'un objet construit inline dans le handler de clic) pour rester testable sans DOM, même
+ * principe que getObjectifsReconduits. */
+function candidatureToEmployeePrefill(candidature) {
+  return {
+    nom: candidature.nom,
+    prenom: candidature.prenom,
+    email: candidature.email,
+    telephone: candidature.telephone,
+    poste: (candidature.postes || [])[0] || ''
+  };
+}
+
 /** prefill/candidatureId (voir bindEmbaucheEvents) : pré-remplit un NOUVEAU salarié depuis une
  * candidature reçue par QR code — jamais utilisé en édition (isEdit). candidatureId est juste
  * transmis jusqu'à submitEmployeeForm pour marquer la candidature "embauchée" une fois le salarié
  * réellement créé, sans dupliquer la logique de création elle-même. */
-function openEmployeeModal(id, prefill, candidatureId) {
+function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   const isEdit = Boolean(id);
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   if (isEdit && !employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
@@ -22706,6 +22860,7 @@ function openEmployeeModal(id, prefill, candidatureId) {
       </div>
       <form id="employee-form">
         <div class="modal-body">
+          ${candidatureId && cvUrl ? `<p class="text-muted" style="margin-top:0;">Créé depuis une candidature — <button type="button" class="btn-link" onclick="window.open('${cvUrl}', '_blank', 'noopener')">voir le CV</button> pendant la saisie.</p>` : ''}
           ${renderEmployeeFormSummary(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
           <fieldset class="form-section" id="employee-form-section-identite">
             <legend>Identité</legend>

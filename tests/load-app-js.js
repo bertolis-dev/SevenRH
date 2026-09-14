@@ -71,6 +71,10 @@ function loadAppJs() {
 
   const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl };
   sandbox.window = sandbox;
+  // Minimal, mutable par un test qui a besoin d'un autre chemin/paramètre (ex. ?poste=...) — voir
+  // candidatureUrlForCompany/carriereUrlForCompany/renderCarrierePage (app.js), seules fonctions de
+  // ce bac à sable à lire window.location jusqu'ici.
+  sandbox.location = { origin: 'https://nexus-rh.com', pathname: '/index.html', search: '' };
   sandbox.addEventListener = () => {};
   sandbox.removeEventListener = () => {};
   sandbox.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
@@ -98,6 +102,8 @@ globalThis.__computeDureeTravailleeMinutes = computeDureeTravailleeMinutes;
 globalThis.__calculerCoutEmployeurComplet = calculerCoutEmployeurComplet;
 globalThis.__revisionSalarialeRepository = revisionSalarialeRepository;
 globalThis.__settingsRepository = settingsRepository;
+globalThis.__candidatureRepository = candidatureRepository;
+globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -284,6 +290,14 @@ globalThis.__openLancerRevisionSalarialeModal = openLancerRevisionSalarialeModal
 globalThis.__openProposerRevisionModal = openProposerRevisionModal;
 globalThis.__renderConfidentialEmployeeCard = renderConfidentialEmployeeCard;
 globalThis.__REVISION_STATUT_LABELS = REVISION_STATUT_LABELS;
+globalThis.__CANDIDATURE_STATUT_LABELS = CANDIDATURE_STATUT_LABELS;
+globalThis.__CANDIDATURE_STATUT_NEXT = CANDIDATURE_STATUT_NEXT;
+globalThis.__renderCandidaturesBoard = renderCandidaturesBoard;
+globalThis.__renderCandidatureCard = renderCandidatureCard;
+globalThis.__candidatureToEmployeePrefill = candidatureToEmployeePrefill;
+globalThis.__renderCarrierePage = renderCarrierePage;
+globalThis.__carriereUrlForCompany = carriereUrlForCompany;
+globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -317,6 +331,8 @@ globalThis.__REVISION_STATUT_LABELS = REVISION_STATUT_LABELS;
     calculerCoutEmployeurComplet: sandbox.__calculerCoutEmployeurComplet,
     revisionSalarialeRepository: sandbox.__revisionSalarialeRepository,
     settingsRepository: sandbox.__settingsRepository,
+    candidatureRepository: sandbox.__candidatureRepository,
+    DEFAULT_SETTINGS: sandbox.__DEFAULT_SETTINGS,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,
@@ -478,6 +494,14 @@ globalThis.__REVISION_STATUT_LABELS = REVISION_STATUT_LABELS;
     openProposerRevisionModal: sandbox.__openProposerRevisionModal,
     renderConfidentialEmployeeCard: sandbox.__renderConfidentialEmployeeCard,
     REVISION_STATUT_LABELS: sandbox.__REVISION_STATUT_LABELS,
+    CANDIDATURE_STATUT_LABELS: sandbox.__CANDIDATURE_STATUT_LABELS,
+    CANDIDATURE_STATUT_NEXT: sandbox.__CANDIDATURE_STATUT_NEXT,
+    renderCandidaturesBoard: sandbox.__renderCandidaturesBoard,
+    renderCandidatureCard: sandbox.__renderCandidatureCard,
+    candidatureToEmployeePrefill: sandbox.__candidatureToEmployeePrefill,
+    renderCarrierePage: sandbox.__renderCarrierePage,
+    carriereUrlForCompany: sandbox.__carriereUrlForCompany,
+    candidatureUrlForCompany: sandbox.__candidatureUrlForCompany,
     getStatusForDate: sandbox.__getStatusForDate,
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,
