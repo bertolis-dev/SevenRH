@@ -2072,6 +2072,10 @@ const DB = {
       this.saveCurrentCompany(company);
       this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
     }
+    // §retour Betty du 16/09/2026 : triée à la LECTURE (jamais persistée triée) — reste correcte
+    // quel que soit l'ordre déjà enregistré pour une entreprise existante, sans dépendre d'un
+    // rattrapage "une seule fois par entreprise" comme les deux corrections ci-dessus.
+    settings.conventionsCollectives = sortConventionsCollectivesParIdcc(settings.conventionsCollectives);
     return settings;
   },
 
@@ -6258,6 +6262,24 @@ const CONVENTION_COLLECTIVE_RULES = {
 function getConventionCollectiveIdccCode(conventionCollectiveLabel) {
   const match = (conventionCollectiveLabel || '').match(/IDCC\s*(\d+)/i);
   return match ? match[1] : null;
+}
+
+/** §retour Betty du 16/09/2026 ("trier les conventions collectives par numéro d'IDCC") : tri
+ * croissant par numéro — "Aucune" et toute convention personnalisée sans numéro (jamais formatée
+ * "Nom (IDCC XXXX)", voir formatConventionCollective) vont en fin de liste, dans leur ordre
+ * d'origine entre elles (tri stable). Appliqué à la lecture (DB.getSettings) plutôt que sur
+ * DEFAULT_SETTINGS.conventionsCollectives lui-même : une entreprise dont la liste est déjà
+ * persistée dans un autre ordre (voir le rattrapage juste après) doit aussi en profiter, pas
+ * seulement les nouvelles entreprises. */
+function sortConventionsCollectivesParIdcc(list) {
+  return list.slice().sort((a, b) => {
+    const codeA = Number(getConventionCollectiveIdccCode(a));
+    const codeB = Number(getConventionCollectiveIdccCode(b));
+    if (!codeA && !codeB) return 0;
+    if (!codeA) return 1;
+    if (!codeB) return -1;
+    return codeA - codeB;
+  });
 }
 
 function getConventionCollectiveCongesAncienneteBonus(employee, leaveType, refDate) {
