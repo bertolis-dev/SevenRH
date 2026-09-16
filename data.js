@@ -2697,7 +2697,34 @@ const DB = {
   // ---- Types de congés (paramétrables) ----
 
   getLeaveTypes() {
-    return this.getCurrentCompany().leaveTypes.slice().sort((a, b) => a.ordre - b.ordre);
+    const company = this.getCurrentCompany();
+    // §retour Betty du 16/09/2026 (légende du Calendrier entreprise, "tu vas mettre dans
+    // exceptionnel") : les congés liés à un événement familial rare (mariage, décès, naissance,
+    // enfant malade, annonce de handicap) avaient chacun leur propre couleur — trop de teintes
+    // différentes dans la légende pour des types peu fréquents. Recolorés une seule fois sur la
+    // couleur du type "Exceptionnel" déjà existant (jamais réappliqué ensuite, pour ne jamais
+    // écraser un choix de couleur refait depuis Paramètres > Types de congés après ce jour).
+    // Marqueur posé directement sur `company` (jamais sur settings/getSettings, appelé par de
+    // nombreux tests existants sans mock SupabaseSync — passer par lui ici casserait leur appel à
+    // getLeaveTypes(), jusqu'ici toujours sans effet de bord réseau).
+    if (company && !company.couleursEvenementsFamiliauxUnifiees) {
+      const types = company.leaveTypes || [];
+      const exceptionnel = types.find(t => leaveTypeNameMatches(t.nom, 'Exceptionnel'));
+      const nomsAUnifier = ['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Naissance / adoption'];
+      let changed = false;
+      if (exceptionnel) {
+        types.forEach(t => {
+          if (nomsAUnifier.some(nom => leaveTypeNameMatches(t.nom, nom)) && t.couleur !== exceptionnel.couleur) {
+            t.couleur = exceptionnel.couleur;
+            changed = true;
+          }
+        });
+      }
+      company.couleursEvenementsFamiliauxUnifiees = true;
+      if (changed) this.saveLeaveTypes(types); // persiste + pousse vers Supabase (couvre aussi le marqueur, même objet company)
+      else this.saveCurrentCompany(company); // rien à recolorer : seul le marqueur doit être persisté, en local (jamais de push réseau ici)
+    }
+    return company.leaveTypes.slice().sort((a, b) => a.ordre - b.ordre);
   },
 
   saveLeaveTypes(list) {
@@ -7117,14 +7144,18 @@ function seedLeaveTypes() {
     ['RTT', '⏱️', '#7c3aed', 12, 'Mensuelle', true, false, ['manager'], 'conge'],
     ['Ancienneté', '🎖️', '#0891b2', 0, 'Annuelle', true, false, ['manager'], 'autre'],
     ['Maladie', '🌡️', '#16a34a', 0, 'Illimitée', false, true, ['rh'], 'autre'],
-    ['Mariage / PACS', '💍', '#db2777', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
-    ['Mariage d\'un enfant', '💍', '#db2777', 1, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
-    ['Décès', '🕊️', '#4b5563', 3, 'Annuelle', true, true, ['rh'], 'autre'],
-    ['Décès d\'un enfant', '🕊️', '#4b5563', 12, 'Annuelle', true, true, ['rh'], 'autre'],
-    ['Annonce de handicap ou maladie grave d\'un enfant', '🎗️', '#dc2626', 10, 'Annuelle', true, true, ['rh'], 'autre'],
-    ['Enfant malade', '🤒', '#f59e0b', 3, 'Annuelle', false, true, ['manager'], 'autre'],
+    // §retour Betty du 16/09/2026 (légende du Calendrier entreprise) : ces 7 types d'événements
+    // familiaux, tous rares, partagent désormais la couleur du type "Exceptionnel" ci-dessous
+    // (#d97706) plutôt qu'une teinte chacun — moins de couleurs différentes dans la légende. Les
+    // entreprises déjà créées sont recolorées une seule fois par DB.getLeaveTypes() ci-dessus.
+    ['Mariage / PACS', '💍', '#d97706', 4, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
+    ['Mariage d\'un enfant', '💍', '#d97706', 1, 'Annuelle', true, true, ['manager', 'rh'], 'autre'],
+    ['Décès', '🕊️', '#d97706', 3, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Décès d\'un enfant', '🕊️', '#d97706', 12, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Annonce de handicap ou maladie grave d\'un enfant', '🎗️', '#d97706', 10, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Enfant malade', '🤒', '#d97706', 3, 'Annuelle', false, true, ['manager'], 'autre'],
     ['Formation', '📚', '#059669', 5, 'Annuelle', true, false, ['manager', 'rh'], 'autre'],
-    ['Naissance / adoption', '👶', '#ec4899', 3, 'Annuelle', true, true, ['rh'], 'autre'],
+    ['Naissance / adoption', '👶', '#d97706', 3, 'Annuelle', true, true, ['rh'], 'autre'],
     ['Proche aidant', '🤝', '#8b5cf6', 0, 'Illimitée', false, true, ['rh'], 'autre'],
     ['Sans solde', '🚫', '#6b7280', 0, 'Illimitée', false, false, ['manager', 'proprietaire'], 'autre'],
     ['Exceptionnel', '⭐', '#d97706', 3, 'Annuelle', true, false, ['rh'], 'autre']
