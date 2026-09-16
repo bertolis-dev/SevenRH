@@ -3389,6 +3389,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-employee-slider { max-width: 420px; margin: 0 auto 28px; text-align: center; }
 .landing-employee-slider label { display: block; font-size: 13.5px; font-weight: 600; color: var(--color-text-muted); margin-bottom: 10px; }
 .landing-employee-slider-row { display: flex; align-items: center; gap: 14px; }
+.landing-employee-slider-hint { margin: 10px 0 0; font-size: 12.5px; }
 .landing-employee-slider-row input[type="range"] {
   flex: 1;
   height: 6px;

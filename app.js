@@ -1461,28 +1461,31 @@ const LANDING_FEATURES = [
  * le compositeur (renderAlacarteBuilderSection/computeAlacarteTotal), distinct du curseur d'effectif
  * général. Décision du 14/08/2026 : copier ce point précis du système Lucca, pas leur opacité
  * tarifaire au-delà de 100 salariés (jugée contraire à la transparence déjà actée pour Nexus). */
-// §retour Betty du 16/09/2026 ("baisser un peu les prix de 10%") : baissé UNIQUEMENT ici (l'affichage
-// du site — simulateur public + composeur d'abonnement) — Stripe facture d'après des Price déjà créés
-// séparément (price_... codés en dur, supabase/functions/billing/index.ts), jamais recalculés depuis
-// ce tableau. Tant que ces Price Stripe ne sont pas eux-mêmes recréés à -10% (accès Dashboard Stripe
-// que je n'ai pas) et leurs nouveaux price_... reportés dans billing/index.ts, le montant RÉELLEMENT
-// prélevé à la création d'un compte reste celui d'AVANT cette baisse — décalage entre le prix annoncé
-// ici et le prix facturé, signalé à Betty, jamais résolu silencieusement.
+/** unite: comme Lucca, tous les modules ne se facturent pas sur la même base — la plupart par
+ * salarié/mois, mais Notes de frais par DÉCLARANT/mois (seuls les salariés qui déposent vraiment des
+ * notes de frais comptent, pas tout l'effectif) — voir le champ dédié "combien de déclarants ?" dans
+ * le compositeur (renderAlacarteBuilderSection/computeAlacarteTotal), distinct du curseur d'effectif
+ * général. Décision du 14/08/2026 : copier ce point précis du système Lucca, pas leur opacité
+ * tarifaire au-delà de 100 salariés (jugée contraire à la transparence déjà actée pour Nexus).
+ * §retour Betty du 16/09/2026 : la baisse de -10% testée plus tôt dans la journée a été abandonnée
+ * (prix redevenus ceux d'origine) — demande finale : laisser choisir, PAR MODULE, le nombre de
+ * salariés concernés (comme Notes de frais/déclarants ci-dessus, désormais généralisé à tous les
+ * modules) plutôt que d'appliquer aveuglément l'effectif total à chacun. Voir effectifParDefaut. */
 const LANDING_ALACARTE_MODULES = [
-  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.61, unite: 'salarié' }, // NAV_ITEMS: absences + calendrier
-  { key: 'planning', label: 'Planning, télétravail', prix: 1.89, unite: 'salarié' }, // NAV_ITEMS: planning + (télétravail dans absences)
-  { key: 'frais', label: 'Notes de frais', prix: 4.68, unite: 'déclarant' }, // NAV_ITEMS: frais
-  { key: 'tickets', label: 'Tickets restaurant', prix: 0.86, unite: 'salarié' }, // NAV_ITEMS: tickets
-  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 5.85, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
-  { key: 'remuneration', label: 'Rémunération', prix: 1.35, unite: 'salarié' }, // NAV_ITEMS: remuneration
-  { key: 'entretiens', label: 'Entretiens', prix: 1.71, unite: 'salarié' }, // NAV_ITEMS: entretiens
-  { key: 'embauche', label: 'Embauche', prix: 1.71, unite: 'salarié' }, // NAV_ITEMS: embauche
+  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.90, unite: 'salarié' }, // NAV_ITEMS: absences + calendrier
+  { key: 'planning', label: 'Planning, télétravail', prix: 2.10, unite: 'salarié' }, // NAV_ITEMS: planning + (télétravail dans absences)
+  { key: 'frais', label: 'Notes de frais', prix: 5.20, unite: 'déclarant' }, // NAV_ITEMS: frais
+  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95, unite: 'salarié' }, // NAV_ITEMS: tickets
+  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
+  { key: 'remuneration', label: 'Rémunération', prix: 1.50, unite: 'salarié' }, // NAV_ITEMS: remuneration
+  { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: entretiens
+  { key: 'embauche', label: 'Embauche', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: embauche
   // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR fixe (un par établissement,
   // scanné depuis l'app, voir NAV_ITEMS "Pointeuse" et renderPointeuse). Prix À CONFIRMER PAR BETTY
   // — placé ici à titre indicatif (entre "Tickets restaurant" et "Planning"), à ajuster librement
   // dans ce tableau, seul endroit à changer pour le prix (repris automatiquement par le composeur
   // à la carte ET la page publique, voir LANDING_FEATURES pour le descriptif marketing).
-  { key: 'pointage', label: 'Pointeuse QR (arrivée/départ)', prix: 1.35, unite: 'salarié' } // NAV_ITEMS: pointeuse
+  { key: 'pointage', label: 'Pointeuse QR (arrivée/départ)', prix: 1.50, unite: 'salarié' } // NAV_ITEMS: pointeuse
 ];
 
 const ABOUT_CATEGORIES = [
@@ -2101,6 +2104,11 @@ function renderLandingScreen() {
             <input type="range" id="landing-employee-count" min="1" max="150" value="10" step="1">
             <span class="landing-employee-count-value" id="landing-employee-count-value">10 salariés</span>
           </div>
+          <!-- §retour Betty du 16/09/2026 ("choisir pour chaque module le nombre de personnes qui
+               l'auront") : chaque module a maintenant son propre effectif ci-dessous — cet effectif
+               global ne sert plus qu'à préremplir un module qu'on n'a pas encore ajusté et à calculer
+               la remise volume (basée sur la taille réelle de l'entreprise, pas sur un module précis). -->
+          <p class="text-muted landing-employee-slider-hint">Sert de point de départ pour chaque module ci-dessous, et calcule la remise volume : ajustez librement l'effectif de chaque module s'il diffère.</p>
         </div>
         <div class="landing-pricing-toggle">
           <div class="tabs">
@@ -2117,12 +2125,14 @@ function renderLandingScreen() {
                   <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
                   <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ ${escapeHtml(m.unite)} / mois</span></span>
                 </label>
-                ${m.unite === 'déclarant' ? `
-                  <div class="alacarte-module-unit-count">
-                    <label for="alacarte-count-${m.key}">Combien de salariés déposent des notes de frais ?</label>
-                    <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 10}">
-                  </div>
-                ` : ''}
+                <!-- §retour Betty du 16/09/2026 : ce champ existait déjà pour Notes de frais
+                     (facturé par déclarant, jamais tout l'effectif) — généralisé à CHAQUE module,
+                     certaines entreprises n'ayant par exemple que quelques managers sur Entretiens
+                     ou seulement l'équipe RH sur Embauche, jamais tout le monde. -->
+                <div class="alacarte-module-unit-count">
+                  <label for="alacarte-count-${m.key}">${m.unite === 'déclarant' ? 'Combien de salariés déposent des notes de frais ?' : `Combien de salariés auront "${escapeHtml(m.label)}" ?`}</label>
+                  <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 10}">
+                </div>
               </div>
             `).join('')}
           </div>
@@ -2305,28 +2315,24 @@ function getAlacarteVolumeDiscount(employeeCount) {
 }
 
 /** Estimation volontairement simplifiée (comme le simulateur tickets restaurant) — somme des prix
- * unitaires des modules cochés × nombre de salariés, remise volume appliquée, ×10 en annuel (2 mois
- * offerts, même convention que le reste du site). Ne pilote AUCUNE facturation réelle (voir la note
- * affichée sous le total et le commentaire sur LANDING_ALACARTE_MODULES) — Stripe reste branché sur
- * OFFRE_TARIFS tant que le vrai verrouillage par module n'est pas construit. */
+ * unitaires des modules cochés × effectif propre à CHAQUE module (voir data-count-for/
+ * alacarte-count-input, généralisé le 16/09/2026 à tous les modules — plus seulement Notes de
+ * frais/déclarants), remise volume appliquée sur l'effectif global de l'entreprise, ×10 en annuel
+ * (2 mois offerts, même convention que le reste du site). Ne pilote AUCUNE facturation réelle (voir
+ * la note affichée sous le total et le commentaire sur LANDING_ALACARTE_MODULES) — Stripe reste
+ * branché sur OFFRE_TARIFS tant que le vrai verrouillage par module n'est pas construit. */
 function computeAlacarteTotal() {
   const totalEl = document.getElementById('alacarte-total');
   if (!totalEl) return;
   const employeeCount = Math.max(1, parseInt(document.getElementById('landing-employee-count')?.value, 10) || 1);
   const periodicite = state.landingPeriodicite === 'annuel' ? 'annuel' : 'mensuel';
-  // Comme Lucca : un module "déclarant" (Notes de frais) se facture sur son propre effectif de
-  // déclarants, jamais sur le nombre total de salariés — voir data-count-for/alacarte-count-input.
   let monthlyTotal = 0;
   document.querySelectorAll('.alacarte-module-checkbox').forEach(cb => {
     if (!cb.checked) return;
     const prix = parseFloat(cb.dataset.modulePrice) || 0;
-    if (cb.dataset.moduleUnite === 'déclarant') {
-      const countInput = document.getElementById(`alacarte-count-${cb.dataset.moduleKey}`);
-      const count = Math.max(0, parseInt(countInput?.value, 10) || 0);
-      monthlyTotal += prix * count;
-    } else {
-      monthlyTotal += prix * employeeCount;
-    }
+    const countInput = document.getElementById(`alacarte-count-${cb.dataset.moduleKey}`);
+    const count = Math.max(0, parseInt(countInput?.value, 10) || 0);
+    monthlyTotal += prix * count;
   });
 
   const tier = getAlacarteVolumeDiscount(employeeCount);

@@ -116,6 +116,9 @@ globalThis.__render = render;
 globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__LANDING_ALACARTE_MODULES = LANDING_ALACARTE_MODULES;
+globalThis.__renderLandingScreen = renderLandingScreen;
+globalThis.__computeAlacarteTotal = computeAlacarteTotal;
+globalThis.__bindLandingScreenEvents = bindLandingScreenEvents;
 globalThis.__renderPointeuse = renderPointeuse;
 globalThis.__renderPointeuseEquipe = renderPointeuseEquipe;
 globalThis.__openRegulariserPointageModal = openRegulariserPointageModal;
@@ -363,6 +366,9 @@ globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard
     state: sandbox.__state,
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     LANDING_ALACARTE_MODULES: sandbox.__LANDING_ALACARTE_MODULES,
+    renderLandingScreen: sandbox.__renderLandingScreen,
+    computeAlacarteTotal: sandbox.__computeAlacarteTotal,
+    bindLandingScreenEvents: sandbox.__bindLandingScreenEvents,
     renderPointeuse: sandbox.__renderPointeuse,
     renderPointeuseEquipe: sandbox.__renderPointeuseEquipe,
     openRegulariserPointageModal: sandbox.__openRegulariserPointageModal,
