@@ -77,8 +77,48 @@ async function runPreviewEtImport() {
   console.log('OK — import-historique-absences-14-09.test.js (aperçu + import : seules les lignes valides créent une demande Validé, sans workflow)');
 }
 
+async function runChevauchement() {
+  // §retour audit du 16/09/2026 : les autres chemins de création (submitLeaveRequestForm) passent
+  // toujours par hasActiveRequestOverlap avant d'enregistrer — l'import en masse l'avait oublié,
+  // permettant à deux lignes chevauchantes de fausser le solde consommé par double comptage.
+  const { DB, sandbox, employeeRepository, leaveTypeRepository, leaveRepository, guessAbsencesColumnMapping, buildAbsencesPreviewRows, importAbsencesRows } = loadAppJs();
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+
+  const employee = employeeRepository.getAll().find(e => !e.archive);
+  const type = leaveTypeRepository.getLeaveTypes().find(t => t.categorie === 'conge' && t.nom === 'Congés payés');
+
+  // Une demande active existe déjà pour cet employé sur cette période.
+  const list = DB.getLeaveRequests();
+  list.push({
+    id: 'lr-existante', employeeId: employee.id, typeId: type.id, statut: 'Validé', workflow: [],
+    dateDebut: '2026-07-01', dateFin: '2026-07-05', nbJours: 5, historique: [], dateCreation: new Date().toISOString(), dateModification: new Date().toISOString()
+  });
+  DB.saveLeaveRequests(list);
+
+  const headers = ['Matricule', 'Type', 'Date début', 'Date fin'];
+  const mapping = guessAbsencesColumnMapping(headers);
+  const dataRows = [
+    [employee.matricule, 'Congés payés', '03/07/2026', '04/07/2026'], // chevauche la demande existante
+    [employee.matricule, 'Congés payés', '10/08/2026', '12/08/2026'], // ligne valide, isolée
+    [employee.matricule, 'Congés payés', '11/08/2026', '11/08/2026']  // chevauche la ligne précédente DU MÊME fichier
+  ];
+  const preview = buildAbsencesPreviewRows(dataRows, mapping, 'conge');
+  assert.strictEqual(preview[0].status, 'error', 'une ligne qui chevauche une demande déjà existante doit être rejetée');
+  assert.match(preview[0].message, /Chevauche/);
+  assert.strictEqual(preview[1].status, 'ok', 'une ligne isolée, sans aucun chevauchement, reste acceptée');
+  assert.strictEqual(preview[2].status, 'error', 'une ligne qui chevauche une AUTRE ligne du même fichier doit aussi être rejetée');
+  assert.match(preview[2].message, /Chevauche/);
+
+  const results = importAbsencesRows(preview);
+  assert.strictEqual(results.created, 1, 'seule la ligne réellement isolée doit créer une demande');
+
+  console.log('OK — import-historique-absences-14-09.test.js (chevauchement : rejeté contre une demande existante ET contre une autre ligne du même fichier)');
+}
+
 runMapping()
   .then(runPreviewEtImport)
+  .then(runChevauchement)
   .catch((err) => {
     console.error('ÉCHEC — import-historique-absences-14-09.test.js');
     console.error(err.stack || err.message);

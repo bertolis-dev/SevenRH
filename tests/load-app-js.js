@@ -104,6 +104,7 @@ globalThis.__revisionSalarialeRepository = revisionSalarialeRepository;
 globalThis.__settingsRepository = settingsRepository;
 globalThis.__candidatureRepository = candidatureRepository;
 globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
+globalThis.__formatCurrencyFR = formatCurrencyFR;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -354,6 +355,7 @@ globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard
     settingsRepository: sandbox.__settingsRepository,
     candidatureRepository: sandbox.__candidatureRepository,
     DEFAULT_SETTINGS: sandbox.__DEFAULT_SETTINGS,
+    formatCurrencyFR: sandbox.__formatCurrencyFR,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,

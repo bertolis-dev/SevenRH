@@ -1170,7 +1170,16 @@ function fusionnerModeleDocument(corps, valeurs) {
 function computeShiftHeures(shift) {
   const [dh, dm] = shift.heureDebut.split(':').map(Number);
   const [fh, fm] = shift.heureFin.split(':').map(Number);
-  const minutes = Math.max(0, (fh * 60 + fm) - (dh * 60 + dm) - (shift.pauseMinutes || 0));
+  const debut = dh * 60 + dm;
+  let fin = fh * 60 + fm;
+  // §correctif audit du 16/09/2026 : un quart de nuit à cheval sur deux jours (ex. 22:00-06:00) a
+  // une heure de fin plus PETITE que l'heure de début en minutes brutes — sans ce report sur le
+  // jour suivant, Math.max(0, ...) ramenait sa durée à 0, le rendant invisible du coût du planning
+  // (calculerCoutShifts) et des contrôles légaux (durée max quotidienne/hebdomadaire). Strictement
+  // `<` (jamais `<=`) : début === fin reste le garde-fou "durée nulle" déjà établi (voir
+  // planning-postes-10-09.test.js), pas un quart de 24h.
+  if (fin < debut) fin += 24 * 60;
+  const minutes = Math.max(0, fin - debut - (shift.pauseMinutes || 0));
   return round2(minutes / 60);
 }
 
@@ -2544,11 +2553,16 @@ const DB = {
     const token = generateId('pqr');
     try {
       await window.SupabaseSync.regeneratePointageTokenRemote(etablissementId, token);
+      return { success: true, token };
     } catch (err) {
+      // §correctif audit du 16/09/2026 : le rappel ci-dessous affiche déjà un toast d'erreur, mais
+      // l'appelant (openPointageQrModalContent, app.js) affichait ENSUITE "Secret régénéré." sans
+      // condition — l'utilisateur voyait les deux messages contradictoires et croyait le secret
+      // régénéré alors que l'ancien (potentiellement fuité, raison même du bouton) reste valide.
       console.error('Synchronisation du secret de pointage vers le serveur impossible.', err);
       if (this.onSaveError) this.onSaveError('Le secret n\'a pas pu être régénéré côté serveur. Réessayez, ou contactez votre RH si ça persiste.');
+      return { success: false, token: null };
     }
-    return token;
   },
 
   /** Un scan bascule entre arrivée et départ pour LA MÊME journée : s'il existe déjà un pointage
@@ -3447,6 +3461,13 @@ const DB = {
     if (!ligne) return { success: false, error: 'Ligne introuvable.' };
     if (ligne.statut === 'rapproche') return { success: false, error: 'Cette ligne est déjà rapprochée.' };
     if (!expenseId) return { success: false, error: 'Choisissez une note de frais.' };
+    // §correctif audit du 16/09/2026 : contrairement à rapprocherAutomatiquement (qui suit un Set
+    // dejaRapprochees pendant SA propre passe), rien n'empêchait jusqu'ici de rapprocher manuellement
+    // la MÊME note de frais à deux lignes de relevé différentes (deux choix successifs, ou deux
+    // onglets) — double comptage silencieux.
+    if (releves.some(l => l.statut === 'rapproche' && l.expenseId === expenseId)) {
+      return { success: false, error: 'Cette note de frais est déjà rapprochée à une autre ligne du relevé.' };
+    }
     ligne.statut = 'rapproche';
     ligne.expenseId = expenseId;
     this.saveRelevesBancaires(releves);

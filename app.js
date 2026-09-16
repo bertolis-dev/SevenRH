@@ -7895,6 +7895,13 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const settings = settingsRepository.getSettings();
+  // §retour audit du 16/09/2026 : les autres chemins de création (submitLeaveRequestForm) passent
+  // TOUJOURS par hasActiveRequestOverlap avant d'enregistrer — l'import en masse l'avait oublié,
+  // laissant deux lignes chevauchantes (entre elles, ou avec une demande déjà existante) toutes les
+  // deux passer en Validé, fausser getQuotasForEmployee par double comptage. Même helper, jamais
+  // dupliqué/réécrit différemment ici.
+  const existingActive = leaveRepository.getAll().filter(r => r.statut !== 'Refusé' && r.statut !== 'Annulé');
+  const acceptedInFile = [];
   const findEmployee = (value) => {
     if (!value) return null;
     const norm = normalizeForSearch(value);
@@ -7912,7 +7919,13 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     const typeValue = get(mapping.type);
     const type = findType(typeValue);
     const dateDebut = parseImportDate(get(mapping.dateDebut));
-    const dateFin = parseImportDate(get(mapping.dateFin)) || dateDebut;
+    // §correctif audit du 16/09/2026 : une cellule Date fin VIDE reste un raccourci valide pour une
+    // absence d'un seul jour (repli sur dateDebut) — mais une cellule NON vide qui échoue à parser
+    // (typo, format non reconnu) doit rester une vraie erreur, jamais silencieusement confondue avec
+    // le cas "vide" par un simple `|| dateDebut` qui ne distinguait pas les deux.
+    const dateFinRaw = get(mapping.dateFin);
+    const dateFinParsed = parseImportDate(dateFinRaw);
+    const dateFin = dateFinRaw ? dateFinParsed : dateDebut;
     const commentaire = get(mapping.commentaire);
     let status = 'ok', message = '', nbJours = 0;
     if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
@@ -7920,12 +7933,18 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     else if (!typeValue) { status = 'error'; message = 'Type de congé manquant.'; }
     else if (!type) { status = 'error'; message = `Type "${typeValue}" introuvable parmi les types existants.`; }
     else if (!dateDebut) { status = 'error'; message = 'Date de début manquante ou invalide.'; }
+    else if (dateFinRaw && !dateFinParsed) { status = 'error'; message = 'Date de fin invalide (format non reconnu).'; }
     else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
     else if (dateFin < dateDebut) { status = 'error'; message = 'La date de fin est avant la date de début.'; }
     else {
       nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settings, type.uniteDecompte);
       if (!nbJours) { status = 'error'; message = 'Aucun jour ouvré sur cette période (jours fériés/week-end uniquement).'; }
+      else if (hasActiveRequestOverlap(existingActive, employee.id, dateDebut, dateFin) || hasActiveRequestOverlap(acceptedInFile, employee.id, dateDebut, dateFin)) {
+        status = 'error';
+        message = 'Chevauche une absence déjà existante ou une autre ligne de ce fichier pour ce salarié.';
+      }
     }
+    if (status === 'ok') acceptedInFile.push({ id: `import-${i}`, employeeId: employee.id, dateDebut, dateFin });
     return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, commentaire, nbJours, status, message };
   });
 }
@@ -9606,7 +9625,10 @@ function openGererTramesModal() {
 function resolvePopulationEmployeeIds(population) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   if (population === 'managers') return employees.filter(e => e.role === 'manager').map(e => e.id);
-  if (population === 'cadres') return employees.filter(e => (e.statutPro || '').toLowerCase().includes('cadre')).map(e => e.id);
+  // §correctif audit du 16/09/2026 : `.includes('cadre')` incluait aussi "Non cadre" (le sous-texte
+  // contient bien "cadre") — comparaison EXACTE (comme getEffectiveCategorieSalarieId, data.js)
+  // plutôt qu'une sous-chaîne, pour ne jamais mélanger les deux catégories opposées.
+  if (population === 'cadres') return employees.filter(e => normalizeForSearch(e.statutPro || '') === 'cadre').map(e => e.id);
   return employees.map(e => e.id);
 }
 
@@ -11380,7 +11402,11 @@ function openRegistreUniquePersonnelModal() {
                     <td>${escapeHtml(e.poste || '—')}</td>
                     <td>${escapeHtml(e.typeContrat)}</td>
                     <td>${formatDate(e.dateEmbauche)}</td>
-                    <td>${e.archive ? (e.dateFinContrat ? formatDate(e.dateFinContrat) : 'Parti(e) — date non précisée') : '—'}</td>
+                    <!-- §correctif audit du 16/09/2026 : affichait dateFinContrat (n'a de sens que
+                         pour un CDD/Intérim) au lieu de dateDepart (la vraie date de sortie, quel
+                         que soit le type de contrat) — incohérent avec renderParametresRegistrePersonnel
+                         (Paramètres > Référentiels), qui utilise déjà dateDepart pour cette même colonne. -->
+                    <td>${e.dateDepart ? formatDate(e.dateDepart) : '—'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -16118,7 +16144,7 @@ async function refreshPointageQrModalContent(etablissementId, premiereOuverture)
   let code;
   try {
     code = await window.SupabaseSync.getPointageQrCode(etablissementId);
-  } catch (err) {
+  } catch {
     if (!premiereOuverture) return true; // coupure réseau passagère en arrière-plan : le prochain rafraîchissement réessaiera, jamais remplacer un QR encore affiché par une erreur.
     // Premier affichage jamais régénéré pour cet établissement (secret pas encore initialisé) :
     // régénère puis réessaie une seule fois, même geste qu'avant ce correctif.
@@ -16176,7 +16202,8 @@ function renderPointageQrModalContent(etab, code) {
       confirmLabel: 'Régénérer',
       danger: true,
       onConfirm: async () => {
-        await etablissementRepository.regenererPointageToken(etab.id);
+        const result = await etablissementRepository.regenererPointageToken(etab.id);
+        if (!result.success) return; // le toast d'erreur est déjà affiché par onSaveError (data.js)
         showToast('Secret régénéré.');
         refreshPointageQrModalContent(etab.id, true);
       }
@@ -16730,7 +16757,12 @@ function bindParametresListesEvents() {
     if (!el) return;
     el.addEventListener('change', (e) => {
       const settings = settingsRepository.getSettings();
-      settings[settingKey] = Number(e.target.value) || fallback;
+      // §correctif audit du 16/09/2026 : `Number(e.target.value) || fallback` remplaçait
+      // silencieusement un 0 saisi intentionnellement (ex. délai de prévenance à 0 jour) par le
+      // défaut du champ, 0 étant falsy en JS — le repli ne doit jouer que sur une saisie réellement
+      // vide ou invalide, jamais sur un 0 explicite.
+      const parsed = Number(e.target.value);
+      settings[settingKey] = e.target.value !== '' && Number.isFinite(parsed) ? parsed : fallback;
       settingsRepository.saveSettings(settings);
       showToast(toastMsg);
     });
@@ -19009,7 +19041,12 @@ function renderPlanningPostes() {
  * réaffectation avant la validation manager — voir DB.traiterEchangeShift. */
 function renderShiftSwapCard(user, employeesVisibles) {
   const canManage = hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
-  const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé');
+  // §correctif audit du 16/09/2026 : employeesVisibles était reçu mais jamais utilisé — un manager
+  // dont la portée est restreinte à sa propre équipe (getVisibleEmployeeIdsForCurrentUser) voyait ET
+  // pouvait valider/refuser des échanges de créneaux entre salariés d'AUTRES équipes, hors de son
+  // autorité (peutTraiter ne vérifie qu'une permission globale, jamais la portée d'équipe).
+  const visibleIds = new Set(employeesVisibles.map(e => e.id));
+  const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé' && visibleIds.has(r.employeeId));
   if (!requests.length) return '';
   const nomDe = (id) => { const e = employeeRepository.getById(id); return e ? `${e.prenom} ${e.nom}` : '—'; };
   const describeShift = (shiftId) => {
@@ -20899,7 +20936,14 @@ function bindFraisEvents() {
       title: 'Refuser tout le dossier ?',
       message: `${notes.length} note(s) seront refusées, le salarié sera informé.`,
       onConfirm: (motif) => {
-        notes.forEach(n => expenseRepository.update(n.id, refuseRequest(n, motif)));
+        notes.forEach(n => {
+          expenseRepository.update(n.id, refuseRequest(n, motif));
+          // §correctif audit du 16/09/2026 : ce chemin groupé contournait handleRefuseExpense (le
+          // seul qui recalculait jusqu'ici), oubliant le recalcul du barème kilométrique sur les
+          // notes du dossier — même correctif que handleRefuseExpense/handleCancelExpense
+          // ("vrai défaut de paiement", 07-11/09/2026).
+          if (n.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(n.employeeId, (n.date || '').slice(0, 4));
+        });
         auditLogRepository.logAudit('Refus', 'Dossier de frais', `${notes.length} notes`, auditDetailsForActor());
         showToast('Dossier refusé.');
         render();
@@ -21141,7 +21185,11 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
           </div>
 
           <div class="form-grid" id="expense-standard-fields" style="margin-top: 14px;">
-            ${textField('montantTTC', 'Montant TTC (€)', champs.montantTTC || '', false, 'number')}
+            <!-- §correctif audit du 16/09/2026 : un repli sur chaîne vide effaçait un montant
+                 existant valant explicitement 0 (note à 0€), 0 étant falsy — ce champ vide
+                 déclenchait ensuite le pré-remplissage forfaitaire (voir updateExpenseCategoryFields)
+                 qui écrasait silencieusement le vrai 0 saisi par l'utilisateur. -->
+            ${textField('montantTTC', 'Montant TTC (€)', champs.montantTTC != null ? champs.montantTTC : '', false, 'number')}
             <div class="form-field">
               <label for="f-tauxTVA">Taux de TVA</label>
               <select class="input" id="f-tauxTVA" name="tauxTVA">
@@ -22354,7 +22402,17 @@ function renderRemuneration() {
   const nonRenseignes = employees.filter(e => !(e.salaireBrutMensuel > 0));
   const total = renseignes.reduce((sum, e) => sum + e.salaireBrutMensuel, 0);
   const moyenne = renseignes.length ? total / renseignes.length : 0;
-  const mediane = renseignes.length ? renseignes[Math.floor(renseignes.length / 2)].salaireBrutMensuel : 0;
+  // §correctif audit du 16/09/2026 : sur un effectif pair, la médiane est la MOYENNE des deux
+  // valeurs centrales, jamais l'une des deux prise seule (renseignes[n/2] sur un tri descendant
+  // pointait systématiquement vers la plus basse des deux, sous-évaluant le KPI).
+  const mediane = (() => {
+    const n = renseignes.length;
+    if (!n) return 0;
+    const mid = Math.floor(n / 2);
+    return n % 2 === 0
+      ? round2((renseignes[mid - 1].salaireBrutMensuel + renseignes[mid].salaireBrutMensuel) / 2)
+      : renseignes[mid].salaireBrutMensuel;
+  })();
 
   return `
     <div class="view-header">
@@ -23487,15 +23545,20 @@ function openProposerCreneauxModal(candidature) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('proposer-creneaux-form').addEventListener('submit', async (evt) => {
     evt.preventDefault();
-    const creneaux = lignes
+    const lignesCompletes = lignes
       .map(i => ({
         date: document.getElementById(`f-creneau-date-${i}`).value,
         heureDebut: document.getElementById(`f-creneau-debut-${i}`).value,
         heureFin: document.getElementById(`f-creneau-fin-${i}`).value
       }))
-      .filter(l => l.date && l.heureDebut && l.heureFin)
-      .map(l => buildCreneauPropose(l.date, l.heureDebut, l.heureFin));
-    if (!creneaux.length) { showToast('Renseignez au moins un créneau complet.', 'error'); return; }
+      .filter(l => l.date && l.heureDebut && l.heureFin);
+    if (!lignesCompletes.length) { showToast('Renseignez au moins un créneau complet.', 'error'); return; }
+    // §correctif audit du 16/09/2026 : aucun contrôle jusqu'ici sur une date déjà passée ou une
+    // heure de fin avant l'heure de début — un créneau invalide partait tel quel vers le candidat.
+    const today = toISODate(new Date());
+    if (lignesCompletes.some(l => l.date < today)) { showToast('Un créneau ne peut pas être proposé à une date déjà passée.', 'error'); return; }
+    if (lignesCompletes.some(l => l.heureFin <= l.heureDebut)) { showToast('L\'heure de fin doit être après l\'heure de début.', 'error'); return; }
+    const creneaux = lignesCompletes.map(l => buildCreneauPropose(l.date, l.heureDebut, l.heureFin));
     try {
       await candidatureRepository.proposerCreneaux(candidature.id, creneaux);
     } catch {
