@@ -325,6 +325,10 @@ globalThis.__buildEvaluationRecord = buildEvaluationRecord;
 globalThis.__computeEvaluationMoyenne = computeEvaluationMoyenne;
 globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
 globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
+globalThis.__buildExcelXmlWorkbook = buildExcelXmlWorkbook;
+globalThis.__excelColumnWidths = excelColumnWidths;
+globalThis.__excelXmlCell = excelXmlCell;
+globalThis.__excelXmlEscape = excelXmlEscape;
 globalThis.__renderParametresAbonnement = renderParametresAbonnement;
 globalThis.__renderAbonnementAlaCarteComposer = renderAbonnementAlaCarteComposer;
 globalThis.__renderAbonnementAlaCarteActif = renderAbonnementAlaCarteActif;
@@ -575,6 +579,10 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
     computeAbonnementAlacarteTotal: sandbox.__computeAbonnementAlacarteTotal,
     bindParametresAbonnementEvents: sandbox.__bindParametresAbonnementEvents,
+    buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
+    excelColumnWidths: sandbox.__excelColumnWidths,
+    excelXmlCell: sandbox.__excelXmlCell,
+    excelXmlEscape: sandbox.__excelXmlEscape,
   };
 }
 

@@ -20564,8 +20564,84 @@ function downloadJSONFile(data, filename) {
   URL.revokeObjectURL(url);
 }
 
+/** §retour Betty du 16/09/2026 : "fais des tableaux plus propre bien espacé" — un CSV brut ouvert
+ * dans Excel garde les colonnes à leur largeur par défaut (texte tronqué/collé), sans distinguer
+ * l'en-tête des données. Ces exports n'ayant vocation qu'à être lus/imprimés dans Excel (jamais
+ * réimportés dans un logiciel tiers, à la différence de l'export paie — voir EXPORT_PAIE_MODELES,
+ * exportRowsToCSVWithDelimiter, qui reste un vrai CSV délimité), on génère à la place un classeur au
+ * format XML natif Excel (SpreadsheetML, .xls) : colonnes déjà larges, en-tête mis en évidence,
+ * bordures légères — sans dépendance externe (juste du XML texte, aucune bibliothèque de zip/xlsx
+ * nécessaire, à la différence du format .xlsx moderne). */
+function excelXmlEscape(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function excelXmlCell(value) {
+  const isNumber = typeof value === 'number' && Number.isFinite(value);
+  const text = neutralizeCsvFormulaInjection(value === null || value === undefined ? '' : String(value));
+  if (!text) return '<Cell ss:StyleID="cell"/>';
+  return `<Cell ss:StyleID="cell"><Data ss:Type="${isNumber ? 'Number' : 'String'}">${excelXmlEscape(text)}</Data></Cell>`;
+}
+
+function excelColumnWidths(headers, rows) {
+  return headers.map((header, colIndex) => {
+    let maxLen = String(header).length;
+    rows.forEach(row => {
+      const value = row[colIndex];
+      const len = String(value === null || value === undefined ? '' : value).length;
+      if (len > maxLen) maxLen = len;
+    });
+    return Math.min(320, Math.max(70, (maxLen + 2) * 7));
+  });
+}
+
+function buildExcelXmlWorkbook(headers, rows, sheetName) {
+  const columnsXml = excelColumnWidths(headers, rows).map(w => `<Column ss:Width="${w}"/>`).join('');
+  const headerRowXml = `<Row ss:Height="20">${headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${excelXmlEscape(neutralizeCsvFormulaInjection(String(h)))}</Data></Cell>`).join('')}</Row>`;
+  const dataRowsXml = rows.map(row => `<Row>${headers.map((_, i) => excelXmlCell(row[i])).join('')}</Row>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#1F3B57" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/></Borders>
+  </Style>
+  <Style ss:ID="cell">
+   <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="${excelXmlEscape(sheetName)}">
+  <Table>${columnsXml}${headerRowXml}${dataRowsXml}</Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
+}
+
+/** Comme downloadJSONFile : sans le BOM de downloadTextFile, inutile ici (l'encodage est déclaré
+ * dans la déclaration XML elle-même) et risqué avant une déclaration <?xml ...?> qui doit rester en
+ * tout premier caractère du fichier. */
+function downloadExcelXmlFile(xml, filename) {
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function exportRowsToCSV(headers, rows, filename) {
-  exportRowsToCSVWithDelimiter(headers, rows, filename, ';');
+  const xlsFilename = filename.replace(/\.csv$/i, '.xls');
+  const sheetName = xlsFilename.replace(/\.xls$/i, '').replace(/[:\\/?*[\]]/g, ' ').slice(0, 31) || 'Feuille1';
+  downloadExcelXmlFile(buildExcelXmlWorkbook(headers, rows, sheetName), xlsFilename);
 }
 
 // ---------------------------------------------------------------------------
