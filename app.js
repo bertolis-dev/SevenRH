@@ -10334,7 +10334,7 @@ function renderEmployeeDetail(id) {
         ${infoRow('Poste', e.poste)}
         ${infoRow('Manager(s)', managerNames(e.managerIds))}
         ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
-        ${canSeeContractuel ? infoRow('Statut professionnel', e.statutPro) : ''}
+        ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
         ${infoRow('Type de contrat', e.typeContrat)}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
@@ -11247,7 +11247,7 @@ function openEmployeePrintModal(id) {
           ${infoRow('Poste', e.poste)}
           ${infoRow('Manager(s)', managerNames(e.managerIds))}
           ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
-          ${canSeeContractuel ? infoRow('Statut professionnel', e.statutPro) : ''}
+          ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
           ${infoRow('Type de contrat', e.typeContrat)}
           ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
           ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}

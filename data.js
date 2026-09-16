@@ -251,6 +251,11 @@ const _categoriesSalarieMigratedCompanyIds = new Set();
 // évite de retenter l'écriture à chaque lecture une fois la liste déjà complétée cette session.
 const _conventionsCollectivesMigratedCompanyIds = new Set();
 
+// §retour Betty du 16/09/2026 ("le statut « cadre » n'apparaît pas dans la liste déroulante",
+// malgré le correctif du 27/08/2026 déjà en place) — même principe que les deux Sets ci-dessus,
+// pour le rattrapage du socle standard de catégories de salarié (voir DB.getSettings()).
+const _categoriesSalarieBaseMigratedCompanyIds = new Set();
+
 /** Catalogue des conventions collectives françaises avec leur code IDCC (Identifiant De Convention
  * Collective), sourcé du wiki travail-industrie.com (lui-même dérivé des brochures JORF/Légifrance)
  * — la liste officielle complète du Ministère du Travail dépasse 700 entrées, dont une grande partie
@@ -2015,6 +2020,24 @@ const DB = {
     if (company && !settings.categoriesSalarie.length && !_categoriesSalarieMigratedCompanyIds.has(company.id)) {
       _categoriesSalarieMigratedCompanyIds.add(company.id);
       settings.categoriesSalarie = deriveCategoriesSalarieFromStatutPro(this.getEmployees());
+      company.settings = settings;
+      this.saveCurrentCompany(company);
+      this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
+    }
+    // §retour Betty du 16/09/2026 : le correctif ci-dessus ne rattrape que les entreprises dont
+    // categoriesSalarie était encore VIDE au moment de la lecture — une entreprise déjà migrée
+    // AVANT le correctif du 27/08/2026 (qui, lui, ne partait que des statutPro déjà en usage à
+    // l'époque) est restée figée avec une liste incomplète pour toujours, sans jamais rattraper le
+    // socle standard ajouté depuis. Même principe de réunion que conventionsCollectives ci-dessus :
+    // les statuts standards (DEFAULT_SETTINGS.statutsPro) sont TOUJOURS présents, une catégorie
+    // personnalisée déjà ajoutée par l'entreprise n'est jamais retirée ni réordonnée.
+    if (company && settings.categoriesSalarie.length && DEFAULT_SETTINGS.statutsPro.some(nom => !settings.categoriesSalarie.some(c => c.nom === nom)) && !_categoriesSalarieBaseMigratedCompanyIds.has(company.id)) {
+      _categoriesSalarieBaseMigratedCompanyIds.add(company.id);
+      const manquants = DEFAULT_SETTINGS.statutsPro.filter(nom => !settings.categoriesSalarie.some(c => c.nom === nom));
+      settings.categoriesSalarie = [
+        ...settings.categoriesSalarie,
+        ...manquants.map((nom, i) => ({ id: generateId('cat'), nom, description: '', ordre: settings.categoriesSalarie.length + i }))
+      ];
       company.settings = settings;
       this.saveCurrentCompany(company);
       this._pushInBackground(window.SupabaseSync.pushSettings(company.id, settings), { kind: 'blob', blob: 'settings', companyId: company.id });
