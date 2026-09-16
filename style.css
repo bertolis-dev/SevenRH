@@ -2002,13 +2002,22 @@ textarea.input { resize: vertical; font-family: inherit; }
  * potentiellement beaucoup de lignes (salariés) ; sans repère fixe, on perd de vue à qui/quel jour
  * correspond une cellule dès qu'on scrolle. `max-height` borne la carte pour que le scroll ait lieu
  * DANS la carte (donc que `position: sticky` ait un vrai ancêtre défilant) plutôt que sur la page. */
-.planning-scroll-card { max-height: 70vh; overflow: auto; }
+.planning-scroll-card { max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
 
+/* §correctif retour Betty du 16/09/2026 ("les jours se superposent quand je descends", confirmé
+ * sur l'application PC) : une cellule `position: sticky` n'est pas toujours placée sur son propre
+ * calque graphique pendant le défilement — surtout à un zoom d'affichage Windows non entier
+ * (125 %/150 %, très courant) — et peut alors "traîner" d'un instant, laissant transparaître ce qui
+ * défile juste dessous avant de se replacer pile au bon pixel. `translateZ(0)` force ce calque dédié
+ * (compositing GPU), correctif standard pour ce type de décalage, quel que soit le navigateur ou le
+ * zoom — jamais de changement de mise en page, juste un rendu plus précis pendant le scroll. */
 .planning-scroll-card .planning-table thead th {
   position: sticky;
   top: 0;
   background: var(--color-surface);
   z-index: 3;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .planning-scroll-card .planning-table th:first-child,
@@ -2017,6 +2026,8 @@ textarea.input { resize: vertical; font-family: inherit; }
   left: 0;
   background: var(--color-surface);
   z-index: 2;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* La cellule d'angle (coin haut-gauche) doit rester au-dessus des deux autres groupes de cellules sticky. */
