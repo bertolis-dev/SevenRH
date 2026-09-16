@@ -8245,6 +8245,24 @@ function openImportSalariesModal() {
   }
 }
 
+/** §retour Betty du 16/09/2026 ("il y a des endroits qui sont coupés... bien espacé aussi") :
+ * XLSX.utils.aoa_to_sheet donne à chaque colonne la même largeur par défaut, quel que soit son
+ * contenu — un email ou un intitulé de poste un peu long s'affiche tronqué à l'ouverture. Calcule à
+ * la place une largeur ("wch", nombre de caractères — convention SheetJS) proportionnelle au
+ * contenu réel de chaque colonne. Partagé par tous les exports XLSX (voir loadXLSXLibrary) :
+ * Salariés, Calendrier des absences. */
+function computeSheetColumnWidths(headers, rows) {
+  return headers.map((header, colIndex) => {
+    let maxLen = String(header).length;
+    rows.forEach(row => {
+      const value = row[colIndex];
+      const len = String(value === null || value === undefined ? '' : value).length;
+      if (len > maxLen) maxLen = len;
+    });
+    return { wch: Math.min(48, Math.max(8, maxLen + 2)) };
+  });
+}
+
 async function exportEmployeesExcel() {
   try {
     await loadXLSXLibrary();
@@ -8260,6 +8278,7 @@ async function exportEmployeesExcel() {
     e.typeContrat, formatDate(e.dateEmbauche), calculateAnciennete(e.dateEmbauche), e.statut
   ]);
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  sheet['!cols'] = computeSheetColumnWidths(headers, rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, 'Salariés');
   XLSX.writeFile(workbook, 'salaries.xlsx');
@@ -14473,6 +14492,7 @@ async function exportAbsenceCalendarExcel() {
   });
 
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  sheet['!cols'] = computeSheetColumnWidths(headers, rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, 'Calendrier');
   const monthSlug = `${year}-${String(month + 1).padStart(2, '0')}`;

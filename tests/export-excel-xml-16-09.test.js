@@ -59,6 +59,36 @@ async function runEchappementEtProtectionFormule() {
   console.log('OK — export-excel-xml-16-09.test.js (échappement XML et protection anti-formule préservés)');
 }
 
+async function runLargeursSheetJSSuiventLeContenu() {
+  const { computeSheetColumnWidths } = loadAppJs();
+  const headers = ['Matricule', 'Email'];
+  const rows = [
+    ['2024-0001', 'antoine.bernard@exemple-entreprise-avec-un-nom-long.fr'],
+    ['2022-0003', 'clara@ex.fr'],
+  ];
+  const widths = computeSheetColumnWidths(headers, rows);
+  assert.strictEqual(widths.length, 2);
+  widths.forEach(w => assert.ok(typeof w.wch === 'number', 'chaque colonne doit porter une largeur "wch" (convention SheetJS), pas une largeur par défaut identique pour toutes'));
+  assert.ok(widths[1].wch > widths[0].wch, 'la colonne Email (contenu plus long) doit être plus large que Matricule, sinon le texte reste tronqué à l\'ouverture');
+  assert.ok(widths[0].wch >= 8, 'même une colonne courte garde une largeur minimale lisible');
+
+  console.log('OK — export-excel-xml-16-09.test.js (colonnes XLSX (Salariés/Calendrier) dimensionnées au contenu, plus de texte coupé)');
+}
+
+async function runExportsXLSXAppliquentLesLargeurs() {
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+
+  const employeesFnStart = appSource.indexOf('async function exportEmployeesExcel(');
+  const employeesFnBody = appSource.slice(employeesFnStart, employeesFnStart + 900);
+  assert.ok(employeesFnBody.includes("sheet['!cols'] = computeSheetColumnWidths"), 'exportEmployeesExcel (liste des salariés) doit fixer une largeur de colonne par contenu, sinon Email/Poste/Service restent tronqués comme signalé par Betty');
+
+  const calendarFnStart = appSource.indexOf('async function exportAbsenceCalendarExcel(');
+  const calendarFnBody = appSource.slice(calendarFnStart, calendarFnStart + 3200);
+  assert.ok(calendarFnBody.includes("sheet['!cols'] = computeSheetColumnWidths"), 'exportAbsenceCalendarExcel (calendrier) doit aussi fixer une largeur de colonne par contenu');
+
+  console.log('OK — export-excel-xml-16-09.test.js (les deux exports XLSX (SheetJS) appliquent la largeur de colonne calculée)');
+}
+
 async function runExportPaieResteDuVraiCSV() {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   const fnStart = appSource.indexOf('function exportRowsToCSVWithDelimiter(');
@@ -76,6 +106,8 @@ async function runExportPaieResteDuVraiCSV() {
 runStructureClasseur()
   .then(runLargeursColonnesSuiventLeContenu)
   .then(runEchappementEtProtectionFormule)
+  .then(runLargeursSheetJSSuiventLeContenu)
+  .then(runExportsXLSXAppliquentLesLargeurs)
   .then(runExportPaieResteDuVraiCSV)
   .catch((err) => {
     console.error('ÉCHEC — export-excel-xml-16-09.test.js');
