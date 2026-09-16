@@ -1680,11 +1680,22 @@ textarea.input { resize: vertical; font-family: inherit; }
    pareil sauf les couleurs") : la référence est un vrai quadrillage façon tableur — bordure fine
    autour de CHAQUE case (pas juste un filet horizontal comme les autres tableaux de l'appli), un
    bloc de couleur qui remplit la case de bord à bord (pas une carte arrondie flottant avec une
-   marge/ombre), texte aligné à gauche. `border-collapse: collapse` déjà hérité de .table (voir plus
-   haut) : ajouter `border` sur chaque cellule suffit à obtenir un quadrillage complet, sans
-   redéfinir la structure du tableau. */
-.planning-table th, .planning-table td { text-align: center; border: 1px solid var(--color-border); }
-.planning-table th:first-child, .planning-table td:first-child { text-align: left; }
+   marge/ombre), texte aligné à gauche.
+   §correctif retour Betty du 16/09/2026 ("les jours se superposent quand je descends") :
+   `border-collapse: collapse` (hérité de .table) rend le calcul des bordures partagées PAR LE
+   TABLEAU LUI-MÊME plutôt que par chaque cellule isolément — incompatible avec `position: sticky`
+   sur les th (voir plus bas), qui repositionne certaines cellules hors du calcul de bordures
+   collapsées du navigateur. Résultat observé : la case colorée d'une ligne juste sous l'en-tête
+   déborde visuellement d'un ou deux pixels PAR-DESSUS l'en-tête figé pendant le scroll (une barre de
+   congé "remonte" dans la ligne des jours). Passé en `border-collapse: separate` (voir .planning-table
+   ci-dessous) : sticky redevient fiable. Pour garder EXACTEMENT le même quadrillage fin à une seule
+   ligne malgré ce changement (deux cellules adjacentes en `separate` dessineraient chacune sa propre
+   bordure, doublant l'épaisseur visible), chaque cellule ne dessine plus que sa bordure droite et
+   basse ; le haut et la gauche du quadrillage viennent uniquement de la première ligne/colonne. */
+.planning-table { border-collapse: separate; border-spacing: 0; }
+.planning-table th, .planning-table td { text-align: center; border-style: solid; border-color: var(--color-border); border-width: 0 1px 1px 0; }
+.planning-table thead th { border-top-width: 1px; }
+.planning-table th:first-child, .planning-table td:first-child { text-align: left; border-left-width: 1px; }
 /* Les cases de statut (renderPlanningStatusCell/renderPlanningDayCells) perdent leur padding — la
    carte de couleur à l'intérieur (position absolute) remplit alors la case exactement de bord à
    bord, comme dans la référence, plutôt que de flotter avec une marge visible. */
