@@ -2710,11 +2710,10 @@ const DB = {
     if (company && !company.couleursEvenementsFamiliauxUnifiees) {
       const types = company.leaveTypes || [];
       const exceptionnel = types.find(t => leaveTypeNameMatches(t.nom, 'Exceptionnel'));
-      const nomsAUnifier = ['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Naissance / adoption'];
       let changed = false;
       if (exceptionnel) {
         types.forEach(t => {
-          if (nomsAUnifier.some(nom => leaveTypeNameMatches(t.nom, nom)) && t.couleur !== exceptionnel.couleur) {
+          if (NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom)) && t.couleur !== exceptionnel.couleur) {
             t.couleur = exceptionnel.couleur;
             changed = true;
           }
@@ -6439,6 +6438,13 @@ function leaveTypeNameMatches(nom, target) {
   const t = target.trim().toLowerCase();
   return n === t || n.startsWith(t + ' ');
 }
+
+/** §retour Betty du 16/09/2026 : les 7 types d'événements familiaux regroupés sur la couleur
+ * d'"Exceptionnel" (voir DB.getLeaveTypes ci-dessus) — même liste réutilisée par
+ * renderAbsenceCalendarBoard (app.js) pour aussi les retirer de la légende (devenue redondante
+ * puisqu'ils partagent désormais tous la même couleur qu'"Exceptionnel" dans cette légende). Un
+ * seul endroit pour cette liste, jamais recopiée séparément entre data.js et app.js. */
+const NOMS_EVENEMENTS_FAMILIAUX_UNIFIES = ['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Naissance / adoption'];
 
 /** §retour Betty du 11/09/2026 (point 4.1, "arrêts de travail") : mêmes limites que le
  * rapprochement par nom ci-dessus (un renommage complet du type y échapperait) — utilisé pour

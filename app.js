@@ -1461,21 +1461,28 @@ const LANDING_FEATURES = [
  * le compositeur (renderAlacarteBuilderSection/computeAlacarteTotal), distinct du curseur d'effectif
  * général. Décision du 14/08/2026 : copier ce point précis du système Lucca, pas leur opacité
  * tarifaire au-delà de 100 salariés (jugée contraire à la transparence déjà actée pour Nexus). */
+// §retour Betty du 16/09/2026 ("baisser un peu les prix de 10%") : baissé UNIQUEMENT ici (l'affichage
+// du site — simulateur public + composeur d'abonnement) — Stripe facture d'après des Price déjà créés
+// séparément (price_... codés en dur, supabase/functions/billing/index.ts), jamais recalculés depuis
+// ce tableau. Tant que ces Price Stripe ne sont pas eux-mêmes recréés à -10% (accès Dashboard Stripe
+// que je n'ai pas) et leurs nouveaux price_... reportés dans billing/index.ts, le montant RÉELLEMENT
+// prélevé à la création d'un compte reste celui d'AVANT cette baisse — décalage entre le prix annoncé
+// ici et le prix facturé, signalé à Betty, jamais résolu silencieusement.
 const LANDING_ALACARTE_MODULES = [
-  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.90, unite: 'salarié' }, // NAV_ITEMS: absences + calendrier
-  { key: 'planning', label: 'Planning, télétravail', prix: 2.10, unite: 'salarié' }, // NAV_ITEMS: planning + (télétravail dans absences)
-  { key: 'frais', label: 'Notes de frais', prix: 5.20, unite: 'déclarant' }, // NAV_ITEMS: frais
-  { key: 'tickets', label: 'Tickets restaurant', prix: 0.95, unite: 'salarié' }, // NAV_ITEMS: tickets
-  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 6.50, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
-  { key: 'remuneration', label: 'Rémunération', prix: 1.50, unite: 'salarié' }, // NAV_ITEMS: remuneration
-  { key: 'entretiens', label: 'Entretiens', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: entretiens
-  { key: 'embauche', label: 'Embauche', prix: 1.90, unite: 'salarié' }, // NAV_ITEMS: embauche
+  { key: 'conges', label: 'Congés, absences et calendrier', prix: 2.61, unite: 'salarié' }, // NAV_ITEMS: absences + calendrier
+  { key: 'planning', label: 'Planning, télétravail', prix: 1.89, unite: 'salarié' }, // NAV_ITEMS: planning + (télétravail dans absences)
+  { key: 'frais', label: 'Notes de frais', prix: 4.68, unite: 'déclarant' }, // NAV_ITEMS: frais
+  { key: 'tickets', label: 'Tickets restaurant', prix: 0.86, unite: 'salarié' }, // NAV_ITEMS: tickets
+  { key: 'rh', label: 'Module RH (salariés, paie, documents, organigramme)', prix: 5.85, unite: 'salarié' }, // NAV_ITEMS: employees + export-paie + mes-documents + organigramme
+  { key: 'remuneration', label: 'Rémunération', prix: 1.35, unite: 'salarié' }, // NAV_ITEMS: remuneration
+  { key: 'entretiens', label: 'Entretiens', prix: 1.71, unite: 'salarié' }, // NAV_ITEMS: entretiens
+  { key: 'embauche', label: 'Embauche', prix: 1.71, unite: 'salarié' }, // NAV_ITEMS: embauche
   // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR fixe (un par établissement,
   // scanné depuis l'app, voir NAV_ITEMS "Pointeuse" et renderPointeuse). Prix À CONFIRMER PAR BETTY
   // — placé ici à titre indicatif (entre "Tickets restaurant" et "Planning"), à ajuster librement
   // dans ce tableau, seul endroit à changer pour le prix (repris automatiquement par le composeur
   // à la carte ET la page publique, voir LANDING_FEATURES pour le descriptif marketing).
-  { key: 'pointage', label: 'Pointeuse QR (arrivée/départ)', prix: 1.50, unite: 'salarié' } // NAV_ITEMS: pointeuse
+  { key: 'pointage', label: 'Pointeuse QR (arrivée/départ)', prix: 1.35, unite: 'salarié' } // NAV_ITEMS: pointeuse
 ];
 
 const ABOUT_CATEGORIES = [
@@ -14237,7 +14244,11 @@ function renderAbsenceCalendarBoard(sharedData) {
 
   return `
     <div class="absence-cal-legend">
-      ${leaveTypeRepository.getLeaveTypes().map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
+      <!-- §retour Betty du 16/09/2026 : les 7 types d'événements familiaux regroupés sur la couleur
+           d'"Exceptionnel" (voir DB.getLeaveTypes, data.js) n'apparaissent plus ICI individuellement
+           — une entrée par couleur réellement distincte, pas une par type. Une absence de ce type
+           garde bien sa case colorée dans la grille ci-dessous, seule la légende change. -->
+      ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
       <span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>
     </div>
     <div class="card table-card planning-scroll-card">

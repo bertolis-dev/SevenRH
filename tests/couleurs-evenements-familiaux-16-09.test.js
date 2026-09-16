@@ -7,6 +7,7 @@
  */
 const assert = require('assert');
 const { loadDataJs } = require('./load-data-js');
+const { loadAppJs } = require('./load-app-js');
 
 const NOMS_A_UNIFIER = ['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Naissance / adoption'];
 
@@ -58,8 +59,37 @@ async function runJamaisReapplique() {
   console.log('OK — couleurs-evenements-familiaux-16-09.test.js (rattrapage une seule fois : un choix de couleur fait ensuite est respecté)');
 }
 
+async function runLegendeSansDoublon() {
+  // §retour Betty du 16/09/2026 (message de suivi) : "ceux que je t'ai dit de mettre [dans
+  // Exceptionnel], tu les enlèves dans l'affichage" — les 7 types ne doivent plus apparaître
+  // individuellement dans la LÉGENDE (devenu redondant, même couleur qu'"Exceptionnel"), mais une
+  // absence de ce type garde bien sa case colorée dans la grille elle-même.
+  const { DB, sandbox, renderCalendrier, state } = loadAppJs();
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+  const rh = DB.getEmployees().find(e => e.role === 'rh');
+  DB._currentEmployeeId = rh.id;
+  state.calendrierVue = 'entreprise';
+  state.calendarYear = 2026;
+  state.calendarMonth = 8;
+  state.calendarServiceFilter = '';
+
+  const html = renderCalendrier();
+  const debutLegende = html.indexOf('absence-cal-legend">');
+  const finLegende = html.indexOf('</div>', debutLegende);
+  const legende = html.slice(debutLegende, finLegende);
+  NOMS_A_UNIFIER.forEach(nom => {
+    assert.ok(!legende.includes(nom), `"${nom}" ne doit plus apparaître comme une entrée séparée de la légende`);
+  });
+  assert.ok(legende.includes('Exceptionnel'), '"Exceptionnel" doit rester la seule entrée de légende pour cette couleur');
+  assert.ok(legende.includes('Congés payés'), 'un type non concerné par le regroupement doit rester affiché normalement dans la légende');
+
+  console.log('OK — couleurs-evenements-familiaux-16-09.test.js (légende : les 7 types unifiés disparaissent, "Exceptionnel" reste seul)');
+}
+
 runUnificationCouleurs()
   .then(runJamaisReapplique)
+  .then(runLegendeSansDoublon)
   .catch((err) => {
     console.error('ÉCHEC — couleurs-evenements-familiaux-16-09.test.js');
     console.error(err.stack || err.message);
