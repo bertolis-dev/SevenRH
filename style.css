@@ -2000,24 +2000,32 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* §4 (reprise) : grilles Planning/Horaires/Télétravail — beaucoup de colonnes (jours d'un mois) et
  * potentiellement beaucoup de lignes (salariés) ; sans repère fixe, on perd de vue à qui/quel jour
- * correspond une cellule dès qu'on scrolle. `max-height` borne la carte pour que le scroll ait lieu
- * DANS la carte (donc que `position: sticky` ait un vrai ancêtre défilant) plutôt que sur la page. */
-.planning-scroll-card { max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+ * correspond une cellule dès qu'on scrolle.
+ * §correctif retour Betty du 16/09/2026 ("les jours du haut du calendrier/planning bougent quand je
+ * descends la page, il doit rester fixe") : `max-height: 70vh; overflow: auto;` bornait la carte
+ * pour que `position: sticky` s'y accroche — mais UNIQUEMENT quand le contenu dépasse réellement
+ * ces 70vh (peu de salariés/un grand écran = jamais dépassé). Dans ce cas la carte n'est jamais
+ * elle-même défilée : le sticky n'a rien à quoi s'accrocher et la carte entière (en-tête compris)
+ * défile alors normalement avec le reste de la PAGE, exactement le symptôme décrit. Retiré : le
+ * sticky s'accroche maintenant à la page elle-même (comme #topbar juste au-dessus, déjà sticky de
+ * la même façon) — fonctionne quel que soit le nombre de salariés ou la taille de l'écran.
+ * Volontairement plus AUCUN overflow ici (même `overflow-x` seul suffirait à recréer le problème :
+ * la spécification CSS force alors overflow-y à 'auto' aussi dès que l'un des deux axes n'est pas
+ * 'visible', ce qui rétablirait exactement le même souci). Une grille plus large que l'écran fait
+ * donc défiler la PAGE entière horizontalement plutôt que la seule carte — la barre latérale,
+ * `position: fixed`, reste de toute façon à sa place quel que soit le sens du défilement.
+ * Cette carte a aussi la classe .table-card, qui pose SON PROPRE `overflow-x: auto` (utile pour les
+ * tableaux denses ordinaires, voir plus haut) — repris ici en `visible` explicitement, sinon la
+ * même spécification qui force overflow-y à 'auto' dès qu'un seul axe n'est pas 'visible' recréerait
+ * le problème par ce biais, sans toucher au reste des tableaux qui utilisent .table-card ailleurs. */
+.planning-scroll-card { overflow-x: visible; }
 
-/* §correctif retour Betty du 16/09/2026 ("les jours se superposent quand je descends", confirmé
- * sur l'application PC) : une cellule `position: sticky` n'est pas toujours placée sur son propre
- * calque graphique pendant le défilement — surtout à un zoom d'affichage Windows non entier
- * (125 %/150 %, très courant) — et peut alors "traîner" d'un instant, laissant transparaître ce qui
- * défile juste dessous avant de se replacer pile au bon pixel. `translateZ(0)` force ce calque dédié
- * (compositing GPU), correctif standard pour ce type de décalage, quel que soit le navigateur ou le
- * zoom — jamais de changement de mise en page, juste un rendu plus précis pendant le scroll. */
 .planning-scroll-card .planning-table thead th {
   position: sticky;
-  top: 0;
+  /* Juste sous #topbar (lui-même sticky top:0 au-dessus) — jamais 0, sinon les deux se superposent. */
+  top: var(--topbar-height);
   background: var(--color-surface);
   z-index: 3;
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 .planning-scroll-card .planning-table th:first-child,
@@ -2026,8 +2034,6 @@ textarea.input { resize: vertical; font-family: inherit; }
   left: 0;
   background: var(--color-surface);
   z-index: 2;
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 /* La cellule d'angle (coin haut-gauche) doit rester au-dessus des deux autres groupes de cellules sticky. */
