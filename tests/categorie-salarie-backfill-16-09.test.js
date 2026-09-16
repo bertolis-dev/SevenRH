@@ -8,6 +8,9 @@
  * 2. "Le champ s'appelle « Statut Professionnel » en lecture et « Catégorie de salarié » en
  *    modification" — même donnée (employee.statutPro), harmonisé sur "Catégorie de salarié"
  *    (le nom déjà utilisé partout ailleurs : formulaire d'édition, Paramètres → Référentiels).
+ * 3. Convention collective manquante signalée ("IDCC 0982" puis "IDCC 0892") — le bon numéro,
+ *    vérifié sur Légifrance/LégiSocial/Doctrine, était 892 ("Distribution de films, cadres et
+ *    agents de maîtrise"). 0982/982 n'existe sous aucune forme dans aucune source officielle.
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -67,9 +70,26 @@ async function runHarmonisationLibelle() {
   console.log('OK — categorie-salarie-backfill-16-09.test.js (libellé harmonisé sur "Catégorie de salarié" en lecture comme en modification)');
 }
 
+async function runConventionCollectiveManquante() {
+  const { DB, sandbox } = loadDataJs();
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+  const company = DB.getCurrentCompany();
+  // Simule une entreprise déjà migrée avec une liste ancienne, plus courte (exactement le
+  // scénario signalé) — le rattrapage déjà en place (voir DB.getSettings()) doit combler l'écart.
+  company.settings.conventionsCollectives = ['Aucune'];
+  DB.saveCurrentCompany(company);
+
+  const settings = DB.getSettings();
+  assert.ok(settings.conventionsCollectives.some(c => c.includes('IDCC 892')), 'IDCC 892 (Distribution de films, cadres et agents de maîtrise) doit être proposée, y compris sur une entreprise déjà migrée avec une liste ancienne');
+
+  console.log('OK — categorie-salarie-backfill-16-09.test.js (IDCC 892 ajoutée à la liste, rattrapée automatiquement même sur une liste déjà figée)');
+}
+
 runBackfillCategoriesDejaMigrees()
   .then(runPreserveCategoriePersonnalisee)
   .then(runHarmonisationLibelle)
+  .then(runConventionCollectiveManquante)
   .catch((err) => {
     console.error('ÉCHEC — categorie-salarie-backfill-16-09.test.js');
     console.error(err.stack || err.message);

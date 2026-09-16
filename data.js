@@ -330,6 +330,9 @@ const IDCC_CONVENTIONS = [
   { code: '3216', nom: 'Négoce des matériaux de construction', secteur: 'BTP' },
   // Services
   { code: '86', nom: 'Publicité', secteur: 'Services' },
+  // §retour Betty du 16/09/2026 : signalée manquante ("IDCC 0982" puis "IDCC 0892" — le bon numéro,
+  // vérifié sur Légifrance/LégiSocial/Doctrine, était 892).
+  { code: '892', nom: 'Distribution de films (cadres et agents de maîtrise)', secteur: 'Services' },
   { code: '218', nom: 'Organismes de sécurité sociale', secteur: 'Services' },
   { code: '240', nom: 'Greffes des tribunaux de commerce', secteur: 'Services' },
   { code: '454', nom: 'Remontées mécaniques & ski', secteur: 'Services' },
