@@ -82,11 +82,34 @@ async function runExportsXLSXAppliquentLesLargeurs() {
   const employeesFnBody = appSource.slice(employeesFnStart, employeesFnStart + 900);
   assert.ok(employeesFnBody.includes("sheet['!cols'] = computeSheetColumnWidths"), 'exportEmployeesExcel (liste des salariés) doit fixer une largeur de colonne par contenu, sinon Email/Poste/Service restent tronqués comme signalé par Betty');
 
-  const calendarFnStart = appSource.indexOf('async function exportAbsenceCalendarExcel(');
-  const calendarFnBody = appSource.slice(calendarFnStart, calendarFnStart + 3200);
-  assert.ok(calendarFnBody.includes("sheet['!cols'] = computeSheetColumnWidths"), 'exportAbsenceCalendarExcel (calendrier) doit aussi fixer une largeur de colonne par contenu');
+  console.log('OK — export-excel-xml-16-09.test.js (l\'export Salariés (SheetJS) applique la largeur de colonne calculée)');
+}
 
-  console.log('OK — export-excel-xml-16-09.test.js (les deux exports XLSX (SheetJS) appliquent la largeur de colonne calculée)');
+async function runCalendrierRessembleAUnCalendrier() {
+  const { buildCalendarExcelXmlWorkbook } = loadAppJs();
+  const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+
+  const calendarFnStart = appSource.indexOf('function exportAbsenceCalendarExcel(');
+  const calendarFnBody = appSource.slice(calendarFnStart, calendarFnStart + 3200);
+  assert.ok(calendarFnBody.includes('buildCalendarExcelXmlWorkbook'), 'exportAbsenceCalendarExcel doit générer son fichier via buildCalendarExcelXmlWorkbook (bordures/week-ends), plus via XLSX/SheetJS qui ne permet aucune mise en forme en version gratuite');
+  assert.ok(calendarFnBody.includes('WEEKDAY_LABELS'), 'chaque en-tête de jour doit aussi porter le jour de la semaine (ex. "1 Lun"), pour ressembler à un vrai calendrier');
+
+  // §retour Betty du 16/09/2026 : "ressemble plus a un calendrier avec des cases et plus jolie" —
+  // vérifie la construction du XML elle-même (bordures 4 côtés = "cases", week-ends grisés).
+  const headers = ['Salarié', 'Service', '1 Lun', '2 Mar', '3 Mer', '4 Jeu', '5 Ven', '6 Sam', '7 Dim'];
+  const rows = [['Dupont Marie', 'Commercial', '', '', 'Congés payés', '', '', '', '']];
+  const weekendColumnIndexes = new Set([7, 8]); // "6 Sam" et "7 Dim", à l'index 7 et 8 dans headers
+  const xml = buildCalendarExcelXmlWorkbook(headers, rows, 'Calendrier', weekendColumnIndexes);
+
+  assert.ok(xml.includes('ss:Position="Left"') && xml.includes('ss:Position="Right"') && xml.includes('ss:Position="Top"') && xml.includes('ss:Position="Bottom"'), 'chaque cellule doit avoir une bordure sur ses 4 côtés, pour ressembler à de vraies cases plutôt qu\'à un simple filet sous chaque ligne');
+  assert.ok(xml.includes('StyleID="header-weekend"'), 'les en-têtes samedi/dimanche doivent avoir un style distinct');
+  assert.ok(xml.includes('StyleID="cell-weekend"'), 'les cellules samedi/dimanche doivent avoir un fond distinct (grisé), comme sur un vrai calendrier');
+  // "6 Sam" (en-tête week-end) ne doit pas apparaître avec le style "header" normal.
+  const samCellIndex = xml.indexOf('<Data ss:Type="String">6 Sam</Data>');
+  const samCellStart = xml.lastIndexOf('<Cell', samCellIndex);
+  assert.ok(xml.slice(samCellStart, samCellIndex).includes('header-weekend'), '"6 Sam" doit porter le style week-end, pas le style de semaine');
+
+  console.log('OK — export-excel-xml-16-09.test.js (export calendrier : cases bordées sur les 4 côtés, week-ends distingués)');
 }
 
 async function runExportPaieResteDuVraiCSV() {
@@ -108,6 +131,7 @@ runStructureClasseur()
   .then(runEchappementEtProtectionFormule)
   .then(runLargeursSheetJSSuiventLeContenu)
   .then(runExportsXLSXAppliquentLesLargeurs)
+  .then(runCalendrierRessembleAUnCalendrier)
   .then(runExportPaieResteDuVraiCSV)
   .catch((err) => {
     console.error('ÉCHEC — export-excel-xml-16-09.test.js');

@@ -327,6 +327,7 @@ globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
 globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
 globalThis.__computeSheetColumnWidths = computeSheetColumnWidths;
 globalThis.__buildExcelXmlWorkbook = buildExcelXmlWorkbook;
+globalThis.__buildCalendarExcelXmlWorkbook = buildCalendarExcelXmlWorkbook;
 globalThis.__excelColumnWidths = excelColumnWidths;
 globalThis.__excelXmlCell = excelXmlCell;
 globalThis.__excelXmlEscape = excelXmlEscape;
@@ -582,6 +583,7 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     bindParametresAbonnementEvents: sandbox.__bindParametresAbonnementEvents,
     computeSheetColumnWidths: sandbox.__computeSheetColumnWidths,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
+    buildCalendarExcelXmlWorkbook: sandbox.__buildCalendarExcelXmlWorkbook,
     excelColumnWidths: sandbox.__excelColumnWidths,
     excelXmlCell: sandbox.__excelXmlCell,
     excelXmlEscape: sandbox.__excelXmlEscape,

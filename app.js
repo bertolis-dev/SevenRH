@@ -14447,14 +14447,14 @@ function bindCalendrierEvents() {
  * à l'écran), la cellule reprenant le même libellé que la barre correspondante dans
  * renderAbsenceCalendarRow (nom du type de congé ou "Télétravail", "(en attente)" si non validé) —
  * pas le même regroupement par segments/colspan (qui n'a de sens qu'à l'affichage), une valeur par
- * jour, plus simple à exploiter dans un tableur. */
-async function exportAbsenceCalendarExcel() {
-  try {
-    await loadXLSXLibrary();
-  } catch (err) {
-    showToast(err.message, 'error');
-    return;
-  }
+ * jour, plus simple à exploiter dans un tableur.
+ *
+ * §retour Betty du 16/09/2026 ("il faut que le calendrier ressemble plus a un calendrier avec des
+ * cases et plus jolie") : chaque en-tête de jour porte désormais aussi le jour de la semaine, et le
+ * fichier est généré via buildCalendarExcelXmlWorkbook (bordures sur les 4 côtés de chaque cellule,
+ * week-ends grisés) plutôt que XLSX.utils/SheetJS, qui ne permet aucune mise en forme en version
+ * gratuite — plus besoin de charger la bibliothèque XLSX pour cet export. */
+function exportAbsenceCalendarExcel() {
   const year = state.calendarYear;
   const month = state.calendarMonth;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -14464,8 +14464,13 @@ async function exportAbsenceCalendarExcel() {
   if (state.calendarServiceFilter) employees = employees.filter(e => e.service === state.calendarServiceFilter);
   const { leaveRequests, teleworkRequests, leaveTypesById } = sharedData;
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const weekendColumnIndexes = new Set();
+  days.forEach((day, i) => {
+    const weekday = new Date(year, month, day).getDay();
+    if (weekday === 0 || weekday === 6) weekendColumnIndexes.add(2 + i);
+  });
 
-  const headers = ['Salarié', 'Service', ...days.map(String)];
+  const headers = ['Salarié', 'Service', ...days.map(day => `${day} ${WEEKDAY_LABELS[(new Date(year, month, day).getDay() + 6) % 7]}`)];
   const rows = [];
   groupEmployeesByServiceAndEquipe(employees).forEach(g => {
     g.equipes.forEach(eq => {
@@ -14491,12 +14496,9 @@ async function exportAbsenceCalendarExcel() {
     });
   });
 
-  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  sheet['!cols'] = computeSheetColumnWidths(headers, rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Calendrier');
   const monthSlug = `${year}-${String(month + 1).padStart(2, '0')}`;
-  XLSX.writeFile(workbook, `calendrier-absences-${monthSlug}.xlsx`);
+  const xml = buildCalendarExcelXmlWorkbook(headers, rows, 'Calendrier', weekendColumnIndexes);
+  downloadExcelXmlFile(xml, `calendrier-absences-${monthSlug}.xls`);
   auditLogRepository.logAudit('Export', 'Calendrier des absences', `${MONTH_NAMES[month]} ${year}, ${employees.length} salarié${employees.length > 1 ? 's' : ''}`);
 }
 
@@ -20596,11 +20598,11 @@ function excelXmlEscape(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function excelXmlCell(value) {
+function excelXmlCell(value, styleId = 'cell') {
   const isNumber = typeof value === 'number' && Number.isFinite(value);
   const text = neutralizeCsvFormulaInjection(value === null || value === undefined ? '' : String(value));
-  if (!text) return '<Cell ss:StyleID="cell"/>';
-  return `<Cell ss:StyleID="cell"><Data ss:Type="${isNumber ? 'Number' : 'String'}">${excelXmlEscape(text)}</Data></Cell>`;
+  if (!text) return `<Cell ss:StyleID="${styleId}"/>`;
+  return `<Cell ss:StyleID="${styleId}"><Data ss:Type="${isNumber ? 'Number' : 'String'}">${excelXmlEscape(text)}</Data></Cell>`;
 }
 
 function excelColumnWidths(headers, rows) {
@@ -20632,6 +20634,74 @@ function buildExcelXmlWorkbook(headers, rows, sheetName) {
   <Style ss:ID="cell">
    <Alignment ss:Vertical="Center"/>
    <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="${excelXmlEscape(sheetName)}">
+  <Table>${columnsXml}${headerRowXml}${dataRowsXml}</Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
+}
+
+/** Variante de buildExcelXmlWorkbook pour l'export du calendrier des absences (§retour Betty du
+ * 16/09/2026 : "il faut que le calendrier ressemble plus a un calendrier avec des cases et plus
+ * jolie") : bordures sur les 4 côtés de chaque cellule (de vraies "cases", pas juste un filet sous
+ * chaque ligne) et colonnes week-end distinguées par un fond grisé, comme sur un vrai calendrier
+ * mural. `weekendColumnIndexes` est l'ensemble des index de colonnes (0-based, dans `headers`)
+ * correspondant à un samedi/dimanche. */
+function buildCalendarExcelXmlWorkbook(headers, rows, sheetName, weekendColumnIndexes) {
+  const columnsXml = excelColumnWidths(headers, rows).map(w => `<Column ss:Width="${w}"/>`).join('');
+  const headerRowXml = `<Row ss:Height="20">${headers.map((h, i) => {
+    const styleId = weekendColumnIndexes.has(i) ? 'header-weekend' : 'header';
+    return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${excelXmlEscape(neutralizeCsvFormulaInjection(String(h)))}</Data></Cell>`;
+  }).join('')}</Row>`;
+  const dataRowsXml = rows.map(row => `<Row>${headers.map((_, i) => excelXmlCell(row[i], weekendColumnIndexes.has(i) ? 'cell-weekend' : 'cell')).join('')}</Row>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#1F3B57" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center" ss:Horizontal="Center"/>
+   <Borders>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="header-weekend">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#8A5A2B" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center" ss:Horizontal="Center"/>
+   <Borders>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="cell">
+   <Alignment ss:Vertical="Center" ss:Horizontal="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="cell-weekend">
+   <Interior ss:Color="#F0F1F3" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center" ss:Horizontal="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/>
+   </Borders>
   </Style>
  </Styles>
  <Worksheet ss:Name="${excelXmlEscape(sheetName)}">
