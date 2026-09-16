@@ -59,30 +59,36 @@ async function runEchappementEtProtectionFormule() {
   console.log('OK — export-excel-xml-16-09.test.js (échappement XML et protection anti-formule préservés)');
 }
 
-async function runLargeursSheetJSSuiventLeContenu() {
-  const { computeSheetColumnWidths } = loadAppJs();
-  const headers = ['Matricule', 'Email'];
-  const rows = [
-    ['2024-0001', 'antoine.bernard@exemple-entreprise-avec-un-nom-long.fr'],
-    ['2022-0003', 'clara@ex.fr'],
-  ];
-  const widths = computeSheetColumnWidths(headers, rows);
-  assert.strictEqual(widths.length, 2);
-  widths.forEach(w => assert.ok(typeof w.wch === 'number', 'chaque colonne doit porter une largeur "wch" (convention SheetJS), pas une largeur par défaut identique pour toutes'));
-  assert.ok(widths[1].wch > widths[0].wch, 'la colonne Email (contenu plus long) doit être plus large que Matricule, sinon le texte reste tronqué à l\'ouverture');
-  assert.ok(widths[0].wch >= 8, 'même une colonne courte garde une largeur minimale lisible');
-
-  console.log('OK — export-excel-xml-16-09.test.js (colonnes XLSX (Salariés/Calendrier) dimensionnées au contenu, plus de texte coupé)');
-}
-
-async function runExportsXLSXAppliquentLesLargeurs() {
+async function runSalariesUtiliseLeGenerateurColore() {
+  const { buildExcelXmlWorkbook } = loadAppJs();
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
-  const employeesFnStart = appSource.indexOf('async function exportEmployeesExcel(');
+  const employeesFnStart = appSource.indexOf('function exportEmployeesExcel(');
   const employeesFnBody = appSource.slice(employeesFnStart, employeesFnStart + 900);
-  assert.ok(employeesFnBody.includes("sheet['!cols'] = computeSheetColumnWidths"), 'exportEmployeesExcel (liste des salariés) doit fixer une largeur de colonne par contenu, sinon Email/Poste/Service restent tronqués comme signalé par Betty');
+  assert.ok(employeesFnBody.includes('buildExcelXmlWorkbook'), 'exportEmployeesExcel (liste des salariés) doit générer son fichier via buildExcelXmlWorkbook, plus via XLSX/SheetJS qui ne permet aucune couleur en version gratuite');
+  assert.ok(employeesFnBody.includes('zebra: true'), 'exportEmployeesExcel doit activer le fond alterné (zebra), demandé par Betty ("rajoute de la couleurs")');
 
-  console.log('OK — export-excel-xml-16-09.test.js (l\'export Salariés (SheetJS) applique la largeur de colonne calculée)');
+  // §retour Betty du 16/09/2026 : "rajoute de la couleurs sur le exporter excel des salariés" —
+  // vérifie la construction du XML elle-même (fond alterné + couleurs de marque navy/or).
+  const headers = ['Nom', 'Statut'];
+  const rows = [['Dupont', 'Actif'], ['Martin', 'Actif'], ['Bernard', 'Actif']];
+  const xml = buildExcelXmlWorkbook(headers, rows, 'Salariés', { zebra: true });
+
+  assert.ok(xml.includes('StyleID="cell-zebra"'), 'une ligne sur deux doit porter le style "cell-zebra" (fond alterné)');
+  assert.ok(xml.includes('#17284D') && xml.includes('#C99A54'), 'les couleurs utilisées doivent être celles de la marque (bleu marine + or, voir --landing-navy-700/--landing-gold-500 dans style.css), jamais une couleur arbitraire par colonne');
+  // La 1ère ligne de données (Dupont) ne doit PAS être zébrée, la 2e (Martin) doit l'être.
+  const dupontIndex = xml.indexOf('>Dupont<');
+  const dupontCellStart = xml.lastIndexOf('<Cell', dupontIndex);
+  assert.ok(!xml.slice(dupontCellStart, dupontIndex).includes('cell-zebra'), 'la première ligne de données garde le fond normal (pas zébrée)');
+  const martinIndex = xml.indexOf('>Martin<');
+  const martinCellStart = xml.lastIndexOf('<Cell', martinIndex);
+  assert.ok(xml.slice(martinCellStart, martinIndex).includes('cell-zebra'), 'la deuxième ligne de données doit porter le fond alterné');
+
+  // Sans l'option zebra (les 6 autres exports CSV→Excel), le comportement doit rester inchangé.
+  const xmlSansZebra = buildExcelXmlWorkbook(headers, rows, 'Congés');
+  assert.ok(!xmlSansZebra.includes('StyleID="cell-zebra"'), 'sans l\'option zebra, aucune cellule ne doit utiliser le style zébré (les autres exports Excel restent inchangés)');
+
+  console.log('OK — export-excel-xml-16-09.test.js (export Salariés : fond alterné et couleurs de marque, autres exports Excel inchangés)');
 }
 
 async function runCalendrierRessembleAUnCalendrier() {
@@ -129,8 +135,7 @@ async function runExportPaieResteDuVraiCSV() {
 runStructureClasseur()
   .then(runLargeursColonnesSuiventLeContenu)
   .then(runEchappementEtProtectionFormule)
-  .then(runLargeursSheetJSSuiventLeContenu)
-  .then(runExportsXLSXAppliquentLesLargeurs)
+  .then(runSalariesUtiliseLeGenerateurColore)
   .then(runCalendrierRessembleAUnCalendrier)
   .then(runExportPaieResteDuVraiCSV)
   .catch((err) => {

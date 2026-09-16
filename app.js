@@ -8245,31 +8245,13 @@ function openImportSalariesModal() {
   }
 }
 
-/** §retour Betty du 16/09/2026 ("il y a des endroits qui sont coupés... bien espacé aussi") :
- * XLSX.utils.aoa_to_sheet donne à chaque colonne la même largeur par défaut, quel que soit son
- * contenu — un email ou un intitulé de poste un peu long s'affiche tronqué à l'ouverture. Calcule à
- * la place une largeur ("wch", nombre de caractères — convention SheetJS) proportionnelle au
- * contenu réel de chaque colonne. Partagé par tous les exports XLSX (voir loadXLSXLibrary) :
- * Salariés, Calendrier des absences. */
-function computeSheetColumnWidths(headers, rows) {
-  return headers.map((header, colIndex) => {
-    let maxLen = String(header).length;
-    rows.forEach(row => {
-      const value = row[colIndex];
-      const len = String(value === null || value === undefined ? '' : value).length;
-      if (len > maxLen) maxLen = len;
-    });
-    return { wch: Math.min(48, Math.max(8, maxLen + 2)) };
-  });
-}
-
-async function exportEmployeesExcel() {
-  try {
-    await loadXLSXLibrary();
-  } catch (err) {
-    showToast(err.message, 'error');
-    return;
-  }
+/** §retour Betty du 16/09/2026 ("il y a des endroits qui sont coupés... bien espacé aussi", puis
+ * "rajoute de la couleurs") : passait par XLSX.utils/SheetJS (gratuit, aucune mise en forme
+ * possible) — remplacé par buildExcelXmlWorkbook (même générateur XML que les autres exports
+ * Excel), avec un fond alterné (`zebra`) pour habiller le tableau. Toujours réimportable ensuite
+ * (voir IMPORT_EMPLOYEE_FIELD_ALIASES) : ce générateur produit du SpreadsheetML, un format que
+ * XLSX.read() (SheetJS) sait aussi bien lire qu'un vrai .xlsx. */
+function exportEmployeesExcel() {
   const { list } = getFilteredSortedEmployees();
   const visible = list.filter(e => !e.archive);
   const headers = ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Ancienneté', 'Statut'];
@@ -8277,11 +8259,8 @@ async function exportEmployeesExcel() {
     e.matricule, e.nom, e.prenom, e.email, e.telephone, e.poste, e.service, e.equipe,
     e.typeContrat, formatDate(e.dateEmbauche), calculateAnciennete(e.dateEmbauche), e.statut
   ]);
-  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  sheet['!cols'] = computeSheetColumnWidths(headers, rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Salariés');
-  XLSX.writeFile(workbook, 'salaries.xlsx');
+  const xml = buildExcelXmlWorkbook(headers, rows, 'Salariés', { zebra: true });
+  downloadExcelXmlFile(xml, 'salaries.xls');
   auditLogRepository.logAudit('Export', 'Salariés', `${visible.length} salarié${visible.length > 1 ? 's' : ''}`);
 }
 
@@ -20617,21 +20596,32 @@ function excelColumnWidths(headers, rows) {
   });
 }
 
-function buildExcelXmlWorkbook(headers, rows, sheetName) {
+/** §retour Betty du 16/09/2026 ("rajoute de la couleurs sur le exporter excel des salariés") :
+ * `options.zebra` alterne un fond crème sur une ligne sur deux, pour un tableau plus lisible et plus
+ * habillé — jamais une couleur différente par colonne/valeur, uniquement les couleurs de marque
+ * (bleu marine + or, voir --landing-navy-700/--landing-gold-500, style.css), comme partout ailleurs
+ * dans l'app (§règle de palette). Header et bordure dorée déjà appliqués à tous les exports Excel. */
+function buildExcelXmlWorkbook(headers, rows, sheetName, options) {
+  const zebra = Boolean(options && options.zebra);
   const columnsXml = excelColumnWidths(headers, rows).map(w => `<Column ss:Width="${w}"/>`).join('');
   const headerRowXml = `<Row ss:Height="20">${headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${excelXmlEscape(neutralizeCsvFormulaInjection(String(h)))}</Data></Cell>`).join('')}</Row>`;
-  const dataRowsXml = rows.map(row => `<Row>${headers.map((_, i) => excelXmlCell(row[i])).join('')}</Row>`).join('');
+  const dataRowsXml = rows.map((row, rowIndex) => `<Row>${headers.map((_, i) => excelXmlCell(row[i], zebra && rowIndex % 2 === 1 ? 'cell-zebra' : 'cell')).join('')}</Row>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
  <Styles>
   <Style ss:ID="header">
    <Font ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#1F3B57" ss:Pattern="Solid"/>
+   <Interior ss:Color="#17284D" ss:Pattern="Solid"/>
    <Alignment ss:Vertical="Center"/>
-   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F2438"/></Borders>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#C99A54"/></Borders>
   </Style>
   <Style ss:ID="cell">
+   <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+  <Style ss:ID="cell-zebra">
+   <Interior ss:Color="#F8EFE0" ss:Pattern="Solid"/>
    <Alignment ss:Vertical="Center"/>
    <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
   </Style>
