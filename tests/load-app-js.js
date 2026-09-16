@@ -105,6 +105,8 @@ globalThis.__settingsRepository = settingsRepository;
 globalThis.__candidatureRepository = candidatureRepository;
 globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 globalThis.__formatCurrencyFR = formatCurrencyFR;
+globalThis.__companyRepository = companyRepository;
+globalThis.__billingRepository = billingRepository;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -323,6 +325,11 @@ globalThis.__buildEvaluationRecord = buildEvaluationRecord;
 globalThis.__computeEvaluationMoyenne = computeEvaluationMoyenne;
 globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
 globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
+globalThis.__renderParametresAbonnement = renderParametresAbonnement;
+globalThis.__renderAbonnementAlaCarteComposer = renderAbonnementAlaCarteComposer;
+globalThis.__renderAbonnementAlaCarteActif = renderAbonnementAlaCarteActif;
+globalThis.__computeAbonnementAlacarteTotal = computeAbonnementAlacarteTotal;
+globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -561,6 +568,13 @@ globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard
     computeEvaluationMoyenne: sandbox.__computeEvaluationMoyenne,
     renderCandidatureCreneauxCard: sandbox.__renderCandidatureCreneauxCard,
     renderCandidatureEvaluationsCard: sandbox.__renderCandidatureEvaluationsCard,
+    companyRepository: sandbox.__companyRepository,
+    billingRepository: sandbox.__billingRepository,
+    renderParametresAbonnement: sandbox.__renderParametresAbonnement,
+    renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
+    renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
+    computeAbonnementAlacarteTotal: sandbox.__computeAbonnementAlacarteTotal,
+    bindParametresAbonnementEvents: sandbox.__bindParametresAbonnementEvents,
   };
 }
 

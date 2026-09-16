@@ -235,12 +235,10 @@ Deno.serve(async (req) => {
         const moduleDef = MODULES[m?.key];
         if (!moduleDef) return jsonResponse({ error: `Module inconnu : ${m?.key}` }, 400);
         const priceId = moduleDef.priceIds[periodicite as "mensuel" | "annuel"];
-        // "déclarant" (Notes de frais) : quantité choisie par le client (combien de salariés
-        // déposent vraiment des notes de frais), jamais l'effectif total — mais toujours plafonnée
-        // à l'effectif réel, jamais fiée aveuglément à ce qu'envoie le navigateur.
-        const quantite = moduleDef.unite === "declarant"
-          ? Math.min(effectif, Math.max(1, parseInt(m.declarants, 10) || 1))
-          : effectif;
+        // Quantité choisie librement par le client pour CE module (généralisé le 16/09/2026 à
+        // tous les modules, plus seulement Notes de frais) — mais toujours plafonnée à l'effectif
+        // réel, jamais fiée aveuglément à ce qu'envoie le navigateur ; à défaut, tout l'effectif.
+        const quantite = Math.min(effectif, Math.max(1, parseInt(m.quantite, 10) || effectif));
         lineItems.push({ price: priceId, quantity: quantite });
       }
 
@@ -305,9 +303,7 @@ Deno.serve(async (req) => {
         if (!moduleDef) return jsonResponse({ error: `Module inconnu : ${m?.key}` }, 400);
         desiredKeys.add(m.key);
         const priceId = moduleDef.priceIds[periodicite as "mensuel" | "annuel"];
-        const quantite = moduleDef.unite === "declarant"
-          ? Math.min(effectif, Math.max(1, parseInt(m.declarants, 10) || 1))
-          : effectif;
+        const quantite = Math.min(effectif, Math.max(1, parseInt(m.quantite, 10) || effectif));
         const existing = currentItemsByModule.get(m.key);
         itemsPayload.push(existing ? { id: existing.id, price: priceId, quantity: quantite } : { price: priceId, quantity: quantite });
       }
@@ -326,26 +322,27 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "resync") {
-      // Réaligne les quantités facturées sur l'effectif réel — déclenché à la demande par le
-      // client (bouton "Actualiser mon abonnement"), pas automatiquement à chaque embauche/départ
-      // (choix v1 : plus simple et plus sûr, pas d'appel Stripe caché derrière une simple action RH).
+      // Sans quantité fournie pour un module : plafonne simplement sa quantité facturée à
+      // l'effectif réel si besoin (jamais augmentée automatiquement — un module choisi pour une
+      // partie seulement de l'effectif reste tel quel, voir renderParametresAbonnement/app.js).
+      // Avec une quantité fournie (bouton "Mettre à jour" par module) : l'applique directement,
+      // plafonnée à l'effectif réel. Déclenché à la demande par le client, jamais automatiquement
+      // à chaque embauche/départ (choix v1 : plus simple et plus sûr, pas d'appel Stripe caché
+      // derrière une simple action RH).
       if (!sub?.offre || sub.offre !== "a_la_carte" || !sub.stripe_subscription_id) {
         return jsonResponse({ error: "Aucun abonnement à la carte actif pour cette entreprise." }, 400);
       }
       const stripeSubscription = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
       const effectif = await getHeadcount(supabaseAdmin, companyId);
-      const declarantOverrides: Record<string, unknown> = (body && body.declarants) || {};
+      const quantiteOverrides: Record<string, unknown> = (body && body.quantites) || {};
 
       for (const item of stripeSubscription.items.data as any[]) {
         const key = item.price?.metadata?.module;
         const moduleDef = key ? MODULES[key] : undefined;
         if (!moduleDef) continue;
-        let newQuantite = item.quantity;
-        if (moduleDef.unite === "salarie") {
-          newQuantite = effectif;
-        } else if (moduleDef.unite === "declarant" && declarantOverrides[key] != null) {
-          newQuantite = Math.min(effectif, Math.max(1, parseInt(String(declarantOverrides[key]), 10) || 1));
-        }
+        const newQuantite = quantiteOverrides[key] != null
+          ? Math.min(effectif, Math.max(1, parseInt(String(quantiteOverrides[key]), 10) || 1))
+          : Math.min(item.quantity, effectif);
         if (newQuantite !== item.quantity) {
           await stripe.subscriptionItems.update(item.id, { quantity: newQuantite, proration_behavior: "create_prorations" });
         }

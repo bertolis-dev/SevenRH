@@ -15690,7 +15690,7 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
     .map(m => Object.assign({}, m, { def: LANDING_ALACARTE_MODULES.find(d => d.key === m.key) }))
     .filter(m => m.def);
   const totalMensuel = modules.reduce((sum, m) => sum + m.def.prix * m.quantite, 0);
-  const effectifDesaligne = modules.some(m => m.def.unite === 'salarié' && m.quantite !== nbSalaries);
+  const effectifDesaligne = modules.some(m => m.quantite > nbSalaries);
 
   return `
     <div class="card abonnement-summary-card">
@@ -15718,12 +15718,10 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
               <td>${escapeHtml(m.def.label)}</td>
               <td>
                 ${m.quantite} ${escapeHtml(m.def.unite)}${m.quantite > 1 ? 's' : ''}
-                ${m.def.unite === 'déclarant' ? `
-                  <span style="display:inline-flex; align-items:center; gap:6px; margin-left:8px;">
-                    <input type="number" class="input" id="abo-declarants-${m.key}" min="1" max="${nbSalaries}" value="${m.quantite}" style="width:70px;">
-                    <button type="button" class="btn-link" data-update-declarants="${m.key}">Mettre à jour</button>
-                  </span>
-                ` : ''}
+                <span style="display:inline-flex; align-items:center; gap:6px; margin-left:8px;">
+                  <input type="number" class="input" id="abo-quantite-${m.key}" min="1" max="${nbSalaries}" value="${m.quantite}" style="width:70px;">
+                  <button type="button" class="btn-link" data-update-module-quantite="${m.key}">Mettre à jour</button>
+                </span>
               </td>
               <td>${formatCurrencyFR(m.def.prix)} / ${escapeHtml(m.def.unite)} / mois</td>
             </tr>
@@ -15793,7 +15791,7 @@ function renderAbonnementAlaCarteComposer(nbSalaries, options) {
       <p class="text-muted">${editing
         ? 'Ajoutez, retirez un module ou changez de périodicité : le changement s\'applique immédiatement, avec un prorata sur la facture en cours.'
         : 'Choisissez uniquement les modules dont vous avez besoin, le prix s\'ajuste en direct. Paiement sécurisé par Stripe, résiliable à tout moment.'}</p>
-      <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} : la quantité facturée par module suit automatiquement votre effectif réel (sauf Notes de frais, voir ci-dessous).</p>
+      <p class="text-muted"><strong>${nbSalaries}</strong> salarié${nbSalaries > 1 ? 's' : ''} actif${nbSalaries > 1 ? 's' : ''} : point de départ de chaque module ci-dessous, ajustez librement le nombre de salariés concernés par chacun.</p>
       <div class="tabs" style="margin: 12px 0;">
         <button class="tab ${periodicite === 'mensuel' ? 'active' : ''}" data-abonnement-periodicite="mensuel">Mensuel</button>
         <button class="tab ${periodicite === 'annuel' ? 'active' : ''}" data-abonnement-periodicite="annuel">Annuel (2 mois offerts)</button>
@@ -15807,12 +15805,10 @@ function renderAbonnementAlaCarteComposer(nbSalaries, options) {
                 <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
                 <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ ${escapeHtml(m.unite)} / mois</span></span>
               </label>
-              ${m.unite === 'déclarant' ? `
-                <div class="alacarte-module-unit-count">
-                  <label for="abo-alacarte-count-${m.key}">Combien de salariés déposent des notes de frais ?</label>
-                  <input type="number" id="abo-alacarte-count-${m.key}" class="input abo-alacarte-count-input" data-count-for="${m.key}" min="1" max="${nbSalaries}" value="${Math.min(nbSalaries, (state.abonnementAlacarteCounts && state.abonnementAlacarteCounts[m.key]) || nbSalaries)}">
-                </div>
-              ` : ''}
+              <div class="alacarte-module-unit-count">
+                <label for="abo-alacarte-count-${m.key}">${m.unite === 'déclarant' ? 'Combien de salariés déposent des notes de frais ?' : `Combien de salariés auront "${escapeHtml(m.label)}" ?`}</label>
+                <input type="number" id="abo-alacarte-count-${m.key}" class="input abo-alacarte-count-input" data-count-for="${m.key}" min="1" max="${nbSalaries}" value="${Math.min(nbSalaries, (state.abonnementAlacarteCounts && state.abonnementAlacarteCounts[m.key]) || nbSalaries)}">
+              </div>
             </div>
           `).join('')}
         </div>
@@ -15840,13 +15836,9 @@ function computeAbonnementAlacarteTotal(nbSalaries) {
   document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
     if (!cb.checked) return;
     const prix = parseFloat(cb.dataset.modulePrice) || 0;
-    if (cb.dataset.moduleUnite === 'déclarant') {
-      const countInput = document.getElementById(`abo-alacarte-count-${cb.dataset.moduleKey}`);
-      const count = Math.max(1, parseInt(countInput?.value, 10) || 1);
-      monthlyTotal += prix * count;
-    } else {
-      monthlyTotal += prix * nbSalaries;
-    }
+    const countInput = document.getElementById(`abo-alacarte-count-${cb.dataset.moduleKey}`);
+    const count = Math.max(1, Math.min(nbSalaries, parseInt(countInput?.value, 10) || nbSalaries));
+    monthlyTotal += prix * count;
   });
 
   const tier = getAlacarteVolumeDiscount(nbSalaries);
@@ -15897,10 +15889,10 @@ function bindParametresAbonnementEvents() {
     render();
   });
 
-  document.querySelectorAll('[data-update-declarants]').forEach(btn => {
+  document.querySelectorAll('[data-update-module-quantite]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const key = btn.dataset.updateDeclarants;
-      const input = document.getElementById(`abo-declarants-${key}`);
+      const key = btn.dataset.updateModuleQuantite;
+      const input = document.getElementById(`abo-quantite-${key}`);
       const quantite = Math.max(1, parseInt(input?.value, 10) || 1);
       btn.disabled = true;
       btn.textContent = '...';
@@ -15966,12 +15958,8 @@ function bindParametresAbonnementEvents() {
     document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
       if (!cb.checked) return;
       const key = cb.dataset.moduleKey;
-      if (cb.dataset.moduleUnite === 'déclarant') {
-        const countInput = document.getElementById(`abo-alacarte-count-${key}`);
-        modules.push({ key, declarants: Math.max(1, parseInt(countInput?.value, 10) || 1) });
-      } else {
-        modules.push({ key });
-      }
+      const countInput = document.getElementById(`abo-alacarte-count-${key}`);
+      modules.push({ key, quantite: Math.max(1, parseInt(countInput?.value, 10) || 1) });
     });
     if (!modules.length) {
       showToast('Sélectionnez au moins un module. Pour tout annuler, utilisez "Gérer mon abonnement".', 'error');
@@ -16007,12 +15995,8 @@ function bindParametresAbonnementEvents() {
     document.querySelectorAll('.abo-alacarte-module-checkbox').forEach(cb => {
       if (!cb.checked) return;
       const key = cb.dataset.moduleKey;
-      if (cb.dataset.moduleUnite === 'déclarant') {
-        const countInput = document.getElementById(`abo-alacarte-count-${key}`);
-        modules.push({ key, declarants: Math.max(1, parseInt(countInput?.value, 10) || 1) });
-      } else {
-        modules.push({ key });
-      }
+      const countInput = document.getElementById(`abo-alacarte-count-${key}`);
+      modules.push({ key, quantite: Math.max(1, parseInt(countInput?.value, 10) || 1) });
     });
     if (!modules.length) {
       showToast('Sélectionnez au moins un module.', 'error');

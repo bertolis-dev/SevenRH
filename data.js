@@ -4992,17 +4992,19 @@ function currentReturnBase() {
 }
 
 const billingRepository = {
-  // modules : [{ key, declarants? }] — voir LANDING_ALACARTE_MODULES/renderParametresAbonnement
-  // (app.js). declarants ne compte que pour le module "frais" (unité déclarant, pas salarié).
+  // modules : [{ key, quantite }] — voir LANDING_ALACARTE_MODULES/renderParametresAbonnement
+  // (app.js). quantite = nombre de salariés facturés pour CE module, choisi librement par le
+  // client pour chaque module (généralisé le 16/09/2026, plafonné à l'effectif réel côté serveur).
   checkout: (modules, periodicite) => window.SupabaseSync.invokeBilling('checkout', { modules, periodicite, returnBase: currentReturnBase() }),
-  // Ajoute/retire des modules ou change leur quantité (déclarants) sur un abonnement à la carte
-  // déjà actif — même forme de payload que checkout, mais modifie l'abonnement Stripe existant
-  // (proration) au lieu d'en créer un nouveau. Jamais utilisé pour tout annuler (garder au moins un
-  // module reste obligatoire côté serveur) — l'annulation complète reste réservée au portail Stripe.
+  // Ajoute/retire des modules ou change leur quantité sur un abonnement à la carte déjà actif —
+  // même forme de payload que checkout, mais modifie l'abonnement Stripe existant (proration) au
+  // lieu d'en créer un nouveau. Jamais utilisé pour tout annuler (garder au moins un module reste
+  // obligatoire côté serveur) — l'annulation complète reste réservée au portail Stripe.
   updateModules: (modules, periodicite) => window.SupabaseSync.invokeBilling('update-modules', { modules, periodicite }),
-  // declarantOverrides : { [moduleKey]: nombre } — ne concerne que les modules en unité déclarant ;
-  // les modules en unité salarié se réalignent automatiquement sur l'effectif réel côté serveur.
-  resync: (declarantOverrides) => window.SupabaseSync.invokeBilling('resync', { declarants: declarantOverrides || {} }),
+  // quantiteOverrides : { [moduleKey]: nombre } — module absent de l'objet : sa quantité facturée
+  // est simplement plafonnée à l'effectif actuel si besoin, jamais augmentée automatiquement (un
+  // choix de quantité réduite pour un module reste toujours volontaire, jamais écrasé).
+  resync: (quantiteOverrides) => window.SupabaseSync.invokeBilling('resync', { quantites: quantiteOverrides || {} }),
   portal: () => window.SupabaseSync.invokeBilling('portal', { returnBase: currentReturnBase() }),
   confirm: (sessionId) => window.SupabaseSync.invokeBilling('confirm', { sessionId })
 };
