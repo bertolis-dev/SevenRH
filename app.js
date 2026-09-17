@@ -1794,18 +1794,25 @@ function openLegalModal(type) {
 
 /** Liens de navigation (Fonctionnalités/Tarifs/Installer/Nouveautés/À propos), partagés par la
  * topbar de la home ET celle des pages de fonctionnalité.
- * §retour Betty du 17/09/2026 : "tu vas enlever le panneau déroulant et tu vas juste les alignés" —
- * remplace l'ancien menu à un seul déclencheur (☰ Menu, voir git blame) par ces liens directement
- * alignés dans la topbar, toujours visibles, sans clic pour les révéler. */
+ * §retour Betty du 17/09/2026 : "tu vas enlever le panneau déroulant et tu vas juste les alignés"
+ * puis "sur téléphone laisse le panneau déroulant" — alignés en permanence à partir d'une largeur
+ * d'écran normale ; sous 480px (voir style.css), .landing-nav-menu-trigger redevient visible et
+ * .landing-nav-links redevient un panneau caché par défaut : même déclencheur ☰ qu'avant, mais
+ * seulement sur téléphone. */
 function renderLandingNavMenu() {
   return `
-    <nav class="landing-nav-links">
-      <button type="button" class="landing-nav-link" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
-      <button type="button" class="landing-nav-link" data-landing-goto="landing-tarifs">Tarifs</button>
-      <button type="button" class="landing-nav-link" data-landing-goto="landing-installer">Installer</button>
-      <button type="button" class="landing-nav-link" data-landing-action="changelog">Nouveautés</button>
-      <button type="button" class="landing-nav-link" data-landing-action="about">À propos</button>
-    </nav>
+    <div class="landing-nav-menu">
+      <button type="button" class="btn btn-secondary btn-sm landing-nav-menu-trigger" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+        ${ICONS.menu}
+      </button>
+      <nav class="landing-nav-links">
+        <button type="button" class="landing-nav-link" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
+        <button type="button" class="landing-nav-link" data-landing-goto="landing-tarifs">Tarifs</button>
+        <button type="button" class="landing-nav-link" data-landing-goto="landing-installer">Installer</button>
+        <button type="button" class="landing-nav-link" data-landing-action="changelog">Nouveautés</button>
+        <button type="button" class="landing-nav-link" data-landing-action="about">À propos</button>
+      </nav>
+    </div>
   `;
 }
 
@@ -1824,10 +1831,42 @@ function goToLandingSection(sectionId) {
   });
 }
 
+let landingNavMenuOutsideCloseBound = false;
+function closeAllLandingNavMenus() {
+  document.querySelectorAll('.landing-nav-links.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.landing-nav-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
+}
 function bindLandingNavMenuEvents() {
-  document.querySelectorAll('[data-landing-goto]').forEach(btn => {
-    btn.addEventListener('click', () => goToLandingSection(btn.dataset.landingGoto));
+  // §retour Betty du 17/09/2026 : le déclencheur ☰ n'est visible que sur téléphone (voir style.css,
+  // max-width: 480px) — sur un écran normal, il reste caché et ce clic ne se produit jamais.
+  document.querySelectorAll('.landing-nav-menu-trigger').forEach(trigger => {
+    trigger.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      const panel = trigger.nextElementSibling;
+      const wasOpen = panel.classList.contains('open');
+      closeAllLandingNavMenus();
+      panel.classList.toggle('open', !wasOpen);
+      trigger.setAttribute('aria-expanded', String(!wasOpen));
+    });
   });
+  document.querySelectorAll('[data-landing-goto]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      closeAllLandingNavMenus();
+      goToLandingSection(btn.dataset.landingGoto);
+    });
+  });
+  document.querySelectorAll('.landing-nav-links [data-landing-action]').forEach(btn => {
+    btn.addEventListener('click', closeAllLandingNavMenus);
+  });
+  if (!landingNavMenuOutsideCloseBound) {
+    landingNavMenuOutsideCloseBound = true;
+    document.addEventListener('click', (evt) => {
+      if (!evt.target.closest('.landing-nav-menu')) closeAllLandingNavMenus();
+    });
+    document.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape') closeAllLandingNavMenus();
+    });
+  }
 }
 
 /** Maquette stylisée (pas une vraie capture d'écran — voir aussi bindLandingHeroCarousel) réutilisée

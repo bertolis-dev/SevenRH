@@ -3116,9 +3116,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-topbar-nav { display: flex; align-items: center; gap: 22px; }
 
 /* §retour Betty du 17/09/2026 : "tu vas enlever le panneau déroulant et tu vas juste les alignés"
-   — Fonctionnalités/Tarifs/Installer/Nouveautés/À propos directement dans la topbar, sans clic pour
-   les révéler. flex-wrap sur .landing-topbar-left (ci-dessus) laisse ces liens passer à la ligne sur
-   un petit écran plutôt que de déborder ou d'obliger à en masquer certains. */
+   puis "sur téléphone laisse le panneau déroulant" — alignés en permanence à partir d'une largeur
+   d'écran normale (flex-wrap laisse les liens passer à la ligne plutôt que déborder), mais sous
+   480px (voir plus bas) redevient un panneau cachable derrière un déclencheur ☰, comme avant. */
+.landing-nav-menu { position: relative; }
+.landing-nav-menu-trigger { display: none; }
 .landing-nav-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .landing-nav-link {
   border: none;
@@ -3640,9 +3642,38 @@ textarea.input { resize: vertical; font-family: inherit; }
   .landing-topbar-nav { gap: 6px; }
   .landing-topbar-nav > button.btn { padding: 8px 10px; font-size: 12.5px; }
   .landing-topbar-nav .btn-arrow { display: none; }
-  .landing-nav-link { font-size: 12.5px; }
   .landing-topbar-cta-full { display: none; }
   .landing-topbar-cta-short { display: inline; }
+
+  /* §retour Betty du 17/09/2026 : "sur téléphone laisse le paneau déroulant" — redevient un
+     déclencheur ☰ qui ouvre/ferme un panneau, comme avant le passage aux liens alignés (toujours
+     alignés au-dessus de 480px, voir la règle de base plus haut dans ce fichier). */
+  .landing-nav-menu-trigger { display: inline-flex; align-items: center; gap: 6px; }
+  .landing-nav-menu-trigger svg { width: 16px; height: 16px; }
+  .landing-nav-links {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 190px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    flex-direction: column;
+    z-index: 30;
+  }
+  .landing-nav-links.open { display: flex; }
+  .landing-nav-link {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+  }
+  .landing-nav-link:hover { background: var(--color-muted-soft); }
 }
 
 
