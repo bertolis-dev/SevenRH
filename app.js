@@ -14436,7 +14436,13 @@ function buildCalendarSharedData(cells) {
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
-  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente');
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : l'écran Calendrier ne dépend
+  // QUE du module "congés" (NAV_ITEMS 'calendrier') — le télétravail est du module "planning" (voir
+  // le même point déjà corrigé sur la fiche salarié). Coupé ici, à la source, plutôt que dans chaque
+  // fonction de rendu qui lit sharedData.teleworkRequests (grille mensuelle personnelle ET tableau
+  // équipe/entreprise, voir getCalendarDayInfo/renderAbsenceCalendarRow ci-dessous) : une entreprise
+  // n'ayant souscrit qu'au module congés ne doit jamais voir de télétravail sur cet écran.
+  const teleworkRequests = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'Validé' || r.statut === 'En attente') : [];
   const schoolHolidays = schoolHolidayRepository.getSchoolHolidays();
   const years = [...new Set(cells.map(c => c.date.getFullYear()))];
   const publicHolidays = years.flatMap(y => getAllPublicHolidays(y, settings));
@@ -14561,6 +14567,15 @@ const CALENDAR_FILTER_CATEGORIES = [
   { key: 'vacances', label: 'Vacances scolaires', icon: null, swatchClass: 'legend-school' }
 ];
 
+/** §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : "Télétravail" fait partie du
+ * module "planning", pas "congés" (voir NAV_ITEMS 'calendrier', module: 'conges' seul) — sans ce
+ * filtre, un salarié sans le module planning voyait quand même la pastille/le filtre "Télétravail"
+ * sur son propre Calendrier (toujours en vue personnelle, voir buildCalendarSharedData), même si
+ * aucune demande de télétravail ne peut plus jamais y apparaître depuis ce même correctif. */
+function visibleCalendarFilterCategories() {
+  return CALENDAR_FILTER_CATEGORIES.filter(c => c.key !== 'teletravail' || hasModule('planning'));
+}
+
 /** Toutes les catégories actives par défaut — un filtre désactivé n'efface jamais la donnée sous-
  * jacente (getCalendarDayInfo ne change pas), seul l'affichage des badges/tags en tient compte. */
 function getCalendarFilters() {
@@ -14579,7 +14594,7 @@ function renderCalendarFilterBar() {
   return `
     <div class="calendar-filter-bar">
       <div class="calendar-filter-dots">
-        ${CALENDAR_FILTER_CATEGORIES.map(c => `<span class="calendar-filter-dot ${c.swatchClass}${filters[c.key] === false ? ' legend-item-inactive' : ''}" title="${escapeHtml(c.label)}"></span>`).join('')}
+        ${visibleCalendarFilterCategories().map(c => `<span class="calendar-filter-dot ${c.swatchClass}${filters[c.key] === false ? ' legend-item-inactive' : ''}" title="${escapeHtml(c.label)}"></span>`).join('')}
       </div>
       <div class="dropdown-wrapper">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-calendar-filters">Filtres</button>
@@ -14591,7 +14606,7 @@ function renderCalendarFilterBar() {
 
 function renderCalendarFiltersPanelContent(settings) {
   const filters = getCalendarFilters();
-  return CALENDAR_FILTER_CATEGORIES.map(c => {
+  return visibleCalendarFilterCategories().map(c => {
     const active = filters[c.key] !== false;
     const label = c.key === 'vacances' ? `Vacances scolaires (Zone ${escapeHtml(settings.schoolZone)})` : c.label;
     return `
@@ -14699,7 +14714,7 @@ function renderAbsenceCalendarBoard(sharedData) {
            — une entrée par couleur réellement distincte, pas une par type. Une absence de ce type
            garde bien sa case colorée dans la grille ci-dessous, seule la légende change. -->
       ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
-      <span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>
+      ${hasModule('planning') ? '<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>' : ''}
     </div>
     <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
