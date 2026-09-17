@@ -4779,7 +4779,8 @@ const employeeRepository = {
   changerRole: (employeeId, newRole, actingUserId) => DB.changerRoleSalarie(employeeId, newRole, actingUserId),
   transferProprietaire: (newProprietaireId, nouveauRoleAncien) => DB.transferProprietaire(newProprietaireId, nouveauRoleAncien),
   getIcalToken: (scope) => DB.getIcalToken(scope),
-  regenerateIcalToken: (scope) => DB.regenerateIcalToken(scope)
+  regenerateIcalToken: (scope) => DB.regenerateIcalToken(scope),
+  renumberMatricules: () => renumberMatricules()
 };
 
 const leaveRepository = {
@@ -6106,6 +6107,37 @@ function formatMatricule(year, seq) {
   const num = String(seq).padStart(4, '0');
   const settings = DB.getSettings();
   return (settings && settings.matriculeAvecTiret === false) ? `${year}${num}` : `${year}-${num}`;
+}
+
+/** §retour Betty du 17/09/2026 (point 3, "les matricules sont mélangés") : réattribue TOUS les
+ * matricules de l'entreprise courante par ordre chronologique d'embauche, via renumber_company_
+ * matricules (0058_renumerotation_matricules.sql, réservée à RH/Propriétaire côté serveur — la
+ * vérification de rôle CÔTÉ ÉCRAN dans openRenumeroterMatriculesModal, app.js, n'est qu'un confort
+ * d'affichage, jamais la seule protection). Le serveur écrit déjà le nouveau matricule ET la ligne
+ * d'audit correspondante avant même de répondre ici : n'applique le mapping obtenu QUE localement,
+ * pour que l'écran reflète immédiatement le résultat sans le recalculer (et sans dupliquer l'audit).
+ * Pas de repli local en cas d'échec réseau — un abandon en cours de renumérotation est décrit comme
+ * sans risque au client (voir l'avertissement d'openRenumeroterMatriculesModal) : soit tout est
+ * renuméroté côté serveur, soit rien (aucune ligne n'est modifiée avant l'appel RPC). */
+async function renumberMatricules() {
+  const company = DB.getCurrentCompany();
+  const settings = DB.getSettings();
+  const avecTiret = settings.matriculeAvecTiret !== false;
+  const result = await window.SupabaseSync.renumberCompanyMatricules(company.id, avecTiret);
+  if (!result.success) throw new Error(result.error || 'La renumérotation a échoué côté serveur. Aucun matricule n\'a été modifié.');
+
+  const list = DB.getEmployees();
+  const byId = new Map(list.map(e => [e.id, e]));
+  let changed = 0;
+  result.mappings.forEach(({ employeeId, ancien, nouveau }) => {
+    const employee = byId.get(employeeId);
+    if (employee && employee.matricule !== nouveau) {
+      employee.matricule = nouveau;
+      changed += 1;
+    }
+  });
+  if (changed) DB.saveEmployees(list);
+  return { count: result.mappings.length, changed };
 }
 
 /** §correctif audit du 23/08/2026 (§7.4) : notifie par email les validateurs de la PREMIÈRE étape

@@ -27,6 +27,11 @@ const PROTECTED_FUNCTIONS = [
   { name: 'check_notify_request_email_rate_limit', signature: 'check_notify_request_email_rate_limit(text, int)' },
   // §rétroactif : même défaut, plus ancien, sur candidature-submit (voir 0031 et 0039).
   { name: 'check_candidature_rate_limit', signature: 'check_candidature_rate_limit(text, text, int)' },
+  // §retour Betty du 17/09/2026 (point 3, renumérotation des matricules) : prend un company_id en
+  // paramètre et modifie des lignes employees — la vérification de rôle (rh/proprietaire) faite EN
+  // PLUS à l'intérieur de la fonction (voir 0058) ne dispense jamais de ce revoke, seconde ligne de
+  // défense si cette vérification interne était un jour affaiblie par erreur.
+  { name: 'renumber_company_matricules', signature: 'renumber_company_matricules(text, boolean)' },
 ];
 
 function run() {

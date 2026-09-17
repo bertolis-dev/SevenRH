@@ -1296,6 +1296,17 @@ async function assignMatriculeNumber(companyId, year) {
   return { success: true, number: data };
 }
 
+/** §retour Betty du 17/09/2026 (point 3, "les matricules sont mélangés") : renumber_company_matricules
+ * (0058_renumerotation_matricules.sql) réattribue TOUS les matricules de l'entreprise par ordre
+ * chronologique d'embauche et journalise chaque changement ancien -> nouveau côté serveur — cette
+ * fonction ne fait que transmettre l'appel et remonter le mapping obtenu (voir DB.renumberMatricules,
+ * data.js, qui applique ensuite ce même mapping au cache local). */
+async function renumberCompanyMatricules(companyId, avecTiret) {
+  const { data, error } = await supabase.rpc('renumber_company_matricules', { p_company_id: companyId, p_avec_tiret: avecTiret });
+  if (error) return { success: false, error: error.message };
+  return { success: true, mappings: (data || []).map(row => ({ employeeId: row.employee_id, ancien: row.ancien_matricule, nouveau: row.nouveau_matricule })) };
+}
+
 /** Append atomique via la fonction SQL update_ticket_statut (0018_ticket_suivi_livraison.sql) —
  * jamais un simple `.update({statut})` : la fonction alimente aussi l'historique horodaté et la
  * date de livraison automatique, en un seul aller-retour (voir DB.updateSupportTicketStatus). */
@@ -1470,7 +1481,7 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
-  resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber,
+  resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature,
   getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, regeneratePointageTokenRemote,

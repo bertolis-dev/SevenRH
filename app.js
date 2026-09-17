@@ -16990,7 +16990,11 @@ function renderParametresListes() {
         </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
-          <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement.</p>
+          <p class="form-hint">Purement visuel : n'affecte jamais l'unicité des matricules, garantie par le serveur. Les matricules déjà attribués ne sont pas reformatés rétroactivement (voir « Renuméroter tous les matricules » ci-dessous pour une harmonisation volontaire).</p>
+        </div>
+        <div class="form-field" style="align-items: flex-start;">
+          <button type="button" class="btn btn-secondary" id="btn-renumeroter-matricules">Renuméroter tous les matricules</button>
+          <p class="form-hint">Réattribue un matricule à chaque salarié par ordre chronologique d'embauche, pour unifier un format mélangé (ex. anciens « SRH-0001 » et nouveaux « 2026-0001 » côte à côte). ⚠️ Les matricules figurent déjà sur des documents émis (bulletins de paie, attestations, exports comptables) : une confirmation explicite est demandée avant toute exécution, et chaque changement est journalisé (ancien vers nouveau).</p>
         </div>
       </div>
     </div>
@@ -17240,6 +17244,28 @@ function bindParametresListesEvents() {
   bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
   bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
   bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
+  const renumeroterMatriculesBtn = document.getElementById('btn-renumeroter-matricules');
+  if (renumeroterMatriculesBtn) renumeroterMatriculesBtn.addEventListener('click', () => {
+    openConfirm({
+      title: 'Renuméroter tous les matricules ?',
+      message: 'Chaque salarié de l\'entreprise recevra un nouveau matricule, réattribué par ordre chronologique d\'embauche. Les matricules figurent déjà sur des documents émis (bulletins de paie, attestations, exports comptables) : ceux déjà transmis garderont l\'ancien numéro imprimé, créant un écart assumé avec la fiche à jour. Chaque changement est journalisé, mais cette action ne peut pas être annulée automatiquement.',
+      confirmLabel: 'Renuméroter',
+      danger: true,
+      onConfirm: async () => {
+        renumeroterMatriculesBtn.disabled = true;
+        renumeroterMatriculesBtn.textContent = 'Renumérotation...';
+        try {
+          const result = await employeeRepository.renumberMatricules();
+          showToast(result.changed
+            ? `${result.changed} matricule(s) renuméroté(s) sur ${result.count} salarié(s).`
+            : 'Les matricules étaient déjà dans le bon ordre : rien à changer.');
+        } catch (err) {
+          showToast(`Renumérotation impossible (${(err && err.message) || err}). Aucun matricule n'a été modifié.`, 'error');
+        }
+        render();
+      }
+    });
+  });
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
