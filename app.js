@@ -1076,7 +1076,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Paramètre les règles d'acquisition et de report, avec une vue d'ensemble par service." }
     ],
     related: [1, 6],
-    screenshot: 'landing-feature-conges.jpg',
+    screenshot: 'landing-feature-conges.png',
     mock: {
       title: 'Congés & absences',
       kpis: [['18', 'Jours CP restants'], ['2', 'Demandes en attente'], ['5', 'Absents cette semaine']],
@@ -1109,6 +1109,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Définit le quota de télétravail applicable à toute l'entreprise." }
     ],
     related: [0, 4],
+    screenshot: 'landing-feature-planning.png',
     mock: {
       title: 'Planning & télétravail',
       kpis: [['4/5', 'Jours au bureau'], ['1', 'Jour télétravail'], ['18', 'Salariés au bureau']],
@@ -1172,7 +1173,7 @@ const LANDING_FEATURES = [
       { role: 'Comptabilité', text: "Exporte les notes validées directement pour l'intégration comptable." }
     ],
     related: [2, 4],
-    screenshot: 'landing-feature-frais.jpg',
+    screenshot: 'landing-feature-frais.png',
     mock: {
       title: 'Notes de frais',
       kpis: [['104,70 €', 'Ce mois-ci'], ['3', 'En attente'], ['0', 'Rejetées']],
@@ -1204,7 +1205,7 @@ const LANDING_FEATURES = [
     ],
     related: [0, 1],
     simulator: true,
-    screenshot: 'landing-feature-tickets.jpg',
+    screenshot: 'landing-feature-tickets.png',
     mock: {
       title: 'Tickets restaurant',
       kpis: [['128', 'Tickets ce mois'], ['9,00 €', 'Valeur faciale'], ['60 %', 'Part employeur']],
@@ -1330,6 +1331,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Dispose des heures réellement travaillées, sans ressaisie manuelle." }
     ],
     related: [1, 0],
+    screenshot: 'landing-feature-pointeuse.png',
     mock: {
       title: 'Pointeuse',
       kpis: [['9h03', 'Dernière arrivée'], ['8h09', 'Travaillées aujourd\'hui'], ['1', 'Établissement équipé']],
@@ -1390,6 +1392,7 @@ const LANDING_FEATURES = [
       { role: 'RH', text: "Ne rate plus un bilan à 6 ans, rappelé automatiquement avant l'échéance légale." }
     ],
     related: [0, 5],
+    screenshot: 'landing-feature-entretiens.png',
     mock: {
       title: 'Entretiens',
       kpis: [['3', 'Entretiens ce trimestre'], ['1', 'Auto-évaluation en attente'], ['1', 'Bilan à 6 ans à prévoir']],
@@ -1420,6 +1423,7 @@ const LANDING_FEATURES = [
       { role: 'Candidat', text: "Postule en quelques minutes, sans créer de compte ni installer d'application." }
     ],
     related: [0, 8],
+    screenshot: 'landing-feature-embauche.png',
     mock: {
       title: 'Embauche',
       kpis: [['2', 'Postes ouverts'], ['5', 'Candidatures reçues'], ['1', 'À traiter']],
@@ -1737,12 +1741,13 @@ function bindLandingNavMenuEvents() {
  * pour donner un aperçu visuel concret à chaque page de fonctionnalité, plutôt qu'un mur de texte. */
 /** §refonte "capture d'écran réelle" du 01/09/2026 : une vraie capture (feature.screenshot, jeu de
  * données de démonstration) remplace le mockup HTML inventé quand elle existe — même logique que le
- * hero de la page d'accueil. "Planning & télétravail" n'a pas encore la sienne (rendu de tableau
- * capturé vide via html2canvas malgré des données réelles présentes, cause non résolue) : garde son
- * mockup d'origine plutôt qu'une capture cassée. */
+ * hero de la page d'accueil.
+ * §retour Betty du 17/09/2026 : captures manuelles fournies pour Planning, Congés & absences, Notes
+ * de frais, Tickets restaurant, Pointeuse QR, Entretiens et Embauche (celles capturées automatiquement
+ * via html2canvas restaient vides pour certaines, cause jamais résolue — voir git blame). */
 function renderMockCard(feature) {
   if (feature.screenshot) {
-    return `<img class="landing-hero-screenshot" src="${escapeHtml(feature.screenshot)}" alt="${escapeHtml(feature.title)} dans Nexus" width="1280" height="760" loading="lazy">`;
+    return `<img class="landing-hero-screenshot" src="${escapeHtml(feature.screenshot)}" alt="${escapeHtml(feature.title)} dans Nexus" width="1916" height="1006" loading="lazy">`;
   }
   const mock = feature.mock;
   return `
