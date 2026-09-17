@@ -1792,25 +1792,20 @@ function openLegalModal(type) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 }
 
-/** Menu déroulant unique pour les liens de navigation (Fonctionnalités/Tarifs/Installer/À propos),
- * partagé par la topbar de la home ET celle des pages de fonctionnalité (qui n'avaient auparavant
- * aucun de ces liens). Remplace les boutons/ancres séparés d'avant : sur mobile, ces liens étaient
- * soit masqués (display:none, inaccessibles), soit entassés avec les autres boutons de la topbar
- * jusqu'au débordement horizontal — un seul déclencheur compact règle les deux problèmes d'un coup. */
+/** Liens de navigation (Fonctionnalités/Tarifs/Installer/Nouveautés/À propos), partagés par la
+ * topbar de la home ET celle des pages de fonctionnalité.
+ * §retour Betty du 17/09/2026 : "tu vas enlever le panneau déroulant et tu vas juste les alignés" —
+ * remplace l'ancien menu à un seul déclencheur (☰ Menu, voir git blame) par ces liens directement
+ * alignés dans la topbar, toujours visibles, sans clic pour les révéler. */
 function renderLandingNavMenu() {
   return `
-    <div class="landing-nav-menu">
-      <button type="button" class="btn btn-secondary btn-sm landing-nav-menu-trigger" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
-        ${ICONS.menu} <span class="landing-nav-menu-label">Menu</span>
-      </button>
-      <div class="landing-nav-menu-panel">
-        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
-        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-tarifs">Tarifs</button>
-        <button type="button" class="landing-nav-menu-item" data-landing-goto="landing-installer">Installer</button>
-        <button type="button" class="landing-nav-menu-item" data-landing-action="changelog">Nouveautés</button>
-        <button type="button" class="landing-nav-menu-item" data-landing-action="about">À propos</button>
-      </div>
-    </div>
+    <nav class="landing-nav-links">
+      <button type="button" class="landing-nav-link" data-landing-goto="landing-fonctionnalites">Fonctionnalités</button>
+      <button type="button" class="landing-nav-link" data-landing-goto="landing-tarifs">Tarifs</button>
+      <button type="button" class="landing-nav-link" data-landing-goto="landing-installer">Installer</button>
+      <button type="button" class="landing-nav-link" data-landing-action="changelog">Nouveautés</button>
+      <button type="button" class="landing-nav-link" data-landing-action="about">À propos</button>
+    </nav>
   `;
 }
 
@@ -1829,40 +1824,10 @@ function goToLandingSection(sectionId) {
   });
 }
 
-let landingNavMenuOutsideCloseBound = false;
-function closeAllLandingNavMenus() {
-  document.querySelectorAll('.landing-nav-menu-panel.open').forEach(p => p.classList.remove('open'));
-  document.querySelectorAll('.landing-nav-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
-}
 function bindLandingNavMenuEvents() {
-  document.querySelectorAll('.landing-nav-menu-trigger').forEach(trigger => {
-    trigger.addEventListener('click', (evt) => {
-      evt.stopPropagation();
-      const panel = trigger.nextElementSibling;
-      const wasOpen = panel.classList.contains('open');
-      closeAllLandingNavMenus();
-      panel.classList.toggle('open', !wasOpen);
-      trigger.setAttribute('aria-expanded', String(!wasOpen));
-    });
-  });
   document.querySelectorAll('[data-landing-goto]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      closeAllLandingNavMenus();
-      goToLandingSection(btn.dataset.landingGoto);
-    });
+    btn.addEventListener('click', () => goToLandingSection(btn.dataset.landingGoto));
   });
-  document.querySelectorAll('.landing-nav-menu-panel [data-landing-action]').forEach(btn => {
-    btn.addEventListener('click', closeAllLandingNavMenus);
-  });
-  if (!landingNavMenuOutsideCloseBound) {
-    landingNavMenuOutsideCloseBound = true;
-    document.addEventListener('click', (evt) => {
-      if (!evt.target.closest('.landing-nav-menu')) closeAllLandingNavMenus();
-    });
-    document.addEventListener('keydown', (evt) => {
-      if (evt.key === 'Escape') closeAllLandingNavMenus();
-    });
-  }
 }
 
 /** Maquette stylisée (pas une vraie capture d'écran — voir aussi bindLandingHeroCarousel) réutilisée
@@ -14508,8 +14473,8 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
 // §correctif audit du 31/08/2026 : bindCalendrierEvents() ré-attachait un listener 'click' sur
 // `document` à CHAQUE rendu du calendrier (changement de mois, bascule Moi/Équipe, etc.), sans jamais
 // retirer le précédent — une fuite mémoire qui accumule des closures mortes (capturant un
-// filtersPanel détaché du DOM précédent) au fil de la navigation. Même garde que
-// landingNavMenuOutsideCloseBound un peu plus haut dans ce fichier : posé une seule fois.
+// filtersPanel détaché du DOM précédent) au fil de la navigation. Le drapeau ci-dessous pose ce
+// listener une seule fois, plutôt qu'à chaque rendu.
 let calendarFiltersOutsideCloseBound = false;
 function bindCalendrierEvents() {
   document.getElementById('btn-cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));

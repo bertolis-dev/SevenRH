@@ -3110,47 +3110,26 @@ textarea.input { resize: vertical; font-family: inherit; }
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
-.landing-topbar-left { display: flex; align-items: center; gap: 18px; }
+.landing-topbar-left { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .landing-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--color-text); }
 .landing-brand .logo-mark { width: 32px; height: 32px; }
 .landing-topbar-nav { display: flex; align-items: center; gap: 22px; }
 
-/* Un seul déclencheur pour Fonctionnalités/Tarifs/Installer/À propos, plutôt que 4 boutons/ancres
-   séparés — remplace un empilement qui débordait sur mobile (certains étaient masqués en display:none,
-   donc inaccessibles) par un menu compact identique partout, y compris sur les pages de fonctionnalité
-   qui n'avaient auparavant aucun de ces liens. */
-.landing-nav-menu { position: relative; }
-.landing-nav-menu-trigger { display: inline-flex; align-items: center; gap: 6px; }
-.landing-nav-menu-trigger svg { width: 15px; height: 15px; }
-.landing-nav-menu-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  min-width: 190px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: 6px;
-  display: none;
-  flex-direction: column;
-  z-index: 30;
-}
-.landing-nav-menu-panel.open { display: flex; }
-.landing-nav-menu-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
+/* §retour Betty du 17/09/2026 : "tu vas enlever le panneau déroulant et tu vas juste les alignés"
+   — Fonctionnalités/Tarifs/Installer/Nouveautés/À propos directement dans la topbar, sans clic pour
+   les révéler. flex-wrap sur .landing-topbar-left (ci-dessus) laisse ces liens passer à la ligne sur
+   un petit écran plutôt que de déborder ou d'obliger à en masquer certains. */
+.landing-nav-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.landing-nav-link {
   border: none;
   background: none;
-  border-radius: var(--radius-sm);
+  padding: 4px 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   cursor: pointer;
 }
-.landing-nav-menu-item:hover { background: var(--color-muted-soft); }
+.landing-nav-link:hover { color: var(--color-text); }
 
 .feature-page-back-short { display: none; }
 .landing-topbar-cta-short { display: none; }
@@ -3652,7 +3631,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .landing-topbar-nav { gap: 6px; }
   .landing-topbar-nav > button.btn { padding: 8px 10px; font-size: 12.5px; }
   .landing-topbar-nav .btn-arrow { display: none; }
-  .landing-nav-menu-label { display: none; }
+  .landing-nav-link { font-size: 12.5px; }
   .landing-topbar-cta-full { display: none; }
   .landing-topbar-cta-short { display: inline; }
 }
