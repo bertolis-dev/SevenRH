@@ -7542,7 +7542,12 @@ function renderEmployeesList() {
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-employees">Exporter Excel</button>
-        ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
+        <!-- §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : le Registre du personnel
+             est aussi un onglet de Paramètres (PARAMETRES_TABS, clé 'registre-personnel'), lui
+             explicitement réservé au module RH (isVisible: canManageParametres() && hasModule('rh'))
+             — ce bouton, sur l'écran Salariés (jamais gaté par aucun module, "socle commun"), donnait
+             donc un second accès à la MÊME donnée sans jamais vérifier ce module. -->
+        ${canSeeRegistrePersonnel && hasModule('rh') ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
         ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
         ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer Excel</button>' : ''}
         ${canImportSoldes ? '<button class="btn btn-secondary" id="btn-import-soldes">Importer les soldes initiaux</button>' : ''}
@@ -11814,6 +11819,13 @@ function openAttestationEmployeurModal(id) {
 function openRegistreUniquePersonnelModal() {
   if (getVisibleEmployeeIdsForCurrentUser() !== null) {
     showToast('Vous n\'avez pas le droit d\'accéder au registre du personnel.', 'error');
+    return;
+  }
+  // §retour Betty du 17/09/2026 : même module que l'onglet Paramètres équivalent (voir le commentaire
+  // du bouton qui ouvre cette modale, écran Salariés) — vérifié ici aussi, pas seulement à l'affichage
+  // du bouton, au cas où cette fonction soit un jour appelée d'un autre endroit.
+  if (!hasModule('rh')) {
+    showToast('Le registre du personnel fait partie du module RH, non souscrit par votre entreprise.', 'error');
     return;
   }
   const profile = companyRepository.getProfile();
