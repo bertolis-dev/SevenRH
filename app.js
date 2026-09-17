@@ -2302,7 +2302,7 @@ function renderLandingScreen() {
             ${LANDING_ALACARTE_MODULES.map(m => `
               <div class="alacarte-module">
                 <label class="alacarte-module-main">
-                  <input type="checkbox" class="alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" data-module-unite="${m.unite}" ${(state.landingAlacarteModules && state.landingAlacarteModules[m.key] === false) ? '' : 'checked'}>
+                  <input type="checkbox" class="alacarte-module-checkbox" data-module-key="${m.key}" data-module-price="${m.prix}" data-module-unite="${m.unite}" ${(state.landingAlacarteModules && Object.prototype.hasOwnProperty.call(state.landingAlacarteModules, m.key)) ? (state.landingAlacarteModules[m.key] ? 'checked' : '') : (m.key === 'conges' ? 'checked' : '')}>
                   <span class="alacarte-module-name">${escapeHtml(m.label)}</span>
                   <span class="alacarte-module-price">${formatCurrencyFR(m.prix)} <span class="text-muted">/ ${escapeHtml(m.unite)} / mois</span></span>
                 </label>
