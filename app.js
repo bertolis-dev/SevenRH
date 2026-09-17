@@ -1723,9 +1723,15 @@ const LANDING_FAQ_ITEMS = [
 
 const LEGAL_CONTACT_EMAIL = 'b.bertolis@outlook.com';
 
-/** Le CGU/CGV est un premier brouillon basé sur les faits réels du service (offres, résiliation
- * via Stripe, support par tickets) : à faire relire par un professionnel du droit avant de s'appuyer
- * dessus contractuellement. */
+/** §retour Betty du 17/09/2026 ("il faut mettre quoi comme obligations légales") : complété avec
+ * les mentions manquantes les plus significatives pour un SIRH réel (adresses des hébergeurs, RCS,
+ * droit applicable, et surtout le statut de sous-traitant RGPD sur les données des salariés — voir
+ * le paragraphe "Qui est responsable de vos données ?" ci-dessous). Reste un brouillon sérieux basé
+ * sur les faits réels du service (offres, résiliation via Stripe, support par tickets, durées de
+ * conservation déjà réellement appliquées par l'application) : À FAIRE RELIRE PAR UN PROFESSIONNEL
+ * DU DROIT (ou un service comme LegalPlace/Captain Contrat) avant de s'appuyer dessus
+ * contractuellement, en particulier pour les données de santé (arrêts de travail, catégorie
+ * "sensible" au sens de l'article 9 du RGPD). */
 const LEGAL_CONTENT = {
   mentions: {
     title: 'Mentions légales',
@@ -1733,15 +1739,17 @@ const LEGAL_CONTENT = {
       <p style="margin-top:0;"><strong>Éditeur du site</strong><br>
       Nexus est édité par la société BERTOLIS, EURL au capital social de 1 000 €.<br>
       Siège social : 3 Bis Bois Baudry, 77510 Doue<br>
-      SIREN : 100 782 358<br>
+      SIREN : 100 782 358, RCS Meaux<br>
       Numéro de TVA intracommunautaire : FR26100782358<br>
       Directrice de la publication : Betty Aubert<br>
       Contact : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       <p><strong>Hébergement</strong><br>
-      Hébergement du site : GitHub Pages (GitHub Inc.)<br>
-      Hébergement des données applicatives : Supabase</p>
+      Hébergement du site : GitHub, Inc. — 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis<br>
+      Hébergement des données applicatives : Supabase Pte. Ltd.</p>
       <p><strong>Paiement</strong><br>
-      Les paiements sont traités par Stripe.</p>
+      Les paiements sont traités par Stripe. Nexus ne stocke aucune donnée de carte bancaire.</p>
+      <p><strong>Propriété intellectuelle</strong><br>
+      L'ensemble des contenus de ce site (textes, logo, mises en page) est la propriété de BERTOLIS, sauf mention contraire, et ne peut être reproduit sans autorisation.</p>
     `
   },
   cgu: {
@@ -1750,23 +1758,34 @@ const LEGAL_CONTENT = {
       <p style="margin-top:0;"><strong>Objet</strong><br>
       Nexus est un logiciel de gestion des ressources humaines (SIRH), fourni en tant que service par abonnement par la société BERTOLIS.</p>
       <p><strong>Abonnement et facturation</strong><br>
-      L'abonnement (offre Essentiel, Professionnel ou Premium, facturation mensuelle ou annuelle) est géré via Stripe. Il est résiliable à tout moment depuis Paramètres → Abonnement, sans préavis ; la résiliation prend effet à la fin de la période déjà payée.</p>
+      L'abonnement (modules à la carte ou offre historique Essentiel/Professionnel/Premium, facturation mensuelle ou annuelle) est géré via Stripe. Il est résiliable à tout moment depuis Paramètres → Abonnement, sans préavis ; la résiliation prend effet à la fin de la période déjà payée. En cas d'échec de paiement, l'accès peut être suspendu jusqu'à régularisation, sans effacement des données.</p>
       <p><strong>Comptes et accès</strong><br>
-      Un compte est créé par entreprise cliente. L'accès de chaque utilisateur (salarié, manager, RH, comptabilité, propriétaire) est déterminé par son rôle et ses permissions au sein de cette entreprise.</p>
-      <p><strong>Propriété des données</strong><br>
-      Les données saisies par une entreprise cliente lui appartiennent. Elles ne sont pas utilisées à d'autres fins que la fourniture du service.</p>
+      Un compte est créé par entreprise cliente. L'accès de chaque utilisateur (salarié, manager, RH, comptabilité, propriétaire) est déterminé par son rôle et ses permissions au sein de cette entreprise. Le client est responsable de la confidentialité des identifiants de ses utilisateurs.</p>
+      <p><strong>Propriété des données et du logiciel</strong><br>
+      Les données saisies par une entreprise cliente lui appartiennent et ne sont pas utilisées à d'autres fins que la fourniture du service. À l'inverse, le logiciel Nexus lui-même (code, marque) reste la propriété de BERTOLIS : l'abonnement donne un droit d'usage, jamais un droit de revente ou de reproduction.</p>
+      <p><strong>Disponibilité et responsabilité</strong><br>
+      BERTOLIS met en œuvre les moyens raisonnables pour assurer la disponibilité du service, sans garantie de disponibilité continue (maintenance, panne d'un prestataire tiers, cas de force majeure). BERTOLIS ne saurait être tenue responsable des conséquences d'une saisie erronée par l'entreprise cliente ou de l'indisponibilité d'un service tiers (Supabase, Stripe, GitHub Pages).</p>
       <p><strong>Support</strong><br>
       Le support est inclus dans toutes les offres, via le système de tickets intégré à l'application.</p>
+      <p><strong>Droit applicable</strong><br>
+      Les présentes conditions sont soumises au droit français. À défaut de résolution amiable, tout litige relève des tribunaux compétents du ressort du siège social de BERTOLIS. Ces conditions peuvent être modifiées ; la version en vigueur est celle publiée sur ce site à la date d'utilisation du service.</p>
     `
   },
   confidentialite: {
     title: 'Politique de confidentialité',
     body: `
-      <p style="margin-top:0;">Nexus traite les données nécessaires à la gestion des ressources humaines des entreprises clientes (salariés, congés, notes de frais, documents RH...).</p>
-      <p>Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface).</p>
-      <p>Chaque salarié peut demander l'export de ses propres données personnelles à tout moment depuis l'application.</p>
-      <p>Les paiements sont traités directement par Stripe. Nexus ne stocke aucune donnée de carte bancaire.</p>
-      <p>Pour toute question relative à vos données personnelles : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
+      <p style="margin-top:0;"><strong>Qui est responsable de vos données ?</strong><br>
+      Pour les données des salariés d'une entreprise cliente (congés, notes de frais, documents RH, arrêts de travail...), c'est cette entreprise qui est responsable du traitement au sens du RGPD ; BERTOLIS agit en qualité de sous-traitant, dans le cadre d'un contrat de sous-traitance conforme à l'article 28 du RGPD. Pour les données de contact d'une entreprise prospect ou cliente elle-même (facturation, compte), BERTOLIS est responsable du traitement.</p>
+      <p><strong>Quelles données, pour quoi et pendant combien de temps</strong><br>
+      Nexus traite les données nécessaires à la gestion des ressources humaines des entreprises clientes (identité, contrat, absences, notes de frais, documents RH...), sur la base de l'exécution du contrat conclu avec l'entreprise cliente. Les durées de conservation sont configurables par chaque entreprise (voir Paramètres → Types d'absences / Confidentialité) ; passé ce délai après le départ d'un salarié, sa fiche est anonymisée automatiquement, jamais supprimée sans trace pour les besoins de compteurs et de rapports.</p>
+      <p><strong>Donnée de santé</strong><br>
+      Les arrêts de travail et données médicales associées constituent une catégorie particulière de données au sens de l'article 9 du RGPD. Leur accès est strictement limité aux rôles habilités (RH, manager concerné) selon les permissions définies par l'entreprise cliente, contrôlées côté serveur.</p>
+      <p><strong>Isolation et destinataires</strong><br>
+      Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface). Les seuls destinataires des données sont Supabase (hébergement et base de données) et Stripe (paiement) ; aucune donnée n'est vendue ni utilisée à des fins publicitaires.</p>
+      <p><strong>Cookies</strong><br>
+      Nexus n'utilise aucun cookie de mesure d'audience ni de publicité. Seules des informations techniques nécessaires à la connexion (session, préférences d'affichage) sont conservées dans votre navigateur.</p>
+      <p><strong>Vos droits</strong><br>
+      Vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité sur vos données personnelles. Chaque salarié peut exporter ses propres données depuis l'application à tout moment. Pour exercer un droit, contactez d'abord votre entreprise (responsable du traitement) ou, à défaut, BERTOLIS : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a>. Vous pouvez aussi introduire une réclamation auprès de la CNIL (cnil.fr).</p>
     `
   }
 };

@@ -122,6 +122,8 @@ globalThis.__LANDING_FEATURES = LANDING_FEATURES;
 globalThis.__renderMockCard = renderMockCard;
 globalThis.__renderFeatureDetailPage = renderFeatureDetailPage;
 globalThis.__openScreenshotLightbox = openScreenshotLightbox;
+globalThis.__LEGAL_CONTENT = LEGAL_CONTENT;
+globalThis.__openLegalModal = openLegalModal;
 globalThis.__renderLandingScreen = renderLandingScreen;
 globalThis.__computeAlacarteTotal = computeAlacarteTotal;
 globalThis.__bindLandingScreenEvents = bindLandingScreenEvents;
@@ -386,6 +388,8 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     renderMockCard: sandbox.__renderMockCard,
     renderFeatureDetailPage: sandbox.__renderFeatureDetailPage,
     openScreenshotLightbox: sandbox.__openScreenshotLightbox,
+    LEGAL_CONTENT: sandbox.__LEGAL_CONTENT,
+    openLegalModal: sandbox.__openLegalModal,
     renderLandingScreen: sandbox.__renderLandingScreen,
     computeAlacarteTotal: sandbox.__computeAlacarteTotal,
     bindLandingScreenEvents: sandbox.__bindLandingScreenEvents,
