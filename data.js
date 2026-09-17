@@ -547,12 +547,20 @@ const DEFAULT_SETTINGS = {
   // ensuite n'affecte jamais les checklists déjà en cours, seulement les prochaines.
   onboardingChecklistTemplate: ['DPAE envoyée', 'Contrat de travail signé', 'Visite médicale d\'embauche planifiée', 'Badge/accès remis', 'Compte informatique créé', 'Mutuelle souscrite', 'Règlement intérieur remis'],
   offboardingChecklistTemplate: ['Matériel récupéré', 'Accès informatiques désactivés', 'Solde de tout compte préparé', 'Certificat de travail remis', 'Attestation Pôle emploi remise', 'Portabilité mutuelle/prévoyance signalée'],
-  // Périodicité par défaut du suivi médical (Code du travail — "suivi individuel simple" : 5 ans
-  // maximum entre deux visites hors surveillance renforcée, non gérée ici) — configurable car un
-  // accord de branche ou une exposition à risque particulière peut imposer un délai plus court.
-  // Voir getUpcomingVisitesMedicales (app.js) : la toute première visite (à l'embauche) reste fixée
-  // à 3 mois par la loi, non paramétrable, indépendamment de ce réglage.
-  visiteMedicalePerioditeMois: 60,
+  // §retour Betty du 17/09/2026 : un réglage unique ne reflétait pas la réalité — la périodicité du
+  // suivi médical dépend du TYPE de suivi de chaque salarié (employee.suiviMedicalType, voir
+  // makeEmptyEmployee), fixé par le Code du travail depuis la réforme de 2017 (décret 2016-1908) :
+  // suivi simple (5 ans maximum), suivi adapté (plus court, à confirmer au cas par cas avec la
+  // médecine du travail/l'expert-comptable — 3 ans ici à titre indicatif), suivi renforcé (4 ans
+  // maximum entre deux visites du médecin, AVEC un rendez-vous intermédiaire par un professionnel de
+  // santé à 2 ans — visiteMedicaleRenforceIntermediaireMois). Reste configurable (un accord de
+  // branche peut imposer un délai plus court). Voir getUpcomingVisitesMedicales (app.js) : la toute
+  // première visite (à l'embauche) reste fixée à 3 mois par la loi, non paramétrable, quel que soit
+  // le type de suivi.
+  visiteMedicaleSimpleMois: 60,
+  visiteMedicaleAdapteMois: 36,
+  visiteMedicaleRenforceMois: 48,
+  visiteMedicaleRenforceIntermediaireMois: 24,
   // §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") : durée d'un arrêt
   // de travail (maladie/accident) à partir de laquelle une visite de reprise devient obligatoire au
   // retour du salarié (Code du travail L4624-2-1). 30 jours = seuil le plus souvent cité, mais la
@@ -1863,7 +1871,53 @@ const DB = {
 
   // ---- Salariés ----
 
+  /** §retour Betty du 17/09/2026 : reprise unique de l'ancien champ dateDerniereVisiteMedicale (un
+   * champ unique, écrasé à chaque visite) vers un vrai historique (employee.visitesMedicales) —
+   * même patron que getLeaveTypes() (couleurs des événements familiaux, 16/09/2026) : drapeau posé
+   * directement sur `company` (jamais settings/saveEmployees, qui poussent vers Supabase — de
+   * nombreux tests appellent employeeRepository.getAll() sans mocker SupabaseSync) et persisté via
+   * saveCurrentCompany, réseau-free. Ne s'exécute qu'une fois par entreprise. */
   getEmployees() {
+    const company = this.getCurrentCompany();
+    if (company && !company.visitesMedicalesMigrees) {
+      (company.employees || []).forEach(e => {
+        if (!e.suiviMedicalType) e.suiviMedicalType = 'simple';
+        if (!Array.isArray(e.visitesMedicales)) e.visitesMedicales = [];
+        if (e.dateDerniereVisiteMedicale && !e.visitesMedicales.length) {
+          const now = new Date().toISOString();
+          e.visitesMedicales.push({
+            id: generateId('visite'),
+            date: e.dateDerniereVisiteMedicale,
+            type: 'periodique',
+            conclusion: '',
+            dateProchaineEcheance: '',
+            contreVisite: false,
+            amenagements: '',
+            commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026) — aucune donnée médicale n\'a été reprise.',
+            pieceJointe: null,
+            dateCreation: now,
+            dateModification: now,
+            auteurId: null
+          });
+        }
+      });
+      company.visitesMedicalesMigrees = true;
+      this.saveCurrentCompany(company);
+    }
+    // §retour Betty du 17/09/2026 ("la mise en forme des noms... plus une reprise unique de
+    // l'existant, comme pour les matricules") : même patron de reprise ponctuelle que ci-dessus,
+    // sur son propre drapeau (indépendant de visitesMedicalesMigrees) pour ne jamais reformater deux
+    // fois un nom déjà corrigé, y compris si l'utilisateur l'avait entre-temps délibérément saisi
+    // différemment (cas rare, mais un nom de famille composé pourrait légitimement contenir une
+    // minuscule volontaire — la reprise ne s'exécute qu'une fois, jamais à chaque lecture).
+    if (company && !company.nomsPrenomsMigres) {
+      (company.employees || []).forEach(e => {
+        if (e.nom) e.nom = formatNomFamille(e.nom);
+        if (e.prenom) e.prenom = formatPrenom(e.prenom);
+      });
+      company.nomsPrenomsMigres = true;
+      this.saveCurrentCompany(company);
+    }
     return this.getCurrentCompany().employees.slice();
   },
 
@@ -1903,6 +1957,8 @@ const DB = {
     const employee = Object.assign(makeEmptyEmployee(), data, {
       id: generateId('emp'),
       matricule,
+      nom: formatNomFamille(data.nom),
+      prenom: formatPrenom(data.prenom),
       dateCreation: now,
       dateModification: now,
       // Copie figée du modèle au moment de l'embauche (voir DEFAULT_SETTINGS.onboardingChecklistTemplate)
@@ -1934,6 +1990,11 @@ const DB = {
     const historiqueSalaire = (patch.salaireBrutMensuel !== undefined && Number(patch.salaireBrutMensuel) !== Number(avant.salaireBrutMensuel || 0))
       ? [...(avant.historiqueSalaire || []), { date: new Date().toISOString(), ancienMontant: avant.salaireBrutMensuel || 0, nouveauMontant: Number(patch.salaireBrutMensuel), motif: motifSalaire || '', auteurId: this._currentEmployeeId }]
       : avant.historiqueSalaire;
+    // §retour Betty du 17/09/2026 : mise en forme automatique du nom/prénom, seulement si le champ
+    // est bien fourni dans ce patch (une modification qui ne touche pas au nom, ex. le salaire, ne
+    // doit pas être bloquée par ces deux champs).
+    if (patch.nom !== undefined) patch = { ...patch, nom: formatNomFamille(patch.nom) };
+    if (patch.prenom !== undefined) patch = { ...patch, prenom: formatPrenom(patch.prenom) };
     list[index] = Object.assign({}, avant, patch, { historiqueSalaire, dateModification: new Date().toISOString() });
     this.saveEmployees(list);
     this.logAudit('Modification', 'Salarié', `${list[index].prenom} ${list[index].nom}`);
@@ -5068,7 +5129,16 @@ function makeEmptyEmployee() {
     dateFinContrat: '',
     dateFinPeriodeEssai: '',
     dateDernierEntretienProfessionnel: '',
-    dateDerniereVisiteMedicale: '', // suivi médecine du travail — voir getUpcomingVisitesMedicales
+    // §retour Betty du 17/09/2026 : dateDerniereVisiteMedicale (un champ unique, écrasé à chaque
+    // visite, sans confirmation ni historique) remplacé par un vrai historique — voir
+    // visitesMedicales ci-dessous et VISITES_MEDICALES_MIGRATION_FLAG (migration ponctuelle,
+    // DB.getEmployees()). suiviMedicalType détermine la périodicité ET les options de conclusion
+    // disponibles (seul le suivi renforcé produit un avis d'aptitude/inaptitude, voir
+    // SUIVI_MEDICAL_RULES, app.js).
+    suiviMedicalType: 'simple', // 'simple' | 'adapte' | 'renforce'
+    // [{ id, date, type, conclusion, dateProchaineEcheance, contreVisite, amenagements, commentaire,
+    //    pieceJointe, dateCreation, dateModification, auteurId }], le plus récent en premier à l'affichage.
+    visitesMedicales: [],
     // Checklists d'intégration/de départ (demande du 18/08/2026) : [{ label, fait, dateFait }] —
     // copie du modèle de Paramètres au démarrage, jamais une référence live à ce modèle (voir
     // ensureOnboardingChecklist/startOffboardingChecklist, app.js). onboardingChecklist démarre dès
@@ -5252,6 +5322,26 @@ function seedServices() {
 
 function generateId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** §retour Betty du 17/09/2026 ("la mise en forme des noms") : nom de famille toujours tout en
+ * majuscules, accents conservés (toLocaleUpperCase('fr-FR') convertit correctement é -> É, jamais
+ * une simple bascule ASCII qui les perdrait). Appelée depuis DB.addEmployee/updateEmployee (donc
+ * couvre déjà la création manuelle, l'import Excel et la conversion d'une candidature, qui passent
+ * tous par ces deux fonctions) et depuis bindCandidatureFormEvents (app.js) pour le formulaire
+ * public lui-même. */
+function formatNomFamille(nom) {
+  if (!nom) return nom;
+  return nom.trim().toLocaleUpperCase('fr-FR');
+}
+
+/** Majuscule en première lettre de chaque "mot", un mot commençant après un espace, un tiret ou une
+ * apostrophe (courbe ’ ou droite ') — "Marie-Caroline", "Jean Pierre", "N'Golo" respectent tous
+ * cette même règle. Reste en minuscules ailleurs (accents conservés par le même mécanisme locale
+ * que formatNomFamille), y compris si la saisie d'origine était tout en majuscules. */
+function formatPrenom(prenom) {
+  if (!prenom) return prenom;
+  return prenom.trim().toLocaleLowerCase('fr-FR').replace(/(^|[\s\-'’])(\p{L})/gu, (match, sep, letter) => sep + letter.toLocaleUpperCase('fr-FR'));
 }
 
 /** Calcule une ancienneté lisible ("3 ans, 2 mois") à partir d'une date d'embauche. */
@@ -5540,8 +5630,8 @@ function makeEmptyLeaveRequest() {
     // §retour Betty du 14/09/2026 (Congés, "rappel au retour + visite médicale") : renseigné une
     // fois la visite de reprise (Code du travail, obligatoire après certains arrêts) confirmée
     // faite pour CETTE absence précise — voir DB.marquerVisiteRepriseEffectuee, getVisitesRepriseAFaire
-    // (app.js). Distinct de employee.dateDerniereVisiteMedicale (suivi périodique, sans rapport avec
-    // une absence donnée) : les deux obligations ne se confondent jamais entre elles.
+    // (app.js). Distinct de employee.visitesMedicales (suivi périodique, sans rapport avec une
+    // absence donnée) : les deux obligations ne se confondent jamais entre elles.
     visiteRepriseDate: null,
     dateCreation: null,
     dateModification: null

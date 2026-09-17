@@ -2019,6 +2019,16 @@ textarea.input { resize: vertical; font-family: inherit; }
  * même spécification qui force overflow-y à 'auto' dès qu'un seul axe n'est pas 'visible' recréerait
  * le problème par ce biais, sans toucher au reste des tableaux qui utilisent .table-card ailleurs. */
 .planning-scroll-card { overflow-x: visible; }
+/* §audit du 17/09/2026 : sur téléphone (largeur réelle, pas seulement redimensionnée), le tableau
+   Planning/Calendrier équipe est plus large que l'écran quel que soit l'effectif affiché (beaucoup
+   de colonnes jour) — avec overflow-x: visible ci-dessus, ce débordement n'était plus contenu dans
+   la carte et poussait TOUTE la page (jusqu'à 500-600px de trop, sidebar et topbar compris). Sous
+   860px, on réautorise le défilement horizontal contenu à cette carte : l'en-tête ne reste alors
+   fixe que par rapport à la carte (pas toute la page) pendant un défilement vertical, un compromis
+   largement préférable à une page entière qui déborde sur le côté. */
+@media (max-width: 860px) {
+  .planning-scroll-card { overflow-x: auto; }
+}
 
 .planning-scroll-card .planning-table thead th {
   position: sticky;

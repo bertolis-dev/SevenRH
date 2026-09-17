@@ -807,8 +807,11 @@ function bindCandidatureFormEvents(companyId) {
     const formData = new FormData();
     formData.set('company_id', companyId);
     formData.set('site_web', document.getElementById('cand-honeypot').value);
-    formData.set('nom', document.getElementById('cand-nom').value.trim());
-    formData.set('prenom', document.getElementById('cand-prenom').value.trim());
+    // §retour Betty du 17/09/2026 ("pour que le candidat converti en salarié arrive déjà propre") :
+    // même mise en forme que DB.addEmployee/updateEmployee (data.js), appliquée ici aussi puisque
+    // cette candidature est envoyée directement à submitCandidature, jamais via employeeRepository.
+    formData.set('nom', formatNomFamille(document.getElementById('cand-nom').value));
+    formData.set('prenom', formatPrenom(document.getElementById('cand-prenom').value));
     formData.set('email', document.getElementById('cand-email').value.trim());
     formData.set('telephone', document.getElementById('cand-telephone').value.trim());
     formData.set('lettre_texte', document.getElementById('cand-lettre-texte').value.trim());
@@ -6890,36 +6893,95 @@ function renderContingentHeuresSupCard(items) {
   `;
 }
 
+/** §retour Betty du 17/09/2026 : la périodicité ET les options de conclusion d'une visite médicale
+ * dépendent du type de suivi du salarié (Code du travail, réforme de 2017/décret 2016-1908) — seul
+ * le suivi renforcé (salariés exposés à des risques particuliers) produit un avis d'aptitude ou
+ * d'inaptitude ; suivi simple et adapté relèvent d'une visite d'information et de prévention, sans
+ * avis d'aptitude. Le suivi renforcé impose en plus un rendez-vous intermédiaire par un
+ * professionnel de santé (pas nécessairement le médecin) entre deux visites périodiques. Valeurs
+ * indicatives (adapté notamment) À FAIRE CONFIRMER avec la médecine du travail/l'expert-comptable —
+ * voir le commentaire sur visiteMedicaleAdapteMois (data.js). */
+const SUIVI_MEDICAL_RULES = {
+  simple: {
+    label: 'Suivi simple',
+    perioditeSettingKey: 'visiteMedicaleSimpleMois',
+    hasAptitudeVerdict: false,
+    conclusionOptions: ['Suivi assuré, aucune orientation nécessaire', 'Orientation vers le médecin du travail recommandée']
+  },
+  adapte: {
+    label: 'Suivi adapté',
+    perioditeSettingKey: 'visiteMedicaleAdapteMois',
+    hasAptitudeVerdict: false,
+    conclusionOptions: ['Suivi assuré, aucune orientation nécessaire', 'Orientation vers le médecin du travail recommandée']
+  },
+  renforce: {
+    label: 'Suivi renforcé',
+    perioditeSettingKey: 'visiteMedicaleRenforceMois',
+    intermediaireSettingKey: 'visiteMedicaleRenforceIntermediaireMois',
+    hasAptitudeVerdict: true,
+    conclusionOptions: ['Apte', 'Apte avec réserves ou aménagements', 'Inapte temporairement', 'Inapte définitivement']
+  }
+};
+const VISITE_MEDICALE_TYPE_LABELS = {
+  embauche: 'Visite d\'information et de prévention à l\'embauche',
+  periodique: 'Visite périodique',
+  reprise: 'Visite de reprise après un arrêt',
+  demande: 'Visite à la demande du salarié ou de l\'employeur'
+};
+
+/** Visite la plus récente d'un salarié (tri par date, pas par ordre de saisie) — null si aucune
+ * n'est encore enregistrée. */
+function getLatestVisiteMedicale(employee) {
+  const visites = employee.visitesMedicales || [];
+  if (!visites.length) return null;
+  return visites.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+}
+
 /** Prochaine échéance de visite médicale pour UN salarié — extrait de getUpcomingVisitesMedicales
  * pour être aussi réutilisable sur la fiche salarié (qui doit toujours montrer la prochaine
  * échéance, même hors de la fenêtre "60 prochains jours" du tableau de bord). null si le salarié
- * n'a pas de date d'embauche connue (rien à calculer). */
-function computeNextVisiteMedicale(employee, perioditeMois) {
+ * n'a pas de date d'embauche connue (rien à calculer).
+ * §simplification assumée : la dernière visite ENREGISTRÉE (quel que soit son type — périodique ou
+ * rendez-vous intermédiaire) sert de nouveau point de départ pour les deux échéances suivantes,
+ * plutôt que de suivre deux cycles indépendants — plus simple à comprendre pour l'utilisateur, et le
+ * rendez-vous intermédiaire tombe de toute façon toujours avant la visite périodique suivante. */
+function computeNextVisiteMedicale(employee) {
   if (!employee.dateEmbauche) return null;
-  if (employee.dateDerniereVisiteMedicale) {
-    const baseline = parseISODateLocal(employee.dateDerniereVisiteMedicale);
-    return { next: addMonths(baseline, perioditeMois), premiereVisite: false };
+  const rules = SUIVI_MEDICAL_RULES[employee.suiviMedicalType] || SUIVI_MEDICAL_RULES.simple;
+  const derniere = getLatestVisiteMedicale(employee);
+  if (!derniere) {
+    const embauche = parseISODateLocal(employee.dateEmbauche);
+    return { next: addMonths(embauche, 3), premiereVisite: true, kind: 'embauche', autreEcheance: null };
   }
-  const embauche = parseISODateLocal(employee.dateEmbauche);
-  return { next: addMonths(embauche, 3), premiereVisite: true };
+  const settings = settingsRepository.getSettings();
+  const baseline = parseISODateLocal(derniere.date);
+  const perioditeMois = settings[rules.perioditeSettingKey] || 60;
+  const next = addMonths(baseline, perioditeMois);
+  if (rules.intermediaireSettingKey) {
+    const intermediaireMois = settings[rules.intermediaireSettingKey] || 24;
+    const intermediaireNext = addMonths(baseline, intermediaireMois);
+    if (intermediaireNext < next) return { next: intermediaireNext, premiereVisite: false, kind: 'intermediaire', autreEcheance: next };
+  }
+  return { next, premiereVisite: false, kind: 'periodique', autreEcheance: null };
 }
 
 /** Suivi médecine du travail (Code du travail) : la toute première visite ("visite d'information
  * et de prévention") est due au plus tard 3 mois après la prise de poste — délai légal, jamais
  * paramétrable. Une fois une première visite enregistrée, l'échéance suivante suit la périodicité
- * réglable (settings.visiteMedicalePerioditeMois, 5 ans par défaut). Même principe qu'
+ * de son type de suivi (voir SUIVI_MEDICAL_RULES/computeNextVisiteMedicale). Même principe qu'
  * getUpcomingEntretiensProfessionnels : un retard s'affiche EN RETARD (daysUntil négatif, trié en
  * premier), jamais silencieusement repoussé. */
 function getUpcomingVisitesMedicales(daysAhead = 60, employees, limit = 5) {
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
-  const perioditeMois = settingsRepository.getSettings().visiteMedicalePerioditeMois || 60;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
-      const { next, premiereVisite } = computeNextVisiteMedicale(e, perioditeMois);
-      return { employee: e, next, daysUntil: Math.round((next - today) / 86400000), premiereVisite };
+      const echeance = computeNextVisiteMedicale(e);
+      if (!echeance) return null;
+      return { employee: e, next: echeance.next, daysUntil: Math.round((echeance.next - today) / 86400000), premiereVisite: echeance.premiereVisite, kind: echeance.kind };
     })
+    .filter(Boolean)
     .filter(x => x.daysUntil <= daysAhead)
     .sort((a, b) => a.daysUntil - b.daysUntil)
     .slice(0, limit);
@@ -10327,6 +10389,59 @@ function bindChecklistEvents(employeeId) {
 
 const AVENANT_TYPES = ['Poste', 'Rémunération', 'Temps de travail', 'Établissement / Service', 'Autre'];
 
+/** §retour Betty du 17/09/2026 : remplace l'ancien champ unique dateDerniereVisiteMedicale (écrasé
+ * à chaque visite, sans historique) par une vraie liste, comme renderAvenantsCard juste en dessous
+ * — le plus récent en premier. */
+function visiteMedicaleConclusionBadgeClass(conclusion) {
+  if (!conclusion) return 'badge-muted';
+  if (/inapte/i.test(conclusion)) return 'badge-danger';
+  // "aucune orientation nécessaire" est la conclusion FAVORABLE de la VIP (suivi simple/adapté) —
+  // seule une orientation explicitement RECOMMANDÉE (ou une réserve/aménagement) doit ressortir en
+  // avertissement, jamais sa négation.
+  if (/réserve|orientation (vers|recommandée)/i.test(conclusion)) return 'badge-warning';
+  return 'badge-success';
+}
+
+function renderVisitesMedicalesCard(employee, canEdit) {
+  const rules = SUIVI_MEDICAL_RULES[employee.suiviMedicalType] || SUIVI_MEDICAL_RULES.simple;
+  const visites = (employee.visitesMedicales || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const echeance = computeNextVisiteMedicale(employee);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return `
+    <div class="card">
+      <h2>Suivi médical</h2>
+      <p class="text-muted" style="margin: 0 0 10px;">${escapeHtml(rules.label)}</p>
+      ${echeance ? (() => {
+        const overdue = echeance.next < today;
+        const kindLabel = echeance.kind === 'embauche' ? ' (visite d\'embauche)' : echeance.kind === 'intermediaire' ? ' (rendez-vous intermédiaire par un professionnel de santé)' : '';
+        const autre = echeance.autreEcheance ? `<br>Visite périodique suivante (sauf nouvel enregistrement d'ici là) : ${formatDate(toISODate(echeance.autreEcheance))}` : '';
+        return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin: 0 0 10px;">Prochaine échéance : ${formatDate(toISODate(echeance.next))}${kindLabel}${overdue ? ' — en retard' : ''}${autre}</p>`;
+      })() : ''}
+      ${visites.length === 0 ? `<p class="text-muted" style="margin-bottom: 10px;">Aucune visite enregistrée.</p>` : `
+        <div class="mini-list" style="margin-bottom: 10px;">
+          ${visites.map(v => `
+            <div class="mini-list-item" style="align-items: flex-start;">
+              <span>
+                <span class="badge ${visiteMedicaleConclusionBadgeClass(v.conclusion)}">${escapeHtml(v.conclusion || 'Sans conclusion')}</span>
+                ${escapeHtml(VISITE_MEDICALE_TYPE_LABELS[v.type] || v.type)}
+                ${v.contreVisite ? '<span class="badge badge-info">Contre-visite/examen complémentaire</span>' : ''}
+                ${v.amenagements ? `<br><span class="text-muted">Aménagements préconisés : ${escapeHtml(v.amenagements)}</span>` : ''}
+                ${v.pieceJointe ? `<br><a href="${v.pieceJointe.dataUrl}" download="${escapeHtml(v.pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 12)} ${escapeHtml(v.pieceJointe.nom)}</a>` : ''}
+              </span>
+              <span style="text-align: right; white-space: nowrap;">
+                <span class="text-muted">${formatDate(v.date)}</span>
+                ${canEdit ? `<br><button type="button" class="btn-link" data-edit-visite-medicale="${v.id}">Modifier</button> · <button type="button" class="btn-link text-danger" data-delete-visite-medicale="${v.id}">Supprimer</button>` : ''}
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `}
+      ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-visite-medicale">Enregistrer une visite médicale</button>` : ''}
+    </div>
+  `;
+}
+
 /** Trace manuelle des avenants (voir data.js, employee.avenants) — le plus récent en premier,
  * comme les autres historiques de l'app (buildRequestTimeline, entretien.historique...). */
 function renderAvenantsCard(avenants, canEdit) {
@@ -10410,6 +10525,141 @@ function openAjouterAvenantModal(employeeId) {
     closeModal();
     showToast('Avenant enregistré.');
     render();
+  });
+}
+
+/** §retour Betty du 17/09/2026 ("le suivi médical, à faire complètement ou pas du tout") : remplace
+ * l'ancien bouton qui écrivait la date du jour au premier clic, sans confirmation ni possibilité de
+ * choisir la date — sert à la fois pour ajouter (visiteId absent) et pour modifier (visiteId fourni)
+ * une visite, même formulaire dans les deux cas. Les options de conclusion dépendent du type de
+ * suivi du salarié (SUIVI_MEDICAL_RULES) : seul le suivi renforcé propose un avis d'aptitude. */
+function openVisiteMedicaleModal(employeeId, visiteId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee || !canEditEmployeeRecord(employee)) {
+    showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error');
+    return;
+  }
+  const existing = visiteId ? (employee.visitesMedicales || []).find(v => v.id === visiteId) : null;
+  const rules = SUIVI_MEDICAL_RULES[employee.suiviMedicalType] || SUIVI_MEDICAL_RULES.simple;
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${existing ? 'Modifier' : 'Enregistrer'} une visite médicale</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="visite-medicale-form">
+        <div class="modal-body">
+          <p class="text-muted" style="margin-top: 0;">${escapeHtml(rules.label)} — les options de conclusion ci-dessous en tiennent compte.</p>
+          <div class="form-field">
+            <label for="f-visite-type">Type de visite</label>
+            <select class="input" id="f-visite-type">
+              ${Object.entries(VISITE_MEDICALE_TYPE_LABELS).map(([key, label]) => `<option value="${key}" ${existing && existing.type === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-date">Date de la visite *</label>
+            <input class="input" type="date" id="f-visite-date" value="${escapeHtml(existing ? existing.date : toISODate(new Date()))}" required>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-conclusion">Conclusion</label>
+            <select class="input" id="f-visite-conclusion">
+              <option value="">— Non renseignée —</option>
+              ${rules.conclusionOptions.map(c => `<option value="${escapeHtml(c)}" ${existing && existing.conclusion === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-echeance">Date de la prochaine échéance</label>
+            <input class="input" type="date" id="f-visite-echeance" value="${escapeHtml(existing ? existing.dateProchaineEcheance : '')}">
+            <p class="form-hint">Laissez vide pour vous baser sur la périodicité par défaut du type de suivi (Paramètres).</p>
+          </div>
+          <div class="form-field">
+            <label><input type="checkbox" id="f-visite-contre-visite" ${existing && existing.contreVisite ? 'checked' : ''}> Contre-visite ou examen complémentaire prévu</label>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-amenagements">Aménagements de poste préconisés</label>
+            <textarea class="input" id="f-visite-amenagements" rows="2">${escapeHtml(existing ? existing.amenagements : '')}</textarea>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-commentaire">Commentaire</label>
+            <textarea class="input" id="f-visite-commentaire" rows="2">${escapeHtml(existing ? existing.commentaire : '')}</textarea>
+            <p class="form-hint text-danger">Ne jamais y indiquer un diagnostic ou le motif médical d'une inaptitude : l'employeur n'a le droit de connaître que la conclusion et les aménagements préconisés, jamais l'information médicale elle-même.</p>
+          </div>
+          <div class="form-field">
+            <label for="f-visite-piece-jointe">Document remis par le médecin (optionnel)</label>
+            <input class="input" type="file" id="f-visite-piece-jointe">
+            ${existing && existing.pieceJointe ? `<p class="text-muted">Document actuel : ${escapeHtml(existing.pieceJointe.nom)} (choisissez un nouveau fichier pour le remplacer)</p>` : ''}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  state.pendingAttachment = existing ? existing.pieceJointe : null;
+  state.pendingAttachmentFile = null;
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('f-visite-piece-jointe').addEventListener('change', handleAttachmentChange);
+  document.getElementById('visite-medicale-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const date = document.getElementById('f-visite-date').value;
+    if (!date) return;
+    const current = employeeRepository.getById(employeeId);
+    if (!current) { showToast('Ce salarié n\'est plus disponible.', 'error'); closeModal(); return; }
+    const now = new Date().toISOString();
+    const visite = {
+      id: existing ? existing.id : generateId('visite'),
+      type: document.getElementById('f-visite-type').value,
+      date,
+      conclusion: document.getElementById('f-visite-conclusion').value,
+      dateProchaineEcheance: document.getElementById('f-visite-echeance').value,
+      contreVisite: document.getElementById('f-visite-contre-visite').checked,
+      amenagements: document.getElementById('f-visite-amenagements').value.trim(),
+      commentaire: document.getElementById('f-visite-commentaire').value.trim(),
+      pieceJointe: state.pendingAttachment,
+      dateCreation: existing ? existing.dateCreation : now,
+      dateModification: now,
+      auteurId: authRepository.getCurrentUser().id
+    };
+    const visites = existing
+      ? (current.visitesMedicales || []).map(v => v.id === existing.id ? visite : v)
+      : [...(current.visitesMedicales || []), visite];
+    employeeRepository.update(employeeId, { visitesMedicales: visites });
+    auditLogRepository.logAudit(existing ? 'Modification' : 'Création', 'Visite médicale', `${current.prenom} ${current.nom}`, `${VISITE_MEDICALE_TYPE_LABELS[visite.type] || visite.type} du ${formatDate(visite.date)}`);
+    state.pendingAttachment = null;
+    state.pendingAttachmentFile = null;
+    closeModal();
+    showToast(existing ? 'Visite médicale modifiée.' : 'Visite médicale enregistrée.');
+    render();
+  });
+}
+
+function deleteVisiteMedicale(employeeId, visiteId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee || !canEditEmployeeRecord(employee)) {
+    showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error');
+    return;
+  }
+  const visite = (employee.visitesMedicales || []).find(v => v.id === visiteId);
+  if (!visite) return;
+  openConfirm({
+    title: 'Supprimer cette visite médicale ?',
+    message: `Visite du ${formatDate(visite.date)} (${VISITE_MEDICALE_TYPE_LABELS[visite.type] || visite.type}). Cette action est définitive.`,
+    confirmLabel: 'Supprimer',
+    danger: true,
+    onConfirm: () => {
+      const current = employeeRepository.getById(employeeId);
+      if (!current) return;
+      employeeRepository.update(employeeId, { visitesMedicales: (current.visitesMedicales || []).filter(v => v.id !== visiteId) });
+      auditLogRepository.logAudit('Suppression', 'Visite médicale', `${current.prenom} ${current.nom}`, `${VISITE_MEDICALE_TYPE_LABELS[visite.type] || visite.type} du ${formatDate(visite.date)}`);
+      showToast('Visite médicale supprimée.');
+      render();
+    }
   });
 }
 
@@ -10560,18 +10810,7 @@ function renderEmployeeDetail(id) {
         ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
       </div>
 
-      <div class="card">
-        <h2>Suivi médical</h2>
-        ${infoRow('Dernière visite médicale', e.dateDerniereVisiteMedicale ? formatDate(e.dateDerniereVisiteMedicale) : 'Jamais enregistrée')}
-        ${(() => {
-          const visite = computeNextVisiteMedicale(e, settingsRepository.getSettings().visiteMedicalePerioditeMois);
-          if (!visite) return '';
-          const now = new Date();
-          const overdue = visite.next < new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin-top: 4px;">Prochaine échéance : ${formatDate(toISODate(visite.next))}${visite.premiereVisite ? ' (visite d\'embauche)' : ''}${overdue ? ' — en retard' : ''}</p>`;
-        })()}
-        ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-enregistrer-visite-medicale" style="margin-top: 8px;">Enregistrer une visite médicale</button>` : ''}
-      </div>
+      ${ifModule('rh', renderVisitesMedicalesCard(e, canEdit))}
 
       ${canSeeContractuel ? renderAvenantsCard(e.avenants || [], canEdit) : ''}
 
@@ -11847,14 +12086,13 @@ function bindEmployeeDetailEvents() {
   const editBtn = document.getElementById('btn-edit-employee');
   if (editBtn) editBtn.addEventListener('click', () => openEmployeeModal(state.currentEmployeeId));
 
-  // Un clic = "je reviens de la visite, elle a eu lieu aujourd'hui" (cas le plus courant) — pour
-  // saisir une date passée précise (rattrapage de données), le champ reste modifiable depuis
-  // "Modifier" comme dateFinPeriodeEssai/dateFinContrat.
-  const visiteMedicaleBtn = document.getElementById('btn-enregistrer-visite-medicale');
-  if (visiteMedicaleBtn) visiteMedicaleBtn.addEventListener('click', () => {
-    employeeRepository.update(state.currentEmployeeId, { dateDerniereVisiteMedicale: toISODate(new Date()) });
-    showToast('Visite médicale enregistrée.');
-    render();
+  const ajouterVisiteMedicaleBtn = document.getElementById('btn-ajouter-visite-medicale');
+  if (ajouterVisiteMedicaleBtn) ajouterVisiteMedicaleBtn.addEventListener('click', () => openVisiteMedicaleModal(state.currentEmployeeId));
+  document.querySelectorAll('[data-edit-visite-medicale]').forEach(btn => {
+    btn.addEventListener('click', () => openVisiteMedicaleModal(state.currentEmployeeId, btn.dataset.editVisiteMedicale));
+  });
+  document.querySelectorAll('[data-delete-visite-medicale]').forEach(btn => {
+    btn.addEventListener('click', () => deleteVisiteMedicale(state.currentEmployeeId, btn.dataset.deleteVisiteMedicale));
   });
 
   const avenantBtn = document.getElementById('btn-ajouter-avenant');
@@ -16690,8 +16928,24 @@ function renderParametresListes() {
       <h2>Salariés</h2>
       <div class="form-grid" style="max-width: 700px;">
         <div class="form-field">
-          <label for="f-visite-medicale-periodicite">Périodicité des visites médicales (mois)</label>
-          <input class="input" type="number" min="1" id="f-visite-medicale-periodicite" value="${escapeHtml(settings.visiteMedicalePerioditeMois)}">
+          <label for="f-visite-medicale-simple">Périodicité du suivi médical simple (mois)</label>
+          <input class="input" type="number" min="1" id="f-visite-medicale-simple" value="${escapeHtml(settings.visiteMedicaleSimpleMois)}">
+          <p class="form-hint">5 ans (60 mois) maximum par défaut (Code du travail), hors surveillance renforcée.</p>
+        </div>
+        <div class="form-field">
+          <label for="f-visite-medicale-adapte">Périodicité du suivi médical adapté (mois)</label>
+          <input class="input" type="number" min="1" id="f-visite-medicale-adapte" value="${escapeHtml(settings.visiteMedicaleAdapteMois)}">
+          <p class="form-hint">Valeur indicative, à confirmer au cas par cas avec la médecine du travail/votre expert-comptable.</p>
+        </div>
+        <div class="form-field">
+          <label for="f-visite-medicale-renforce">Périodicité du suivi médical renforcé (mois)</label>
+          <input class="input" type="number" min="1" id="f-visite-medicale-renforce" value="${escapeHtml(settings.visiteMedicaleRenforceMois)}">
+          <p class="form-hint">4 ans (48 mois) maximum par défaut entre deux visites du médecin du travail.</p>
+        </div>
+        <div class="form-field">
+          <label for="f-visite-medicale-renforce-intermediaire">Rendez-vous intermédiaire, suivi renforcé (mois)</label>
+          <input class="input" type="number" min="1" id="f-visite-medicale-renforce-intermediaire" value="${escapeHtml(settings.visiteMedicaleRenforceIntermediaireMois)}">
+          <p class="form-hint">2 ans (24 mois) maximum par défaut, par un professionnel de santé (pas nécessairement le médecin).</p>
         </div>
         <div class="form-field">
           <label for="f-seuil-visite-reprise">Durée d'arrêt déclenchant une visite de reprise (jours)</label>
@@ -16967,7 +17221,10 @@ function bindParametresListesEvents() {
   };
 
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
-  bindNumberField('f-visite-medicale-periodicite', 'visiteMedicalePerioditeMois', 60, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-simple', 'visiteMedicaleSimpleMois', 60, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-adapte', 'visiteMedicaleAdapteMois', 36, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-renforce', 'visiteMedicaleRenforceMois', 48, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-renforce-intermediaire', 'visiteMedicaleRenforceIntermediaireMois', 24, 'Périodicité mise à jour.');
   bindNumberField('f-seuil-visite-reprise', 'seuilVisiteRepriseJours', 30, 'Seuil mis à jour.');
   bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
   bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
@@ -24047,7 +24304,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date')}
               ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
               ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
-              ${textField('dateDerniereVisiteMedicale', 'Dernière visite médicale', employee.dateDerniereVisiteMedicale, false, 'date')}
+              ${selectField('suiviMedicalType', 'Type de suivi médical', null, employee.suiviMedicalType || 'simple', Object.entries(SUIVI_MEDICAL_RULES).map(([key, r]) => ({ value: key, label: r.label })))}
             </div>
           </fieldset>
 

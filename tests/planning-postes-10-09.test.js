@@ -85,8 +85,10 @@ async function run() {
 
     // Thomas Petit (service "Comptabilité", voir seedEmployees) reçoit un quart ; Nicolas Girard
     // (service "IT") n'en a aucun cette semaine.
-    const thomas = DB.getEmployees().find(e => e.nom === 'Petit');
-    const nicolas = DB.getEmployees().find(e => e.nom === 'Girard');
+    // §retour Betty du 17/09/2026 : le nom de famille est désormais toujours mis en majuscules
+    // (formatNomFamille, data.js) — comparaison mise à jour en conséquence.
+    const thomas = DB.getEmployees().find(e => e.nom === 'PETIT');
+    const nicolas = DB.getEmployees().find(e => e.nom === 'GIRARD');
     const shift = shiftRepository.create({ employeeId: thomas.id, weekday: 'Lun', heureDebut: '09:00', heureFin: '16:00', pauseMinutes: 30 });
 
     state.planningVue = 'equipe';

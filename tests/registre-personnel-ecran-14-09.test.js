@@ -36,7 +36,9 @@ function run() {
     });
 
     const html = renderParametresRegistrePersonnel();
-    assert.ok(html.includes('Moreau') && html.includes('Julien'), 'le salarié anonymisé doit rester visible dans le registre (nom/prénom préservés par 0053)');
+    // §retour Betty du 17/09/2026 : le nom de famille est désormais toujours mis en majuscules
+    // (formatNomFamille, data.js) — "Moreau" devient "MOREAU" dès l'enregistrement ci-dessus.
+    assert.ok(html.includes('MOREAU') && html.includes('Julien'), 'le salarié anonymisé doit rester visible dans le registre (nom/prénom préservés par 0053)');
     assert.ok(html.includes('12/05/1990'), 'la date de naissance doit être formatée et affichée');
     assert.ok(html.includes('Française'), 'la nationalité doit être affichée');
     assert.ok(html.includes('Comptable'), 'l\'emploi (poste) doit être affiché');

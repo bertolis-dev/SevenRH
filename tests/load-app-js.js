@@ -105,6 +105,8 @@ globalThis.__settingsRepository = settingsRepository;
 globalThis.__candidatureRepository = candidatureRepository;
 globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 globalThis.__formatCurrencyFR = formatCurrencyFR;
+globalThis.__formatNomFamille = formatNomFamille;
+globalThis.__formatPrenom = formatPrenom;
 globalThis.__companyRepository = companyRepository;
 globalThis.__billingRepository = billingRepository;
 `;
@@ -286,6 +288,13 @@ globalThis.__reportClientError = reportClientError;
 globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
 globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 globalThis.__renderEmployeeDetail = renderEmployeeDetail;
+globalThis.__computeNextVisiteMedicale = computeNextVisiteMedicale;
+globalThis.__getLatestVisiteMedicale = getLatestVisiteMedicale;
+globalThis.__SUIVI_MEDICAL_RULES = SUIVI_MEDICAL_RULES;
+globalThis.__VISITE_MEDICALE_TYPE_LABELS = VISITE_MEDICALE_TYPE_LABELS;
+globalThis.__openVisiteMedicaleModal = openVisiteMedicaleModal;
+globalThis.__deleteVisiteMedicale = deleteVisiteMedicale;
+globalThis.__visiteMedicaleConclusionBadgeClass = visiteMedicaleConclusionBadgeClass;
 globalThis.__renderParametresListes = renderParametresListes;
 globalThis.__renderParametresEntreprise = renderParametresEntreprise;
 globalThis.__bindParametresEntrepriseEvents = bindParametresEntrepriseEvents;
@@ -377,6 +386,8 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     candidatureRepository: sandbox.__candidatureRepository,
     DEFAULT_SETTINGS: sandbox.__DEFAULT_SETTINGS,
     formatCurrencyFR: sandbox.__formatCurrencyFR,
+    formatNomFamille: sandbox.__formatNomFamille,
+    formatPrenom: sandbox.__formatPrenom,
     syncNotifications: sandbox.__syncNotifications,
     hasModule: sandbox.__hasModule,
     navigateTo: sandbox.__navigateTo,
@@ -531,6 +542,13 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
     ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
     renderEmployeeDetail: sandbox.__renderEmployeeDetail,
+    computeNextVisiteMedicale: sandbox.__computeNextVisiteMedicale,
+    getLatestVisiteMedicale: sandbox.__getLatestVisiteMedicale,
+    SUIVI_MEDICAL_RULES: sandbox.__SUIVI_MEDICAL_RULES,
+    VISITE_MEDICALE_TYPE_LABELS: sandbox.__VISITE_MEDICALE_TYPE_LABELS,
+    openVisiteMedicaleModal: sandbox.__openVisiteMedicaleModal,
+    deleteVisiteMedicale: sandbox.__deleteVisiteMedicale,
+    visiteMedicaleConclusionBadgeClass: sandbox.__visiteMedicaleConclusionBadgeClass,
     renderParametresListes: sandbox.__renderParametresListes,
     renderParametresEntreprise: sandbox.__renderParametresEntreprise,
     bindParametresEntrepriseEvents: sandbox.__bindParametresEntrepriseEvents,
