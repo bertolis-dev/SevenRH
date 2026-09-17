@@ -119,6 +119,9 @@ globalThis.__state = state;
 globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__LANDING_ALACARTE_MODULES = LANDING_ALACARTE_MODULES;
 globalThis.__LANDING_FEATURES = LANDING_FEATURES;
+globalThis.__renderMockCard = renderMockCard;
+globalThis.__renderFeatureDetailPage = renderFeatureDetailPage;
+globalThis.__openScreenshotLightbox = openScreenshotLightbox;
 globalThis.__renderLandingScreen = renderLandingScreen;
 globalThis.__computeAlacarteTotal = computeAlacarteTotal;
 globalThis.__bindLandingScreenEvents = bindLandingScreenEvents;
@@ -380,6 +383,9 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     LANDING_ALACARTE_MODULES: sandbox.__LANDING_ALACARTE_MODULES,
     LANDING_FEATURES: sandbox.__LANDING_FEATURES,
+    renderMockCard: sandbox.__renderMockCard,
+    renderFeatureDetailPage: sandbox.__renderFeatureDetailPage,
+    openScreenshotLightbox: sandbox.__openScreenshotLightbox,
     renderLandingScreen: sandbox.__renderLandingScreen,
     computeAlacarteTotal: sandbox.__computeAlacarteTotal,
     bindLandingScreenEvents: sandbox.__bindLandingScreenEvents,

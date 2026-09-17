@@ -3216,6 +3216,32 @@ textarea.input { resize: vertical; font-family: inherit; }
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
   display: block;
 }
+/* §retour Betty du 17/09/2026 : voir openScreenshotLightbox (app.js) — juste un indice visuel que
+   l'image s'agrandit au clic, jamais un style différent par module. */
+.landing-hero-screenshot-zoomable { cursor: zoom-in; }
+.modal-image-lightbox {
+  background: transparent;
+  box-shadow: none;
+  max-width: 95vw;
+  width: auto;
+  max-height: 95vh;
+  position: relative;
+  align-items: center;
+}
+.lightbox-image {
+  max-width: 95vw;
+  max-height: 95vh;
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  display: block;
+}
+.lightbox-close-btn {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
 .landing-mock-card {
   width: 100%;
   max-width: 420px;

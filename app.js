@@ -1433,6 +1433,134 @@ const LANDING_FEATURES = [
         [ICONS.checkCircle, 'Fiche salarié pré-remplie en un clic', 'success', 'Prêt à embaucher']
       ]
     }
+  },
+  // §retour Betty du 17/09/2026 : 4 modules ajoutés à la carte des fonctionnalités, insérés à la
+  // fin (jamais au milieu) pour ne jamais décaler les index déjà référencés dans les tableaux
+  // `related` des modules existants.
+  {
+    icon: ICONS.schedule, title: 'Calendrier',
+    text: 'Vue mensuelle de toute l\'entreprise, filtrable par service et par type d\'absence.',
+    detail: [
+      "Vue mensuelle classique (comme un agenda), en plus de la vue tableau du Planning",
+      "Bascule Mon calendrier / Calendrier entreprise, filtrable par service",
+      "Jours fériés et vacances scolaires (par zone) intégrés automatiquement",
+      "Export Excel du mois affiché, un salarié par ligne et un jour par colonne"
+    ],
+    howItWorks: [
+      "Chaque salarié consulte son propre calendrier, ou celui de toute l'entreprise selon son rôle.",
+      "Les congés, absences et télétravail validés s'affichent avec leur type, les demandes en attente restent visibles à part.",
+      "Jours fériés et vacances scolaires apparaissent automatiquement, sans saisie manuelle."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Voit en un coup d'œil qui est présent, absent ou en télétravail ce mois-ci." },
+      { role: 'Manager', text: "Repère un déséquilibre de service (trop d'absences groupées) avant qu'il ne pose problème." },
+      { role: 'RH', text: "Exporte le mois affiché en un clic pour le partager ou l'archiver." }
+    ],
+    related: [0, 1],
+    screenshot: 'landing-feature-calendrier.png',
+    mock: {
+      title: 'Calendrier',
+      kpis: [['5', 'Absents cette semaine'], ['2', 'Jours fériés ce mois'], ['1', 'Vacances scolaires en cours']],
+      rows: [
+        [ICONS.calendar, 'Congés payés : L. Fontaine, 14 → 16', 'success', 'Validé'],
+        [ICONS.laptop, 'Télétravail : C. Rousseau', 'info', 'Cette semaine'],
+        [ICONS.upload, 'Export Excel du mois en un clic', null, null]
+      ]
+    }
+  },
+  {
+    icon: ICONS.checkCircle, title: 'Congés à valider',
+    text: 'Toutes les demandes de votre équipe à traiter, filtrées et regroupées au même endroit.',
+    detail: [
+      "Vue dédiée manager/RH : uniquement les demandes qui vous concernent, jamais celles déjà traitées",
+      "3 onglets (Congés, Absences, Télétravail), avec filtres par salarié/type/statut",
+      "Valider ou refuser directement depuis la liste, sans ouvrir chaque demande",
+      "Historique de chaque décision conservé, pour retracer qui a validé quoi et quand"
+    ],
+    howItWorks: [
+      "Le manager ou la RH ouvre cette vue et retrouve uniquement les demandes en attente de son équipe.",
+      "Chaque demande se valide ou se refuse en un clic, directement depuis la liste.",
+      "La décision est tracée dans l'historique de la demande, avec la date et l'auteur."
+    ],
+    audience: [
+      { role: 'Manager', text: "Traite les demandes de son équipe sans les chercher dans une liste générale." },
+      { role: 'RH', text: "Garde une vue d'ensemble de tout ce qui reste en attente, tous services confondus." },
+      { role: 'Direction', text: "A la garantie qu'aucune demande ne reste bloquée sans réponse." }
+    ],
+    related: [0, 4],
+    screenshot: 'landing-feature-conges-a-valider.png',
+    mock: {
+      title: 'Congés à valider',
+      kpis: [['4', 'En attente'], ['2', 'Managers concernés'], ['0', 'En retard']],
+      rows: [
+        [ICONS.sun, 'Congés payés : M. Petit, 17 → 20 sept.', 'warning', 'En attente'],
+        [ICONS.checkCircle, 'Validé en un clic depuis la liste', 'success', 'Validé'],
+        [ICONS.clipboard, 'Historique de chaque décision conservé', null, null]
+      ]
+    }
+  },
+  {
+    icon: ICONS.people, title: 'Salariés',
+    text: 'Annuaire complet de l\'entreprise, avec la fiche détaillée de chaque salarié.',
+    detail: [
+      "Liste filtrable par établissement, service, contrat et statut",
+      "Fiche complète par salarié : coordonnées, contrat, documents, compteurs de congés, historique",
+      "Import en masse depuis un fichier Excel, avec aperçu ligne par ligne avant validation",
+      "Export Excel de la liste, colonnes déjà lisibles sans réglage supplémentaire",
+      "Registre du personnel et index égalité professionnelle générés automatiquement"
+    ],
+    howItWorks: [
+      "RH ajoute les salariés un par un, ou importe un fichier Excel avec aperçu avant validation.",
+      "Chaque salarié dispose d'une fiche complète, centralisant contrat, documents et compteurs.",
+      "Le registre du personnel et l'index égalité professionnelle se génèrent automatiquement à partir de ces fiches."
+    ],
+    audience: [
+      { role: 'RH', text: "Retrouve et met à jour n'importe quel salarié depuis un seul écran, sans fichier séparé." },
+      { role: 'Manager', text: "Consulte les fiches de son équipe, dans la limite de son périmètre." },
+      { role: 'Direction', text: "A un annuaire toujours à jour, sans ressaisie après chaque arrivée ou départ." }
+    ],
+    related: [5, 6],
+    screenshot: 'landing-feature-salaries.png',
+    mock: {
+      title: 'Salariés',
+      kpis: [['17', 'Salariés actifs'], ['2', 'CDD en cours'], ['1', 'Import en attente']],
+      rows: [
+        [ICONS.people, '17 salariés, filtrables par service/contrat', null, null],
+        [ICONS.upload, 'Import Excel avec aperçu avant validation', null, null],
+        [ICONS.checkCircle, 'Registre du personnel généré automatiquement', 'success', 'À jour']
+      ]
+    }
+  },
+  {
+    icon: ICONS.hourglass, title: 'Tableau des compteurs',
+    text: 'Solde de congés disponible par salarié et par type, en un coup d\'œil.',
+    detail: [
+      "Solde disponible par salarié et par type de congé (payés, RTT, ancienneté...)",
+      "Distingue le disponible de la période close et ce qui s'acquiert sur la période en cours",
+      "Filtrable par service, pour repérer vite un compteur qui part dans le rouge",
+      "Toujours à jour : recalculé automatiquement à chaque demande validée"
+    ],
+    howItWorks: [
+      "Chaque type de congé acquiert des jours selon ses propres règles, définies une fois dans Paramètres.",
+      "Le tableau affiche le solde réellement disponible par salarié, période close et période en cours distinguées.",
+      "Un compteur se met à jour automatiquement dès qu'une demande est validée, sans recalcul manuel."
+    ],
+    audience: [
+      { role: 'Salarié', text: "Vérifie son propre solde avant de poser une demande, sans attendre une réponse RH." },
+      { role: 'Manager', text: "Voit si un compteur de son équipe part dans le rouge avant de valider une nouvelle demande." },
+      { role: 'RH', text: "N'a plus à recalculer un solde à la main pour répondre à une question d'un salarié." }
+    ],
+    related: [0, 2],
+    screenshot: 'landing-feature-compteurs.png',
+    mock: {
+      title: 'Tableau des compteurs',
+      kpis: [['26,00 j', 'CP disponibles (T. Aubert)'], ['8,00 j', 'RTT disponibles'], ['7,50 j', 'En cours d\'acquisition']],
+      rows: [
+        [ICONS.hourglass, 'Solde recalculé à chaque demande validée', null, null],
+        [ICONS.calendar, 'Période close distinguée de la période en cours', null, null],
+        [ICONS.checkCircle, 'Filtrable par service', 'success', 'À jour']
+      ]
+    }
   }
 ];
 
@@ -1747,7 +1875,9 @@ function bindLandingNavMenuEvents() {
  * via html2canvas restaient vides pour certaines, cause jamais résolue — voir git blame). */
 function renderMockCard(feature) {
   if (feature.screenshot) {
-    return `<img class="landing-hero-screenshot" src="${escapeHtml(feature.screenshot)}" alt="${escapeHtml(feature.title)} dans Nexus" width="1916" height="1006" loading="lazy">`;
+    // §retour Betty du 17/09/2026 : "quand on clique sur l'image on puisse la voir de plus proche"
+    // — voir openScreenshotLightbox/bindLandingScreenEvents ([data-lightbox]).
+    return `<img class="landing-hero-screenshot landing-hero-screenshot-zoomable" src="${escapeHtml(feature.screenshot)}" alt="${escapeHtml(feature.title)} dans Nexus" width="1916" height="1006" loading="lazy" data-lightbox="${escapeHtml(feature.screenshot)}" data-lightbox-alt="${escapeHtml(feature.title)} dans Nexus">`;
   }
   const mock = feature.mock;
   return `
@@ -1892,6 +2022,21 @@ function renderFeatureDetailPage(index) {
   document.querySelectorAll('[data-feature-page-back]').forEach(btn => {
     btn.addEventListener('click', () => { window.location.hash = ''; });
   });
+}
+
+/** §retour Betty du 17/09/2026 : "je veux que quand on clique sur l'image on puisse la voir de plus
+ * proche" — même patron que openLegalModal (#modal-root, déjà utilisable depuis la landing avant
+ * connexion), mais sans chrome de modale classique : juste l'image, en grand, avec un bouton fermer. */
+function openScreenshotLightbox(src, alt) {
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-image-lightbox">
+      <button type="button" class="btn-icon lightbox-close-btn" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 16)}</button>
+      <img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" class="lightbox-image">
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
 }
 
 function openAboutModal() {
@@ -2367,6 +2512,9 @@ function bindLandingScreenEvents() {
   });
   document.querySelectorAll('[data-feature-detail]').forEach(card => {
     card.addEventListener('click', () => { window.location.hash = `fonctionnalite-${card.dataset.featureDetail}`; });
+  });
+  document.querySelectorAll('[data-lightbox]').forEach(img => {
+    img.addEventListener('click', () => openScreenshotLightbox(img.dataset.lightbox, img.dataset.lightboxAlt));
   });
   bindLandingHashRouting();
   document.querySelectorAll('[data-legal-trigger]').forEach(btn => {
