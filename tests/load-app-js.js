@@ -69,7 +69,7 @@ function loadAppJs() {
 
   const navigator = { clipboard: { writeText: async () => {} }, userAgent: 'node-test' };
 
-  const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl };
+  const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl, URLSearchParams };
   sandbox.window = sandbox;
   // Minimal, mutable par un test qui a besoin d'un autre chemin/paramètre (ex. ?poste=...) — voir
   // candidatureUrlForCompany/carriereUrlForCompany/renderCarrierePage (app.js), seules fonctions de
@@ -350,6 +350,9 @@ globalThis.__renderAbonnementAlaCarteComposer = renderAbonnementAlaCarteComposer
 globalThis.__renderAbonnementAlaCarteActif = renderAbonnementAlaCarteActif;
 globalThis.__computeAbonnementAlacarteTotal = computeAbonnementAlacarteTotal;
 globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
+globalThis.__renderLoginView = renderLoginView;
+globalThis.__bindLoginScreenEvents = bindLoginScreenEvents;
+globalThis.__showLogin = showLogin;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -610,6 +613,9 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
     computeAbonnementAlacarteTotal: sandbox.__computeAbonnementAlacarteTotal,
     bindParametresAbonnementEvents: sandbox.__bindParametresAbonnementEvents,
+    renderLoginView: sandbox.__renderLoginView,
+    bindLoginScreenEvents: sandbox.__bindLoginScreenEvents,
+    showLogin: sandbox.__showLogin,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
     buildCalendarExcelXmlWorkbook: sandbox.__buildCalendarExcelXmlWorkbook,
     excelColumnWidths: sandbox.__excelColumnWidths,

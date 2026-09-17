@@ -207,6 +207,10 @@ function getInitialViewState() {
     abonnementEditingModules: false,
     authView: 'login', // 'login' | 'forgot' | 'reset' | 'signup'
     authError: '',
+    // §retour Betty du 17/09/2026 : une erreur de connexion ne doit pas effacer ce qui a été saisi —
+    // en mémoire seulement, jamais persisté ; remis à zéro dès qu'on repart sur un écran de connexion
+    // neuf (showLogin) ou après une connexion réussie.
+    loginDraft: { email: '', password: '' },
     pendingReset: null, // { token, employeeName } après une demande de réinitialisation
     pendingSignupConfirmation: null, // email en attente de confirmation après DB.signUp()
     resendConfirmationSent: null, // email confirmé après renderResendConfirmationView() (écran "email envoyé")
@@ -993,6 +997,7 @@ function showLogin(defaultView) {
   document.getElementById('landing-root').style.display = 'none';
   document.getElementById('login-root').style.display = 'flex';
   state.authError = '';
+  state.loginDraft = { email: '', password: '' };
   // Si un rechargement survient pendant l'attente de confirmation d'email (typiquement parce que
   // l'utilisateur a changé d'appli pour consulter ses emails, ce qui peut faire recharger l'onglet
   // en arrière-plan sur mobile), on retrouve cet état au lieu de silencieusement revenir au simple
@@ -3290,12 +3295,12 @@ function renderLoginView() {
       <form id="login-form">
         <div class="form-field">
           <label for="f-login-email">Email</label>
-          <input class="input" type="email" id="f-login-email" required autocomplete="username">
+          <input class="input" type="email" id="f-login-email" required autocomplete="username" value="${escapeHtml(state.loginDraft.email)}">
         </div>
         <div class="form-field">
           <label for="f-login-password">Mot de passe</label>
           <div class="password-input-wrapper">
-            <input class="input" type="password" id="f-login-password" required autocomplete="current-password">
+            <input class="input" type="password" id="f-login-password" required autocomplete="current-password" value="${escapeHtml(state.loginDraft.password)}">
             <button type="button" class="btn-icon password-toggle" data-target="f-login-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
         </div>
@@ -3534,6 +3539,7 @@ function bindLoginScreenEvents() {
       evt.preventDefault();
       const email = document.getElementById('f-login-email').value;
       const password = document.getElementById('f-login-password').value;
+      state.loginDraft = { email, password };
       const submitBtn = document.getElementById('btn-login-submit');
       submitBtn.disabled = true;
       submitBtn.textContent = 'Connexion...';
@@ -3543,6 +3549,7 @@ function bindLoginScreenEvents() {
         renderLoginScreen();
         return;
       }
+      state.loginDraft = { email: '', password: '' };
       showApp();
     });
   }
