@@ -3270,8 +3270,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 .landing-section-head p { color: var(--color-text-muted); margin: 0; }
 
 .landing-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.landing-feature-card { text-align: left; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.landing-feature-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+/* §retour Betty du 17/09/2026 ("dans les fonctionnalités ajoute de la couleur") : liseré et icône
+   dorés, jamais une couleur différente par carte (§règle de palette bleu marine + or). */
+.landing-feature-card { text-align: left; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; border-top: 3px solid var(--landing-gold-500); }
+.landing-feature-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(201, 154, 84, 0.22); }
 .landing-feature-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
 .landing-feature-more { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 600; color: var(--color-primary); }
 
@@ -3348,7 +3350,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  background: var(--landing-gold-soft);
+  background: linear-gradient(135deg, var(--landing-gold-soft), var(--landing-gold-300));
   margin-bottom: 12px;
   color: var(--landing-navy-700);
 }
