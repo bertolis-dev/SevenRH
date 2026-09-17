@@ -22609,6 +22609,11 @@ function exportTicketsCSV() {
 // Vue : Export paie — consolidation mensuelle congés / télétravail / tickets / frais
 // ---------------------------------------------------------------------------
 
+// Valeur neutre pour la colonne "Tickets restaurant" quand le module n'est pas souscrit — mêmes
+// champs que calculateTicketsRestaurant (data.js), pour que l'appelant n'ait jamais besoin de
+// distinguer les deux cas.
+const ZERO_TICKETS_RESULT = { nbTickets: 0, montantTotal: 0, partEmployeur: 0, partSalarie: 0, ajustement: 0 };
+
 function getPaieRows(year, month) {
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
   const monthStart = `${monthStr}-01`;
@@ -22619,7 +22624,14 @@ function getPaieRows(year, month) {
   // (congés, télétravail, notes de frais), pas seulement les jours après son départ.
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
-  const leaveTypesExportables = leaveTypes.filter(t => t.exportPaie);
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : "Préparation de paie" n'exige
+  // que le module RH (NAV_ITEMS 'export-paie') — sans ce cloisonnement, une entreprise abonnée à RH
+  // seul (sans congés/planning/frais/tickets) voyait ici de VRAIES données personnelles de ces
+  // modules jamais souscrits (jours de congé réels, montants de notes de frais...), pas seulement des
+  // boutons ou libellés d'aperçu comme dans les autres correctifs de cet audit. Coupé à la source,
+  // comme pour buildCalendarSharedData : chaque champ redevient 0/vide plutôt que d'être recalculé
+  // avec de vraies données, aussi bien ici que dans getPaieAnomalies juste plus bas.
+  const leaveTypesExportables = hasModule('conges') ? leaveTypes.filter(t => t.exportPaie) : [];
   // Sprint SIRH premium §6 (Préparation de paie) : buckets fixes par nom de type, indépendants du
   // réglage "export paie" par type — le récapitulatif doit montrer les vraies données de congés/RTT/
   // maladie même si RH n'a pas coché ces types pour la colonne CSV (même principe que
@@ -22627,9 +22639,9 @@ function getPaieRows(year, month) {
   const congesPayesTypeIds = getLeaveTypeIdsByName(leaveTypes, 'Congés payés');
   const rttTypeIds = getLeaveTypeIdsByName(leaveTypes, 'RTT');
   const maladieTypeIds = getLeaveTypeIdsByName(leaveTypes, 'Maladie');
-  const leaveRequests = leaveRepository.getAll().filter(r => r.statut === 'Validé');
-  const teleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
-  const expenses = expenseRepository.getAll().filter(n => n.statut === 'Remboursé');
+  const leaveRequests = hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'Validé') : [];
+  const teleworkRequests = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'Validé') : [];
+  const expenses = hasModule('frais') ? expenseRepository.getAll().filter(n => n.statut === 'Remboursé') : [];
   const settings = settingsRepository.getSettings();
 
   return employees.map(e => {
@@ -22654,7 +22666,7 @@ function getPaieRows(year, month) {
       employee: e,
       congesParType,
       teletravailJours,
-      tickets: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings),
+      tickets: hasModule('tickets') ? calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings) : ZERO_TICKETS_RESULT,
       notesRembourser,
       congesPayesJours: sumTypeIdsInMonth(congesPayesTypeIds),
       rttJours: sumTypeIdsInMonth(rttTypeIds),
@@ -22711,9 +22723,13 @@ function getPaieAnomalies(year, month) {
   const monthEnd = toISODate(new Date(year, month + 1, 0));
   const employees = employeeRepository.getAll().filter(e => !e.archive && isEmployedDuringPeriod(e, monthStart, monthEnd));
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
-  const allLeaveRequests = leaveRepository.getAll();
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : mêmes correctif et raison que
+  // dans getPaieRows juste au-dessus — "Préparation de paie" n'exige que le module RH, mais ces
+  // anomalies (solde négatif, absence incohérente, justificatif manquant) portent sur de VRAIES
+  // données congés/planning, jamais vérifiées avant. Coupé à la source.
+  const allLeaveRequests = hasModule('conges') ? leaveRepository.getAll() : [];
   const validLeaveRequests = allLeaveRequests.filter(r => r.statut === 'Validé');
-  const validTeleworkRequests = teleworkRepository.getAll().filter(r => r.statut === 'Validé');
+  const validTeleworkRequests = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'Validé') : [];
 
   const isWithinEmploymentPeriod = (e, dateDebut, dateFin) =>
     Boolean(e.dateEmbauche) && dateDebut >= e.dateEmbauche && (!e.dateDepart || dateFin <= e.dateDepart);
@@ -22875,15 +22891,13 @@ function renderExportPaiePreparationTab(rows) {
           <thead>
             <tr>
               <th>Salarié</th>
-              <th class="cell-numeric">Congés payés</th>
-              <th class="cell-numeric">RTT</th>
-              <th class="cell-numeric">Maladie</th>
-              <th class="cell-numeric">Télétravail</th>
-              <th class="cell-numeric">Notes de frais</th>
+              ${hasModule('conges') ? '<th class="cell-numeric">Congés payés</th><th class="cell-numeric">RTT</th><th class="cell-numeric">Maladie</th>' : ''}
+              ${hasModule('planning') ? '<th class="cell-numeric">Télétravail</th>' : ''}
+              ${hasModule('frais') ? '<th class="cell-numeric">Notes de frais</th>' : ''}
               <th class="cell-numeric">Variables</th>
               <th class="cell-numeric">Heures sup</th>
               <th class="cell-numeric">Repos comp. pris</th>
-              <th class="cell-numeric">Tickets restaurant</th>
+              ${hasModule('tickets') ? '<th class="cell-numeric">Tickets restaurant</th>' : ''}
               <th>Anomalies</th>
             </tr>
           </thead>
@@ -22891,15 +22905,13 @@ function renderExportPaiePreparationTab(rows) {
             ${rows.map(r => `
               <tr>
                 <td>${personNameHtml(r.employee)}</td>
-                <td class="cell-numeric">${formatDurationFR(r.congesPayesJours)}</td>
-                <td class="cell-numeric">${formatDurationFR(r.rttJours)}</td>
-                <td class="cell-numeric">${formatDurationFR(r.maladieJours)}</td>
-                <td class="cell-numeric">${formatDurationFR(r.teletravailJours)}</td>
-                <td class="cell-numeric">${formatCurrencyFR(r.notesRembourser)}</td>
+                ${hasModule('conges') ? `<td class="cell-numeric">${formatDurationFR(r.congesPayesJours)}</td><td class="cell-numeric">${formatDurationFR(r.rttJours)}</td><td class="cell-numeric">${formatDurationFR(r.maladieJours)}</td>` : ''}
+                ${hasModule('planning') ? `<td class="cell-numeric">${formatDurationFR(r.teletravailJours)}</td>` : ''}
+                ${hasModule('frais') ? `<td class="cell-numeric">${formatCurrencyFR(r.notesRembourser)}</td>` : ''}
                 <td class="cell-numeric">${formatCurrencyFR(r.variablesMontant)} <button type="button" class="btn-link" data-adjust-variables="${r.employee.id}" title="Ajuster les variables de paie">${icon(ICONS.pencil, 13)}</button></td>
                 <td class="cell-numeric">${formatNumberFR(r.heuresSupHeures)} h <button type="button" class="btn-link" data-adjust-heures-sup="${r.employee.id}" title="Ajuster les heures supplémentaires">${icon(ICONS.pencil, 13)}</button></td>
                 <td class="cell-numeric">${formatNumberFR(r.reposCompensateurPrisHeures)} h <button type="button" class="btn-link" data-adjust-repos-compensateur="${r.employee.id}" title="Ajuster le repos compensateur pris">${icon(ICONS.pencil, 13)}</button></td>
-                <td class="cell-numeric">${r.tickets.nbTickets}</td>
+                ${hasModule('tickets') ? `<td class="cell-numeric">${r.tickets.nbTickets}</td>` : ''}
                 <td>${renderPaieAnomalyBadges(anomalies.filter(a => a.employee.id === r.employee.id))}</td>
               </tr>
             `).join('')}
@@ -22914,7 +22926,12 @@ function renderExportPaieExportTab(rows) {
   const settings = settingsRepository.getSettings();
   const modele = settings.exportPaieModele || 'generique';
   const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
-  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : le module reste prioritaire sur
+  // la personnalisation — un module non souscrit n'a jamais de vraie donnée à exporter (voir
+  // getPaieRows, déjà coupé à la source), inutile de laisser la case "personnalisé" la faire
+  // réapparaître dans le fichier envoyé au logiciel de paie.
+  const COLONNE_MODULE = { conges: 'conges', teletravail: 'planning', tickets: 'tickets', frais: 'frais' };
+  const showColonne = (key) => hasModule(COLONNE_MODULE[key]) && (modele !== 'personnalise' || colonnes[key]);
   const leaveTypesExportables = showColonne('conges') ? leaveTypeRepository.getLeaveTypes().filter(t => t.exportPaie) : [];
 
   return `
@@ -22931,10 +22948,10 @@ function renderExportPaieExportTab(rows) {
       <p class="text-muted" style="margin-top: 8px;">${icon(ICONS.warningTriangle, 14)} Ces modèles fixent une convention de délimiteur courante mais ne garantissent pas une compatibilité exacte avec votre paramétrage réel : les formats d'import Sage/Silae/Cegid/ADP/PayFit sont propres à chaque client et à chaque version. Vérifiez et adaptez avant toute utilisation en production.</p>
       ${modele === 'personnalise' ? `
         <div class="form-grid" style="margin-top: 12px;">
-          ${checkboxField('paieCol.conges', 'Congés', colonnes.conges)}
-          ${checkboxField('paieCol.teletravail', 'Télétravail', colonnes.teletravail)}
-          ${checkboxField('paieCol.tickets', 'Tickets restaurant', colonnes.tickets)}
-          ${checkboxField('paieCol.frais', 'Notes de frais', colonnes.frais)}
+          ${hasModule('conges') ? checkboxField('paieCol.conges', 'Congés', colonnes.conges) : ''}
+          ${hasModule('planning') ? checkboxField('paieCol.teletravail', 'Télétravail', colonnes.teletravail) : ''}
+          ${hasModule('tickets') ? checkboxField('paieCol.tickets', 'Tickets restaurant', colonnes.tickets) : ''}
+          ${hasModule('frais') ? checkboxField('paieCol.frais', 'Notes de frais', colonnes.frais) : ''}
         </div>
       ` : ''}
     </div>

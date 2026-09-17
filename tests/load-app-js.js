@@ -353,6 +353,8 @@ globalThis.__bindParametresAbonnementEvents = bindParametresAbonnementEvents;
 globalThis.__renderLoginView = renderLoginView;
 globalThis.__bindLoginScreenEvents = bindLoginScreenEvents;
 globalThis.__showLogin = showLogin;
+globalThis.__renderExportPaiePreparationTab = renderExportPaiePreparationTab;
+globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -616,6 +618,8 @@ globalThis.__showLogin = showLogin;
     renderLoginView: sandbox.__renderLoginView,
     bindLoginScreenEvents: sandbox.__bindLoginScreenEvents,
     showLogin: sandbox.__showLogin,
+    renderExportPaiePreparationTab: sandbox.__renderExportPaiePreparationTab,
+    renderExportPaieExportTab: sandbox.__renderExportPaieExportTab,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
     buildCalendarExcelXmlWorkbook: sandbox.__buildCalendarExcelXmlWorkbook,
     excelColumnWidths: sandbox.__excelColumnWidths,
