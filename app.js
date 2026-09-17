@@ -2473,6 +2473,16 @@ function bindLandingEmployeeSlider() {
     document.querySelectorAll('.offre-card').forEach(card => {
       card.classList.toggle('offre-card-match', card.dataset.offreKey === matchKey);
     });
+    // §retour Betty du 17/09/2026 : "point de départ pour chaque module" (texte déjà affiché sous le
+    // curseur) n'était vrai qu'au premier rendu — déplacer le curseur ENSUITE ne mettait à jour ni le
+    // total ni les champs par module restés à leur valeur par défaut, donnant l'impression que 115
+    // salariés ne "multipliait" rien. Ne touche jamais un champ que l'utilisateur a lui-même modifié
+    // (state.landingAlacarteCounts), exactement comme au premier rendu.
+    document.querySelectorAll('.alacarte-count-input').forEach(input => {
+      const key = input.dataset.countFor;
+      if (state.landingAlacarteCounts && Object.prototype.hasOwnProperty.call(state.landingAlacarteCounts, key)) return;
+      input.value = n;
+    });
     computeAlacarteTotal();
   };
   slider.addEventListener('input', updateMatch);
