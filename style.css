@@ -3282,10 +3282,16 @@ textarea.input { resize: vertical; font-family: inherit; }
    donnait l'impression de rester sur la même page (même bandeau bleu marine partout). Réutilise
    .landing-hero-inner/.landing-hero-text/.landing-hero-mock pour la mise en page (texte à gauche,
    maquette à droite), mais définit son propre fond/couleurs plutôt que d'étendre .landing-hero. */
+/* §retour Betty du 17/09/2026 : "je parlais quand on clique sur une fonctionnalité la page" —
+   halo doré derrière le badge/titre (radial-gradient superposé au fond existant, pas remplacé) pour
+   que la page d'une fonctionnalité soit plus colorée dès l'entrée, sans devenir une couleur par
+   module (toujours le même or, §règle de palette). */
 .feature-page-hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--color-muted-soft), var(--color-surface) 70%);
+  background:
+    radial-gradient(ellipse 480px 320px at 12% 15%, var(--landing-gold-soft), transparent 70%),
+    linear-gradient(180deg, var(--color-muted-soft), var(--color-surface) 70%);
   border-bottom: 1px solid var(--color-border);
   padding: 48px 32px 56px;
 }
@@ -3315,13 +3321,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 .feature-page-list { max-width: 900px; margin: 0 auto; }
 
 .feature-audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
-.feature-audience-card { text-align: center; }
+.feature-audience-card { text-align: center; border-top: 3px solid var(--landing-gold-500); }
 .feature-audience-card h3 { margin: 0 0 8px; font-size: 15px; color: var(--color-text); }
 .feature-audience-card p { margin: 0; font-size: 13.5px; }
 
 .feature-related-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; max-width: 700px; margin: 0 auto; }
-.feature-related-card { cursor: pointer; text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.feature-related-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.feature-related-card { cursor: pointer; text-align: left; transition: transform 0.15s ease, box-shadow 0.15s ease; border-top: 3px solid var(--landing-gold-500); }
+.feature-related-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(201, 154, 84, 0.22); }
 .feature-related-card:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
 .feature-related-card h3 { margin: 0 0 4px; font-size: 15px; }
 .feature-related-card p { margin: 0; font-size: 13px; }
@@ -3436,6 +3442,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   height: 40px;
   border-radius: 50%;
   background: var(--landing-navy-900);
+  border: 2px solid var(--landing-gold-500);
   color: #fff;
   font-weight: 700;
   font-size: 16px;
