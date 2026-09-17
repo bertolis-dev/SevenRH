@@ -8962,6 +8962,12 @@ function confirmerAccuseLectureDocument(documentId) {
 }
 
 function renderEmployeeDocumentsCard(employee) {
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre", même classe de bug que le point 1
+  // sur le Suivi médical) : le coffre-fort documents fait partie du module RH (voir LANDING_ALACARTE_
+  // MODULES, "documents" explicitement listé) — cette carte n'avait jamais vérifié le module, alors
+  // que la fiche salarié reste accessible SANS le module RH (registre de base, voir NAV_ITEMS
+  // 'employees', ou la fiche d'un salarié consultant la SIENNE).
+  if (!hasModule('rh')) return '';
   const documents = documentRepository.getForEmployee(employee.id);
   const canManage = canManageDocumentsFor();
 
@@ -10856,6 +10862,7 @@ function renderEmployeeDetail(id) {
         })()}
       </div>
 
+      ${hasModule('conges') ? `
       <div class="card">
         <!-- §retour QA du 27/08/2026 ("fais un panneau déroulant pour compteurs de congés") : cette
              carte peut afficher un très grand nombre de types (chacun avec son détail acquis/pris/
@@ -10867,7 +10874,10 @@ function renderEmployeeDetail(id) {
           <h2>Compteurs de congés</h2>
           <div class="detail-header-actions">
             <button class="btn btn-secondary btn-sm" id="btn-request-leave">Demander un congé</button>
-            <button class="btn btn-secondary btn-sm" id="btn-request-telework">Demander du télétravail</button>
+            <!-- §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : le télétravail
+                 dépend du module "planning", pas "congés" (voir le commentaire de PARAMETRES_TABS/
+                 NAV_ITEMS sur ce point) — bouton retiré ici quand seul "congés" est souscrit. -->
+            ${hasModule('planning') ? '<button class="btn btn-secondary btn-sm" id="btn-request-telework">Demander du télétravail</button>' : ''}
           </div>
         </div>
         <details class="collapsible-panel">
@@ -10877,6 +10887,7 @@ function renderEmployeeDetail(id) {
             : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
         </details>
       </div>
+      ` : ''}
 
       ${renderEmployeeFraisCard(e, user)}
 
@@ -10936,6 +10947,10 @@ function ensureFraisTotalsLoaded(employeeId) {
  * salarié lui-même : ce sont des documents officiels, pas une auto-consultation). */
 function renderGenererDocumentCard(e, canEdit) {
   if (!canEdit) return '';
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : la génération de documents fait
+  // partie du même coffre-fort RH que renderEmployeeDocumentsCard ci-dessus — même correctif, même
+  // raison (la fiche salarié reste accessible sans le module RH, voir NAV_ITEMS 'employees').
+  if (!hasModule('rh')) return '';
   const templates = documentTemplateRepository.getAll();
   return `
     <div class="card">
@@ -11046,6 +11061,10 @@ function renderEmployeeFraisCard(e, user) {
  * Réutilise canEditEmployeeRecord (MODIFIER_SALARIE) plutôt que d'inventer une nouvelle permission —
  * le catalogue des 31 du §8 reste fermé. */
 function renderTypesAbsenceCard(e, user) {
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : les types d'absence vivent sous
+  // le module congés (NAV_ITEMS 'absences', module: 'conges') — cette carte n'avait jamais vérifié le
+  // module, alors que la fiche salarié reste accessible sans lui (registre de base).
+  if (!hasModule('conges')) return '';
   if (!canEditEmployeeRecord(e)) return '';
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.visibleSalarie);
   if (types.length === 0) return '';
@@ -12108,8 +12127,14 @@ function bindEmployeeDetailEvents() {
   const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
   if (editCoordonneesBtn) editCoordonneesBtn.addEventListener('click', () => openCoordonneesModal(state.currentEmployeeId));
 
-  document.getElementById('btn-request-leave').addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId, 'conge'));
-  document.getElementById('btn-request-telework').addEventListener('click', () => openTeleworkRequestModal(state.currentEmployeeId));
+  // §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : ces deux boutons n'existent plus
+  // dans le DOM quand le module correspondant (congés/planning) n'est pas souscrit (voir la carte
+  // "Compteurs de congés" ci-dessus, renderEmployeeDetail) — un .addEventListener sans garde plantait
+  // toute la suite de cette fonction de liaison dès qu'un de ces boutons manquait.
+  const requestLeaveBtn = document.getElementById('btn-request-leave');
+  if (requestLeaveBtn) requestLeaveBtn.addEventListener('click', () => openLeaveRequestModal(state.currentEmployeeId, 'conge'));
+  const requestTeleworkBtn = document.getElementById('btn-request-telework');
+  if (requestTeleworkBtn) requestTeleworkBtn.addEventListener('click', () => openTeleworkRequestModal(state.currentEmployeeId));
 
   document.querySelectorAll('[data-adjust-compteur]').forEach(btn => {
     btn.addEventListener('click', () => openAjusterCompteurModal(state.currentEmployeeId, btn.dataset.adjustCompteur));
