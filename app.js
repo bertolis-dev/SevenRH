@@ -2282,8 +2282,8 @@ function renderLandingScreen() {
         <div class="landing-employee-slider">
           <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
           <div class="landing-employee-slider-row">
-            <input type="range" id="landing-employee-count" min="1" max="150" value="10" step="1">
-            <span class="landing-employee-count-value" id="landing-employee-count-value">10 salariés</span>
+            <input type="range" id="landing-employee-count" min="1" max="150" value="1" step="1">
+            <span class="landing-employee-count-value" id="landing-employee-count-value">1 salarié</span>
           </div>
           <!-- §retour Betty du 16/09/2026 ("choisir pour chaque module le nombre de personnes qui
                l'auront") : chaque module a maintenant son propre effectif ci-dessous — cet effectif
@@ -2312,7 +2312,7 @@ function renderLandingScreen() {
                      ou seulement l'équipe RH sur Embauche, jamais tout le monde. -->
                 <div class="alacarte-module-unit-count">
                   <label for="alacarte-count-${m.key}">${m.unite === 'déclarant' ? 'Combien de salariés déposent des notes de frais ?' : `Combien de salariés auront "${escapeHtml(m.label)}" ?`}</label>
-                  <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 10}">
+                  <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 1}">
                 </div>
               </div>
             `).join('')}
