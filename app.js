@@ -2282,8 +2282,12 @@ function renderLandingScreen() {
         <div class="landing-employee-slider">
           <label for="landing-employee-count">Combien de salariés dans votre équipe ?</label>
           <div class="landing-employee-slider-row">
-            <input type="range" id="landing-employee-count" min="1" max="150" value="1" step="1">
-            <span class="landing-employee-count-value" id="landing-employee-count-value">1 salarié</span>
+            <!-- §retour Betty du 17/09/2026 : valeur reprise de state (pas figée à 1) — changer de
+                 périodicité juste après avoir déplacé ce curseur déclenche un renderLandingScreen()
+                 complet (voir bindLandingScreenEvents) qui, sans ça, effaçait silencieusement
+                 l'effectif choisi en le remettant à 1. -->
+            <input type="range" id="landing-employee-count" min="1" max="150" value="${state.landingEmployeeCount || 1}" step="1">
+            <span class="landing-employee-count-value" id="landing-employee-count-value">${state.landingEmployeeCount || 1} salarié${(state.landingEmployeeCount || 1) > 1 ? 's' : ''}</span>
           </div>
           <!-- §retour Betty du 16/09/2026 ("choisir pour chaque module le nombre de personnes qui
                l'auront") : chaque module a maintenant son propre effectif ci-dessous — cet effectif
@@ -2312,7 +2316,7 @@ function renderLandingScreen() {
                      ou seulement l'équipe RH sur Embauche, jamais tout le monde. -->
                 <div class="alacarte-module-unit-count">
                   <label for="alacarte-count-${m.key}">${m.unite === 'déclarant' ? 'Combien de salariés déposent des notes de frais ?' : `Combien de salariés auront "${escapeHtml(m.label)}" ?`}</label>
-                  <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || 1}">
+                  <input type="number" id="alacarte-count-${m.key}" class="input alacarte-count-input" data-count-for="${m.key}" min="0" value="${(state.landingAlacarteCounts && state.landingAlacarteCounts[m.key]) || state.landingEmployeeCount || 1}">
                 </div>
               </div>
             `).join('')}
@@ -2461,6 +2465,7 @@ function bindLandingEmployeeSlider() {
   const order = ['essentiel', 'professionnel', 'premium'];
   const updateMatch = () => {
     const n = parseInt(slider.value, 10);
+    state.landingEmployeeCount = n;
     const valueLabel = document.getElementById('landing-employee-count-value');
     if (valueLabel) valueLabel.textContent = `${n} salarié${n > 1 ? 's' : ''}`;
     const matchKey = order.find(key => {
