@@ -5681,12 +5681,12 @@ async function syncNotifications() {
 
   if (hasModule('rh')) getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, ICONS.notepad, 'Entretien professionnel à programmer',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, ICONS.notepad, 'Bilan à 6 ans à réaliser',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
@@ -5708,7 +5708,7 @@ async function syncNotifications() {
     const title = daysUntil < 0 ? 'Document expiré' : 'Document arrivant à expiration';
     candidates.push(makeNotification(`document-expiry-${d.id}`, ICONS.document, title,
       `${employee.prenom} ${employee.nom} · ${d.categorie} · ${d.nom} · ${formatDate(d.dateExpiration)}`,
-      'employee-detail', { currentEmployeeId: employee.id }, employee.id));
+      'employee-detail', { currentEmployeeId: employee.id, employeeDetailTab: 'documents' }, employee.id));
   });
 
   await Promise.all(relancePromises);
@@ -5891,6 +5891,13 @@ function navigateTo(view, params = {}) {
   // Toujours autoriser les vues qui ne sont pas des entrées de menu (détail salarié, coming-soon...).
   const isNavView = NAV_ITEMS.some(i => i.key === view);
   state.view = isNavView && !allowedKeys.includes(view) ? 'dashboard' : view;
+  // §retour Betty du 18/09/2026 (point 6, "onglets profonds depuis les notifications") : sans repli
+  // explicite, l'onglet resterait sur celui laissé par le PRÉCÉDENT salarié consulté (state persiste
+  // entre deux navigations) — un lien "juste ouvrir sa fiche" (liste, organigramme, favoris...)
+  // doit toujours repartir sur "Fiche", jamais hériter d'un onglet resté ouvert par hasard. Seuls
+  // les appelants qui veulent explicitement cibler un autre onglet (voir syncNotifications
+  // ci-dessus) passent employeeDetailTab dans leurs propres params.
+  if (view === 'employee-detail' && !('employeeDetailTab' in params)) params = { ...params, employeeDetailTab: 'fiche' };
   Object.assign(state, params);
   renderSidebar();
   syncNotifications();
@@ -11060,13 +11067,17 @@ function renderSkeletonLines(count = 3) {
   return `<div class="skeleton-lines">${Array.from({ length: count }, (_, i) => `<div class="skeleton-line" style="width:${widths[i % widths.length]}"></div>`).join('')}</div>`;
 }
 
+/** §retour Betty du 18/09/2026 (point 6, "le fil d'Ariane cliquable, plus visible plutôt qu'un
+ * bouton en double") : le premier élément (le "retour" vers la liste d'origine) porte désormais une
+ * flèche explicite en plus du style déjà renforcé (voir .breadcrumb, style.css) — jusqu'ici un texte
+ * gris discret, facile à ne jamais remarquer comme cliquable. */
 function renderBreadcrumb(items) {
   return `<div class="breadcrumb">${items.map((it, i) => {
     const sep = i > 0 ? '<span class="breadcrumb-sep">/</span>' : '';
     const isLast = i === items.length - 1;
     const crumb = (isLast || !it.nav)
       ? `<span>${escapeHtml(it.label)}</span>`
-      : `<button type="button" class="btn-link" data-nav="${escapeHtml(it.nav)}"${it.params ? ` data-nav-params='${escapeHtml(JSON.stringify(it.params))}'` : ''}>${escapeHtml(it.label)}</button>`;
+      : `<button type="button" class="btn-link" data-nav="${escapeHtml(it.nav)}"${it.params ? ` data-nav-params='${escapeHtml(JSON.stringify(it.params))}'` : ''}>${i === 0 ? '← ' : ''}${escapeHtml(it.label)}</button>`;
     return sep + crumb;
   }).join('')}</div>`;
 }
@@ -11130,8 +11141,25 @@ function renderEmployeeDetail(id) {
   // exportEmployeesExcel (cf. son commentaire) déclare déjà explicitement non confidentiels.
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
+  // §retour Betty du 18/09/2026 (point 6) : 16 cartes empilées sur un seul écran, remplacées par 6
+  // onglets (Fiche / Congés et absences / Notes de frais / Accès et droits / Documents / Parcours).
+  // Chaque onglet disparaît de lui-même s'il n'a rien à montrer (module non souscrit, permission
+  // absente...) : le contenu est calculé UNE FOIS ci-dessous, la présence de l'onglet en découle,
+  // au lieu de dupliquer la même condition à deux endroits (le bouton d'onglet ET son contenu).
+  const tabContents = {
+    fiche: renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEdit),
+    conges: renderEmployeeCongesTab(e, user),
+    frais: renderEmployeeFraisCard(e, user),
+    acces: renderEmployeeAccesTab(e, user),
+    documents: renderEmployeeDocumentsTab(e, canEdit),
+    parcours: renderEmployeeParcoursTab(e, user, canEdit)
+  };
+  const visibleTabs = EMPLOYEE_DETAIL_TABS.filter(t => (tabContents[t.key] || '').trim() !== '');
+  const activeTab = visibleTabs.some(t => t.key === state.employeeDetailTab) ? state.employeeDetailTab : (visibleTabs[0] ? visibleTabs[0].key : 'fiche');
+
   return `
     ${renderBreadcrumb([{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }])}
+    ${renderEmployeeDetailPrevNext(e)}
 
     <div class="detail-header card">
       ${renderAvatar(e)}
@@ -11159,6 +11187,45 @@ function renderEmployeeDetail(id) {
       </div>
     </div>
 
+    <div class="tabs">
+      ${visibleTabs.map(t => `<button type="button" class="tab ${t.key === activeTab ? 'active' : ''}" data-employee-detail-tab="${t.key}">${escapeHtml(t.label)}</button>`).join('')}
+    </div>
+    ${tabContents[activeTab] || ''}
+  `;
+}
+
+const EMPLOYEE_DETAIL_TABS = [
+  { key: 'fiche', label: 'Fiche' },
+  { key: 'conges', label: 'Congés et absences' },
+  { key: 'frais', label: 'Notes de frais' },
+  { key: 'acces', label: 'Accès et droits' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'parcours', label: 'Parcours' }
+];
+
+/** §retour Betty du 18/09/2026 (point 6, "flèches précédent/suivant qui respectent le filtre/tri de
+ * la liste d'origine") : réutilise exactement getFilteredSortedEmployees() (état de filtre/tri déjà
+ * conservé dans `state` entre deux écrans, jamais réinitialisé en arrivant ici) — la même liste que
+ * l'écran "Salariés" affiche, dans le même ordre. Rien ne s'affiche si ce salarié n'y figure pas
+ * (filtré par la recherche/le filtre en cours, ou archivé) : la position n'aurait alors aucun sens. */
+function renderEmployeeDetailPrevNext(e) {
+  const { list } = getFilteredSortedEmployees();
+  const visible = list.filter(x => !x.archive);
+  const position = visible.findIndex(x => x.id === e.id);
+  if (position === -1) return '';
+  const prev = position > 0 ? visible[position - 1] : null;
+  const next = position < visible.length - 1 ? visible[position + 1] : null;
+  return `
+    <div class="employee-detail-prev-next">
+      <button type="button" class="btn-icon" id="btn-employee-prev" data-employee-id="${prev ? prev.id : ''}" ${prev ? '' : 'disabled'} title="${prev ? escapeHtml(`${prev.prenom} ${prev.nom}`) : 'Premier de la liste'}" aria-label="Salarié précédent">‹</button>
+      <span class="text-muted" style="font-size: 13px;">${position + 1} sur ${visible.length}</span>
+      <button type="button" class="btn-icon" id="btn-employee-next" data-employee-id="${next ? next.id : ''}" ${next ? '' : 'disabled'} title="${next ? escapeHtml(`${next.prenom} ${next.nom}`) : 'Dernier de la liste'}" aria-label="Salarié suivant">›</button>
+    </div>
+  `;
+}
+
+function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEdit) {
+  return `
     <div class="detail-grid-cards">
       <div class="card">
         <h2>Identité</h2>
@@ -11235,6 +11302,14 @@ function renderEmployeeDetail(id) {
         })()}
       </div>
 
+      ${renderConfidentialEmployeeCard(e, user)}
+    </div>
+  `;
+}
+
+function renderEmployeeCongesTab(e, user) {
+  return `
+    <div class="detail-grid-cards">
       ${hasModule('conges') ? `
       <div class="card">
         <!-- §retour QA du 27/08/2026 ("fais un panneau déroulant pour compteurs de congés") : cette
@@ -11262,22 +11337,33 @@ function renderEmployeeDetail(id) {
       </div>
       ` : ''}
 
-      ${renderEmployeeFraisCard(e, user)}
-
       ${renderTypesAbsenceCard(e, user)}
+    </div>
+  `;
+}
 
-      ${renderConfidentialEmployeeCard(e, user)}
-
+function renderEmployeeAccesTab(e, user) {
+  return `
+    <div class="detail-grid-cards">
       ${renderCompteCard(e, user)}
-
       ${renderPermissionsCard(e, user)}
-
       ${renderMenusAutorisesCard(e, user)}
+    </div>
+  `;
+}
 
+function renderEmployeeDocumentsTab(e, canEdit) {
+  return `
+    <div class="detail-grid-cards">
       ${renderEmployeeDocumentsCard(e)}
-
       ${renderGenererDocumentCard(e, canEdit)}
+    </div>
+  `;
+}
 
+function renderEmployeeParcoursTab(e, user, canEdit) {
+  return `
+    <div class="detail-grid-cards">
       ${canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : ''}
 
       ${canEdit ? (e.offboardingChecklist && e.offboardingChecklist.length
@@ -11793,27 +11879,46 @@ function renderPermissionsCard(e, user) {
   ];
   const overrides = e.permissionsOverrides || {};
   const roleDefaults = DEFAULT_ROLE_PERMISSIONS[e.role] || [];
+  // §retour Betty du 18/09/2026 (point 6) : "24 menus déroulants" (23 aujourd'hui, voir le retrait
+  // de SUPPRIMER_SALARIE au point 9) affichés systématiquement, alors que la quasi-totalité des
+  // salariés suivent exactement le défaut de leur rôle sans aucune exception — repliée derrière le
+  // rappel du défaut du rôle + un bouton "Ajouter une exception", seules les exceptions RÉELLEMENT
+  // posées restent visibles sans avoir à déplier quoi que ce soit.
+  const exceptions = wired.filter(p => Object.prototype.hasOwnProperty.call(overrides, p.key));
 
   return `
     <div class="card">
       <h2>Permissions individuelles</h2>
-      <p class="text-muted">Surcharge le défaut du rôle « ${escapeHtml(ROLE_LABELS[e.role] || e.role)} » pour ce salarié uniquement. Seules les permissions ci-dessous ont un effet réel aujourd'hui ; le reste du catalogue (§8) sera câblé progressivement.</p>
-      <div class="form-grid">
-        ${wired.map(p => {
-          const current = Object.prototype.hasOwnProperty.call(overrides, p.key) ? String(overrides[p.key]) : '';
-          const defaultLabel = roleDefaults.includes(p.key) ? 'autorisé' : 'refusé';
-          return `
-            <div class="form-field">
-              <label for="perm-${p.key}">${escapeHtml(p.label)}</label>
-              <select class="input" id="perm-${p.key}" data-permission-key="${p.key}">
-                <option value="" ${current === '' ? 'selected' : ''}>Par défaut du rôle (${defaultLabel})</option>
-                <option value="true" ${current === 'true' ? 'selected' : ''}>Toujours autorisé</option>
-                <option value="false" ${current === 'false' ? 'selected' : ''}>Toujours refusé</option>
-              </select>
+      <p class="text-muted">Permissions par défaut du rôle « ${escapeHtml(ROLE_LABELS[e.role] || e.role)} ».</p>
+      ${exceptions.length ? `
+        <div class="mini-list" style="margin: 10px 0;">
+          ${exceptions.map(p => `
+            <div class="mini-list-item">
+              <span>${escapeHtml(p.label)} : <strong>${overrides[p.key] ? 'toujours autorisé' : 'toujours refusé'}</strong></span>
+              <button type="button" class="btn-link" data-remove-permission-exception="${p.key}">Retirer l'exception</button>
             </div>
-          `;
-        }).join('')}
-      </div>
+          `).join('')}
+        </div>
+      ` : `<p class="text-muted" style="font-size: 13px; margin: 10px 0;">Aucune exception : ce salarié suit exactement les permissions par défaut de son rôle.</p>`}
+      <details class="collapsible-panel">
+        <summary>Ajouter ou modifier une exception</summary>
+        <div class="form-grid" style="margin-top: 12px;">
+          ${wired.map(p => {
+            const current = Object.prototype.hasOwnProperty.call(overrides, p.key) ? String(overrides[p.key]) : '';
+            const defaultLabel = roleDefaults.includes(p.key) ? 'autorisé' : 'refusé';
+            return `
+              <div class="form-field">
+                <label for="perm-${p.key}">${escapeHtml(p.label)}</label>
+                <select class="input" id="perm-${p.key}" data-permission-key="${p.key}">
+                  <option value="" ${current === '' ? 'selected' : ''}>Par défaut du rôle (${defaultLabel})</option>
+                  <option value="true" ${current === 'true' ? 'selected' : ''}>Toujours autorisé</option>
+                  <option value="false" ${current === 'false' ? 'selected' : ''}>Toujours refusé</option>
+                </select>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </details>
     </div>
   `;
 }
@@ -11829,7 +11934,20 @@ function bindPermissionsCardEvents(employeeId) {
       employeeRepository.update(employeeId, { permissionsOverrides: overrides });
       auditLogRepository.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = ${evt.target.value || 'défaut du rôle'}`);
       showToast('Permission mise à jour.');
-      navigateTo('employee-detail', { currentEmployeeId: employeeId });
+      navigateTo('employee-detail', { currentEmployeeId: employeeId, employeeDetailTab: state.employeeDetailTab });
+    });
+  });
+
+  document.querySelectorAll('[data-remove-permission-exception]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.removePermissionException;
+      const employee = employeeRepository.getById(employeeId);
+      const overrides = Object.assign({}, employee.permissionsOverrides);
+      delete overrides[key];
+      employeeRepository.update(employeeId, { permissionsOverrides: overrides });
+      auditLogRepository.logAudit('Modification', 'Permissions', `${employee.prenom} ${employee.nom} · ${key} = défaut du rôle`);
+      showToast('Exception retirée.');
+      navigateTo('employee-detail', { currentEmployeeId: employeeId, employeeDetailTab: state.employeeDetailTab });
     });
   });
 }
@@ -12470,6 +12588,17 @@ function bindEmployeeDetailEvents() {
   // refusé, voir renderEmployeeDetail), d'où le garde-fou plutôt qu'un accès direct.
   const backBtn = document.getElementById('btn-back-to-list');
   if (backBtn) backBtn.addEventListener('click', () => navigateTo('employees'));
+
+  document.querySelectorAll('[data-employee-detail-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.employeeDetailTab = btn.dataset.employeeDetailTab;
+      render();
+    });
+  });
+  const prevBtn = document.getElementById('btn-employee-prev');
+  if (prevBtn && prevBtn.dataset.employeeId) prevBtn.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: prevBtn.dataset.employeeId, employeeDetailTab: state.employeeDetailTab }));
+  const nextBtn = document.getElementById('btn-employee-next');
+  if (nextBtn && nextBtn.dataset.employeeId) nextBtn.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: nextBtn.dataset.employeeId, employeeDetailTab: state.employeeDetailTab }));
 
   const favoriteBtn = document.getElementById('btn-toggle-favorite');
   if (!favoriteBtn) return; // fiche introuvable ou accès non autorisé : seul le lien de retour existe sur cet état

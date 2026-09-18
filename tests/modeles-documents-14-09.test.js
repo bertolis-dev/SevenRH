@@ -80,12 +80,15 @@ async function runUi() {
   // un message d'administration permanent était plus gênant qu'utile pour qui ne configure jamais de
   // modèle), absente pour qui ne peut pas modifier ----
   {
-    const { DB, sandbox, documentTemplateRepository, renderEmployeeDetail } = loadAppJs();
+    const { DB, sandbox, state, documentTemplateRepository, renderEmployeeDetail } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const salarie = DB.getEmployees().find(e => e.role === 'salarie');
+    // §retour Betty du 18/09/2026 (point 6) : "Documents à générer" vit désormais sous l'onglet
+    // "Documents" (16 cartes empilées remplacées par des onglets), plus sous "Fiche" par défaut.
+    state.employeeDetailTab = 'documents';
 
     const htmlSansModele = renderEmployeeDetail(salarie.id);
     assert.ok(!htmlSansModele.includes('Documents à générer'), 'sans aucun modèle configuré, la carte doit être entièrement masquée, même pour RH');

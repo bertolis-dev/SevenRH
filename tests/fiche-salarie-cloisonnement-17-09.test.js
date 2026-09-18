@@ -41,6 +41,18 @@ function findLeaks(html, activeModule) {
   return FICHE_LABEL_MODULE_RULES.filter(rule => rule.module !== activeModule).filter(rule => html.includes(rule.label));
 }
 
+// §retour Betty du 18/09/2026 (point 6) : la fiche salarié est passée de 16 cartes empilées à 6
+// onglets (un seul rendu à la fois) — un balayage "toutes les fuites possibles" doit donc regarder
+// TOUS les onglets, pas seulement celui affiché par défaut ("Fiche"), sinon une fuite qui ne vivrait
+// que sous "Congés et absences"/"Documents"/etc. ne serait plus jamais détectée par ce test.
+const ALL_EMPLOYEE_DETAIL_TABS = ['fiche', 'conges', 'frais', 'acces', 'documents', 'parcours'];
+function renderAllEmployeeDetailTabsHtml(sandbox, navigateTo, employeeId) {
+  return ALL_EMPLOYEE_DETAIL_TABS.map(tab => {
+    navigateTo('employee-detail', { currentEmployeeId: employeeId, employeeDetailTab: tab });
+    return sandbox.document.getElementById('view-root').innerHTML;
+  }).join('\n');
+}
+
 async function runBalayageParModule() {
   const ALL_MODULE_KEYS = ['conges', 'planning', 'frais', 'tickets', 'rh', 'remuneration', 'entretiens', 'embauche'];
   const ROLES_TO_CHECK = ['rh', 'proprietaire'];
@@ -59,8 +71,7 @@ async function runBalayageParModule() {
       const target = DB.getEmployees().find(e => e.role === 'salarie') || viewer;
       if (!viewer || !target) continue;
       DB._currentEmployeeId = viewer.id;
-      navigateTo('employee-detail', { currentEmployeeId: target.id });
-      const html = sandbox.document.getElementById('view-root').innerHTML;
+      const html = renderAllEmployeeDetailTabsHtml(sandbox, navigateTo, target.id);
       const leaks = findLeaks(html, activeModule);
       assert.deepStrictEqual(leaks.map(l => l.label), [],
         `fuite sur la fiche salarié : avec UNIQUEMENT "${activeModule}" souscrit ("${role}" consultant la fiche d'un salarié), la page affiche un libellé d'un autre module : ${leaks.map(l => `"${l.label}" (module réel : ${l.module})`).join(', ')}`);
@@ -84,8 +95,7 @@ async function runBalayageParModule() {
     // aucun modèle configuré (voir renderGenererDocumentCard) — il en faut donc un pour que ce
     // contrôle positif reste probant (sinon son absence ne prouverait plus rien sur le cloisonnement).
     documentTemplateRepository.create({ nom: 'Attestation de travail', corps: 'Test' });
-    navigateTo('employee-detail', { currentEmployeeId: target.id });
-    const html = sandbox.document.getElementById('view-root').innerHTML;
+    const html = renderAllEmployeeDetailTabsHtml(sandbox, navigateTo, target.id);
     FICHE_LABEL_MODULE_RULES.forEach(rule => assert.ok(html.includes(rule.label),
       `contrôle positif : avec tous les modules souscrits, "${rule.label}" doit apparaître sur la fiche salarié`));
   }
@@ -107,7 +117,10 @@ async function runAucunCrashSiCongesEtPlanningAbsents() {
 
   // Avant correctif : bindEmployeeDetailEvents plantait ici (TypeError sur .addEventListener d'un
   // élément absent du DOM), navigateTo laissait tout le reste de la liaison d'événements non fait.
-  navigateTo('employee-detail', { currentEmployeeId: target.id });
+  // employeeDetailTab: 'conges' demandé explicitement : si le module manque, l'onglet "Congés et
+  // absences" disparaît lui-même (retombe sur le premier onglet visible) — la vérification porte
+  // justement sur le fait qu'aucun de ses boutons/contenus ne fuite ailleurs, ni ne plante le binding.
+  navigateTo('employee-detail', { currentEmployeeId: target.id, employeeDetailTab: 'conges' });
   const html = sandbox.document.getElementById('view-root').innerHTML;
   assert.ok(!html.includes('Compteurs de congés'));
   assert.ok(!html.includes('id="btn-request-leave"'));
@@ -127,7 +140,7 @@ async function runTeletravailIndependantDesConges() {
   const viewer = DB.getEmployees().find(e => e.role === 'rh');
   const target = DB.getEmployees().find(e => e.role === 'salarie') || viewer;
   DB._currentEmployeeId = viewer.id;
-  navigateTo('employee-detail', { currentEmployeeId: target.id });
+  navigateTo('employee-detail', { currentEmployeeId: target.id, employeeDetailTab: 'conges' });
   const html = sandbox.document.getElementById('view-root').innerHTML;
 
   assert.ok(html.includes('Compteurs de congés'), 'le module congés seul doit garder la carte');

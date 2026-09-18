@@ -15,7 +15,10 @@ async function run() {
   const rh = DB.getEmployees().find(e => e.role === 'rh');
   DB._currentEmployeeId = rh.id;
   const employee = DB.getEmployees()[0];
-  navigateTo('employee-detail', { currentEmployeeId: employee.id });
+  // §retour Betty du 18/09/2026 (point 6) : "Compteurs de congés" vit désormais sous l'onglet
+  // "Congés et absences" (16 cartes empilées remplacées par des onglets) — plus sous le "Fiche" par
+  // défaut, d'où le deep-link explicite ici, qui n'était pas nécessaire avant ce changement.
+  navigateTo('employee-detail', { currentEmployeeId: employee.id, employeeDetailTab: 'conges' });
   render();
   const html = sandbox.document.getElementById('view-root').innerHTML;
 

@@ -377,6 +377,9 @@ globalThis.__openCertificatTravailModal = openCertificatTravailModal;
 globalThis.__openRegistreUniquePersonnelModal = openRegistreUniquePersonnelModal;
 globalThis.__exportEmployeesExcel = exportEmployeesExcel;
 globalThis.__SETTINGS_LIST_USAGE_CHECK = SETTINGS_LIST_USAGE_CHECK;
+globalThis.__EMPLOYEE_DETAIL_TABS = EMPLOYEE_DETAIL_TABS;
+globalThis.__renderPermissionsCard = renderPermissionsCard;
+globalThis.__getFilteredSortedEmployees = getFilteredSortedEmployees;
 globalThis.__hasModuleLicense = hasModuleLicense;
 globalThis.__licenseSummaryForModule = licenseSummaryForModule;
 globalThis.__licenseAssignableEmployees = licenseAssignableEmployees;
@@ -670,6 +673,9 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     openRegistreUniquePersonnelModal: sandbox.__openRegistreUniquePersonnelModal,
     exportEmployeesExcel: sandbox.__exportEmployeesExcel,
     SETTINGS_LIST_USAGE_CHECK: sandbox.__SETTINGS_LIST_USAGE_CHECK,
+    EMPLOYEE_DETAIL_TABS: sandbox.__EMPLOYEE_DETAIL_TABS,
+    renderPermissionsCard: sandbox.__renderPermissionsCard,
+    getFilteredSortedEmployees: sandbox.__getFilteredSortedEmployees,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
     downloadExcelXmlFile: sandbox.__downloadExcelXmlFile,
     exportRowsToCSVWithDelimiter: sandbox.__exportRowsToCSVWithDelimiter,

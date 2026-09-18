@@ -11,13 +11,16 @@ const { loadAppJs } = require('./load-app-js');
 async function run() {
   // ---- Document sans accusé requis : jamais de badge ni de bouton, comportement d'avant inchangé ----
   {
-    const { DB, sandbox, documentRepository, renderEmployeeDetail } = loadAppJs();
+    const { DB, sandbox, state, documentRepository, renderEmployeeDetail } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const salarie = DB.getEmployees().find(e => e.role === 'salarie');
     documentRepository.create({ employeeId: salarie.id, categorie: 'Administratif', nom: 'Carte vitale' });
+    // §retour Betty du 18/09/2026 (point 6) : la carte Documents vit désormais sous l'onglet
+    // "Documents" (16 cartes empilées remplacées par des onglets), plus sous "Fiche" par défaut.
+    state.employeeDetailTab = 'documents';
 
     const html = renderEmployeeDetail(salarie.id);
     assert.ok(!html.includes('En attente de lecture') && !html.includes("J'en ai pris connaissance"), 'un document ordinaire ne doit jamais afficher de badge ou de bouton d\'accusé de lecture');
@@ -26,13 +29,14 @@ async function run() {
   // ---- Document nécessitant un accusé : badge "en attente" visible par RH, mais PAS de bouton de
   // confirmation pour RH — seul le salarié concerné peut confirmer ----
   {
-    const { DB, sandbox, documentRepository, renderEmployeeDetail } = loadAppJs();
+    const { DB, sandbox, state, documentRepository, renderEmployeeDetail } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
     const salarie = DB.getEmployees().find(e => e.role === 'salarie');
     const doc = documentRepository.create({ employeeId: salarie.id, categorie: 'Règlement', nom: 'Règlement intérieur', accuseLectureRequis: true });
+    state.employeeDetailTab = 'documents';
 
     const htmlRh = renderEmployeeDetail(salarie.id);
     assert.ok(htmlRh.includes('En attente de lecture'), 'RH doit voir que la confirmation est en attente');

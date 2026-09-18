@@ -1046,9 +1046,18 @@ p { margin: 0; line-height: 1.5; }
 /* §refonte "fil d'Ariane" du 01/09/2026 : "Salariés / Prénom Nom" en haut de fiche, pour ne jamais
    perdre le fil de la navigation — voir renderBreadcrumb (app.js). */
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); margin-bottom: 10px; }
-.breadcrumb .btn-link { font-size: 13px; font-weight: 500; padding: 0; margin: 0; min-height: 0; color: var(--color-text-muted); }
-.breadcrumb .btn-link:hover { color: var(--color-primary-text); text-decoration: underline; }
+/* §retour Betty du 18/09/2026 (point 6) : plus visible qu'un simple texte gris (couleur primaire +
+   plus grand + souligné en permanence, pas seulement au survol) — sans changer sa position ni son
+   comportement, pour ne jamais faire doublon avec un second bouton "retour". */
+.breadcrumb .btn-link { font-size: 14px; font-weight: 600; padding: 0; margin: 0; min-height: 0; color: var(--color-primary-text); text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.15s ease; }
+.breadcrumb .btn-link:hover { text-decoration-color: currentColor; }
 .breadcrumb-sep { opacity: 0.5; }
+
+/* §retour Betty du 18/09/2026 (point 6, flèches précédent/suivant) : petite barre autonome,
+   au-dessus de l'en-tête de la fiche, pour ne jamais se confondre avec les actions propres au
+   salarié (Favori, Modifier...) dans .detail-header-actions. */
+.employee-detail-prev-next { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.employee-detail-prev-next .btn-icon:disabled { opacity: 0.35; cursor: default; }
 
 .detail-header {
   display: flex;
