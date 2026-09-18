@@ -1324,6 +1324,22 @@ p { margin: 0; line-height: 1.5; }
   border-top: 1px solid var(--color-border);
 }
 
+/* §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : DOM root séparé de #modal-root,
+   même patron visuel (fond sombre, centré) mais son propre z-index — doit rester PAR-DESSUS une
+   modale déjà ouverte (#modal-root : 50) plutôt que dedans, pour ne jamais écraser son contenu. */
+#quick-create-root {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 17, 21, 0.45);
+  z-index: 65;
+  padding: 20px;
+}
+
+#quick-create-root.open { display: flex; }
+
 /* ---------------------------------------------------------------------
    Toasts
    --------------------------------------------------------------------- */

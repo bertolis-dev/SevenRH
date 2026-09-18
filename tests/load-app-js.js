@@ -98,6 +98,8 @@ globalThis.__computeShiftHeures = computeShiftHeures;
 globalThis.__seedExampleShifts = seedExampleShifts;
 globalThis.__pointageRepository = pointageRepository;
 globalThis.__etablissementRepository = etablissementRepository;
+globalThis.__serviceRepository = serviceRepository;
+globalThis.__categorieSalarieRepository = categorieSalarieRepository;
 globalThis.__computeDureeTravailleeMinutes = computeDureeTravailleeMinutes;
 globalThis.__calculerCoutEmployeurComplet = calculerCoutEmployeurComplet;
 globalThis.__revisionSalarialeRepository = revisionSalarialeRepository;
@@ -397,6 +399,7 @@ globalThis.__normalizeForDuplicateCheck = normalizeForDuplicateCheck;
 globalThis.__findDuplicateInList = findDuplicateInList;
 globalThis.__QUICK_ADD_LISTS = QUICK_ADD_LISTS;
 globalThis.__SETTINGS_LISTS_RH = SETTINGS_LISTS_RH;
+globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -426,6 +429,8 @@ globalThis.__SETTINGS_LISTS_RH = SETTINGS_LISTS_RH;
     seedExampleShifts: sandbox.__seedExampleShifts,
     pointageRepository: sandbox.__pointageRepository,
     etablissementRepository: sandbox.__etablissementRepository,
+    serviceRepository: sandbox.__serviceRepository,
+    categorieSalarieRepository: sandbox.__categorieSalarieRepository,
     computeDureeTravailleeMinutes: sandbox.__computeDureeTravailleeMinutes,
     calculerCoutEmployeurComplet: sandbox.__calculerCoutEmployeurComplet,
     revisionSalarialeRepository: sandbox.__revisionSalarialeRepository,
@@ -709,6 +714,7 @@ globalThis.__SETTINGS_LISTS_RH = SETTINGS_LISTS_RH;
     findDuplicateInList: sandbox.__findDuplicateInList,
     QUICK_ADD_LISTS: sandbox.__QUICK_ADD_LISTS,
     SETTINGS_LISTS_RH: sandbox.__SETTINGS_LISTS_RH,
+    QUICK_CREATE_TYPES: sandbox.__QUICK_CREATE_TYPES,
   };
 }
 

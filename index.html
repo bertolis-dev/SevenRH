@@ -93,6 +93,11 @@
   </div>
 
   <div id="modal-root" role="dialog" aria-modal="true"></div>
+  <!-- §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : DOM root séparé de #modal-root,
+       jamais imbriqué dedans — une "petite fenêtre de création" (établissement/service/équipe/
+       catégorie de salarié) doit pouvoir s'ouvrir PAR-DESSUS une modale déjà en cours (ex. "Modifier
+       le salarié") sans écraser son contenu en réassignant l'innerHTML d'un root partagé. -->
+  <div id="quick-create-root" role="dialog" aria-modal="true"></div>
   <div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script type="module" src="supabase-client.js?v=20260918b"></script>

@@ -135,6 +135,12 @@ function getPendingSignup() {
 /** Élément qui avait le focus juste avant l'ouverture d'une modale — restauré par closeModal() à la fermeture. */
 let lastFocusedBeforeModal = null;
 
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place"), famille 2 : le <select> d'origine
+ * qui a ouvert #quick-create-root (voir openQuickCreateWindow) — même principe que
+ * lastFocusedBeforeModal ci-dessus, pour retrouver où appliquer la valeur créée une fois la petite
+ * fenêtre refermée, sans avoir à la faire remonter de fonction en fonction. */
+let quickCreateTargetSelect = null;
+
 /** Filtres/pagination/onglets propres à une session de vue — voir showApp(), qui les réinitialise
  * à chaque entrée dans l'application pour éviter qu'un filtre (ex. fraisFilters.employeeId) ne
  * survive à un changement d'entreprise ou de compte et masque silencieusement des données réelles
@@ -4818,8 +4824,29 @@ function bindGlobalEvents() {
   modalRoot.addEventListener('click', (e) => {
     if (e.target.id === 'modal-root' && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
   });
+
+  // §retour Betty du 19/09/2026 ("ajouter une valeur sur place"), famille 2 : #quick-create-root est
+  // un DOM root séparé (voir index.html), toujours par-dessus une modale éventuellement déjà
+  // ouverte — clic sur son propre fond sombre ou Échap ne doit refermer QUE lui, jamais aussi
+  // fermer la modale en dessous (voir la priorité sur le clavier ci-dessous).
+  const quickCreateRoot = document.getElementById('quick-create-root');
+  quickCreateRoot.addEventListener('click', (e) => {
+    if (e.target.id === 'quick-create-root') closeQuickCreateWindow();
+  });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
+    if (e.key !== 'Escape') return;
+    if (quickCreateRoot.classList.contains('open')) { closeQuickCreateWindow(); return; }
+    if (!modalRoot.querySelector('.modal[data-blocking]')) closeModal();
+  });
+
+  // Délégation globale pour l'ajout rapide famille 2 (établissements/services/catégories de
+  // salarié — l'équipe suit le même mécanisme, voir equipeSelectField) : même idiome que la
+  // délégation famille 1 plus bas, jamais un binding par formulaire.
+  document.addEventListener('change', (e) => {
+    const select = e.target.closest('[data-quick-create-type]');
+    if (!select) return;
+    if (select.value === '__quick_create__') openQuickCreateWindow(select);
+    else select.dataset.quickCreatePrevious = select.value;
   });
 
   // Bouton "œil" — bascule l'affichage en clair de n'importe quel champ mot de passe marqué
@@ -24366,14 +24393,29 @@ function equipeOptionsForServiceFilter(serviceNom) {
   return equipeOptionsForService(serviceNom);
 }
 
-function equipeSelectField(serviceNom, currentEquipe) {
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : l'équipe suit le même principe de
+ * création rapide que QUICK_CREATE_TYPES (voir plus bas), mais reste gérée ici directement plutôt
+ * que dans ce catalogue — une équipe a besoin du SERVICE déjà choisi comme contexte (elle s'y
+ * rattache toujours), ce que ni QUICK_ADD_LISTS ni QUICK_CREATE_TYPES ne portent. Les options
+ * elles-mêmes sont reconstruites ici (options + "+ Créer...") pour rester identiques entre le rendu
+ * initial (equipeSelectField) et le rafraîchissement au changement de service
+ * (updateEquipeOptionsForSelectedService) — sinon la seconde écraserait l'option "+ Créer..." de la
+ * première à chaque changement de service. */
+function equipeSelectOptionsHtml(serviceNom, currentEquipe) {
   const options = equipeOptionsForService(serviceNom);
+  const canQuickCreate = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
+  return `<option value="">—</option>` +
+    options.map(nom => `<option value="${escapeHtml(nom)}" ${currentEquipe === nom ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('') +
+    (canQuickCreate ? `<option value="__quick_create__">+ Créer une équipe...</option>` : '');
+}
+
+function equipeSelectField(serviceNom, currentEquipe) {
+  const canQuickCreate = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
   return `
     <div class="form-field">
       <label for="f-equipe">Équipe</label>
-      <select class="input" id="f-equipe" name="equipe">
-        <option value="">—</option>
-        ${options.map(nom => `<option value="${escapeHtml(nom)}" ${currentEquipe === nom ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('')}
+      <select class="input" id="f-equipe" name="equipe" ${canQuickCreate ? `data-quick-create-type="equipes" data-quick-create-previous="${escapeHtml(currentEquipe || '')}"` : ''}>
+        ${equipeSelectOptionsHtml(serviceNom, currentEquipe)}
       </select>
     </div>
   `;
@@ -24383,9 +24425,8 @@ function updateEquipeOptionsForSelectedService() {
   const serviceNom = document.getElementById('f-service').value;
   const equipeSelect = document.getElementById('f-equipe');
   const previousValue = equipeSelect.value;
-  const options = equipeOptionsForService(serviceNom);
-  equipeSelect.innerHTML = `<option value="">—</option>` +
-    options.map(nom => `<option value="${escapeHtml(nom)}" ${nom === previousValue ? 'selected' : ''}>${escapeHtml(nom)}</option>`).join('');
+  equipeSelect.innerHTML = equipeSelectOptionsHtml(serviceNom, previousValue);
+  equipeSelect.dataset.quickCreatePrevious = previousValue;
 }
 
 /** Salaire/genre : édition réservée au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
@@ -25284,13 +25325,13 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
           <fieldset class="form-section" id="employee-form-section-contrat" data-employee-tab-panel="contrat" hidden>
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
-              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
-              ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
+              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements')}
+              ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service, null, undefined, undefined, 'services')}
               ${equipeSelectField(employee.service, employee.equipe)}
               ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).', 'postes')}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
-              ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })))}
+              ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })), undefined, undefined, 'categoriesSalarie')}
               ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat, null, undefined, 'typesContrat')}
               <div class="form-field">
                 <label for="f-dateEmbauche">Date d'embauche *</label>
@@ -25683,14 +25724,38 @@ const QUICK_ADD_LISTS = {
   categoriesFrais: { label: 'une catégorie de notes de frais', champLabel: 'Catégorie de notes de frais', feminin: true, sansReglage: true }
 };
 
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place"), famille 2 : établissements,
+ * services, équipes, catégories de salarié. Contrairement à QUICK_ADD_LISTS, ces types portent plus
+ * qu'un nom (voir openQuickCreateWindow) : une PETITE FENÊTRE séparée (#quick-create-root, sibling
+ * de #modal-root — jamais imbriquée dans une modale déjà ouverte, sous peine d'écraser son contenu)
+ * plutôt qu'un simple champ inline. Réglages fins (adresse, description, managers d'une équipe...)
+ * volontairement absents d'ici : ils restent à faire dans Paramètres. `equipes` n'a que son
+ * titre/libellé ici : la logique de création elle-même reste à part (confirmQuickCreate,
+ * equipeSelectField/updateEquipeOptionsForSelectedService plus haut), car une équipe a besoin du
+ * service déjà choisi comme contexte, pas juste d'une clé de settings comme les 3 autres. */
+const QUICK_CREATE_TYPES = {
+  etablissements: { label: 'un établissement', titre: 'Créer un établissement' },
+  services: { label: 'un service', titre: 'Créer un service' },
+  // La LOGIQUE de création d'une équipe reste à part (confirmQuickCreate, elle a besoin du service
+  // choisi comme contexte) — mais son titre/libellé viennent bien d'ici, comme les 3 autres types,
+  // sinon openQuickCreateWindow (def = QUICK_CREATE_TYPES[type]) ne trouverait rien et abandonnerait
+  // silencieusement à l'ouverture.
+  equipes: { label: 'une équipe', titre: 'Créer une équipe', feminin: true },
+  categoriesSalarie: { label: 'une catégorie de salarié', titre: 'Créer une catégorie de salarié', feminin: true }
+};
+
 /** Si la valeur actuellement enregistrée ne correspond à aucune option (ex. la liste
  * paramétrable a été renommée depuis), on l'ajoute quand même comme option sélectionnée
  * plutôt que de la laisser disparaître silencieusement — sinon un simple "Enregistrer"
  * sans toucher au champ écrase la donnée d'origine par une valeur vide.
  * quickAddListKey (optionnel) : voir QUICK_ADD_LISTS ci-dessus — ajoute une option "+ Ajouter..."
  * en fin de liste, réservée à qui gère les paramètres (écrire une liste de référence en est une
- * facette, même droit que le reste de Paramètres > Référentiels). */
-function selectField(name, label, options, selectedValue, customOptions, help, quickAddListKey) {
+ * facette, même droit que le reste de Paramètres > Référentiels).
+ * quickCreateType (optionnel, mutuellement exclusif avec quickAddListKey) : voir QUICK_CREATE_TYPES
+ * plus bas — même idée, mais pour un type qui porte plus qu'un nom (établissement, catégorie de
+ * salarié) : ouvre une petite fenêtre séparée (#quick-create-root) plutôt qu'un simple champ inline,
+ * elle-même réservée à gererParametres. */
+function selectField(name, label, options, selectedValue, customOptions, help, quickAddListKey, quickCreateType) {
   const opts = customOptions || (options || []).map(o => ({ value: o, label: o }));
   const hasValue = selectedValue !== undefined && selectedValue !== null && selectedValue !== '';
   const matchesOption = opts.some(o => String(o.value) === String(selectedValue));
@@ -25699,14 +25764,22 @@ function selectField(name, label, options, selectedValue, customOptions, help, q
     : '';
   const quickAddDef = quickAddListKey && QUICK_ADD_LISTS[quickAddListKey];
   const canQuickAdd = quickAddDef && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
+  const quickCreateDef = quickCreateType && QUICK_CREATE_TYPES[quickCreateType];
+  const canQuickCreate = quickCreateDef && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
+  const quickAttrs = canQuickAdd
+    ? `data-quick-add-list="${escapeHtml(quickAddListKey)}" data-quick-add-previous="${escapeHtml(hasValue ? selectedValue : '')}"`
+    : canQuickCreate
+      ? `data-quick-create-type="${escapeHtml(quickCreateType)}" data-quick-create-previous="${escapeHtml(hasValue ? selectedValue : '')}"`
+      : '';
   return `
     <div class="form-field">
       <label for="f-${name}">${escapeHtml(label)}${fieldHelpIcon(help)}</label>
-      <select class="input" id="f-${name}" name="${name}" ${canQuickAdd ? `data-quick-add-list="${escapeHtml(quickAddListKey)}" data-quick-add-previous="${escapeHtml(hasValue ? selectedValue : '')}"` : ''}>
+      <select class="input" id="f-${name}" name="${name}" ${quickAttrs}>
         <option value="">—</option>
         ${staleOption}
         ${opts.map(o => `<option value="${escapeHtml(o.value)}" ${String(selectedValue) === String(o.value) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
         ${canQuickAdd ? `<option value="__quick_add__">+ Ajouter ${escapeHtml(quickAddDef.label)}...</option>` : ''}
+        ${canQuickCreate ? `<option value="__quick_create__">+ Créer ${escapeHtml(quickCreateDef.label)}...</option>` : ''}
       </select>
       ${canQuickAdd ? `<div class="quick-add-inline" id="f-${name}-quick-add" hidden></div>` : ''}
     </div>
@@ -26195,6 +26268,201 @@ function applyQuickAddValue(select, value, estNouvelle) {
 
   closeQuickAddInline(select); // lit dataset.quickAddPrevious, déjà mis à jour juste au-dessus.
   showToast(estNouvelle ? `« ${escapeHtml(optionValue)} » ajouté${def.feminin ? 'e' : ''}.` : 'Valeur déjà existante, sélectionnée.');
+}
+
+// ---------------------------------------------------------------------------
+// Ajout rapide, famille 2 (établissements/services/équipes/catégories de salarié) — §retour Betty
+// du 19/09/2026. Contrairement à la famille 1 ci-dessus (simple champ inline), ces types portent
+// plus qu'un nom : une petite fenêtre séparée (#quick-create-root, sibling de #modal-root dans
+// index.html, jamais imbriquée dans une modale déjà ouverte, sous peine d'écraser son contenu par
+// une réassignation d'innerHTML) — voir QUICK_CREATE_TYPES plus haut.
+// ---------------------------------------------------------------------------
+
+function openQuickCreateWindow(select) {
+  const type = select.dataset.quickCreateType;
+  const def = QUICK_CREATE_TYPES[type];
+  if (!def) return;
+  select.value = select.dataset.quickCreatePrevious || '';
+  quickCreateTargetSelect = select;
+
+  const root = document.getElementById('quick-create-root');
+  root.innerHTML = renderQuickCreateForm(type);
+  root.classList.add('open');
+  bindQuickCreateForm(type);
+
+  const firstInput = document.getElementById('quick-create-nom');
+  if (firstInput) firstInput.focus();
+}
+
+/** Champs volontairement réduits au strict indispensable (demande explicite : "les quelques champs
+ * indispensables" — réglages fins laissés à Paramètres). Équipe : a besoin du service déjà choisi
+ * dans le formulaire d'origine (#f-service) comme contexte, jamais un service à sélectionner ici en
+ * plus — si aucun n'est encore choisi, le bouton "Créer" reste désactivé plutôt que de permettre une
+ * équipe orpheline. IDs volontairement préfixés "quick-create-" (jamais "f-", déjà utilisé par les
+ * champs du formulaire potentiellement ouvert derrière, dans l'AUTRE arbre DOM #modal-root) : deux
+ * éléments #f-nom simultanés dans la page auraient fait pointer document.getElementById('f-nom') sur
+ * le premier trouvé, presque certainement pas celui voulu ici. */
+function renderQuickCreateForm(type) {
+  const def = QUICK_CREATE_TYPES[type];
+  let bodyHtml;
+  let disableConfirm = false;
+
+  if (type === 'equipes') {
+    const serviceSelect = document.getElementById('f-service');
+    const serviceNom = serviceSelect ? serviceSelect.value : '';
+    const service = serviceRepository.getAll().find(s => s.nom === serviceNom);
+    if (!service) {
+      bodyHtml = `<p class="text-muted">Choisissez d'abord un service : une équipe se rattache toujours à un service.</p>`;
+      disableConfirm = true;
+    } else {
+      bodyHtml = `
+        <p class="text-muted" style="margin: 0 0 12px;">Service : <strong>${escapeHtml(service.nom)}</strong></p>
+        <div class="form-field">
+          <label for="quick-create-nom">Nom</label>
+          <input class="input" type="text" id="quick-create-nom">
+        </div>
+      `;
+    }
+  } else {
+    bodyHtml = `
+      <div class="form-field">
+        <label for="quick-create-nom">Nom</label>
+        <input class="input" type="text" id="quick-create-nom">
+      </div>
+    `;
+    if (type === 'etablissements') {
+      bodyHtml += `
+        <div class="form-field form-field-checkbox" style="margin-top: 10px;">
+          <label><input type="checkbox" id="quick-create-actif" checked> Actif</label>
+        </div>
+        <div class="form-field form-field-checkbox">
+          <label><input type="checkbox" id="quick-create-principal"> Établissement principal</label>
+        </div>
+      `;
+    }
+  }
+
+  return `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${escapeHtml(def.titre)}</h2>
+        <button type="button" class="btn-icon" id="btn-quick-create-close" aria-label="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        ${bodyHtml}
+        <p class="text-muted" id="quick-create-message" style="font-size: 12px; margin-top: 8px;"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-quick-create-cancel">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-quick-create-confirm" ${disableConfirm ? 'disabled' : ''}>Créer</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindQuickCreateForm(type) {
+  document.getElementById('btn-quick-create-close').addEventListener('click', closeQuickCreateWindow);
+  document.getElementById('btn-quick-create-cancel').addEventListener('click', closeQuickCreateWindow);
+  document.getElementById('btn-quick-create-confirm').addEventListener('click', () => confirmQuickCreate(type, false));
+  const nomInput = document.getElementById('quick-create-nom');
+  if (nomInput) {
+    nomInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      confirmQuickCreate(type, false);
+    });
+  }
+}
+
+/** forcer=true : passe outre un doublon détecté ("Créer quand même") — jamais le comportement par
+ * défaut, seulement une échappatoire explicite (même garde-fou, même mécanisme que confirmQuickAdd
+ * ci-dessus pour la famille 1). */
+function confirmQuickCreate(type, forcer) {
+  const messageEl = document.getElementById('quick-create-message');
+  const nomInput = document.getElementById('quick-create-nom');
+  if (!nomInput) return; // équipe sans service choisi : pas de champ nom, rien à confirmer (bouton déjà désactivé).
+  const nom = nomInput.value.trim();
+  if (!nom) { messageEl.textContent = 'Le nom est obligatoire.'; return; }
+
+  let existingList = [];
+  let service = null;
+  if (type === 'etablissements') existingList = etablissementRepository.getAll();
+  else if (type === 'services') existingList = serviceRepository.getAll();
+  else if (type === 'categoriesSalarie') existingList = categorieSalarieRepository.getAll();
+  else if (type === 'equipes') {
+    const serviceNom = document.getElementById('f-service').value;
+    service = serviceRepository.getAll().find(s => s.nom === serviceNom);
+    if (!service) { messageEl.textContent = 'Choisissez d\'abord un service.'; return; }
+    existingList = service.equipes; // doublon vérifié DANS ce service seulement : le même nom d'équipe dans deux services différents n'est pas un doublon.
+  }
+
+  if (!forcer) {
+    const doublon = findDuplicateInList(existingList, nom, 'nom');
+    if (doublon) {
+      messageEl.innerHTML = `« ${escapeHtml(doublon.nom)} » existe déjà. <button type="button" class="btn-link" id="btn-quick-create-use-existing">Utiliser cette valeur</button> · <button type="button" class="btn-link" id="btn-quick-create-force">Créer quand même</button>`;
+      document.getElementById('btn-quick-create-use-existing').addEventListener('click', () => applyQuickCreateValue(type, doublon, false));
+      document.getElementById('btn-quick-create-force').addEventListener('click', () => confirmQuickCreate(type, true));
+      return;
+    }
+  }
+
+  let created;
+  if (type === 'etablissements') {
+    created = etablissementRepository.create({
+      nom,
+      actif: document.getElementById('quick-create-actif').checked,
+      principal: document.getElementById('quick-create-principal').checked
+    });
+  } else if (type === 'services') {
+    created = serviceRepository.create(nom);
+  } else if (type === 'categoriesSalarie') {
+    created = categorieSalarieRepository.create({ nom });
+  } else if (type === 'equipes') {
+    created = DB.addEquipe(service.id, nom); // journalise déjà l'action (voir DB.addEquipe) : qui, quand.
+  }
+
+  applyQuickCreateValue(type, created, true);
+}
+
+/** Sélectionne l'objet créé (ou déjà existant, si "Utiliser cette valeur") dans LE <select> d'origine
+ * (quickCreateTargetSelect), synchronise les autres <select> du même type déjà affichés sur la page,
+ * puis referme la petite fenêtre — jamais un appel à render(), pour ne perdre aucun autre champ du
+ * formulaire en cours (même principe qu'applyQuickAddValue ci-dessus pour la famille 1). Le 'change'
+ * réellement déclenché sur le select réutilise la logique déjà existante qui en dépend (ex.
+ * updateEquipeOptionsForSelectedService sur #f-service, qui rafraîchit alors #f-equipe pour le
+ * nouveau service, vide d'équipes) plutôt que de la dupliquer ici. */
+function applyQuickCreateValue(type, obj, estNouvelle) {
+  const def = QUICK_CREATE_TYPES[type];
+  const optionValue = (type === 'services' || type === 'equipes') ? obj.nom : obj.id;
+  const optionLabel = type === 'etablissements' && !obj.actif ? `${obj.nom} (désactivé)` : obj.nom;
+  const select = quickCreateTargetSelect;
+
+  document.querySelectorAll(`[data-quick-create-type="${type}"]`).forEach(autreSelect => {
+    const existingOption = Array.from(autreSelect.options).find(o => o.value === optionValue);
+    if (!existingOption) {
+      const quickCreateOption = Array.from(autreSelect.options).find(o => o.value === '__quick_create__');
+      const opt = document.createElement('option');
+      opt.value = optionValue;
+      opt.textContent = optionLabel;
+      if (quickCreateOption) autreSelect.insertBefore(opt, quickCreateOption); else autreSelect.appendChild(opt);
+    }
+    if (autreSelect === select) {
+      autreSelect.value = optionValue;
+      autreSelect.dataset.quickCreatePrevious = optionValue;
+      autreSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
+  closeQuickCreateWindow();
+  showToast(estNouvelle ? `« ${escapeHtml(obj.nom)} » créé${def.feminin ? 'e' : ''}.` : 'Valeur déjà existante, sélectionnée.');
+}
+
+function closeQuickCreateWindow() {
+  const root = document.getElementById('quick-create-root');
+  root.classList.remove('open');
+  root.innerHTML = '';
+  if (quickCreateTargetSelect) quickCreateTargetSelect.value = quickCreateTargetSelect.dataset.quickCreatePrevious || '';
+  quickCreateTargetSelect = null;
 }
 
 function escapeHtml(value) {
