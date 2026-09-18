@@ -76,7 +76,9 @@ async function runUi() {
   }
 
   // ---- Fiche salarié : la carte "Documents à générer" liste les modèles pour qui peut modifier la
-  // fiche, message honnête si aucun modèle, absente pour qui ne peut pas modifier ----
+  // fiche, MASQUÉE ENTIÈREMENT si aucun modèle n'existe encore (retour Betty du 18/09/2026, point 9 :
+  // un message d'administration permanent était plus gênant qu'utile pour qui ne configure jamais de
+  // modèle), absente pour qui ne peut pas modifier ----
   {
     const { DB, sandbox, documentTemplateRepository, renderEmployeeDetail } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
@@ -86,8 +88,7 @@ async function runUi() {
     const salarie = DB.getEmployees().find(e => e.role === 'salarie');
 
     const htmlSansModele = renderEmployeeDetail(salarie.id);
-    assert.ok(htmlSansModele.includes('Documents à générer'), 'RH (peut modifier) doit voir la carte, même vide');
-    assert.ok(htmlSansModele.includes('Aucun modèle configuré'), 'message honnête si aucun modèle n\'existe encore');
+    assert.ok(!htmlSansModele.includes('Documents à générer'), 'sans aucun modèle configuré, la carte doit être entièrement masquée, même pour RH');
 
     documentTemplateRepository.create({ nom: 'Attestation de travail', corps: 'Test' });
     const htmlAvecModele = renderEmployeeDetail(salarie.id);

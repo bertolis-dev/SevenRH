@@ -70,7 +70,7 @@ async function runBalayageParModule() {
   // ---- Contrôle positif : avec TOUS les modules, chaque libellé doit réapparaître — sinon un test
   //      "zéro fuite" qui passe parce que plus rien ne s'affiche jamais ne prouve rien. ----
   {
-    const { DB, sandbox, navigateTo } = loadAppJs();
+    const { DB, sandbox, navigateTo, documentTemplateRepository } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const company = DB.getCurrentCompany();
@@ -80,6 +80,10 @@ async function runBalayageParModule() {
     const viewer = DB.getEmployees().find(e => e.role === 'proprietaire');
     const target = DB.getEmployees().find(e => e.role === 'salarie') || viewer;
     DB._currentEmployeeId = viewer.id;
+    // §retour Betty du 18/09/2026 (point 9) : "Documents à générer" est maintenant masquée sans
+    // aucun modèle configuré (voir renderGenererDocumentCard) — il en faut donc un pour que ce
+    // contrôle positif reste probant (sinon son absence ne prouverait plus rien sur le cloisonnement).
+    documentTemplateRepository.create({ nom: 'Attestation de travail', corps: 'Test' });
     navigateTo('employee-detail', { currentEmployeeId: target.id });
     const html = sandbox.document.getElementById('view-root').innerHTML;
     FICHE_LABEL_MODULE_RULES.forEach(rule => assert.ok(html.includes(rule.label),

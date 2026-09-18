@@ -364,6 +364,13 @@ globalThis.__bindLoginScreenEvents = bindLoginScreenEvents;
 globalThis.__showLogin = showLogin;
 globalThis.__renderExportPaiePreparationTab = renderExportPaiePreparationTab;
 globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
+globalThis.__hasModuleLicense = hasModuleLicense;
+globalThis.__licenseSummaryForModule = licenseSummaryForModule;
+globalThis.__licenseAssignableEmployees = licenseAssignableEmployees;
+globalThis.__ensureLicenseCapacity = ensureLicenseCapacity;
+globalThis.__openGererLicencesModal = openGererLicencesModal;
+globalThis.__releaseModuleLicensesForDeparture = releaseModuleLicensesForDeparture;
+globalThis.__LICENSED_MODULE_KEYS = LICENSED_MODULE_KEYS;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -643,6 +650,13 @@ globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
     excelColumnWidths: sandbox.__excelColumnWidths,
     excelXmlCell: sandbox.__excelXmlCell,
     excelXmlEscape: sandbox.__excelXmlEscape,
+    hasModuleLicense: sandbox.__hasModuleLicense,
+    licenseSummaryForModule: sandbox.__licenseSummaryForModule,
+    licenseAssignableEmployees: sandbox.__licenseAssignableEmployees,
+    ensureLicenseCapacity: sandbox.__ensureLicenseCapacity,
+    openGererLicencesModal: sandbox.__openGererLicencesModal,
+    releaseModuleLicensesForDeparture: sandbox.__releaseModuleLicensesForDeparture,
+    LICENSED_MODULE_KEYS: sandbox.__LICENSED_MODULE_KEYS,
   };
 }
 

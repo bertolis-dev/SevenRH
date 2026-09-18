@@ -528,6 +528,21 @@ async function deleteRow(tableName, id, companyId) {
   if (error) throw error;
 }
 
+/** §retour Betty du 18/09/2026 (point 8, licences par module) : module_licenses (0059) a une clé
+ * composite (company_id, module_key, employee_id), pas de colonne id — deleteRow ci-dessus ne
+ * convient pas, d'où ces deux fonctions dédiées plutôt qu'un détournement du helper générique. */
+async function grantModuleLicense(companyId, moduleKey, employeeId, grantedBy) {
+  const { error } = await supabase.from('module_licenses').insert({
+    company_id: companyId, module_key: moduleKey, employee_id: employeeId, granted_by: grantedBy || null
+  });
+  if (error) throw error;
+}
+async function revokeModuleLicense(companyId, moduleKey, employeeId) {
+  const { error } = await supabase.from('module_licenses')
+    .delete().eq('company_id', companyId).eq('module_key', moduleKey).eq('employee_id', employeeId);
+  if (error) throw error;
+}
+
 async function syncSingleRow(tableName, companyId, data) {
   const { error } = await supabase.from(tableName).upsert({ company_id: companyId, data });
   if (error) throw error;
@@ -745,7 +760,7 @@ async function hydrateCurrentCompany() {
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
     expensesRes, documentsRes, supportTicketsRes, entretiensRes, ideesRes, draftsRes, notificationsRes, favoritesRes,
-    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes
+    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes, moduleLicensesRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
     supabase.from('employees').select('*').eq('company_id', companyId),
@@ -783,7 +798,12 @@ async function hydrateCurrentCompany() {
     supabase.from('school_holidays').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('settings').select('*').eq('company_id', companyId).maybeSingle(),
     supabase.from('subscriptions').select('*').eq('company_id', companyId).maybeSingle(),
-    supabase.from('subscription_modules').select('*').eq('company_id', companyId)
+    supabase.from('subscription_modules').select('*').eq('company_id', companyId),
+    // §retour Betty du 18/09/2026 (point 8, licences par module) : module_licenses (0059) — jamais
+    // mélangée à subscription_modules (quantité ACHETÉE, propriété exclusive de Stripe/service-role)
+    // ni au blob companies.data, pour que rien ici ne risque d'écraser l'attribution nominative au
+    // prochain resync Stripe.
+    supabase.from('module_licenses').select('*').eq('company_id', companyId)
   ]);
 
   // §correctif audit du 31/08/2026 : companyRes.data était déréférencé (company.id ligne suivante)
@@ -801,8 +821,16 @@ async function hydrateCurrentCompany() {
     ['support_tickets', supportTicketsRes], ['entretiens', entretiensRes], ['idees', ideesRes],
     ['drafts', draftsRes], ['notifications', notificationsRes], ['favorites', favoritesRes],
     ['audit_log', auditLogRes], ['settings', settingsRes], ['subscriptions', subscriptionRes],
-    ['subscription_modules', subscriptionModulesRes]
+    ['subscription_modules', subscriptionModulesRes], ['module_licenses', moduleLicensesRes]
   ].forEach(([table, res]) => { if (res && res.error) console.error(`Échec de lecture Supabase (${table}) :`, res.error); });
+
+  // §retour Betty du 18/09/2026 : { conges: ['emp1', 'emp2'], frais: ['emp3'] } — regroupe les lignes
+  // plates de module_licenses par module, plus simple à lire pour hasModuleLicense (app.js) qu'un
+  // tableau de lignes {module_key, employee_id} brut.
+  const moduleLicenses = {};
+  (moduleLicensesRes.data || []).forEach(r => {
+    (moduleLicenses[r.module_key] = moduleLicenses[r.module_key] || []).push(r.employee_id);
+  });
 
   // Fusionne la table complète (ce que RLS autorise pour ce rôle : soi-même/son équipe/tout si
   // RH-Propriétaire) avec la vue calendrier redactée (tout le monde, champs minimaux) — sans écraser
@@ -826,6 +854,9 @@ async function hydrateCurrentCompany() {
       ...abonnementFromRow(subscriptionRes.data),
       modules: (subscriptionModulesRes.data || []).map(r => ({ key: r.module_key, quantite: r.quantite }))
     },
+    // moduleLicenses : { conges: ['emp1', ...] } (0059_module_licenses.sql) — jamais dans le blob,
+    // même raison que abonnement juste au-dessus.
+    moduleLicenses,
     etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
     employees: (employeesRes.data || []).map(employeeFromRow),
     services: (servicesRes.data || []).map(serviceFromRow),
@@ -1473,6 +1504,7 @@ async function reportClientErrorToBertolis(companyId, employeeId, version, conte
 
 window.SupabaseSync = {
   signIn, signInWithOAuth, signUpNewCompany, createCompanySelfService, transferProprietaire, getOrCreateIcalToken, regenerateIcalToken, resendSignupConfirmation, manageEmployeeAccount, signOut, getSession, fetchCurrentEmployeeRow, hydrateCurrentCompany, fetchFullCompanyExportData,
+  grantModuleLicense, revokeModuleLicense,
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,

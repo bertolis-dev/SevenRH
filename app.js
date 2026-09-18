@@ -543,6 +543,7 @@ const SOURCE_KEY_MODULE_RULES = [
   { prefix: 'document-expiry-', module: 'rh' },
   { prefix: 'entretien-', module: 'entretiens' },
   { prefix: 'ticket-status-', module: null }, // support : fonctionnalité de base, jamais liée à un module à la carte
+  { prefix: 'licence-liberee-', module: null }, // §point 8 : concerne la gestion de l'abonnement elle-même, pas le module libéré
 ];
 
 /** module requis pour un sourceKey donné, ou null si aucun (notification de base). Lève une erreur
@@ -573,6 +574,265 @@ function hasModule(moduleKey) {
  * appel — retourne '' si le module n'est pas souscrit, le HTML sinon. */
 function ifModule(moduleKey, html) {
   return hasModule(moduleKey) ? html : '';
+}
+
+/** Modules réellement verrouillés par has_module_license() côté serveur (0059) : seuls
+ * leave_requests/telework_requests/expenses ont une policy d'INSERT qui vérifie une licence
+ * nominative. Étendre cette liste suppose d'abord d'ajouter la policy SQL correspondante,
+ * sinon l'UI promettrait un verrou que le serveur ne tient pas. */
+const LICENSED_MODULE_KEYS = ['conges', 'planning', 'frais'];
+
+/** §retour Betty du 18/09/2026 (point 8, "les licences par module") : hasModule() ci-dessus ne
+ * vérifie que la présence du module dans l'abonnement de l'entreprise, jamais QUI a un siège
+ * attribué parmi les places achetées (subscription_modules ne contient que la quantité, écrite par
+ * Stripe/le service-role, voir 0023) — d'où module_licenses (0059), l'attribution nominative, et
+ * has_module_license() côté SQL (le vrai verrou, appliqué aux policies d'INSERT). Ce miroir client
+ * sert seulement à guider l'affichage AVANT l'envoi (bouton bloqué, message clair) : la policy
+ * serveur reste la seule vérité, jamais contournable depuis ici. Reprend exactement la même logique :
+ * hors offre à la carte → toujours vrai ; Propriétaire/RH exemptés (administrer un module payé ne
+ * consomme pas un siège personnel) ; sinon, présence dans company.moduleLicenses[moduleKey]. */
+function hasModuleLicense(employee, moduleKey) {
+  if (!employee) return false;
+  const company = companyRepository.getCurrent();
+  const abo = company && company.abonnement;
+  if (!abo || abo.offre !== 'a_la_carte') return true;
+  if (!hasModule(moduleKey)) return false;
+  if (employee.role === 'rh' || employee.role === 'proprietaire') return true;
+  const beneficiaires = (company.moduleLicenses && company.moduleLicenses[moduleKey]) || [];
+  return beneficiaires.includes(employee.id);
+}
+
+/** Employés RH/Propriétaire exclus : exemptés (voir hasModuleLicense), jamais comptés dans le
+ * quota ni proposés dans "Gérer les accès" — leur accès administratif n'a jamais consommé de siège. */
+function licenseAssignableEmployees() {
+  return employeeRepository.getAll().filter(e => !e.archive && e.role !== 'rh' && e.role !== 'proprietaire');
+}
+
+function licenseSummaryForModule(moduleKey, quantite) {
+  const company = companyRepository.getCurrent();
+  if (!company) return { assigned: 0, quantite, beneficiaires: [], employees: [] };
+  const beneficiaires = (company.moduleLicenses && company.moduleLicenses[moduleKey]) || [];
+  const employees = licenseAssignableEmployees();
+  const assigned = beneficiaires.filter(id => employees.some(e => e.id === id)).length;
+  return { assigned, quantite, beneficiaires, employees };
+}
+
+/** §retour Betty du 18/09/2026 : la seule action possible ici est cocher/décocher un salarié — pas
+ * de bouton "Enregistrer" séparé, chaque case appelle directement grant/revokeModuleLicense et
+ * remet à jour la modale, pour que le compteur X/Y ne mente jamais entre deux clics. */
+function openGererLicencesModal(moduleKey) {
+  const moduleDef = LANDING_ALACARTE_MODULES.find(m => m.key === moduleKey);
+  const abo = companyRepository.getCurrent().abonnement;
+  const aboModule = (abo.modules || []).find(m => m.key === moduleKey);
+  const quantite = aboModule ? aboModule.quantite : 0;
+
+  function renderBody() {
+    const { assigned, employees, beneficiaires } = licenseSummaryForModule(moduleKey, quantite);
+    const atCapacite = assigned >= quantite;
+    return `
+      <p>
+        <span class="badge badge-${atCapacite ? 'warning' : 'muted'}">${assigned}/${quantite} attribuées</span>
+        ${atCapacite ? ' Capacité atteinte : décochez un bénéficiaire pour en ajouter un autre, ou ajustez la quantité souscrite.' : ''}
+      </p>
+      ${atCapacite ? `<button type="button" class="btn-link" id="btn-ajuster-abonnement-licence">Ajuster l'abonnement</button>` : ''}
+      <table class="table" style="margin-top: 12px;">
+        <thead><tr><th>Salarié</th><th>Rôle</th><th>Accès</th></tr></thead>
+        <tbody>
+          ${employees.map(e => {
+            const licencie = beneficiaires.includes(e.id);
+            const disabled = !licencie && atCapacite;
+            return `
+              <tr>
+                <td>${personNameHtml(e)}</td>
+                <td>${escapeHtml(ROLE_LABELS[e.role] || e.role)}</td>
+                <td>
+                  <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <input type="checkbox" data-licence-employee="${e.id}" ${licencie ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                    ${licencie ? 'Accès accordé' : (disabled ? 'Capacité atteinte' : 'Accorder l\'accès')}
+                  </label>
+                </td>
+              </tr>
+            `;
+          }).join('') || '<tr><td colspan="3" class="text-muted">Aucun salarié éligible.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+  }
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Accès au module « ${escapeHtml(moduleDef ? moduleDef.label : moduleKey)} »</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body" id="licences-modal-body">${renderBody()}</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  function bindBody() {
+    const ajusterBtn = document.getElementById('btn-ajuster-abonnement-licence');
+    if (ajusterBtn) ajusterBtn.addEventListener('click', () => {
+      closeModal();
+      state.abonnementEditingModules = true;
+      render();
+    });
+    document.querySelectorAll('[data-licence-employee]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const employeeId = cb.dataset.licenceEmployee;
+        const company = companyRepository.getCurrent();
+        cb.disabled = true;
+        try {
+          if (cb.checked) {
+            await window.SupabaseSync.grantModuleLicense(company.id, moduleKey, employeeId, authRepository.getCurrentUser().id);
+          } else {
+            await window.SupabaseSync.revokeModuleLicense(company.id, moduleKey, employeeId);
+          }
+          const refreshed = await window.SupabaseSync.hydrateCurrentCompany();
+          if (refreshed) DB._companiesCache = [refreshed];
+        } catch (err) {
+          showToast('Impossible de mettre à jour cet accès : ' + (err.message || err), 'error');
+        }
+        document.getElementById('licences-modal-body').innerHTML = renderBody();
+        bindBody();
+      });
+    });
+  }
+  bindBody();
+}
+
+/** §retour Betty du 18/09/2026 (point 8) : "employé archivé/parti : libération automatique + me
+ * notifier" — appelé au moment de l'archivage et au moment où une date de départ est enregistrée
+ * (voir les deux points d'appel dans bindEmployeeDetailEvents/submitEmployeeForm). Le siège redevient
+ * disponible pour quelqu'un d'autre ; les données déjà produites (congés, notes de frais...) ne sont
+ * pas concernées, ceci ne retire QUE l'accès personnel nominatif. Best-effort : une erreur réseau ne
+ * doit jamais bloquer l'archivage/le départ lui-même, déjà enregistrés au moment de l'appel. */
+async function releaseModuleLicensesForDeparture(employee) {
+  const company = companyRepository.getCurrent();
+  const liberees = [];
+  for (const key of LICENSED_MODULE_KEYS) {
+    const beneficiaires = (company.moduleLicenses && company.moduleLicenses[key]) || [];
+    if (!beneficiaires.includes(employee.id)) continue;
+    try {
+      await window.SupabaseSync.revokeModuleLicense(company.id, key, employee.id);
+      liberees.push(key);
+    } catch (err) { /* best-effort : ne bloque jamais l'archivage/le départ */ }
+  }
+  if (!liberees.length) return;
+  try {
+    const refreshed = await window.SupabaseSync.hydrateCurrentCompany();
+    if (refreshed) DB._companiesCache = [refreshed];
+  } catch (err) { /* la libération elle-même a réussi, seul le rafraîchissement du cache a échoué */ }
+  const labels = liberees.map(key => (LANDING_ALACARTE_MODULES.find(m => m.key === key) || {}).label || key);
+  notificationRepository.addNotificationsIfNew([
+    makeNotification(`licence-liberee-${employee.id}-${Date.now()}`, ICONS.card, 'Licence(s) libérée(s)',
+      `${employee.prenom} ${employee.nom} a quitté l'entreprise : accès retiré pour ${labels.join(', ')}. Le siège reste disponible pour un autre salarié.`,
+      'parametres', { parametresTab: 'abonnement' }, employee.id)
+  ]);
+  updateNotifBadge();
+  render();
+}
+
+/** true immédiatement si la nouvelle quantité couvre déjà les accès attribués ; sinon ouvre la
+ * modale de choix et ne se résout qu'une fois assez d'accès retirés (true) ou l'opération annulée
+ * (false) — jamais un choix automatique, voir openReduireLicencesModal. nouvelleQuantite à 0
+ * couvre le cas d'un module entièrement décoché dans le composeur (revient à retirer tous les accès). */
+function ensureLicenseCapacity(moduleKey, nouvelleQuantite) {
+  if (!LICENSED_MODULE_KEYS.includes(moduleKey)) return Promise.resolve(true);
+  const { assigned } = licenseSummaryForModule(moduleKey, nouvelleQuantite);
+  if (assigned <= nouvelleQuantite) return Promise.resolve(true);
+  return new Promise((resolve) => openReduireLicencesModal(moduleKey, nouvelleQuantite, assigned, resolve));
+}
+
+function openReduireLicencesModal(moduleKey, nouvelleQuantite, assigned, resolve) {
+  const moduleDef = LANDING_ALACARTE_MODULES.find(m => m.key === moduleKey);
+  const aRetirer = assigned - nouvelleQuantite;
+  const { beneficiaires, employees } = licenseSummaryForModule(moduleKey, nouvelleQuantite);
+  const licencies = employees.filter(e => beneficiaires.includes(e.id));
+  let annule = false;
+
+  function renderBody() {
+    const cochees = document.querySelectorAll('[data-a-retirer]:checked').length;
+    return `
+      <p>Cette quantité (${nouvelleQuantite}) ne couvre plus les ${assigned} accès actuellement attribués au module « ${escapeHtml(moduleDef ? moduleDef.label : moduleKey)} ». Choisissez ${aRetirer} salarié${aRetirer > 1 ? 's' : ''} à qui retirer l'accès pour continuer${nouvelleQuantite === 0 ? ' (module retiré de l\'abonnement)' : ''}.</p>
+      <table class="table" style="margin-top: 12px;">
+        <thead><tr><th>Salarié</th><th>Retirer l'accès</th></tr></thead>
+        <tbody>
+          ${licencies.map(e => `
+            <tr>
+              <td>${personNameHtml(e)}</td>
+              <td><input type="checkbox" data-a-retirer="${e.id}"></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <p class="form-hint" id="retrait-licence-compteur">${cochees}/${aRetirer} sélectionné${aRetirer > 1 ? 's' : ''}.</p>
+    `;
+  }
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Quantité insuffisante pour les accès attribués</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body" id="retrait-licence-body">${renderBody()}</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-confirm-retrait-licence" disabled>Confirmer le retrait</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  function finish(result) {
+    if (annule) return;
+    annule = true;
+    closeModal();
+    resolve(result);
+  }
+  document.getElementById('btn-close-modal').addEventListener('click', () => finish(false));
+  document.getElementById('btn-cancel-modal').addEventListener('click', () => finish(false));
+
+  function bindBody() {
+    document.querySelectorAll('[data-a-retirer]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const cochees = document.querySelectorAll('[data-a-retirer]:checked').length;
+        document.getElementById('retrait-licence-compteur').textContent = `${cochees}/${aRetirer} sélectionné${aRetirer > 1 ? 's' : ''}.`;
+        document.getElementById('btn-confirm-retrait-licence').disabled = cochees < aRetirer;
+      });
+    });
+  }
+  bindBody();
+
+  document.getElementById('btn-confirm-retrait-licence').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirm-retrait-licence');
+    btn.disabled = true;
+    btn.textContent = 'Retrait...';
+    const company = companyRepository.getCurrent();
+    const aRetirerIds = Array.from(document.querySelectorAll('[data-a-retirer]:checked')).map(cb => cb.dataset.aRetirer);
+    try {
+      for (const employeeId of aRetirerIds) {
+        await window.SupabaseSync.revokeModuleLicense(company.id, moduleKey, employeeId);
+      }
+      const refreshed = await window.SupabaseSync.hydrateCurrentCompany();
+      if (refreshed) DB._companiesCache = [refreshed];
+    } catch (err) {
+      showToast('Impossible de retirer ces accès : ' + (err.message || err), 'error');
+      finish(false);
+      return;
+    }
+    finish(true);
+  });
 }
 
 /** user : l'objet salarié complet (pas juste son rôle), pour pouvoir consulter ses éventuelles
@@ -10437,8 +10697,14 @@ function canArchiveEmployeeRecord(employee) {
   return false;
 }
 
-function canDeleteEmployeeRecord() {
+/** §retour Betty du 18/09/2026 (point 9) : "rien n'empêche actuellement un Propriétaire de
+ * supprimer sa propre fiche" — contrairement à canArchiveEmployeeRecord ci-dessus, AUCUNE exception
+ * pour le Propriétaire ici : une suppression est définitive (contrairement à un archivage), et se
+ * supprimer soi-même laisserait l'entreprise sans Propriétaire. */
+function canDeleteEmployeeRecord(employee) {
   const user = authRepository.getCurrentUser();
+  if (!user) return false;
+  if (user.id === employee.id) return false;
   return hasPermission(user, PERMISSIONS.SUPPRIMER_SALARIE);
 }
 
@@ -10852,7 +11118,7 @@ function renderEmployeeDetail(id) {
   const age = calculateAge(e.dateNaissance);
   const user = authRepository.getCurrentUser();
   const canEdit = canEditEmployeeRecord(e);
-  const canDelete = canDeleteEmployeeRecord();
+  const canDelete = canDeleteEmployeeRecord(e);
   const selfRhBlocked = user.role === ROLES.RH && user.id === e.id;
   // Auto-service limité (téléphone/adresse uniquement) pour qui n'a pas déjà l'édition complète sur
   // sa propre fiche — sinon le bouton "Modifier" fait déjà tout, pas besoin d'un second bouton.
@@ -11057,14 +11323,17 @@ function renderGenererDocumentCard(e, canEdit) {
   // raison (la fiche salarié reste accessible sans le module RH, voir NAV_ITEMS 'employees').
   if (!hasModule('rh')) return '';
   const templates = documentTemplateRepository.getAll();
+  // §retour Betty du 18/09/2026 (point 9) : sans aucun modèle configuré, cette carte n'affichait
+  // qu'un message d'administration ("créez-en un dans Paramètres...") à TOUT le monde ayant canEdit,
+  // pas seulement à qui gère les modèles, une friction permanente pour une fonctionnalité que la
+  // plupart des entreprises ne configureront jamais. Masquée entièrement plutôt qu'un message vide.
+  if (!templates.length) return '';
   return `
     <div class="card">
       <h2>Documents à générer</h2>
-      ${templates.length
-        ? `<div class="badge-row" style="gap: 10px;">
-            ${templates.map(t => `<button type="button" class="btn btn-secondary btn-sm" data-generer-document="${t.id}">${icon(ICONS.document, 13)} ${escapeHtml(t.nom)}</button>`).join('')}
-          </div>`
-        : `<p class="text-muted">Aucun modèle configuré, créez-en un dans Paramètres &gt; Modèles de documents.</p>`}
+      <div class="badge-row" style="gap: 10px;">
+        ${templates.map(t => `<button type="button" class="btn btn-secondary btn-sm" data-generer-document="${t.id}">${icon(ICONS.document, 13)} ${escapeHtml(t.nom)}</button>`).join('')}
+      </div>
     </div>
   `;
 }
@@ -11514,7 +11783,10 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
     { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
     { key: PERMISSIONS.ARCHIVER_SALARIE, label: 'Archiver un salarié' },
-    { key: PERMISSIONS.SUPPRIMER_SALARIE, label: 'Supprimer définitivement un salarié' },
+    // §retour Betty du 18/09/2026 (point 9) : SUPPRIMER_SALARIE volontairement absent de cette
+    // liste, jamais accordable en exception individuelle (déjà réservée au rôle Propriétaire par
+    // défaut, vérifiée côté serveur, voir DEFAULT_ROLE_PERMISSIONS) : une suppression définitive n'a
+    // pas sa place parmi des surcharges au cas par cas.
     { key: PERMISSIONS.VOIR_JOURNAL_AUDIT, label: 'Voir le journal d\'audit' }
   ];
   const overrides = e.permissionsOverrides || {};
@@ -12265,6 +12537,7 @@ function bindEmployeeDetailEvents() {
       confirmLabel: willArchive ? 'Archiver' : 'Réactiver',
       onConfirm: () => {
         employeeRepository.archive(e.id, willArchive);
+        if (willArchive) releaseModuleLicensesForDeparture(e);
         showToast(willArchive ? 'Salarié archivé.' : 'Salarié réactivé.');
         render();
       }
@@ -12275,16 +12548,10 @@ function bindEmployeeDetailEvents() {
   if (deleteBtn) deleteBtn.addEventListener('click', () => {
     const e = employeeRepository.getById(state.currentEmployeeId);
     if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
-    openConfirm({
-      title: 'Supprimer définitivement ?',
-      message: `Cette action est irréversible. La fiche de ${e.prenom} ${e.nom} sera définitivement supprimée.`,
-      confirmLabel: 'Supprimer',
-      danger: true,
-      onConfirm: () => {
-        employeeRepository.delete(e.id);
-        showToast('Salarié supprimé.');
-        navigateTo('employees');
-      }
+    openConfirmerSuppressionSalarieModal(e, () => {
+      employeeRepository.delete(e.id);
+      showToast('Salarié supprimé.');
+      navigateTo('employees');
     });
   });
 }
@@ -13731,6 +13998,14 @@ async function submitLeaveRequestForm(evt) {
 
   const employee = employeeRepository.getById(employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(typeId);
+
+  // §retour Betty du 18/09/2026 (point 8) : miroir client de has_module_license (0059), qui reste
+  // le vrai verrou côté serveur (policy leave_requests_insert) — ce contrôle évite seulement une
+  // erreur brute au moment de l'enregistrement, jamais un contournement possible depuis ici.
+  if (!hasModuleLicense(employee, 'conges')) {
+    showToast(`${employee.prenom} ${employee.nom} n'a pas d'accès au module Congés : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
+    return;
+  }
 
   // §correctif audit du 23/08/2026 (§7.8) : délai de prévenance en mode "blocage" — en mode
   // "alerte", updateLeaveRequestHints a déjà prévenu au moment de la saisie, la demande part quand
@@ -16297,9 +16572,11 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
         ${infoRow('Coût estimé', `${formatCurrencyFR(abo.periodicite === 'annuel' ? totalMensuel * 10 : totalMensuel)} / ${abo.periodicite === 'annuel' ? 'an' : 'mois'}`)}
       </div>
       <table class="table" style="margin-top: 16px;">
-        <thead><tr><th>Module actif</th><th>Quantité facturée</th><th>Prix</th></tr></thead>
+        <thead><tr><th>Module actif</th><th>Quantité facturée</th><th>Prix</th><th></th></tr></thead>
         <tbody>
-          ${modules.map(m => `
+          ${modules.map(m => {
+            const licence = LICENSED_MODULE_KEYS.includes(m.key) ? licenseSummaryForModule(m.key, m.quantite) : null;
+            return `
             <tr>
               <td>${escapeHtml(m.def.label)}</td>
               <td>
@@ -16310,8 +16587,15 @@ function renderAbonnementAlaCarteActif(abo, nbSalaries, statutBadge) {
                 </span>
               </td>
               <td>${formatCurrencyFR(m.def.prix)} / ${escapeHtml(m.def.unite)} / mois</td>
+              <td>
+                ${licence ? `
+                  <span class="badge badge-${licence.assigned >= licence.quantite ? 'warning' : 'muted'}" style="margin-right:8px;">${licence.assigned}/${licence.quantite} attribuées</span>
+                  <button type="button" class="btn-link" data-gerer-licences="${m.key}">Gérer les accès</button>
+                ` : ''}
+              </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
       ${effectifDesaligne ? `
@@ -16480,6 +16764,8 @@ function bindParametresAbonnementEvents() {
       const key = btn.dataset.updateModuleQuantite;
       const input = document.getElementById(`abo-quantite-${key}`);
       const quantite = Math.max(1, parseInt(input?.value, 10) || 1);
+      const poursuivre = await ensureLicenseCapacity(key, quantite);
+      if (!poursuivre) return;
       btn.disabled = true;
       btn.textContent = '...';
       const result = await billingRepository.resync({ [key]: quantite });
@@ -16494,6 +16780,10 @@ function bindParametresAbonnementEvents() {
       showToast('Module mis à jour.');
       render();
     });
+  });
+
+  document.querySelectorAll('[data-gerer-licences]').forEach(btn => {
+    btn.addEventListener('click', () => openGererLicencesModal(btn.dataset.gererLicences));
   });
 
   const nbSalaries = employeeRepository.getAll().filter(e => !e.archive).length;
@@ -16550,6 +16840,14 @@ function bindParametresAbonnementEvents() {
     if (!modules.length) {
       showToast('Sélectionnez au moins un module. Pour tout annuler, utilisez "Gérer mon abonnement".', 'error');
       return;
+    }
+    // §retour Betty du 18/09/2026 : "jamais auto-choisir" qui perd son accès si la quantité baisse
+    // (ou si le module est décoché, ce qui revient à une quantité de 0) — vérifier module par module
+    // AVANT d'appeler Stripe, dans l'ordre où ils apparaissent dans le composeur.
+    for (const key of LICENSED_MODULE_KEYS) {
+      const cible = modules.find(m => m.key === key);
+      const poursuivre = await ensureLicenseCapacity(key, cible ? cible.quantite : 0);
+      if (!poursuivre) return;
     }
     enregistrerModulesBtn.disabled = true;
     enregistrerModulesBtn.textContent = 'Enregistrement...';
@@ -20545,6 +20843,12 @@ async function submitTeleworkRequestForm(evt) {
     return;
   }
 
+  // §retour Betty du 18/09/2026 (point 8) : voir le même contrôle dans submitLeaveRequestForm.
+  if (!hasModuleLicense(employee, 'planning')) {
+    showToast(`${employee.prenom} ${employee.nom} n'a pas d'accès au module Planning : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
+    return;
+  }
+
   const nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settingsRepository.getSettings());
 
   if (nbJours <= 0) {
@@ -22216,6 +22520,14 @@ async function submitExpenseForm(evt) {
   }
   if (employeeForDate && employeeForDate.dateEmbauche && dateDepense < employeeForDate.dateEmbauche) {
     showToast(`La date de la dépense ne peut pas être antérieure à la date d'embauche (${formatDate(employeeForDate.dateEmbauche)}).`, 'error');
+    return;
+  }
+
+  // §retour Betty du 18/09/2026 (point 8) : voir le même contrôle dans submitLeaveRequestForm ;
+  // uniquement à la création (expenses_insert, 0059), jamais sur la modification d'une note déjà
+  // enregistrée, qui reste possible même si l'accès a été retiré depuis.
+  if (!isEditing && !hasModuleLicense(employeeForDate, 'frais')) {
+    showToast(`${employeeForDate.prenom} ${employeeForDate.nom} n'a pas d'accès au module Notes de frais : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
     return;
   }
 
@@ -24810,7 +25122,12 @@ function submitEmployeeForm(evt, id, candidatureId) {
   }
 
   if (id) {
+    // §retour Betty du 18/09/2026 (point 8) : capturé AVANT update, sinon plus aucun moyen de savoir
+    // si cette date de départ vient d'être renseignée (par opposition à déjà présente, resaisie
+    // sans changement) une fois le patch appliqué.
+    const avaitDejaDateDepart = Boolean(employeeRepository.getById(id).dateDepart);
     employeeRepository.update(id, patch);
+    if (patch.dateDepart && !avaitDejaDateDepart) releaseModuleLicensesForDeparture(employeeRepository.getById(id));
     showToast('Salarié mis à jour.');
     closeModal();
     navigateTo('employee-detail', { currentEmployeeId: id });
@@ -24966,6 +25283,45 @@ function openRefuseModal({ title, message, onConfirm }) {
     if (!motif) return;
     closeModal();
     onConfirm(motif);
+  });
+}
+
+/** §retour Betty du 18/09/2026 (point 9) : la confirmation générique ("Cette action est
+ * irréversible") ne rappelait ni que l'archivage est le chemin normal pour un départ, ni
+ * l'obligation légale de conservation du registre unique du personnel (5 ans) que la suppression
+ * définitive contourne. Saisie du nom en toutes lettres plutôt qu'un simple bouton "Supprimer" :
+ * la friction est volontaire pour une action qui, contrairement à l'archivage, ne se rattrape pas. */
+function openConfirmerSuppressionSalarieModal(employee, onConfirm) {
+  const nomAttendu = `${employee.prenom} ${employee.nom}`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Supprimer définitivement ${escapeHtml(nomAttendu)} ?</h2>
+      </div>
+      <div class="modal-body">
+        <p>Pour un salarié qui quitte l'entreprise, <strong>archiver</strong> est le chemin normal : ses données restent conservées, comme l'exige le registre unique du personnel (obligation légale de conservation de 5 ans après le départ).</p>
+        <p>La suppression définitive efface la fiche ET ses congés, notes de frais et documents associés, de façon irréversible : à réserver à une fiche créée par erreur, jamais à un départ.</p>
+        <div class="form-field" style="margin-top: 12px;">
+          <label for="f-confirmation-suppression">Pour confirmer, tapez le nom du salarié : « ${escapeHtml(nomAttendu)} »</label>
+          <input type="text" class="input" id="f-confirmation-suppression" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-confirm-cancel">Annuler</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-ok" disabled>Supprimer définitivement</button>
+      </div>
+    </div>
+  `;
+  modalRoot.classList.add('open');
+  const input = document.getElementById('f-confirmation-suppression');
+  const okBtn = document.getElementById('btn-confirm-ok');
+  input.addEventListener('input', () => { okBtn.disabled = input.value.trim() !== nomAttendu; });
+  document.getElementById('btn-confirm-cancel').addEventListener('click', closeModal);
+  okBtn.addEventListener('click', () => {
+    if (input.value.trim() !== nomAttendu) return;
+    closeModal();
+    onConfirm();
   });
 }
 
