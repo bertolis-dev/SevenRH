@@ -4097,14 +4097,26 @@ textarea.input { resize: vertical; font-family: inherit; }
      tableau de bord...), avec la vraie zone imprimable, positionnée en absolu, répétée à l'identique
      sur chacune des pages "fantômes" ainsi générées (le "certificat de travail en 6 pages
      identiques et vides" qu'elle a signalé). display:none retire réellement du flux : :has()
-     (support navigateur moderne, cette app cible Chrome/Edge/Firefox/Safari récents) cache tout
-     élément qui ne contient PAS .print-area nulle part en dessous de lui, à N'IMPORTE QUEL niveau
-     d'imbrication, sans avoir à lister chaque conteneur (modale, écran Paramètres...) un par un. */
+     cache tout élément qui ne contient PAS .print-area nulle part en dessous de lui, à N'IMPORTE
+     QUEL niveau d'imbrication, sans avoir à lister chaque conteneur (modale, écran Paramètres...)
+     un par un.
+     §retour Betty du 19/09/2026 (point 4) : elle a reconstaté EXACTEMENT le même défaut sur la
+     fiche salarié après ce correctif — la cause la plus probable est un poste sans support de
+     :has() (Chrome 105+/Firefox 121+/Safari 15.4+ seulement) : un sélecteur non supporté invalide
+     TOUTE la règle (jamais une dégradation partielle), ce qui fait réapparaître le bug d'origine à
+     l'identique sans qu'aucune autre régression ne l'explique. isolatePrintAreaForPrinting()
+     (app.js, beforeprint/afterprint — supportés depuis IE10/Firefox 6) fait donc désormais le même
+     travail en JS, sans dépendre d'aucune fonctionnalité CSS récente : cette règle reste posée en
+     secours (double sécurité), mais n'est plus la seule ligne de défense. */
   body *:not(:has(.print-area)):not(.print-area):not(.print-area *) { display: none !important; }
   /* Le chemin d'ancêtres restant (ex. #modal-root > .modal > .modal-body) garde son display normal
      (jamais forcé) mais perd tout ce qui, à ce niveau-là, contraignait la zone imprimable à la
      taille de l'écran (modale plafonnée à 90vh avec défilement interne, position fixe...) —
-     sans ce reset, un document un peu long resterait invisible au-delà du cadre de la modale. */
+     sans ce reset, un document un peu long resterait invisible au-delà du cadre de la modale.
+     #main-column/#app-shell couvrent le seul cas où .print-area n'est PAS dans une modale (registre
+     du personnel version Paramètres, rendu directement dans #view-root) : sans ce reset, la marge
+     gauche réservée à la barre latérale (déjà masquée par la règle ci-dessus, mais sa marge reste)
+     gaspillerait la largeur de la page à l'impression. */
   .modal, .modal-body, #modal-root {
     position: static !important;
     inset: auto !important;
@@ -4114,6 +4126,10 @@ textarea.input { resize: vertical; font-family: inherit; }
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
+  }
+  #app-shell, #main-column {
+    min-height: 0 !important;
+    margin-left: 0 !important;
   }
   .print-area {
     padding: 24px;

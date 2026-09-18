@@ -5224,6 +5224,68 @@ function bindGlobalEvents() {
   });
 
   bindSortableHeadersGlobalDelegation();
+
+  // §retour Betty du 19/09/2026 (point 4, "impression sur six pages") : le correctif du 18/09/2026
+  // (@media print, style.css) masque le reste de la page via un sélecteur CSS `:has()` — vérifié en
+  // direct : il fonctionne bien dans un navigateur qui le supporte (Chrome 105+, Firefox 121+,
+  // Safari 15.4+), mais un `:has()` non supporté invalide TOUTE la règle (pas une dégradation
+  // partielle) et fait réapparaître EXACTEMENT le bug d'origine, sans qu'aucune autre modification de
+  // code ne l'explique — la cause la plus probable pour un poste de travail d'entreprise pas
+  // systématiquement à jour. isolatePrintAreaForPrinting() ci-dessous ne dépend d'aucune
+  // fonctionnalité CSS récente (juste beforeprint/afterprint, supportés depuis IE10/Firefox 6) : elle
+  // masque explicitement, en JS, tout ce qui n'est ni la zone à imprimer ni l'un de ses ancêtres —
+  // un filet de sécurité qui fonctionne même si `:has()` est ignoré. Posée UNE SEULE FOIS ici : les
+  // 10 documents concernés (chacun son propre openXxxModal) n'ont besoin d'AUCUNE modification, ils
+  // partagent déjà tous la même classe .print-area.
+  window.addEventListener('beforeprint', isolatePrintAreaForPrinting);
+  window.addEventListener('afterprint', restorePageAfterPrinting);
+}
+
+/** Masque tout ce qui n'est ni .print-area, ni l'un de ses ancêtres, ni l'un de ses descendants —
+ * jamais visibility:hidden (qui laisse l'élément occuper sa place dans le flux, cause historique du
+ * bug, voir le commentaire de bindGlobalEvents ci-dessus), toujours display:none (qui retire
+ * réellement du flux). S'il n'y a aucune .print-area sur la page (Ctrl+P sur un écran normal, pas un
+ * document), ne touche à rien.
+ * Neutralise EN PLUS, sur chaque ANCÊTRE de .print-area (pas seulement .modal/.modal-body/#modal-root
+ * par leur nom de classe, pour rester valable même sur un futur type de document) : `position` (une
+ * modale s'affiche normalement en position:fixed à l'écran — un élément position:fixed ne compte pour
+ * RIEN dans la hauteur de document.body, vérifié en direct dans le navigateur, et certains moteurs
+ * d'impression le répètent purement et simplement sur chaque page générée, la cause probable du "six
+ * pages identiques" one) ainsi que `overflow`/`maxHeight` (une modale plafonnée à 90vh avec
+ * défilement interne rendrait sinon un document un peu long invisible au-delà du cadre). Même
+ * intention que la règle @media print déjà existante (style.css), mais garantie ici en JS pur, sans
+ * dépendre du support d'une fonctionnalité CSS particulière par le navigateur. */
+let printIsolationRestore = null;
+function isolatePrintAreaForPrinting() {
+  const printArea = document.querySelector('.print-area');
+  if (!printArea) return;
+  const restores = [];
+  document.querySelectorAll('body *').forEach(el => {
+    if (el === printArea || el.contains(printArea) || printArea.contains(el)) return;
+    if (el.style.display === 'none') return; // déjà caché (ex. onglet inactif) : rien à restaurer ensuite
+    restores.push({ el, prop: 'display', value: el.style.display });
+    el.style.display = 'none';
+  });
+  let ancestor = printArea.parentElement;
+  while (ancestor && ancestor !== document.body) {
+    ['position', 'maxHeight', 'overflow', 'inset', 'margin', 'padding'].forEach(prop => {
+      restores.push({ el: ancestor, prop, value: ancestor.style[prop] });
+    });
+    ancestor.style.position = 'static';
+    ancestor.style.maxHeight = 'none';
+    ancestor.style.overflow = 'visible';
+    ancestor.style.inset = 'auto';
+    ancestor.style.margin = '0';
+    ancestor.style.padding = '0';
+    ancestor = ancestor.parentElement;
+  }
+  printIsolationRestore = restores;
+}
+
+function restorePageAfterPrinting() {
+  if (!printIsolationRestore) return;
+  printIsolationRestore.forEach(({ el, prop, value }) => { el.style[prop] = value; });
+  printIsolationRestore = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -10677,10 +10739,21 @@ function openGererTramesModal() {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  // §retour Betty du 19/09/2026 (point 7, "cinq suppressions sans confirmation") : même garde-fou
+  // que partout ailleurs (openConfirm) — un clic supprimait la trame immédiatement, sans rattrapage.
   document.querySelectorAll('[data-delete-trame]').forEach(btn => btn.addEventListener('click', () => {
-    entretienTrameRepository.delete(btn.dataset.deleteTrame);
-    showToast('Trame supprimée.');
-    openGererTramesModal();
+    const trame = entretienTrameRepository.getAll().find(t => t.id === btn.dataset.deleteTrame);
+    openConfirm({
+      title: 'Supprimer cette trame ?',
+      message: trame ? `"${trame.nom}" (${trame.questions.length} question${trame.questions.length > 1 ? 's' : ''}) sera définitivement supprimée.` : 'Cette trame sera définitivement supprimée.',
+      confirmLabel: 'Supprimer',
+      danger: true,
+      onConfirm: () => {
+        entretienTrameRepository.delete(btn.dataset.deleteTrame);
+        showToast('Trame supprimée.');
+        openGererTramesModal();
+      }
+    });
   }));
   document.getElementById('nouvelle-trame-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
@@ -16495,12 +16568,25 @@ function bindParametresMonCompteEvents() {
 
   const addIndisponibiliteBtn = document.getElementById('btn-add-indisponibilite');
   if (addIndisponibiliteBtn) addIndisponibiliteBtn.addEventListener('click', () => openIndisponibiliteModal(user.id));
+  // §retour Betty du 19/09/2026 (point 7, "cinq suppressions sans confirmation") : un clic sur
+  // "Supprimer" agissait immédiatement, sans aucun rattrapage possible — même garde-fou que partout
+  // ailleurs dans l'app (openConfirm), avec le détail (jour/horaire) plutôt qu'un "Voulez-vous
+  // supprimer ?" muet.
   document.querySelectorAll('[data-delete-indisponibilite]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const liste = (user.indisponibilitesRecurrentes || []).filter(i => i.id !== btn.dataset.deleteIndisponibilite);
-      employeeRepository.update(user.id, { indisponibilitesRecurrentes: liste });
-      showToast('Indisponibilité supprimée.');
-      render();
+      const indispo = (user.indisponibilitesRecurrentes || []).find(i => i.id === btn.dataset.deleteIndisponibilite);
+      openConfirm({
+        title: 'Supprimer cette indisponibilité ?',
+        message: indispo ? `${indispo.weekday} ${indispo.heureDebut}-${indispo.heureFin}${indispo.motif ? ` (${indispo.motif})` : ''} ne sera plus signalée au planning.` : 'Cette indisponibilité ne sera plus signalée au planning.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          const liste = (user.indisponibilitesRecurrentes || []).filter(i => i.id !== btn.dataset.deleteIndisponibilite);
+          employeeRepository.update(user.id, { indisponibilitesRecurrentes: liste });
+          showToast('Indisponibilité supprimée.');
+          render();
+        }
+      });
     });
   });
 
@@ -16508,10 +16594,22 @@ function bindParametresMonCompteEvents() {
   if (addDelegationBtn) addDelegationBtn.addEventListener('click', openDelegationModal);
   document.querySelectorAll('[data-delete-delegation]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const liste = (user.delegations || []).filter(d => d.id !== btn.dataset.deleteDelegation);
-      employeeRepository.update(user.id, { delegations: liste });
-      showToast('Délégation supprimée.');
-      render();
+      const delegation = (user.delegations || []).find(d => d.id === btn.dataset.deleteDelegation);
+      const delegataire = delegation ? employeeRepository.getById(delegation.delegataireId) : null;
+      openConfirm({
+        title: 'Supprimer cette délégation ?',
+        message: delegation
+          ? `${delegataire ? `${delegataire.prenom} ${delegataire.nom}` : 'Cette personne'} ne pourra plus valider à votre place du ${formatDate(delegation.dateDebut)} au ${formatDate(delegation.dateFin)}.`
+          : 'Cette délégation sera retirée.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          const liste = (user.delegations || []).filter(d => d.id !== btn.dataset.deleteDelegation);
+          employeeRepository.update(user.id, { delegations: liste });
+          showToast('Délégation supprimée.');
+          render();
+        }
+      });
     });
   });
 }
@@ -20864,11 +20962,23 @@ function openAppliquerModeleSemaineModal() {
       });
     });
   });
+  // §retour Betty du 19/09/2026 (point 7, "cinq suppressions sans confirmation") : même garde-fou
+  // que le bouton "Appliquer" juste au-dessus (openConfirm) — un clic supprimait le modèle
+  // immédiatement, sans rattrapage.
   document.querySelectorAll('[data-delete-modele-semaine]').forEach(btn => {
     btn.addEventListener('click', () => {
-      weekTemplateRepository.delete(btn.dataset.deleteModeleSemaine);
-      showToast('Modèle supprimé.');
-      openAppliquerModeleSemaineModal();
+      const template = weekTemplateRepository.getById(btn.dataset.deleteModeleSemaine);
+      openConfirm({
+        title: 'Supprimer ce modèle ?',
+        message: template ? `"${template.nom}" (${template.shifts.length} quart${template.shifts.length > 1 ? 's' : ''}) sera définitivement supprimé.` : 'Ce modèle sera définitivement supprimé.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          weekTemplateRepository.delete(btn.dataset.deleteModeleSemaine);
+          showToast('Modèle supprimé.');
+          openAppliquerModeleSemaineModal();
+        }
+      });
     });
   });
 }
