@@ -114,6 +114,9 @@ globalThis.__getSexe = getSexe;
 globalThis.__getCiviliteAffichee = getCiviliteAffichee;
 globalThis.__ensureCiviliteSexeMigresVersServeur = ensureCiviliteSexeMigresVersServeur;
 globalThis.__makeEmptyEmployee = makeEmptyEmployee;
+globalThis.__parsePosteGenre = parsePosteGenre;
+globalThis.__getPosteAccorde = getPosteAccorde;
+globalThis.__ensurePostesGenresBackfilled = ensurePostesGenresBackfilled;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -369,6 +372,11 @@ globalThis.__bindLoginScreenEvents = bindLoginScreenEvents;
 globalThis.__showLogin = showLogin;
 globalThis.__renderExportPaiePreparationTab = renderExportPaiePreparationTab;
 globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
+globalThis.__openAttestationEmployeurModal = openAttestationEmployeurModal;
+globalThis.__openCertificatTravailModal = openCertificatTravailModal;
+globalThis.__openRegistreUniquePersonnelModal = openRegistreUniquePersonnelModal;
+globalThis.__exportEmployeesExcel = exportEmployeesExcel;
+globalThis.__SETTINGS_LIST_USAGE_CHECK = SETTINGS_LIST_USAGE_CHECK;
 globalThis.__hasModuleLicense = hasModuleLicense;
 globalThis.__licenseSummaryForModule = licenseSummaryForModule;
 globalThis.__licenseAssignableEmployees = licenseAssignableEmployees;
@@ -644,6 +652,9 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     getCiviliteAffichee: sandbox.__getCiviliteAffichee,
     ensureCiviliteSexeMigresVersServeur: sandbox.__ensureCiviliteSexeMigresVersServeur,
     makeEmptyEmployee: sandbox.__makeEmptyEmployee,
+    parsePosteGenre: sandbox.__parsePosteGenre,
+    getPosteAccorde: sandbox.__getPosteAccorde,
+    ensurePostesGenresBackfilled: sandbox.__ensurePostesGenresBackfilled,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
@@ -654,6 +665,11 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     showLogin: sandbox.__showLogin,
     renderExportPaiePreparationTab: sandbox.__renderExportPaiePreparationTab,
     renderExportPaieExportTab: sandbox.__renderExportPaieExportTab,
+    openAttestationEmployeurModal: sandbox.__openAttestationEmployeurModal,
+    openCertificatTravailModal: sandbox.__openCertificatTravailModal,
+    openRegistreUniquePersonnelModal: sandbox.__openRegistreUniquePersonnelModal,
+    exportEmployeesExcel: sandbox.__exportEmployeesExcel,
+    SETTINGS_LIST_USAGE_CHECK: sandbox.__SETTINGS_LIST_USAGE_CHECK,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
     downloadExcelXmlFile: sandbox.__downloadExcelXmlFile,
     exportRowsToCSVWithDelimiter: sandbox.__exportRowsToCSVWithDelimiter,

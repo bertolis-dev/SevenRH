@@ -481,7 +481,20 @@ function formatConventionCollective(c) {
 const DEFAULT_SETTINGS = {
   // Les services/équipes ont leur propre catalogue structuré (company.services), pas une simple
   // liste de textes : voir makeEmptyService()/seedServices() et l'onglet Paramètres dédié.
-  postes: ['Directeur·rice général·e', 'Responsable RH', 'Chargé·e RH', 'Comptable', 'Commercial·e', 'Développeur·se', 'Technicien·ne support'],
+  // §retour Betty du 18/09/2026 (point 5) : chaque poste porte désormais 3 formes (masculin/
+  // féminin/neutre au point médian) au lieu d'un simple intitulé unique au point médian —
+  // employee.poste continue de stocker la forme neutre (`neutre` ci-dessous, jamais changée), les 2
+  // autres ne servent qu'à l'affichage (voir getPosteAccorde). ensurePostesGenresBackfilled migre
+  // une entreprise déjà créée avant ce changement (simple tableau de chaînes).
+  postes: [
+    { neutre: 'Directeur·rice général·e', masculin: 'Directeur général', feminin: 'Directrice générale' },
+    { neutre: 'Responsable RH', masculin: 'Responsable RH', feminin: 'Responsable RH' },
+    { neutre: 'Chargé·e RH', masculin: 'Chargé RH', feminin: 'Chargée RH' },
+    { neutre: 'Comptable', masculin: 'Comptable', feminin: 'Comptable' },
+    { neutre: 'Commercial·e', masculin: 'Commercial', feminin: 'Commerciale' },
+    { neutre: 'Développeur·se', masculin: 'Développeur', feminin: 'Développeuse' },
+    { neutre: 'Technicien·ne support', masculin: 'Technicien support', feminin: 'Technicienne support' }
+  ],
   conventionsCollectives: ['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)],
   statutsPro: ['Non cadre', 'Cadre', 'Agent de maîtrise', 'Dirigeant'],
   typesContrat: ['CDI', 'CDD', 'Stage', 'Alternance', 'Apprentissage', 'Intérim'],
@@ -763,6 +776,7 @@ async function hydrateCurrentCompanyWithMigrations() {
     await ensureNomsPrenomsMigresVersServeur(company, currentUser);
     await ensureVisitesMedicalesMigreesVersServeur(company, currentUser);
     await ensureCiviliteSexeMigresVersServeur(company, currentUser);
+    await ensurePostesGenresBackfilled(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -966,6 +980,27 @@ async function ensureCiviliteSexeMigresVersServeur(company, currentUser) {
     await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
   } catch (err) {
     console.error('ensureCiviliteSexeMigresVersServeur : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** §retour Betty du 18/09/2026 (point 5) : migre settings.postes du simple tableau de chaînes au
+ * point médian ('Commercial·e') vers des entrées {neutre, masculin, feminin} (voir
+ * DEFAULT_SETTINGS.postes) — une entreprise déjà créée avant ce changement a encore l'ancien
+ * format. parsePosteGenre() fait de son mieux (meilleur effort, jamais une grammaire française
+ * parfaite) ; le résultat reste modifiable à la main ensuite (Paramètres > Référentiels > Postes).
+ * Même conception que les migrations ci-dessus (aucun drapeau de complétude, poussée réellement à
+ * Supabase). */
+async function ensurePostesGenresBackfilled(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) return;
+  const settings = company.settings || {};
+  const postes = settings.postes || [];
+  if (!postes.length || postes.every(p => p && typeof p === 'object')) return;
+  settings.postes = postes.map(p => (typeof p === 'string' ? { neutre: p, ...parsePosteGenre(p) } : p));
+  company.settings = settings;
+  try {
+    await window.SupabaseSync.pushSettings(company.id, settings);
+  } catch (err) {
+    console.error('ensurePostesGenresBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -5528,6 +5563,47 @@ function formatNomFamille(nom) {
 function formatPrenom(prenom) {
   if (!prenom) return prenom;
   return prenom.trim().toLocaleLowerCase('fr-FR').replace(/(^|[\s\-'’])(\p{L})/gu, (match, sep, letter) => sep + letter.toLocaleUpperCase('fr-FR'));
+}
+
+/** §retour Betty du 18/09/2026 (point 5, postes) : dérive masculin/féminin à partir d'un intitulé au
+ * point médian ("Commercial·e", "Directeur·rice général·e"). MEILLEUR EFFORT, pas une grammaire
+ * française complète (irrégulière par nature : "développeur·se" -> "développeuse" ne se déduit pas
+ * de la même façon que "commercial·e" -> "commerciale") : les 2 suffixes standards -rice/-se qui
+ * remplacent une terminaison -eur sont gérés explicitement (accord·e -teur/-trice, -eur/-euse), tout
+ * le reste (le cas le plus courant) par simple concaténation. Le résultat reste TOUJOURS modifiable
+ * à la main dans Paramètres > Référentiels > Postes : ce n'est qu'un point de départ, jamais une
+ * vérité figée.
+ */
+function parsePosteGenre(posteNeutre) {
+  const segments = String(posteNeutre || '').split(/(\S+·\S+)/g);
+  let masculin = '', feminin = '';
+  segments.forEach(seg => {
+    const m = seg.match(/^(\S*?)·(\S+)$/);
+    if (!m) { masculin += seg; feminin += seg; return; }
+    const [, racine, suffixe] = m;
+    masculin += racine;
+    if (suffixe === 'rice' && racine.toLowerCase().endsWith('eur')) feminin += racine.slice(0, -3) + 'rice';
+    else if (suffixe === 'se' && racine.toLowerCase().endsWith('eur')) feminin += racine.slice(0, -1) + 'se';
+    else feminin += racine + suffixe;
+  });
+  return { masculin: masculin.trim(), feminin: feminin.trim() };
+}
+
+/** §retour Betty du 18/09/2026 (point 5) : sélectionne la forme du poste qui correspond à ce
+ * salarié précis (masculin/féminin selon getSexe, forme neutre au point médian par défaut si le
+ * sexe n'est pas encore renseigné ou si ce poste n'a pas/plus d'entrée dans settings.postes — ex. un
+ * intitulé tapé librement à la création, jamais ajouté au catalogue). employee.poste (la forme
+ * neutre) reste la SEULE valeur stockée sur le salarié, jamais réécrite : ceci ne change que
+ * l'AFFICHAGE, jamais les données. */
+function getPosteAccorde(employee, settings) {
+  const neutre = employee && employee.poste;
+  if (!neutre) return '';
+  const entree = ((settings && settings.postes) || []).find(p => p.neutre === neutre);
+  if (!entree) return neutre;
+  const sexe = getSexe(employee);
+  if (sexe === 'Homme') return entree.masculin || neutre;
+  if (sexe === 'Femme') return entree.feminin || neutre;
+  return neutre;
 }
 
 /** Calcule une ancienneté lisible ("3 ans, 2 mois") à partir d'une date d'embauche. */

@@ -5185,6 +5185,7 @@ function performGlobalSearch(term) {
   if (!q) return [];
   const results = [];
   const user = authRepository.getCurrentUser();
+  const settings = settingsRepository.getSettings();
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
@@ -5194,7 +5195,7 @@ function performGlobalSearch(term) {
       results.push({
         icon: favoriteRepository.isFavoriteEmployee(e.id) ? ICONS.star : ICONS.person,
         label: `${e.prenom} ${e.nom}`,
-        sublabel: e.poste || e.service || 'Salarié',
+        sublabel: getPosteAccorde(e, settings) || e.service || 'Salarié',
         nav: 'employee-detail',
         params: { currentEmployeeId: e.id }
       });
@@ -5349,7 +5350,7 @@ function renderFavoritesDropdown(resultsBox) {
         <span class="search-result-icon">${ICONS.star}</span>
         <div>
           <div class="search-result-label">${personNameHtml(e)}</div>
-          <div class="search-result-sublabel">${escapeHtml(e.poste || '—')}</div>
+          <div class="search-result-sublabel">${escapeHtml(getPosteAccorde(e, settingsRepository.getSettings()) || '—')}</div>
         </div>
       </div>
     `).join('')}
@@ -8086,7 +8087,7 @@ function renderEmployeeRow(e) {
           </div>
         </div>
       </td>
-      <td data-label="Poste">${escapeHtml(e.poste || '—')}</td>
+      <td data-label="Poste">${escapeHtml(getPosteAccorde(e, settingsRepository.getSettings()) || '—')}</td>
       <td data-label="Service">${escapeHtml(e.service || '—')}</td>
       <td data-label="Contrat">${renderContratBadge(e.typeContrat)}</td>
       <td data-label="Ancienneté">${calculateAnciennete(e.dateEmbauche)}</td>
@@ -9151,7 +9152,7 @@ function renderOrgNode(employee, childrenOf) {
         ${hasChildren ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
         ${renderAvatar(employee)}
         <div class="org-node-name">${personNameHtml(employee)}</div>
-        <div class="org-node-poste">${escapeHtml(employee.poste || '—')}</div>
+        <div class="org-node-poste">${escapeHtml(getPosteAccorde(employee, settingsRepository.getSettings()) || '—')}</div>
         <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
       </div>
       ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
@@ -11116,6 +11117,7 @@ function renderEmployeeDetail(id) {
   }
 
   const age = calculateAge(e.dateNaissance);
+  const settings = settingsRepository.getSettings();
   const user = authRepository.getCurrentUser();
   const canEdit = canEditEmployeeRecord(e);
   const canDelete = canDeleteEmployeeRecord(e);
@@ -11135,7 +11137,7 @@ function renderEmployeeDetail(id) {
       ${renderAvatar(e)}
       <div class="detail-header-info">
         <h1>${personNameHtml(e)}</h1>
-        <p class="view-subtitle">${escapeHtml(e.poste || '—')} · ${escapeHtml(e.service || '—')}</p>
+        <p class="view-subtitle">${escapeHtml(getPosteAccorde(e, settings) || '—')} · ${escapeHtml(e.service || '—')}</p>
         <div class="badge-row">
           ${renderContratBadge(e.typeContrat)}
           ${renderStatutBadge(e.statut)}
@@ -11174,7 +11176,7 @@ function renderEmployeeDetail(id) {
         <h2>Contrat &amp; poste</h2>
         ${infoRow('Service', e.service)}
         ${infoRow('Équipe', e.equipe)}
-        ${infoRow('Poste', e.poste)}
+        ${infoRow('Poste', getPosteAccorde(e, settings))}
         ${infoRow('Manager(s)', managerNames(e.managerIds))}
         ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
         ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
@@ -12068,6 +12070,7 @@ function openEmployeePrintModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const age = calculateAge(e.dateNaissance);
+  const settings = settingsRepository.getSettings();
   const user = authRepository.getCurrentUser();
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
@@ -12096,7 +12099,7 @@ function openEmployeePrintModal(id) {
           <h3>Contrat &amp; poste</h3>
           ${infoRow('Service', e.service)}
           ${infoRow('Équipe', e.equipe)}
-          ${infoRow('Poste', e.poste)}
+          ${infoRow('Poste', getPosteAccorde(e, settings))}
           ${infoRow('Manager(s)', managerNames(e.managerIds))}
           ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
           ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
@@ -12141,6 +12144,7 @@ function openAttestationEmployeurModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const profile = companyRepository.getProfile();
+  const settings = settingsRepository.getSettings();
   const today = toISODate(new Date());
 
   const html = `
@@ -12158,7 +12162,7 @@ function openAttestationEmployeurModal(id) {
           <p>
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
             atteste que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
-            est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(e.poste || '____________________')},
+            est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')},
             sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
           </p>
           <p>Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.</p>
@@ -12202,6 +12206,7 @@ function openRegistreUniquePersonnelModal() {
     return;
   }
   const profile = companyRepository.getProfile();
+  const settings = settingsRepository.getSettings();
   const employees = employeeRepository.getAll().slice()
     .sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
 
@@ -12234,7 +12239,7 @@ function openRegistreUniquePersonnelModal() {
                     <td>${escapeHtml(getSexe(e) || '—')}</td>
                     <td>${escapeHtml(e.nationalite || '—')}</td>
                     <td>${formatDate(e.dateNaissance)}</td>
-                    <td>${escapeHtml(e.poste || '—')}</td>
+                    <td>${escapeHtml(getPosteAccorde(e, settings) || '—')}</td>
                     <td>${escapeHtml(e.typeContrat)}</td>
                     <td>${formatDate(e.dateEmbauche)}</td>
                     <!-- §correctif audit du 16/09/2026 : affichait dateFinContrat (n'a de sens que
@@ -12411,6 +12416,7 @@ function openCertificatTravailModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const profile = companyRepository.getProfile();
+  const settings = settingsRepository.getSettings();
   const today = toISODate(new Date());
   // Le certificat de travail (Code du travail, art. L1234-19) est obligatoire à la SORTIE — reste
   // générable pour un contrat en cours (préparation à l'avance), juste avec un avertissement.
@@ -12433,7 +12439,7 @@ function openCertificatTravailModal(id) {
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
             certifie que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)} a été employé(e) au sein de notre entreprise
             du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
-            en qualité de ${escapeHtml(e.poste || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
+            en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
           </p>
           <p>Le salarié est libre de tout engagement à l'issue de cette période.</p>
           <p style="margin-top: 48px;">Fait pour servir et valoir ce que de droit.</p>
@@ -13275,6 +13281,8 @@ function openLeaveAttestationModal(requestId) {
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   if (!employee || !type) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
+  const settings = settingsRepository.getSettings();
+  const posteFallback = getSexe(employee) === 'Homme' ? 'salarié' : getSexe(employee) === 'Femme' ? 'salariée' : 'salarié·e';
   const periode = r.dateDebut === r.dateFin
     ? formatDate(r.dateDebut) + (r.demiJournee ? ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : '')
     : `du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}`;
@@ -13293,7 +13301,7 @@ function openLeaveAttestationModal(requestId) {
           </div>
           <p class="print-attestation-text">
             Nexus atteste que <strong>${personNameHtml(employee)}</strong>
-            (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(employee.poste || 'salarié·e')},
+            (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(getPosteAccorde(employee, settings) || posteFallback)},
             a bénéficié d'un congé de type <strong>${escapeHtml(type.nom)}</strong> ${periode},
             soit ${formatNumberFR(r.nbJours)} jour${r.nbJours > 1 ? 's' : ''}.
           </p>
@@ -13389,7 +13397,7 @@ function openAttestationSalaireModal(requestId) {
           <p>${escapeHtml(profile.adresse || '____________________')}</p>
           <h2>Salarié</h2>
           <p>${personNameHtml(employee)} (matricule ${escapeHtml(employee.matricule || '—')})${employee.numeroSecu ? ' · N° sécurité sociale ' + escapeHtml(employee.numeroSecu) : ' · N° sécurité sociale non renseigné dans la fiche'}</p>
-          <p>Poste : ${escapeHtml(employee.poste || '—')} · Dernier jour travaillé avant l'arrêt : ${formatDate(r.dateDebut)}</p>
+          <p>Poste : ${escapeHtml(getPosteAccorde(employee, settings) || '—')} · Dernier jour travaillé avant l'arrêt : ${formatDate(r.dateDebut)}</p>
           <h2>Arrêt de travail</h2>
           <p>Type : <strong>${escapeHtml(TYPE_ARRET_LABELS[arret.typeArret] || arret.typeArret)}</strong></p>
           <p>Période : du ${formatDate(r.dateDebut)} au ${formatDate(r.dateFin)}${derniereProlongation ? ` (dernière prolongation déclarée le ${formatDate(derniereProlongation.date)})` : ''}</p>
@@ -15611,7 +15619,6 @@ function openCalendarDayModal(dateStr) {
 // son propre thème "module frais" dans renderParametresListes, pas dans le bloc "rh" toujours
 // affiché. Renommée _RH (pas juste SETTINGS_LISTS) pour rendre ce périmètre explicite.
 const SETTINGS_LISTS_RH = [
-  { key: 'postes', label: 'Postes' },
   { key: 'conventionsCollectives', label: 'Conventions collectives' },
   { key: 'statutsPro', label: 'Statuts professionnels' },
   { key: 'typesContrat', label: 'Types de contrat' },
@@ -17510,6 +17517,7 @@ function renderParametresListes() {
       </table>
     </div>
     <div class="settings-lists-grid">
+      ${renderPostesCard(settings.postes)}
       ${SETTINGS_LISTS_RH.map(l => renderSettingsListCard(l, settings[l.key] || [],
         l.key === 'conventionsCollectives' ? new Set(['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)]) : null)).join('')}
     </div>
@@ -17797,6 +17805,7 @@ function bindParametresListesEvents() {
   }
 
   bindChipListEvents();
+  bindPostesCardEvents();
 }
 
 /** Extrait de bindParametresListesEvents (générique par data-list-key sur settings[key]) — réutilisé
@@ -18703,6 +18712,7 @@ function getFilteredAuditLog() {
  * d'entrée (ordre chronologique attendu d'un registre), présentable tel quel à un contrôle (bouton
  * Imprimer). */
 function renderParametresRegistrePersonnel() {
+  const settings = settingsRepository.getSettings();
   const employees = employeeRepository.getAll().slice().sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
   return `
     <div class="card table-card">
@@ -18724,7 +18734,7 @@ function renderParametresRegistrePersonnel() {
                 <td>${escapeHtml(getSexe(e) || '—')}</td>
                 <td>${e.dateNaissance ? formatDate(e.dateNaissance) : '—'}</td>
                 <td>${escapeHtml(e.nationalite || '—')}</td>
-                <td>${escapeHtml(e.poste || '—')}</td>
+                <td>${escapeHtml(getPosteAccorde(e, settings) || '—')}</td>
                 <td>${e.dateEmbauche ? formatDate(e.dateEmbauche) : '—'}</td>
                 <td>${e.dateDepart ? formatDate(e.dateDepart) : '—'}</td>
                 <td>${escapeHtml(e.typeContrat || '—')}</td>
@@ -19033,7 +19043,8 @@ function renderPlanningGroupRows(employees, colspan, renderRow, renderServiceSum
  * quoi (demande Betty du 04/09/2026) — pas utilisé partout (ex. listes de salariés) pour ne pas
  * alourdir les écrans où le poste est déjà visible ailleurs. */
 function personNameWithPosteHtml(e) {
-  return `${personNameHtml(e)}${e.poste ? ` <span class="text-muted" style="font-size:12px;">${escapeHtml(e.poste)}</span>` : ''}`;
+  const poste = getPosteAccorde(e, settingsRepository.getSettings());
+  return `${personNameHtml(e)}${poste ? ` <span class="text-muted" style="font-size:12px;">${escapeHtml(poste)}</span>` : ''}`;
 }
 
 /** Sprint SIRH premium §3 : "modification par glisser-déposer" — une case de congé/télétravail
@@ -24210,6 +24221,89 @@ function renderPostesOuvertsCard(postesOuverts) {
   `;
 }
 
+/** §retour Betty du 18/09/2026 (point 5) : chaque poste porte 3 formes (masculin/féminin/neutre au
+ * point médian, voir DEFAULT_SETTINGS.postes/parsePosteGenre, data.js) — remplace le
+ * renderSettingsListCard générique (simples chaînes) pour cette liste précise, même raisonnement que
+ * renderPostesOuvertsCard ci-dessus (un champ propre à cette liste, pas la peine d'alourdir le
+ * composant partagé). La forme neutre reste la seule valeur stockée sur un salarié (employee.poste,
+ * jamais changée) : masculin/féminin ne servent qu'à l'affichage (getPosteAccorde, data.js). */
+function renderPostesCard(postes) {
+  return `
+    <div class="card">
+      <h2>Postes</h2>
+      <p class="text-muted" style="font-size:12px; margin-top:-6px;">Les formes masculine/féminine sont proposées automatiquement à partir de l'intitulé neutre (meilleur effort, jamais une grammaire française parfaite) : corrigez-les si besoin, ci-dessous.</p>
+      <div class="chip-list" style="flex-direction: column; align-items: stretch;">
+        ${(postes || []).map((poste, i) => `
+          <div class="poste-genre-row">
+            <span class="poste-genre-neutre">${escapeHtml(poste.neutre)}</span>
+            <label class="poste-genre-field">
+              <span class="text-muted" style="font-size: 11px;">Masculin</span>
+              <input type="text" class="input poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}">
+            </label>
+            <label class="poste-genre-field">
+              <span class="text-muted" style="font-size: 11px;">Féminin</span>
+              <input type="text" class="input poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}">
+            </label>
+            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
+          </div>
+        `).join('')}
+      </div>
+      <form class="chip-add-form" id="form-add-poste">
+        <input type="text" class="input" id="input-poste-neutre" placeholder="Intitulé neutre (ex. Commercial·e)..." required>
+        <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+      </form>
+    </div>
+  `;
+}
+
+function bindPostesCardEvents() {
+  document.querySelectorAll('.poste-genre-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const settings = settingsRepository.getSettings();
+      const postes = settings.postes || [];
+      const index = Number(input.dataset.index);
+      postes[index][input.dataset.champ] = input.value.trim() || postes[index].neutre;
+      settingsRepository.saveSettings(settings);
+      showToast('Poste mis à jour.');
+    });
+  });
+
+  document.querySelectorAll('.poste-genre-row .chip-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = settingsRepository.getSettings();
+      const postes = settings.postes || [];
+      const index = Number(btn.dataset.index);
+      const poste = postes[index];
+      if (poste && SETTINGS_LIST_USAGE_CHECK.postes(poste.neutre)) {
+        showToast(`Impossible de retirer "${poste.neutre}" : au moins un salarié a encore ce poste.`, 'error');
+        return;
+      }
+      settings.postes = postes.filter((_, i) => i !== index);
+      settingsRepository.saveSettings(settings);
+      showToast('Poste retiré.');
+      render();
+    });
+  });
+
+  const formAjouterPoste = document.getElementById('form-add-poste');
+  if (formAjouterPoste) formAjouterPoste.addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const input = document.getElementById('input-poste-neutre');
+    const neutre = input.value.trim();
+    if (!neutre) return;
+    const settings = settingsRepository.getSettings();
+    const postes = settings.postes || [];
+    if (postes.some(p => p.neutre === neutre)) {
+      showToast('Ce poste existe déjà.', 'error');
+      return;
+    }
+    settings.postes = [...postes, { neutre, ...parsePosteGenre(neutre) }];
+    settingsRepository.saveSettings(settings);
+    showToast('Poste ajouté.');
+    render();
+  });
+}
+
 function bindPostesOuvertsEvents() {
   document.querySelectorAll('.poste-ouvert-qty').forEach(input => {
     input.addEventListener('change', () => {
@@ -24947,7 +25041,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
               ${equipeSelectField(employee.service, employee.equipe)}
-              ${selectField('poste', 'Poste', settings.postes, employee.poste)}
+              ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).')}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })))}

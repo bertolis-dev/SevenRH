@@ -1711,6 +1711,21 @@ textarea.input { resize: vertical; font-family: inherit; }
 .poste-ouvert-qty-label { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .poste-ouvert-qty { width: 64px; padding: 4px 8px; }
 
+/* Postes (Paramètres > Référentiels) : une ligne par poste avec ses formes masculine/féminine
+   éditables, même raisonnement que .poste-ouvert-row ci-dessus. */
+.poste-genre-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--color-muted-soft);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+.poste-genre-neutre { flex: 1 1 160px; font-size: 14px; font-weight: 500; align-self: center; }
+.poste-genre-field { display: flex; flex-direction: column; gap: 2px; flex: 1 1 140px; }
+.poste-genre-input { padding: 4px 8px; }
+
 /* ---------------------------------------------------------------------
    Télétravail — planning hebdomadaire
    --------------------------------------------------------------------- */
