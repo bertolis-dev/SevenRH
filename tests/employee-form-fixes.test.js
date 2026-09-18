@@ -64,8 +64,8 @@ async function run() {
       'le champ Heures hebdomadaires doit être un input texte (inputmode decimal), pas un <input type="number"> qui refuse la virgule française'
     );
     assert.ok(
-      appSource.includes("patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || 35;"),
-      'la sauvegarde doit normaliser la virgule en point avant conversion numérique'
+      appSource.includes("patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || settingsRepository.getSettings().dureeHebdomadaireReferenceHeures;"),
+      'la sauvegarde doit normaliser la virgule en point avant conversion numérique, avec un repli sur la durée de référence de l\'entreprise (retour Betty du 18/09/2026, point 2.2), pas une valeur 35 codée en dur'
     );
   }
 

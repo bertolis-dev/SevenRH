@@ -616,7 +616,14 @@ const DEFAULT_SETTINGS = {
   // candidature (get_company_public_info) — simple liste de libellés, comme `postes` ci-dessus,
   // pas une entité à part avec ID (un poste ouvert n'a pas besoin d'identité stable au-delà de son
   // libellé, une candidature garde le libellé choisi tel quel).
-  postesOuverts: []
+  postesOuverts: [],
+  // §retour Betty du 18/09/2026 (point 2.2) : 35h était codée en dur à plusieurs endroits (nouvelle
+  // fiche salarié, calculs temps partiel/RTT) au lieu de venir d'un réglage par entreprise — certes
+  // la durée légale la plus courante, mais pas universelle (certaines conventions collectives fixent
+  // une durée collective différente). Sert de valeur de référence pour calculer automatiquement le
+  // pourcentage d'activité à partir des heures hebdomadaires saisies (voir calculerPourcentageActivite,
+  // app.js) et préremplit horairesHebdo sur une nouvelle fiche.
+  dureeHebdomadaireReferenceHeures: 35
 };
 
 /**
@@ -5268,6 +5275,11 @@ function makeEmptyEmployee() {
     pourcentageActivite: 100,
     horairesHebdo: 35,
     forfait: 'Aucun',
+    // §retour Betty du 18/09/2026 (point 2.3) : en "Forfait jours", le décompte se fait en jours
+    // travaillés dans l'année, jamais en heures hebdomadaires (voir openEmployeeModal, qui bascule
+    // l'affichage entre horairesHebdo et ce champ selon la valeur de `forfait`). 218 = plafond légal
+    // par défaut (L3121-64), sauf accord collectif fixant un plafond différent.
+    nombreJoursForfait: 218,
     regimeRTT: '',
     joursTravailles: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'],
     // Sprint SIRH premium §3 : horaires matin/après-midi, identiques chaque jour travaillé pour

@@ -371,6 +371,7 @@ globalThis.__ensureLicenseCapacity = ensureLicenseCapacity;
 globalThis.__openGererLicencesModal = openGererLicencesModal;
 globalThis.__releaseModuleLicensesForDeparture = releaseModuleLicensesForDeparture;
 globalThis.__LICENSED_MODULE_KEYS = LICENSED_MODULE_KEYS;
+globalThis.__computeTempsTravailAffichage = computeTempsTravailAffichage;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -657,6 +658,7 @@ globalThis.__LICENSED_MODULE_KEYS = LICENSED_MODULE_KEYS;
     openGererLicencesModal: sandbox.__openGererLicencesModal,
     releaseModuleLicensesForDeparture: sandbox.__releaseModuleLicensesForDeparture,
     LICENSED_MODULE_KEYS: sandbox.__LICENSED_MODULE_KEYS,
+    computeTempsTravailAffichage: sandbox.__computeTempsTravailAffichage,
   };
 }
 

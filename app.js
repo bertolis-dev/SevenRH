@@ -17397,6 +17397,11 @@ function renderParametresListes() {
       <h2>Salariés</h2>
       <div class="form-grid" style="max-width: 700px;">
         <div class="form-field">
+          <label for="f-duree-hebdo-reference">Durée hebdomadaire de référence (heures)</label>
+          <input class="input" type="number" min="1" step="0.5" id="f-duree-hebdo-reference" value="${escapeHtml(settings.dureeHebdomadaireReferenceHeures)}">
+          <p class="form-hint">35h par défaut (durée légale). Préremplit les nouvelles fiches salarié et sert de référence pour calculer automatiquement le pourcentage d'activité à partir des heures hebdomadaires saisies.</p>
+        </div>
+        <div class="form-field">
           <label for="f-visite-medicale-simple">Périodicité du suivi médical simple (mois)</label>
           <input class="input" type="number" min="1" id="f-visite-medicale-simple" value="${escapeHtml(settings.visiteMedicaleSimpleMois)}">
           <p class="form-hint">5 ans (60 mois) maximum par défaut (Code du travail), hors surveillance renforcée.</p>
@@ -17693,6 +17698,7 @@ function bindParametresListesEvents() {
     });
   };
 
+  bindNumberField('f-duree-hebdo-reference', 'dureeHebdomadaireReferenceHeures', 35, 'Durée de référence mise à jour.');
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
   bindNumberField('f-visite-medicale-simple', 'visiteMedicaleSimpleMois', 60, 'Périodicité mise à jour.');
   bindNumberField('f-visite-medicale-adapte', 'visiteMedicaleAdapteMois', 36, 'Périodicité mise à jour.');
@@ -24857,6 +24863,12 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   if (isEdit && !employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   if (!isEdit && prefill) Object.assign(employee, prefill);
   const settings = settingsRepository.getSettings();
+  // §retour Betty du 18/09/2026 (point 2.2) : makeEmptyEmployee() (data.js) reste une fonction pure,
+  // sans accès aux réglages de l'entreprise — 35h y est un simple repli, jamais la vraie source de
+  // vérité. Une NOUVELLE fiche préremplit désormais depuis le réglage réel de l'entreprise, même
+  // principe que etablissementId juste en dessous.
+  if (!isEdit) employee.horairesHebdo = settings.dureeHebdomadaireReferenceHeures;
+  const tempsTravailAffichage = computeTempsTravailAffichage(employee.tempsTravail, employee.forfait, employee.horairesHebdo, settings.dureeHebdomadaireReferenceHeures);
   const managers = employeeRepository.getAll().filter(e => e.id !== id && !e.archive);
   const categoriesSalarie = categorieSalarieRepository.getAll();
   const etablissements = etablissementRepository.getAll();
@@ -24943,8 +24955,12 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             <legend>Temps de travail</legend>
             <div class="form-grid">
               ${selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail)}
-              ${textField('pourcentageActivite', 'Pourcentage d\'activité', employee.pourcentageActivite, false, 'number')}
-              <div class="form-field">
+              <div class="form-field" id="field-pourcentage-activite" ${tempsTravailAffichage.pourcentageVisible ? '' : 'hidden'}>
+                <label for="f-pourcentageActivite">Pourcentage d'activité</label>
+                <input class="input" type="number" id="f-pourcentageActivite" name="pourcentageActivite" value="${escapeHtml(tempsTravailAffichage.pourcentage)}" readonly>
+                <p class="form-hint">Calculé automatiquement à partir des heures hebdomadaires ci-contre et de la durée de référence de l'entreprise (Paramètres &gt; Listes &gt; Salariés).</p>
+              </div>
+              <div class="form-field" id="field-horaires-hebdo" ${tempsTravailAffichage.horairesVisible ? '' : 'hidden'}>
                 <!-- §retour QA du 27/08/2026 ("pouvoir mettre un chiffre à virgule") : un <input
                      type="number"> refuse la virgule décimale française au clavier (même avec
                      step="any", la locale du champ number reste le point, jamais la virgule) — un
@@ -24955,9 +24971,24 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                      virgule française en lecture — seule la SAISIE posait problème). -->
                 <label for="f-horairesHebdo">Heures hebdomadaires</label>
                 <input class="input" type="text" inputmode="decimal" id="f-horairesHebdo" name="horairesHebdo" value="${escapeHtml(employee.horairesHebdo != null ? String(employee.horairesHebdo).replace('.', ',') : '')}" placeholder="35 ou 35,5">
+                <p class="field-warning ${tempsTravailAffichage.avertissementL3123 ? 'visible' : ''}" id="temps-partiel-l3123-warning">${icon(ICONS.warningTriangle, 13)} Moins de 24h/semaine : la durée minimale légale d'un temps partiel est de 24h/semaine (L3123-7), sauf dérogation (étudiant, demande du salarié, accord de branche...).</p>
+              </div>
+              <div class="form-field" id="field-nombre-jours-forfait" ${tempsTravailAffichage.joursForfaitVisible ? '' : 'hidden'}>
+                <label for="f-nombreJoursForfait">Nombre de jours par an (forfait jours)</label>
+                <input class="input" type="number" id="f-nombreJoursForfait" name="nombreJoursForfait" min="1" max="218" value="${escapeHtml(employee.nombreJoursForfait || 218)}">
+                <p class="form-hint">218 jours = plafond légal par défaut (L3121-64), sauf accord collectif fixant un plafond différent.</p>
               </div>
               ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.')}
               ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT, false, 'text', 'any', 'Jours de repos accordés en compensation d\'un temps de travail au-delà de 35h/semaine. Le mode de calcul (nombre de jours, méthode d\'acquisition) dépend de l\'accord d\'entreprise ou de la convention collective applicable.')}
+            </div>
+            <div class="form-hint-block" id="forfait-jours-rappels-legaux" ${tempsTravailAffichage.joursForfaitVisible ? '' : 'hidden'}>
+              <strong>Forfait jours : rappels légaux</strong>
+              <ul>
+                <li>L3121-58 : réservé aux cadres autonomes dans l'organisation de leur temps, ou aux salariés dont la durée ne peut être prédéterminée.</li>
+                <li>L3121-63 : nécessite un accord collectif (branche ou entreprise) déterminant les modalités, pas une simple mention au contrat.</li>
+                <li>L3121-55 : le forfait doit résulter d'une convention individuelle écrite avec le salarié.</li>
+                <li>L3121-64 : garanties obligatoires (repos quotidien/hebdomadaire, suivi de la charge de travail, entretien annuel dédié) à la charge de l'employeur.</li>
+              </ul>
             </div>
             <p class="form-subsection-title">Horaires (identiques chaque jour travaillé), utilisés par le Planning (§3).</p>
             <div class="form-grid">
@@ -24997,6 +25028,8 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 
+  bindTempsTravailFields(settings);
+
   // §correctif audit du 23/08/2026 (§7.20) : "rien ne calcule ce montant ni ne le signale au moment
   // où l'on renseigne une date de départ" — mis à jour dès la saisie, pas seulement après
   // enregistrement, pour que ce soit visible AU MOMENT de la décision plutôt qu'une surprise ensuite.
@@ -25011,6 +25044,57 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   };
   dateDepartInput.addEventListener('change', updateIndemniteHint);
   updateIndemniteHint();
+}
+
+/** §retour Betty du 18/09/2026 (points 2.1/2.3) : fonction pure (testable sans DOM) déterminant
+ * quels champs afficher/cacher et la valeur calculée du pourcentage d'activité, à partir de
+ * Temps plein-partiel/Forfait/heures hebdomadaires/durée de référence de l'entreprise — réutilisée à
+ * la fois pour le rendu initial (openEmployeeModal) et pour la mise à jour en direct
+ * (bindTempsTravailFields), pour ne jamais avoir deux implémentations de la même règle. */
+function computeTempsTravailAffichage(tempsTravail, forfait, horairesHebdo, dureeReference) {
+  const tempsPartiel = tempsTravail === 'Temps partiel';
+  const enForfaitJours = forfait === 'Forfait jours';
+  const horaires = Number(horairesHebdo) || 0;
+  const reference = Number(dureeReference) || 35;
+  const pourcentage = tempsPartiel ? (reference > 0 ? Math.round((horaires / reference) * 1000) / 10 : 0) : 100;
+  return {
+    pourcentageVisible: tempsPartiel,
+    horairesVisible: !enForfaitJours,
+    joursForfaitVisible: enForfaitJours,
+    pourcentage,
+    // Sans horaire renseigné (0), rien à avertir : ce n'est pas encore "moins de 24h", c'est juste vide.
+    avertissementL3123: tempsPartiel && !enForfaitJours && horaires > 0 && horaires < 24
+  };
+}
+
+/** Bascule l'affichage entre pourcentage d'activité (calculé, jamais saisi directement) / heures
+ * hebdomadaires / nombre de jours par an selon Temps plein-partiel et Forfait, plutôt que d'afficher
+ * les 3 en permanence sans distinction — voir computeTempsTravailAffichage ci-dessus pour la règle. */
+function bindTempsTravailFields(settings) {
+  const tempsTravailInput = document.getElementById('f-tempsTravail');
+  const horairesInput = document.getElementById('f-horairesHebdo');
+  const forfaitInput = document.getElementById('f-forfait');
+  const pourcentageInput = document.getElementById('f-pourcentageActivite');
+  const pourcentageField = document.getElementById('field-pourcentage-activite');
+  const horairesField = document.getElementById('field-horaires-hebdo');
+  const joursForfaitField = document.getElementById('field-nombre-jours-forfait');
+  const rappelsForfait = document.getElementById('forfait-jours-rappels-legaux');
+  const warningL3123 = document.getElementById('temps-partiel-l3123-warning');
+
+  const update = () => {
+    const affichage = computeTempsTravailAffichage(tempsTravailInput.value, forfaitInput.value, horairesInput.value, settings.dureeHebdomadaireReferenceHeures);
+    pourcentageField.hidden = !affichage.pourcentageVisible;
+    horairesField.hidden = !affichage.horairesVisible;
+    joursForfaitField.hidden = !affichage.joursForfaitVisible;
+    rappelsForfait.hidden = !affichage.joursForfaitVisible;
+    pourcentageInput.value = String(affichage.pourcentage);
+    warningL3123.classList.toggle('visible', affichage.avertissementL3123);
+  };
+
+  tempsTravailInput.addEventListener('change', update);
+  horairesInput.addEventListener('input', update);
+  forfaitInput.addEventListener('change', update);
+  update();
 }
 
 /** Champ "Adresse" avec suggestions en direct (API Adresse gouv.fr, gratuite/sans clé) — remplace
@@ -25138,7 +25222,8 @@ function submitEmployeeForm(evt, id, candidatureId) {
   // §retour QA du 27/08/2026 : champ texte (voir openEmployeeModal), pas un <input type="number">
   // qui refusait la virgule décimale française — normalise avant conversion, un point saisi
   // directement (ou collé depuis ailleurs) reste accepté tel quel.
-  patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || 35;
+  patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || settingsRepository.getSettings().dureeHebdomadaireReferenceHeures;
+  if ('nombreJoursForfait' in patch) patch.nombreJoursForfait = Number(patch.nombreJoursForfait) || 218;
   patch.managerIds = formData.getAll('managerIds');
   if ('salaireBrutMensuel' in patch) patch.salaireBrutMensuel = Number(patch.salaireBrutMensuel) || 0;
 
