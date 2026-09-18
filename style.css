@@ -421,6 +421,18 @@ p { margin: 0; line-height: 1.5; }
 
 .text-danger { color: var(--color-danger); font-weight: 600; }
 
+/* §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : révélé sous le <select> concerné
+   (voir selectField/openQuickAddInline, app.js), jamais une modale/un ré-rendu — le formulaire en
+   cours (souvent lui-même une modale) ne doit jamais être perdu. */
+.quick-add-inline:not([hidden]) { margin-top: 8px; }
+.quick-add-panel {
+  padding: 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-muted-soft);
+}
+.quick-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
 .table-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 
 .quality-issue-row { flex-direction: column; align-items: flex-start; gap: 8px; }

@@ -5158,6 +5158,18 @@ function bindGlobalEvents() {
     const firstField = modalRoot.querySelector('input, select, textarea');
     if (firstField) firstField.focus();
   }).observe(modalRoot, { childList: true });
+
+  // §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : délégation globale (même idiome
+  // que l'autocomplétion SIRET/adresse ci-dessus), jamais un binding par formulaire — sinon chaque
+  // futur écran qui réutilise selectField(..., quickAddListKey) devrait aussi se souvenir d'appeler
+  // un bind dédié. dataset.quickAddPrevious mémorise la dernière vraie valeur choisie (pas
+  // "__quick_add__" elle-même), pour pouvoir y revenir si l'ajout est annulé.
+  document.addEventListener('change', (e) => {
+    const select = e.target.closest('[data-quick-add-list]');
+    if (!select) return;
+    if (select.value === '__quick_add__') openQuickAddInline(select);
+    else select.dataset.quickAddPrevious = select.value;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -9421,7 +9433,7 @@ function openDocumentModal(employeeId) {
       <form id="document-form">
         <div class="modal-body">
           <div class="form-grid">
-            ${selectField('categorie', 'Catégorie', settings.categoriesDocuments, settings.categoriesDocuments[0])}
+            ${selectField('categorie', 'Catégorie', settings.categoriesDocuments, settings.categoriesDocuments[0], null, undefined, 'categoriesDocuments')}
             ${textField('nom', 'Nom du document', '', true)}
             ${textField('dateExpiration', 'Date d\'expiration (optionnel)', '', false, 'date')}
           </div>
@@ -15813,9 +15825,14 @@ function openCalendarDayModal(dateStr) {
 // §correctif audit du 23/08/2026 (§6.3) : categoriesFrais retirée d'ici — rendue séparément, sous
 // son propre thème "module frais" dans renderParametresListes, pas dans le bloc "rh" toujours
 // affiché. Renommée _RH (pas juste SETTINGS_LISTS) pour rendre ce périmètre explicite.
+// §retour Betty du 19/09/2026 : "Statuts professionnels" retirée d'ici — plus aucun menu déroulant
+// ne s'appuie sur settings.statutsPro (employee.statutPro est aujourd'hui recopié automatiquement
+// depuis la catégorie de salarié choisie, voir submitEmployeeForm), la carte n'avait donc plus
+// aucun effet réel. La donnée elle-même n'est PAS retirée (DEFAULT_SETTINGS.statutsPro sert encore
+// de socle à deriveCategoriesSalarieFromStatutPro, data.js) : seule cette carte, devenue trompeuse
+// dans Paramètres, disparaît.
 const SETTINGS_LISTS_RH = [
   { key: 'conventionsCollectives', label: 'Conventions collectives' },
-  { key: 'statutsPro', label: 'Statuts professionnels' },
   { key: 'typesContrat', label: 'Types de contrat' },
   { key: 'forfaits', label: 'Forfaits' },
   { key: 'categoriesDocuments', label: 'Catégories de documents' },
@@ -15832,7 +15849,6 @@ const SETTINGS_LISTS_RH = [
 const SETTINGS_LIST_USAGE_CHECK = {
   postes: (value) => employeeRepository.getAll().some(e => e.poste === value),
   conventionsCollectives: (value) => employeeRepository.getAll().some(e => e.conventionCollective === value),
-  statutsPro: (value) => employeeRepository.getAll().some(e => e.statutPro === value),
   typesContrat: (value) => employeeRepository.getAll().some(e => e.typeContrat === value),
   forfaits: (value) => employeeRepository.getAll().some(e => e.forfait === value),
   categoriesFrais: (value) => expenseRepository.getAll().some(n => n.categorie === value),
@@ -22583,7 +22599,7 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
         <div class="modal-body">
           <div class="form-grid">
             ${employeeField}
-            ${selectField('categorie', 'Catégorie', settings.categoriesFrais, champs.categorie || settings.categoriesFrais[0])}
+            ${selectField('categorie', 'Catégorie', settings.categoriesFrais, champs.categorie || settings.categoriesFrais[0], null, undefined, 'categoriesFrais')}
             ${textField('date', 'Date de la dépense', champs.date || '', true, 'date')}
             ${textField('libelle', 'Libellé', champs.libelle || '', true)}
           </div>
@@ -25271,11 +25287,11 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service)}
               ${equipeSelectField(employee.service, employee.equipe)}
-              ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).')}
+              ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).', 'postes')}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })))}
-              ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat)}
+              ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat, null, undefined, 'typesContrat')}
               <div class="form-field">
                 <label for="f-dateEmbauche">Date d'embauche *</label>
                 <input class="input" type="date" id="f-dateEmbauche" name="dateEmbauche" value="${escapeHtml(employee.dateEmbauche || '')}" required data-live-anciennete="true">
@@ -25315,7 +25331,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                 <input class="input" type="number" id="f-nombreJoursForfait" name="nombreJoursForfait" min="1" max="218" value="${escapeHtml(employee.nombreJoursForfait || 218)}">
                 <p class="form-hint">218 jours = plafond légal par défaut (L3121-64), sauf accord collectif fixant un plafond différent.</p>
               </div>
-              ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.')}
+              ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.', 'forfaits')}
               ${selectField('regimeRTT', 'Régime RTT', null, employee.regimeRTT || 'aucun', REGIME_RTT_OPTIONS, 'Jours de repos accordés en compensation d\'un temps de travail au-delà de la durée de référence. "Acquisition au réel" utilise le compteur RTT standard (Paramètres &gt; Types de congés) ; les deux autres options sont propres à ce salarié.')}
               <div class="form-field" id="field-nombre-jours-rtt-annuel" ${employee.regimeRTT === 'forfait_annuel' ? '' : 'hidden'}>
                 <label for="f-nombreJoursRTTAnnuel">Nombre de jours RTT par an</label>
@@ -25646,25 +25662,53 @@ function textField(name, label, value, required, type = 'text', step = 'any', he
   `;
 }
 
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : catalogue des listes de référence
+ * simples éligibles à l'ajout rapide depuis un <select> (voir selectField ci-dessous et la
+ * délégation globale dans bindGlobalEvents). `formesGenre` = la liste porte 3 formes (masculin/
+ * féminin/neutre, voir parsePosteGenre) plutôt qu'une simple chaîne — seul le cas des postes aujourd'hui.
+ * `sansReglage` = un message le rappelle après l'ajout (catégories de notes de frais : les réglages
+ * par catégorie, justificatif obligatoire/plafond, restent à faire dans Paramètres). Étendre cette
+ * liste ne suffit PAS à activer l'ajout rapide ailleurs : il faut aussi passer la 7e clé à
+ * selectField() à l'endroit où le champ est rendu (voir openEmployeeModal, l'upload de document,
+ * la note de frais — les seuls appelants aujourd'hui à représenter une VRAIE saisie, jamais un
+ * simple filtre, où ajouter une valeur n'aurait pas de sens). */
+const QUICK_ADD_LISTS = {
+  // formesGenre : la liste porte 3 formes (masculin/féminin/neutre, voir parsePosteGenre) plutôt
+  // qu'une simple chaîne — seul le cas des postes aujourd'hui. feminin : accord grammatical du
+  // message de confirmation ("ajoutée" vs "ajouté") — rien à voir avec formesGenre ci-dessus.
+  postes: { label: 'un poste', champLabel: 'Intitulé', formesGenre: true },
+  typesContrat: { label: 'un type de contrat', champLabel: 'Type de contrat' },
+  forfaits: { label: 'un forfait', champLabel: 'Forfait' },
+  categoriesDocuments: { label: 'une catégorie de documents', champLabel: 'Catégorie de documents', feminin: true },
+  categoriesFrais: { label: 'une catégorie de notes de frais', champLabel: 'Catégorie de notes de frais', feminin: true, sansReglage: true }
+};
+
 /** Si la valeur actuellement enregistrée ne correspond à aucune option (ex. la liste
  * paramétrable a été renommée depuis), on l'ajoute quand même comme option sélectionnée
  * plutôt que de la laisser disparaître silencieusement — sinon un simple "Enregistrer"
- * sans toucher au champ écrase la donnée d'origine par une valeur vide. */
-function selectField(name, label, options, selectedValue, customOptions, help) {
+ * sans toucher au champ écrase la donnée d'origine par une valeur vide.
+ * quickAddListKey (optionnel) : voir QUICK_ADD_LISTS ci-dessus — ajoute une option "+ Ajouter..."
+ * en fin de liste, réservée à qui gère les paramètres (écrire une liste de référence en est une
+ * facette, même droit que le reste de Paramètres > Référentiels). */
+function selectField(name, label, options, selectedValue, customOptions, help, quickAddListKey) {
   const opts = customOptions || (options || []).map(o => ({ value: o, label: o }));
   const hasValue = selectedValue !== undefined && selectedValue !== null && selectedValue !== '';
   const matchesOption = opts.some(o => String(o.value) === String(selectedValue));
   const staleOption = hasValue && !matchesOption
     ? `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue)} (valeur actuelle, absente de la liste)</option>`
     : '';
+  const quickAddDef = quickAddListKey && QUICK_ADD_LISTS[quickAddListKey];
+  const canQuickAdd = quickAddDef && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
   return `
     <div class="form-field">
       <label for="f-${name}">${escapeHtml(label)}${fieldHelpIcon(help)}</label>
-      <select class="input" id="f-${name}" name="${name}">
+      <select class="input" id="f-${name}" name="${name}" ${canQuickAdd ? `data-quick-add-list="${escapeHtml(quickAddListKey)}" data-quick-add-previous="${escapeHtml(hasValue ? selectedValue : '')}"` : ''}>
         <option value="">—</option>
         ${staleOption}
         ${opts.map(o => `<option value="${escapeHtml(o.value)}" ${String(selectedValue) === String(o.value) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
+        ${canQuickAdd ? `<option value="__quick_add__">+ Ajouter ${escapeHtml(quickAddDef.label)}...</option>` : ''}
       </select>
+      ${canQuickAdd ? `<div class="quick-add-inline" id="f-${name}-quick-add" hidden></div>` : ''}
     </div>
   `;
 }
@@ -25981,6 +26025,176 @@ document.addEventListener('click', (e) => {
  * et les accents ne fassent jamais échouer un résultat qui devrait matcher. */
 function normalizeForSearch(value) {
   return (value || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : normalisation DÉDIÉE à la
+ * détection de doublon dans une liste de référence — plus agressive que normalizeForSearch (la
+ * recherche ne doit jamais ignorer la ponctuation, sous peine d'être trop permissive), ici on veut
+ * au contraire que "CDD" et "C.D.D." soient détectés comme la même valeur : espaces, points,
+ * apostrophes et points médians retirés en plus des accents/de la casse déjà gérés ci-dessus. */
+function normalizeForDuplicateCheck(value) {
+  return normalizeForSearch(value).replace(/[\s.’'·-]/g, '');
+}
+
+/** Cherche dans `list` (chaînes, ou objets si `field` est fourni) une valeur déjà "la même" que
+ * `value` au sens de normalizeForDuplicateCheck ci-dessus. Retourne l'élément existant (jamais
+ * juste un booléen) : l'appelant en a besoin pour proposer "utiliser cette valeur" plutôt qu'en
+ * créer une seconde. */
+function findDuplicateInList(list, value, field) {
+  const target = normalizeForDuplicateCheck(value);
+  if (!target) return null;
+  return (list || []).find(item => normalizeForDuplicateCheck(field ? item[field] : item) === target) || null;
+}
+
+/** §retour Betty du 19/09/2026 ("ajouter une valeur sur place") : révèle un mini-formulaire JUSTE
+ * SOUS le <select>, jamais une navigation ni un ré-rendu complet — le formulaire en cours (souvent
+ * lui-même une modale, ex. "Modifier le salarié") ne doit jamais être perdu, exactement ce qu'elle a
+ * demandé. select.value repart sur la dernière vraie valeur choisie (dataset.quickAddPrevious,
+ * maintenu par la délégation globale dans bindGlobalEvents) tant que l'ajout n'est pas confirmé — l'option "+ Ajouter..."
+ * elle-même ne doit jamais rester sélectionnée visuellement pendant la saisie. */
+function openQuickAddInline(select) {
+  const listKey = select.dataset.quickAddList;
+  const def = QUICK_ADD_LISTS[listKey];
+  const container = document.getElementById(select.id + '-quick-add');
+  if (!def || !container) return;
+  select.value = select.dataset.quickAddPrevious || '';
+
+  const champsSaisie = def.formesGenre ? `
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="${select.id}-qa-neutre">Intitulé neutre (point médian, ex. Commercial·e)</label>
+        <input class="input" type="text" id="${select.id}-qa-neutre" placeholder="Commercial·e">
+      </div>
+      <div class="form-field">
+        <label for="${select.id}-qa-masculin">Masculin</label>
+        <input class="input" type="text" id="${select.id}-qa-masculin">
+      </div>
+      <div class="form-field">
+        <label for="${select.id}-qa-feminin">Féminin</label>
+        <input class="input" type="text" id="${select.id}-qa-feminin">
+      </div>
+    </div>
+  ` : `
+    <div class="form-field">
+      <label for="${select.id}-qa-value">${escapeHtml(def.champLabel)}</label>
+      <input class="input" type="text" id="${select.id}-qa-value">
+    </div>
+  `;
+  container.innerHTML = `
+    <div class="quick-add-panel">
+      ${champsSaisie}
+      <p class="text-muted" id="${select.id}-qa-message" style="font-size: 12px; margin: 6px 0 0;"></p>
+      <div class="quick-add-actions">
+        <button type="button" class="btn btn-secondary btn-sm" id="${select.id}-qa-cancel">Annuler</button>
+        <button type="button" class="btn btn-primary btn-sm" id="${select.id}-qa-confirm">Ajouter</button>
+      </div>
+    </div>
+  `;
+  container.hidden = false;
+
+  if (def.formesGenre) {
+    // §dépendance notée par Betty avec les postes accordés en genre (retour du 18/09/2026) :
+    // masculin/féminin sont pré-remplis automatiquement (même heuristique que renderPostesCard,
+    // Paramètres > Référentiels) tant que la personne ne les a pas retouchés à la main.
+    const neutreInput = document.getElementById(`${select.id}-qa-neutre`);
+    const masculinInput = document.getElementById(`${select.id}-qa-masculin`);
+    const femininInput = document.getElementById(`${select.id}-qa-feminin`);
+    let genreTouche = false;
+    masculinInput.addEventListener('input', () => { genreTouche = true; });
+    femininInput.addEventListener('input', () => { genreTouche = true; });
+    neutreInput.addEventListener('input', () => {
+      if (genreTouche) return;
+      const propose = parsePosteGenre(neutreInput.value);
+      masculinInput.value = propose.masculin;
+      femininInput.value = propose.feminin;
+    });
+  }
+
+  document.getElementById(`${select.id}-qa-cancel`).addEventListener('click', () => closeQuickAddInline(select));
+  document.getElementById(`${select.id}-qa-confirm`).addEventListener('click', () => confirmQuickAdd(select, false));
+  container.querySelectorAll('input').forEach(input => input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    confirmQuickAdd(select, false);
+  }));
+  const firstInput = container.querySelector('input');
+  if (firstInput) firstInput.focus();
+}
+
+function closeQuickAddInline(select) {
+  const container = document.getElementById(select.id + '-quick-add');
+  if (container) { container.hidden = true; container.innerHTML = ''; }
+  select.value = select.dataset.quickAddPrevious || '';
+}
+
+/** forcer=true : passe outre un doublon détecté ("Ajouter quand même", voir le message affiché par
+ * findDuplicateInList ci-dessous) — jamais le comportement par défaut, seulement une échappatoire
+ * explicite si la personne est certaine que ce n'est PAS la même valeur malgré la normalisation. */
+function confirmQuickAdd(select, forcer) {
+  const listKey = select.dataset.quickAddList;
+  const def = QUICK_ADD_LISTS[listKey];
+  const messageEl = document.getElementById(`${select.id}-qa-message`);
+  const settings = settingsRepository.getSettings();
+  const list = settings[listKey] || [];
+
+  let nouvelleValeur;
+  if (def.formesGenre) {
+    const neutre = document.getElementById(`${select.id}-qa-neutre`).value.trim();
+    if (!neutre) { messageEl.textContent = 'L\'intitulé neutre est obligatoire.'; return; }
+    const masculin = document.getElementById(`${select.id}-qa-masculin`).value.trim() || neutre;
+    const feminin = document.getElementById(`${select.id}-qa-feminin`).value.trim() || neutre;
+    nouvelleValeur = { neutre, masculin, feminin };
+  } else {
+    const valeur = document.getElementById(`${select.id}-qa-value`).value.trim();
+    if (!valeur) { messageEl.textContent = 'Cette valeur ne peut pas être vide.'; return; }
+    nouvelleValeur = valeur;
+  }
+
+  const compareField = def.formesGenre ? 'neutre' : null;
+  const compareValue = def.formesGenre ? nouvelleValeur.neutre : nouvelleValeur;
+  if (!forcer) {
+    const doublon = findDuplicateInList(list, compareValue, compareField);
+    if (doublon) {
+      const doublonLabel = compareField ? doublon[compareField] : doublon;
+      messageEl.innerHTML = `« ${escapeHtml(doublonLabel)} » existe déjà. <button type="button" class="btn-link" id="${select.id}-qa-use-existing">Utiliser cette valeur</button> · <button type="button" class="btn-link" id="${select.id}-qa-force">Ajouter quand même</button>`;
+      document.getElementById(`${select.id}-qa-use-existing`).addEventListener('click', () => applyQuickAddValue(select, doublon, false));
+      document.getElementById(`${select.id}-qa-force`).addEventListener('click', () => confirmQuickAdd(select, true));
+      return;
+    }
+  }
+
+  settings[listKey] = [...list, nouvelleValeur];
+  settingsRepository.saveSettings(settings); // journalise déjà l'action (voir DB.saveSettings) : qui, quand.
+  applyQuickAddValue(select, nouvelleValeur, true);
+  if (def.sansReglage) {
+    showToast('Configurez cette catégorie (justificatif obligatoire, plafond...) dans Paramètres > Référentiels si besoin.');
+  }
+}
+
+/** Sélectionne la valeur (nouvelle ou déjà existante) dans LE select d'origine, ET synchronise
+ * discrètement tous les AUTRES <select> de la même liste déjà affichés sur la page (ajoute l'option
+ * si elle manque, sans jamais changer leur propre valeur choisie) — "doit apparaître tout de suite
+ * dans les autres menus... sans recharger la page", exactement ce qui est demandé, sans un seul
+ * appel à render(). */
+function applyQuickAddValue(select, value, estNouvelle) {
+  const listKey = select.dataset.quickAddList;
+  const def = QUICK_ADD_LISTS[listKey];
+  const optionValue = def.formesGenre ? value.neutre : value;
+
+  document.querySelectorAll(`[data-quick-add-list="${listKey}"]`).forEach(autreSelect => {
+    const existingOption = Array.from(autreSelect.options).find(o => o.value === optionValue);
+    if (!existingOption) {
+      const quickAddOption = Array.from(autreSelect.options).find(o => o.value === '__quick_add__');
+      const opt = document.createElement('option');
+      opt.value = optionValue;
+      opt.textContent = optionValue;
+      if (quickAddOption) autreSelect.insertBefore(opt, quickAddOption); else autreSelect.appendChild(opt);
+    }
+    if (autreSelect === select) autreSelect.dataset.quickAddPrevious = optionValue;
+  });
+
+  closeQuickAddInline(select); // lit dataset.quickAddPrevious, déjà mis à jour juste au-dessus.
+  showToast(estNouvelle ? `« ${escapeHtml(optionValue)} » ajouté${def.feminin ? 'e' : ''}.` : 'Valeur déjà existante, sélectionnée.');
 }
 
 function escapeHtml(value) {

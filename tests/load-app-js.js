@@ -393,6 +393,10 @@ globalThis.__LICENSED_MODULE_KEYS = LICENSED_MODULE_KEYS;
 globalThis.__computeTempsTravailAffichage = computeTempsTravailAffichage;
 globalThis.__REGIME_RTT_OPTIONS = REGIME_RTT_OPTIONS;
 globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
+globalThis.__normalizeForDuplicateCheck = normalizeForDuplicateCheck;
+globalThis.__findDuplicateInList = findDuplicateInList;
+globalThis.__QUICK_ADD_LISTS = QUICK_ADD_LISTS;
+globalThis.__SETTINGS_LISTS_RH = SETTINGS_LISTS_RH;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -701,6 +705,10 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     computeTempsTravailAffichage: sandbox.__computeTempsTravailAffichage,
     REGIME_RTT_OPTIONS: sandbox.__REGIME_RTT_OPTIONS,
     libelleRegimeRTTAutoCalcul: sandbox.__libelleRegimeRTTAutoCalcul,
+    normalizeForDuplicateCheck: sandbox.__normalizeForDuplicateCheck,
+    findDuplicateInList: sandbox.__findDuplicateInList,
+    QUICK_ADD_LISTS: sandbox.__QUICK_ADD_LISTS,
+    SETTINGS_LISTS_RH: sandbox.__SETTINGS_LISTS_RH,
   };
 }
 
