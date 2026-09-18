@@ -262,8 +262,23 @@ function getInitialViewState() {
     // §retour QA du 26/08/2026 (point 7.2) : tableau des compteurs — état de filtre/pagination
     // dédié, séparé de `filters` (partagé par renderEmployeesList) pour ne jamais interférer avec
     // le filtre service de l'écran Salariés.
-    tableauCompteursFilters: { service: '' },
-    tableauCompteursPage: 1
+    // §retour Betty du 19/09/2026 (point 6, "socle commun des écrans de liste") : etablissementId
+    // ajouté ("pas de filtre par établissement alors que l'application gère les établissements"),
+    // plus recherche/tri dédiés à cet écran — jamais search/sortBy/sortDir globaux (state.search
+    // etc., réservés à l'écran Salariés depuis leur création) : deux paires PAR écran, sinon trier
+    // ici retrierait aussi Salariés au retour sur cet écran.
+    tableauCompteursFilters: { service: '', etablissementId: '' },
+    tableauCompteursSearch: '',
+    tableauCompteursSortBy: 'nom',
+    tableauCompteursSortDir: 'asc',
+    tableauCompteursPage: 1,
+    // §retour Betty du 19/09/2026 (point 6) : Entretiens était "le plus pauvre de tous" — aucun
+    // filtre, aucune recherche, aucune pagination, pas de tableau. Même principe de clés dédiées.
+    entretiensSearch: '',
+    entretiensFilters: { type: '', statut: '', periode: '' },
+    entretiensSortBy: 'datePrevue',
+    entretiensSortDir: 'desc',
+    entretiensPage: 1
   };
 }
 
@@ -5207,6 +5222,8 @@ function bindGlobalEvents() {
     if (select.value === '__quick_add__') openQuickAddInline(select);
     else select.dataset.quickAddPrevious = select.value;
   });
+
+  bindSortableHeadersGlobalDelegation();
 }
 
 // ---------------------------------------------------------------------------
@@ -8025,6 +8042,89 @@ function renderPaginationControls(page, totalPages, pageStart, pageCount, total)
   `;
 }
 
+// ---------------------------------------------------------------------------
+// Socle commun des écrans de liste — §retour Betty du 19/09/2026 (point 6) : "le défaut dominant
+// n'est pas l'absence de fonctions, c'est leur répartition inégale... je voudrais qu'on définisse
+// une fois un socle commun, et qu'on le décline sur chaque écran". Réutilise l'existant partout où
+// il existe déjà (paginate/renderPaginationControls ci-dessus, applyStateFilters/
+// scopeToVisibleEmployees, renderFilterToggleBar) ; ce qui suit couvre ce qui manquait encore :
+// tri par colonne réutilisable (jusqu'ici unique à Salariés, sans indicateur visuel), filtre de
+// période générique (jusqu'ici réécrit à la main dans getFilteredExpenses/getFilteredLeaveRequests),
+// et un état vide paramétrable (jusqu'ici câblé en dur sur "salarié"). Déployé d'abord sur
+// Entretiens (le plus pauvre) et Tableau des compteurs, à décliner ensuite sur le reste.
+// ---------------------------------------------------------------------------
+
+/** Remplace un texte "Aucun X" muet par un message qui dit quoi faire (retour Betty : "un état vide
+ * qui dit quoi faire, pas seulement qu'il n'y a rien") — le message lui-même reste à la charge de
+ * l'appelant, qui sait distinguer "aucune donnée du tout" (dire quoi faire) de "aucun résultat pour
+ * CES filtres" (dire de les ajuster), voir renderEntretiens/renderTableauCompteurs pour le patron. */
+function renderListEmptyState(message, iconKey) {
+  return `
+    <div class="empty-state">
+      <div class="empty-icon">${icon(ICONS[iconKey] || ICONS.search, 26)}</div>
+      <p>${message}</p>
+    </div>
+  `;
+}
+
+/** Filtre de période générique (mois, format 'YYYY-MM', vide = pas de filtre) — même convention que
+ * fraisFilters.periode/congesFilters.periode, désormais partagée au lieu d'être réécrite à chaque
+ * écran. `dateOrRange` est soit une date ISO unique (comparée par préfixe, une note de frais n'a
+ * qu'une date), soit `[dateDebut, dateFin]` pour un intervalle (comparé par CHEVAUCHEMENT, une
+ * demande de congé couvre une plage) — l'appelant choisit selon la nature de sa donnée. */
+function matchesPeriodeFilter(dateOrRange, periode) {
+  if (!periode) return true;
+  if (Array.isArray(dateOrRange)) {
+    const [debut, fin] = dateOrRange;
+    const [year, month] = periode.split('-').map(Number);
+    const debutMois = `${periode}-01`;
+    const finMois = toISODate(new Date(year, month, 0));
+    return (debut || '') <= finMois && (fin || '9999-12-31') >= debutMois;
+  }
+  return (dateOrRange || '').startsWith(periode);
+}
+
+/** Tri générique par colonne, une paire de clés state.*SortBy/*SortDir PAR ÉCRAN (jamais les
+ * anciennes state.sortBy/sortDir globales, réservées à Salariés depuis leur création — sinon trier
+ * un écran retrierait aussi Salariés au retour sur cet écran). getValue(item) renvoie la valeur à
+ * comparer : à l'appelant d'aller chercher, ex., `row.employee.nom` plutôt que `row.nom`. */
+function sortListBy(list, getValue, sortDir) {
+  const dir = sortDir === 'desc' ? -1 : 1;
+  return [...list].sort((a, b) => {
+    const av = getValue(a);
+    const bv = getValue(b);
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+    return String(av || '').toLowerCase().localeCompare(String(bv || '').toLowerCase()) * dir;
+  });
+}
+
+/** En-tête de colonne triable avec un vrai indicateur ▲/▼ sur la colonne active — jusqu'ici absent
+ * même sur Salariés (seul tableau déjà triable avant ce socle). À utiliser avec bindSortableHeaders
+ * ci-dessous pour le clic, et `th.sortable` (voir style.css) plutôt que `.table th` pour que le
+ * curseur "cliquable" ne s'affiche plus, à tort, sur une colonne non triable. */
+function renderSortableHeader(label, key, sortByKey, sortDirKey) {
+  const active = state[sortByKey] === key;
+  const arrow = active ? (state[sortDirKey] === 'asc' ? ' ▲' : ' ▼') : '';
+  return `<th data-sort="${escapeHtml(key)}" data-sort-by-key="${escapeHtml(sortByKey)}" data-sort-dir-key="${escapeHtml(sortDirKey)}" class="sortable">${escapeHtml(label)}${arrow}</th>`;
+}
+
+/** Délégation globale posée UNE SEULE FOIS dans bindGlobalEvents (même idiome que les délégations
+ * d'ajout rapide plus haut) plutôt qu'un bind à répéter dans chaque écran : un futur écran qui
+ * utilise renderSortableHeader n'a besoin d'AUCUN code de binding supplémentaire pour que le tri
+ * fonctionne. Ignore un <th data-sort> sans data-sort-by-key/data-sort-dir-key : c'est l'ancien
+ * mécanisme de tri de Salariés (seul tableau triable avant ce socle), qui garde son propre binding
+ * séparé plutôt que d'être migré ici au passage (aucun besoin fonctionnel, seul le risque change). */
+function bindSortableHeadersGlobalDelegation() {
+  document.addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th || !th.dataset.sortByKey || !th.dataset.sortDirKey) return;
+    const { sort: col, sortByKey, sortDirKey } = th.dataset;
+    if (state[sortByKey] === col) state[sortDirKey] = state[sortDirKey] === 'asc' ? 'desc' : 'asc';
+    else { state[sortByKey] = col; state[sortDirKey] = 'asc'; }
+    render();
+  });
+}
+
 /** §retour QA du 26/08/2026 (point 7.2) : "un tableau de bord des compteurs" — vue d'ensemble des
  * soldes de congés par salarié × par type, réutilisant TEL QUEL getLeaveBalance() (déjà utilisé pour
  * l'affichage individuel dans renderEmployeeBalances, et pour la détection d'anomalies de paie dans
@@ -8037,12 +8137,23 @@ function renderPaginationControls(page, totalPages, pageStart, pageCount, total)
 // que silencieusement absents de l'écran. "Il ne faut pas qu'un client conclue que l'outil ne gère
 // pas les RTT" — une colonne manquante sans aucune explication était indiscernable d'une fonctionnalité
 // absente.
+/** §retour Betty du 19/09/2026 (point 6, "socle commun") : "un seul filtre, le service. Pas de
+ * filtre par établissement alors que l'application gère les établissements, pas de recherche" —
+ * etablissementId et la recherche par nom/matricule ajoutés au même point d'insertion que le filtre
+ * service existant (avant la construction des lignes). Le tri, lui, reste volontairement limité à
+ * "Salarié" (voir renderTableauCompteurs) : trier par un solde précis se heurterait à Infinity
+ * (compteur illimité, déjà exclu des totaux ci-dessous) sans bénéfice clair pour l'usage réel de cet
+ * écran. */
 function getTableauCompteursData() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
-  if (state.tableauCompteursFilters.service) employees = employees.filter(e => e.service === state.tableauCompteursFilters.service);
-  employees.sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`));
+  const filters = state.tableauCompteursFilters;
+  if (filters.service) employees = employees.filter(e => e.service === filters.service);
+  if (filters.etablissementId) employees = employees.filter(e => e.etablissementId === filters.etablissementId);
+  const term = normalizeForSearch(state.tableauCompteursSearch.trim());
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule}`).includes(term));
+  employees = sortListBy(employees, (e) => `${e.nom} ${e.prenom}`, state.tableauCompteursSortDir);
 
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveTypes = allLeaveTypes.filter(t => t.categorie === 'conge');
@@ -8128,26 +8239,43 @@ function renderTableauCompteursCell(b) {
 function renderTableauCompteurs() {
   const { leaveTypes, rows, periodInfoByType } = getTableauCompteursData();
   const { pageItems, totalPages, page, pageStart } = paginate(rows, 'tableauCompteursPage');
+  const filters = state.tableauCompteursFilters;
+  const activeCount = [state.tableauCompteursSearch, filters.service, filters.etablissementId].filter(Boolean).length;
+  const aUnFiltreActif = activeCount > 0;
 
   return `
     <div class="view-header">
       <h1>Tableau des compteurs</h1>
       <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ce qui s'acquiert sur la période en cours n'est jamais consommable avant sa propre clôture.</p>
     </div>
-    <div class="toolbar card">
+    <!-- §retour Betty du 19/09/2026 (point 6, "socle commun") : recherche + filtre établissement
+         ajoutés ("l'application gère les établissements", pas de raison qu'un seul écran l'ignore),
+         export Excel, et le repli mobile (toolbar-collapsible) qui manquait ici alors qu'il existe
+         déjà sur Salariés/Congés. -->
+    ${renderFilterToggleBar('tableau-compteurs-filters', activeCount, 'tableau-compteurs')}
+    <div class="toolbar card toolbar-collapsible" id="tableau-compteurs-filters">
+      <input type="text" id="tableau-compteurs-search" class="input" placeholder="Rechercher un salarié, un matricule..." value="${escapeHtml(state.tableauCompteursSearch)}">
+      <select id="filter-tableau-compteurs-etablissement" class="input">
+        <option value="">Tous les établissements</option>
+        ${etablissementRepository.getAll().map(e => `<option value="${e.id}" ${filters.etablissementId === e.id ? 'selected' : ''}>${escapeHtml(e.nom)}</option>`).join('')}
+      </select>
       <select id="filter-tableau-compteurs-service" class="input">
         <option value="">Tous les services</option>
-        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${state.tableauCompteursFilters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${filters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
       </select>
+      <button type="button" class="btn btn-secondary" id="btn-export-tableau-compteurs">Exporter Excel</button>
     </div>
     ${leaveTypes.length === 0 ? `<div class="card"><p class="text-muted">Aucun type de congé à afficher.</p></div>` : `
       <div class="card table-card">
-        ${rows.length === 0 ? renderEmptyState() : `
+        ${rows.length === 0 ? renderListEmptyState(
+            aUnFiltreActif ? 'Aucun salarié ne correspond à ces filtres.' : 'Aucun salarié actif pour l\'instant.',
+            'people'
+          ) : `
           <div style="overflow-x: auto;">
             <table class="table tc-table mobile-cards">
               <thead>
                 <tr>
-                  <th>Salarié</th>
+                  ${renderSortableHeader('Salarié', 'nom', 'tableauCompteursSortBy', 'tableauCompteursSortDir')}
                   ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}${renderTableauCompteursPeriodInfo(periodInfoByType.get(t.id))}</th>`).join('')}
                 </tr>
               </thead>
@@ -8182,16 +8310,48 @@ function renderTableauCompteurs() {
 }
 
 function bindTableauCompteursEvents() {
+  bindFilterToggleButtons();
+  const searchInput = document.getElementById('tableau-compteurs-search');
+  if (searchInput) searchInput.addEventListener('input', (e) => {
+    state.tableauCompteursSearch = e.target.value;
+    state.tableauCompteursPage = 1;
+    render();
+    const input = document.getElementById('tableau-compteurs-search');
+    input.focus();
+    input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
+  });
+  const etablissementFilter = document.getElementById('filter-tableau-compteurs-etablissement');
+  if (etablissementFilter) etablissementFilter.addEventListener('change', () => {
+    state.tableauCompteursFilters.etablissementId = etablissementFilter.value;
+    state.tableauCompteursPage = 1;
+    render();
+  });
   const serviceFilter = document.getElementById('filter-tableau-compteurs-service');
   if (serviceFilter) serviceFilter.addEventListener('change', () => {
     state.tableauCompteursFilters.service = serviceFilter.value;
     state.tableauCompteursPage = 1;
     render();
   });
+  const exportBtn = document.getElementById('btn-export-tableau-compteurs');
+  if (exportBtn) exportBtn.addEventListener('click', exportTableauCompteursExcel);
   const prevBtn = document.getElementById('btn-page-prev');
   if (prevBtn) prevBtn.addEventListener('click', () => { state.tableauCompteursPage--; render(); });
   const nextBtn = document.getElementById('btn-page-next');
   if (nextBtn) nextBtn.addEventListener('click', () => { state.tableauCompteursPage++; render(); });
+}
+
+/** Exporte exactement ce que l'écran affiche (filtres compris, pagination exclue) — un salarié à
+ * solde "Illimité" (Infinity) est exporté comme tel en texte, jamais une valeur numérique inventée. */
+function exportTableauCompteursExcel() {
+  const { leaveTypes, rows } = getTableauCompteursData();
+  const headers = ['Matricule', 'Salarié', 'Service', ...leaveTypes.map(t => t.nom)];
+  const excelRows = rows.map(row => [
+    row.employee.matricule, `${row.employee.prenom} ${row.employee.nom}`, row.employee.service,
+    ...row.balances.map(b => b.disponible === Infinity ? 'Illimité' : formatDurationFR(b.disponible))
+  ]);
+  const xml = buildExcelXmlWorkbook(headers, excelRows, 'Tableau des compteurs', { zebra: true });
+  downloadExcelXmlFile(xml, 'tableau-compteurs.xls');
+  auditLogRepository.logAudit('Export', 'Tableau des compteurs', `${rows.length} salarié${rows.length > 1 ? 's' : ''}`);
 }
 
 function renderEmployeeRow(e) {
@@ -9982,32 +10142,66 @@ function bindTicketDetailEvents() {
 // Vue : Entretiens annuels (§14 modules futurs, construit)
 // ---------------------------------------------------------------------------
 
+/** §retour Betty du 19/09/2026 (point 6, "socle commun") : Entretiens n'avait jusqu'ici ni filtre,
+ * ni recherche, ni pagination — "sur une campagne annuelle à deux cents salariés, cet écran devient
+ * inutilisable". showEmployee (RH/Propriétaire/manager) détermine si la recherche par salarié a un
+ * sens : un simple salarié ne voit que ses propres entretiens, chercher "un salarié" n'aurait aucun
+ * effet utile pour lui. */
+function getFilteredEntretiens(showEmployee) {
+  const user = authRepository.getCurrentUser();
+  let list = entretienRepository.getVisibleTo(user);
+  const filters = state.entretiensFilters;
+  list = applyStateFilters(list, filters, [['type', 'type'], ['statut', 'statut']]);
+  list = list.filter(e => matchesPeriodeFilter(e.datePrevue, filters.periode));
+
+  if (showEmployee) {
+    const term = normalizeForSearch(state.entretiensSearch.trim());
+    if (term) {
+      list = list.filter(e => {
+        const employee = employeeRepository.getById(e.employeeId);
+        return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+      });
+    }
+  }
+
+  return sortListBy(list, (e) => {
+    if (state.entretiensSortBy === 'employee') {
+      const employee = employeeRepository.getById(e.employeeId);
+      return employee ? `${employee.prenom} ${employee.nom}` : '';
+    }
+    if (state.entretiensSortBy === 'type') return ENTRETIEN_TYPE_LABELS[e.type] || e.type;
+    if (state.entretiensSortBy === 'statut') return ENTRETIEN_STATUT_LABELS[e.statut] || e.statut;
+    return e[state.entretiensSortBy] || '';
+  }, state.entretiensSortDir);
+}
+
 function renderEntretienRow(e, showEmployee) {
   const employee = showEmployee ? employeeRepository.getById(e.employeeId) : null;
   return `
-    <div class="mini-list-item ticket-row" data-open-entretien="${e.id}">
-      <span>
-        <span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[e.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[e.statut] || e.statut)}</span>
-        ${escapeHtml(ENTRETIEN_TYPE_LABELS[e.type] || e.type)}
-        ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
-      </span>
-      <span class="detail-header-actions">
-        <span class="text-muted">${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${escapeHtml(e.heurePrevue)}` : ''}</span>
-      </span>
-    </div>
+    <tr class="ticket-row" data-open-entretien="${e.id}">
+      ${showEmployee ? `<td class="row-title" data-label="Salarié">${employee ? personNameHtml(employee) : '—'}</td>` : ''}
+      <td data-label="Type">${escapeHtml(ENTRETIEN_TYPE_LABELS[e.type] || e.type)}</td>
+      <td data-label="Statut"><span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[e.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[e.statut] || e.statut)}</span></td>
+      <td data-label="Date prévue">${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${escapeHtml(e.heurePrevue)}` : ''}</td>
+    </tr>
   `;
 }
 
 function renderEntretiens() {
   const user = authRepository.getCurrentUser();
-  const entretiens = entretienRepository.getVisibleTo(user);
   const canPlan = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
+  const showEmployee = canPlan || user.role === ROLES.MANAGER;
+  const filters = state.entretiensFilters;
+  const filtered = getFilteredEntretiens(showEmployee);
+  const { pageItems, totalPages, page, pageStart } = paginate(filtered, 'entretiensPage');
+  const aUnFiltreActif = Boolean((showEmployee && state.entretiensSearch) || filters.type || filters.statut || filters.periode);
+  const activeCount = [showEmployee && state.entretiensSearch, filters.type, filters.statut, filters.periode].filter(Boolean).length;
 
   return `
     <div class="view-header view-header-row">
       <div>
         <h1>Entretiens</h1>
-        <p class="view-subtitle">${entretiens.length} entretien${entretiens.length > 1 ? 's' : ''}</p>
+        <p class="view-subtitle">${filtered.length} entretien${filtered.length > 1 ? 's' : ''}</p>
       </div>
       ${canPlan ? `<div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-gerer-trames-entretien">Trames</button>
@@ -10018,12 +10212,68 @@ function renderEntretiens() {
 
     ${canPlan ? renderCampagnesEntretienCard() : ''}
 
-    <div class="card">
-      <div id="entretiens-list">
-        ${entretiens.length === 0 ? '<p class="text-muted">Aucun entretien pour le moment.</p>' : entretiens.map(e => renderEntretienRow(e, canPlan || user.role === ROLES.MANAGER)).join('')}
-      </div>
+    ${renderFilterToggleBar('entretiens-filters', activeCount, 'entretiens')}
+    <div class="toolbar card toolbar-collapsible" id="entretiens-filters">
+      ${showEmployee ? `<input type="text" id="entretiens-search" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state.entretiensSearch)}">` : ''}
+      <select id="entretiens-filter-type" class="input">
+        <option value="">Tous les types</option>
+        ${Object.entries(ENTRETIEN_TYPE_LABELS).map(([key, label]) => `<option value="${key}" ${filters.type === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+      <select id="entretiens-filter-statut" class="input">
+        <option value="">Tous les statuts</option>
+        ${Object.entries(ENTRETIEN_STATUT_LABELS).map(([key, label]) => `<option value="${key}" ${filters.statut === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+      <input class="input" type="month" id="entretiens-filter-periode" value="${escapeHtml(filters.periode)}" title="Filtrer par mois de l'entretien prévu">
+      <button type="button" class="btn btn-secondary" id="btn-export-entretiens">Exporter Excel</button>
+    </div>
+
+    <div class="card table-card">
+      ${filtered.length === 0 ? renderListEmptyState(
+          aUnFiltreActif
+            ? 'Aucun entretien ne correspond à ces filtres.'
+            : `Aucun entretien pour le moment.${canPlan ? ' Utilisez le bouton "+ Planifier un entretien" ci-dessus pour créer le premier.' : ''}`,
+          'notepad'
+        ) : `
+        <table class="table mobile-cards">
+          <thead>
+            <tr>
+              ${showEmployee ? renderSortableHeader('Salarié', 'employee', 'entretiensSortBy', 'entretiensSortDir') : ''}
+              ${renderSortableHeader('Type', 'type', 'entretiensSortBy', 'entretiensSortDir')}
+              ${renderSortableHeader('Statut', 'statut', 'entretiensSortBy', 'entretiensSortDir')}
+              ${renderSortableHeader('Date prévue', 'datePrevue', 'entretiensSortBy', 'entretiensSortDir')}
+            </tr>
+          </thead>
+          <tbody>
+            ${pageItems.map(e => renderEntretienRow(e, showEmployee)).join('')}
+          </tbody>
+        </table>
+        ${renderPaginationControls(page, totalPages, pageStart, pageItems.length, filtered.length)}
+      `}
     </div>
   `;
+}
+
+/** Exporte exactement ce que l'écran affiche (filtres compris, pagination exclue) — même principe
+ * que exportEmployeesExcel (§règle de palette : bleu marine + or imposés par buildExcelXmlWorkbook,
+ * jamais une couleur par ligne/statut). */
+function exportEntretiensExcel() {
+  const user = authRepository.getCurrentUser();
+  const showEmployee = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || user.role === ROLES.MANAGER;
+  const filtered = getFilteredEntretiens(showEmployee);
+  const headers = [...(showEmployee ? ['Salarié'] : []), 'Type', 'Statut', 'Date prévue', 'Heure prévue'];
+  const rows = filtered.map(e => {
+    const employee = showEmployee ? employeeRepository.getById(e.employeeId) : null;
+    return [
+      ...(showEmployee ? [employee ? `${employee.prenom} ${employee.nom}` : '—'] : []),
+      ENTRETIEN_TYPE_LABELS[e.type] || e.type,
+      ENTRETIEN_STATUT_LABELS[e.statut] || e.statut,
+      formatDate(e.datePrevue),
+      e.heurePrevue || ''
+    ];
+  });
+  const xml = buildExcelXmlWorkbook(headers, rows, 'Entretiens', { zebra: true });
+  downloadExcelXmlFile(xml, 'entretiens.xls');
+  auditLogRepository.logAudit('Export', 'Entretiens', `${filtered.length} entretien${filtered.length > 1 ? 's' : ''}`);
 }
 
 /** §retour Betty du 14/09/2026 (Entretiens point 2, "gestion de campagne") : progression (X/Y
@@ -10054,6 +10304,40 @@ function bindEntretiensEvents() {
   if (tramesBtn) tramesBtn.addEventListener('click', openGererTramesModal);
   const campagneBtn = document.getElementById('btn-lancer-campagne-entretien');
   if (campagneBtn) campagneBtn.addEventListener('click', openLancerCampagneModal);
+
+  // §retour Betty du 19/09/2026 (point 6, "socle commun") : recherche/filtres/pagination/export —
+  // le tri par colonne, lui, n'a besoin d'AUCUN binding ici (délégation globale, voir
+  // bindSortableHeadersGlobalDelegation dans bindGlobalEvents).
+  bindFilterToggleButtons();
+  const searchInput = document.getElementById('entretiens-search');
+  if (searchInput) searchInput.addEventListener('input', (e) => {
+    state.entretiensSearch = e.target.value;
+    state.entretiensPage = 1;
+    render();
+    const input = document.getElementById('entretiens-search');
+    input.focus();
+    input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
+  });
+  document.getElementById('entretiens-filter-type').addEventListener('change', (e) => {
+    state.entretiensFilters.type = e.target.value;
+    state.entretiensPage = 1;
+    render();
+  });
+  document.getElementById('entretiens-filter-statut').addEventListener('change', (e) => {
+    state.entretiensFilters.statut = e.target.value;
+    state.entretiensPage = 1;
+    render();
+  });
+  document.getElementById('entretiens-filter-periode').addEventListener('change', (e) => {
+    state.entretiensFilters.periode = e.target.value;
+    state.entretiensPage = 1;
+    render();
+  });
+  document.getElementById('btn-export-entretiens').addEventListener('click', exportEntretiensExcel);
+  const prevBtn = document.getElementById('btn-page-prev');
+  if (prevBtn) prevBtn.addEventListener('click', () => { state.entretiensPage -= 1; render(); });
+  const nextBtn = document.getElementById('btn-page-next');
+  if (nextBtn) nextBtn.addEventListener('click', () => { state.entretiensPage += 1; render(); });
   // §retour Betty du 14/09/2026 (Entretiens point 2, "relancer automatiquement les retardataires") :
   // syncNotifications() régénère déjà ses candidats à chaque connexion depuis l'état réel (entretien
   // "à planifier" avec une date dépassée) — ce bouton se contente de les mettre en évidence ici,
@@ -12994,16 +13278,11 @@ function getFilteredLeaveRequests(categorie = 'conge') {
     return type && type.categorie === categorie;
   });
   const filtered = applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
-  if (!filters.periode) return filtered;
-  // §retour Betty du 19/09/2026 (blocage 5.3, "aucun filtre par période dans les congés") : une
-  // demande est une PLAGE [dateDebut, dateFin], contrairement à une note de frais (une seule date,
-  // simple startsWith — voir getFilteredExpenses). "Appartenir" au mois choisi veut dire le
-  // CHEVAUCHER, pas y être strictement contenue : une demande du 28/08 au 03/09 doit apparaître si on
-  // filtre sur septembre, même si elle a commencé en août.
-  const [year, month] = filters.periode.split('-').map(Number);
-  const debutMois = `${filters.periode}-01`;
-  const finMois = toISODate(new Date(year, month, 0));
-  return filtered.filter(r => r.dateDebut <= finMois && r.dateFin >= debutMois);
+  // §retour Betty du 19/09/2026 (blocage 5.3, puis socle commun point 6) : matchesPeriodeFilter
+  // gère elle-même le CHEVAUCHEMENT d'une plage [dateDebut, dateFin] — une demande est une plage,
+  // contrairement à une note de frais (une seule date, voir getFilteredExpenses) : une demande du
+  // 28/08 au 03/09 doit apparaître si on filtre sur septembre, même commencée en août.
+  return filtered.filter(r => matchesPeriodeFilter([r.dateDebut, r.dateFin], filters.periode));
 }
 
 // §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
@@ -15273,7 +15552,9 @@ const FILTER_RESET_HANDLERS = {
   'autres-absences': () => { state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.autresAbsencesPage = 1; },
   teletravail: () => { state.teletravailFilters = { employeeId: '', statut: '' }; state.teletravailPage = 1; },
   frais: () => { state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' }; state.fraisPage = 1; },
-  organigramme: () => { state.organigrammeFilters = { search: '', etablissementId: '', service: '', equipe: '' }; }
+  organigramme: () => { state.organigrammeFilters = { search: '', etablissementId: '', service: '', equipe: '' }; },
+  entretiens: () => { state.entretiensSearch = ''; state.entretiensFilters = { type: '', statut: '', periode: '' }; state.entretiensPage = 1; },
+  'tableau-compteurs': () => { state.tableauCompteursSearch = ''; state.tableauCompteursFilters = { service: '', etablissementId: '' }; state.tableauCompteursPage = 1; }
 };
 
 function bindResetFiltersButtons() {
@@ -22169,8 +22450,9 @@ function hydrationWindowCutoffDateISO() {
 function getFilteredExpenses() {
   const filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
     [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
-  const periode = state.fraisFilters.periode;
-  return periode ? filtered.filter(n => (n.date || '').startsWith(periode)) : filtered;
+  // §retour Betty du 19/09/2026 (socle commun, point 6) : matchesPeriodeFilter (une seule
+  // implémentation, désormais partagée avec Congés/Entretiens) plutôt qu'un startsWith réécrit ici.
+  return filtered.filter(n => matchesPeriodeFilter(n.date, state.fraisFilters.periode));
 }
 
 function renderFrais() {

@@ -120,6 +120,7 @@ globalThis.__parsePosteGenre = parsePosteGenre;
 globalThis.__getPosteAccorde = getPosteAccorde;
 globalThis.__ensurePostesGenresBackfilled = ensurePostesGenresBackfilled;
 globalThis.__ensureContratsTermineDateDepartAutoDeduite = ensureContratsTermineDateDepartAutoDeduite;
+globalThis.__ROLES = ROLES;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -183,6 +184,15 @@ globalThis.__isManagerOfEmployee = isManagerOfEmployee;
 globalThis.__getCalendarDayInfo = getCalendarDayInfo;
 globalThis.__buildCalendarSharedData = buildCalendarSharedData;
 globalThis.__getTableauCompteursData = getTableauCompteursData;
+globalThis.__renderTableauCompteurs = renderTableauCompteurs;
+globalThis.__exportTableauCompteursExcel = exportTableauCompteursExcel;
+globalThis.__renderListEmptyState = renderListEmptyState;
+globalThis.__matchesPeriodeFilter = matchesPeriodeFilter;
+globalThis.__sortListBy = sortListBy;
+globalThis.__renderSortableHeader = renderSortableHeader;
+globalThis.__bindSortableHeadersGlobalDelegation = bindSortableHeadersGlobalDelegation;
+globalThis.__getFilteredEntretiens = getFilteredEntretiens;
+globalThis.__exportEntretiensExcel = exportEntretiensExcel;
 globalThis.__getPaieAnomalies = getPaieAnomalies;
 globalThis.__getPaieRows = getPaieRows;
 globalThis.__getExpensePayableMonthKey = getExpensePayableMonthKey;
@@ -491,6 +501,15 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getCalendarDayInfo: sandbox.__getCalendarDayInfo,
     buildCalendarSharedData: sandbox.__buildCalendarSharedData,
     getTableauCompteursData: sandbox.__getTableauCompteursData,
+    renderTableauCompteurs: sandbox.__renderTableauCompteurs,
+    exportTableauCompteursExcel: sandbox.__exportTableauCompteursExcel,
+    renderListEmptyState: sandbox.__renderListEmptyState,
+    matchesPeriodeFilter: sandbox.__matchesPeriodeFilter,
+    sortListBy: sandbox.__sortListBy,
+    renderSortableHeader: sandbox.__renderSortableHeader,
+    bindSortableHeadersGlobalDelegation: sandbox.__bindSortableHeadersGlobalDelegation,
+    getFilteredEntretiens: sandbox.__getFilteredEntretiens,
+    exportEntretiensExcel: sandbox.__exportEntretiensExcel,
     getPaieAnomalies: sandbox.__getPaieAnomalies,
     getPaieRows: sandbox.__getPaieRows,
     getExpensePayableMonthKey: sandbox.__getExpensePayableMonthKey,
@@ -678,6 +697,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getPosteAccorde: sandbox.__getPosteAccorde,
     ensurePostesGenresBackfilled: sandbox.__ensurePostesGenresBackfilled,
     ensureContratsTermineDateDepartAutoDeduite: sandbox.__ensureContratsTermineDateDepartAutoDeduite,
+    ROLES: sandbox.__ROLES,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,

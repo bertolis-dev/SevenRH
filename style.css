@@ -920,9 +920,14 @@ p { margin: 0; line-height: 1.5; }
   color: var(--color-text-muted);
   padding: 16px 22px;
   border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-  user-select: none;
 }
+
+/* §retour Betty du 19/09/2026 (point 6, "socle commun") : le curseur "cliquable" s'affichait jusqu'ici
+   sur TOUS les <th> (ci-dessus), y compris des colonnes qui ne trient rien (ex. "Ancienneté" sur
+   Salariés) — trompeur. Restreint au sélecteur [data-sort] : couvre à la fois l'ancien tri de
+   Salariés (data-sort seul, son propre binding séparé) et le nouveau socle (renderSortableHeader,
+   bindSortableHeadersGlobalDelegation), sans avoir à toucher au HTML déjà existant de Salariés. */
+.table th[data-sort] { cursor: pointer; user-select: none; }
 
 .table td {
   padding: 16px 22px;
