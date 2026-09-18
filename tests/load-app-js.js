@@ -119,6 +119,7 @@ globalThis.__makeEmptyEmployee = makeEmptyEmployee;
 globalThis.__parsePosteGenre = parsePosteGenre;
 globalThis.__getPosteAccorde = getPosteAccorde;
 globalThis.__ensurePostesGenresBackfilled = ensurePostesGenresBackfilled;
+globalThis.__ensureContratsTermineDateDepartAutoDeduite = ensureContratsTermineDateDepartAutoDeduite;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -670,6 +671,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     parsePosteGenre: sandbox.__parsePosteGenre,
     getPosteAccorde: sandbox.__getPosteAccorde,
     ensurePostesGenresBackfilled: sandbox.__ensurePostesGenresBackfilled,
+    ensureContratsTermineDateDepartAutoDeduite: sandbox.__ensureContratsTermineDateDepartAutoDeduite,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,

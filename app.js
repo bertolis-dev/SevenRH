@@ -7098,6 +7098,23 @@ function getDataQualityIssues() {
   const cddSansFin = employees.filter(e => (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') && !e.dateFinContrat);
   if (cddSansFin.length) issues.push({ severity: 'error', label: 'CDD/Intérim sans date de fin de contrat', employees: cddSansFin });
 
+  // §retour Betty du 19/09/2026 (point 1.1) : filet de sécurité, en plus du report automatique
+  // (ensureContratsTermineDateDepartAutoDeduite, data.js, qui tourne à chaque connexion d'un RH/
+  // Propriétaire) — ce cas ne devrait donc quasiment jamais s'afficher en pratique ; s'il apparaît,
+  // c'est que le report n'a pas encore eu lieu (import de données, ou personne avec le droit de
+  // modifier les salariés qui ne s'est pas encore connectée depuis).
+  const finContratSansDepart = employees.filter(e =>
+    (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim' || e.typeContrat === 'Stage') &&
+    e.dateFinContrat && e.dateFinContrat <= toISODate(new Date()) && !e.dateDepart);
+  if (finContratSansDepart.length) issues.push({ severity: 'error', label: 'Date de fin de contrat dépassée sans date de départ (salarié compté présent à tort)', employees: finContratSansDepart });
+
+  // Report automatique effectué (voir ci-dessus) mais pas encore relu par un humain (voir
+  // submitEmployeeForm, qui efface ce marqueur au premier réenregistrement de la fiche) — signalé
+  // séparément du cas ci-dessus, moins grave (la date est déjà correcte dans l'immense majorité des
+  // cas) mais à vérifier si le contrat a en réalité été renouvelé.
+  const departAutoDeduitAVerifier = employees.filter(e => e.departAutoDeduit);
+  if (departAutoDeduitAVerifier.length) issues.push({ severity: 'warning', label: 'Date de départ déduite automatiquement de la fin de contrat, à vérifier', employees: departAutoDeduitAVerifier });
+
   const allById = new Map(allEmployees.map(e => [e.id, e]));
   const managerOrphelin = employees.filter(e => (e.managerIds || []).some(mid => {
     const m = allById.get(mid);
@@ -25338,7 +25355,6 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                 <input class="input" type="date" id="f-dateEmbauche" name="dateEmbauche" value="${escapeHtml(employee.dateEmbauche || '')}" required data-live-anciennete="true">
                 <span class="field-hint-computed" id="f-dateEmbauche-anciennete"></span>
               </div>
-              ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date')}
               ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
               ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
               ${selectField('suiviMedicalType', 'Type de suivi médical', null, employee.suiviMedicalType || 'simple', Object.entries(SUIVI_MEDICAL_RULES).map(([key, r]) => ({ value: key, label: r.label })))}
@@ -25406,8 +25422,29 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             <legend>Statut</legend>
             <div class="form-grid">
               ${selectField('statut', 'Statut', ['Actif', 'Inactif'], employee.statut)}
-              ${textField('dateDepart', 'Date de départ', employee.dateDepart, false, 'date')}
             </div>
+            <!-- §retour Betty du 19/09/2026 (point 1.1) : les deux dates réunies dans le même bloc,
+                 après avoir constaté qu'un CDD terminé sans "date de départ" saisie (réflexe naturel :
+                 seule la "date de fin de contrat", dans un AUTRE onglet, était remplie) restait compté
+                 présent indéfiniment — SEULE dateDepart retire un salarié du planning/paie/tickets
+                 restaurant/effectif légal (voir isEmployedDuringPeriod, getEffectifActifAt), jamais
+                 dateFinContrat à elle seule. Voir aussi ensureContratsTermineDateDepartAutoDeduite
+                 (data.js, reporte automatiquement à la connexion) et getDataQualityIssues (alerte
+                 tant que ce n'est pas fait). -->
+            <p class="form-subsection-title">Fin de contrat</p>
+            <div class="form-grid">
+              ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date', undefined, 'Date PRÉVUE au contrat (CDD, intérim, stage) — jamais la date de sortie réelle. Seule, elle ne retire le salarié de rien : ni planning, ni paie, ni effectif.')}
+              ${textField('dateDepart', 'Date de départ', employee.dateDepart, false, 'date', undefined, 'Date de SORTIE RÉELLE, pour tout type de contrat, CDI compris. C\'est cette date, et elle seule, qui retire le salarié du planning, de la paie, des tickets restaurant et de l\'effectif légal (seuils à 11/50/250 salariés).')}
+            </div>
+            <p class="field-warning ${employee.dateFinContrat && employee.dateFinContrat <= toISODate(new Date()) && !employee.dateDepart ? 'visible' : ''}" id="fin-contrat-sans-depart-warning">
+              ${icon(ICONS.warningTriangle, 13)} Date de fin de contrat passée sans date de départ : ce salarié est peut-être encore compté présent alors qu'il ne devrait plus l'être.
+              <button type="button" class="btn-link" id="btn-reporter-date-depart">Reporter cette date sur le départ</button>
+            </p>
+            ${employee.departAutoDeduit ? `
+              <div class="form-hint-block">
+                ${icon(ICONS.info, 13)} Cette date de départ a été déduite automatiquement de la fin de contrat (contrat arrivé à échéance). Si le contrat a en réalité été renouvelé, effacez-la et mettez à jour le type/la date de fin de contrat ci-dessus avant d'enregistrer : enregistrer la fiche telle quelle confirmera ce départ.
+              </div>
+            ` : ''}
             <p class="text-muted" id="indemnite-compensatrice-hint" style="margin-top: 8px;"></p>
           </fieldset>
 
@@ -25450,6 +25487,35 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   };
   dateDepartInput.addEventListener('change', updateIndemniteHint);
   updateIndemniteHint();
+
+  bindFinContratFields();
+}
+
+/** §retour Betty du 19/09/2026 (point 1.1) : tient à jour l'avertissement "fin de contrat passée
+ * sans date de départ" en direct pendant la saisie (pas seulement au chargement de la fiche, sinon
+ * corriger l'un des deux champs laisserait l'avertissement affiché ou caché à tort jusqu'au prochain
+ * enregistrement). Le bouton "Reporter cette date sur le départ" ne fait que copier la valeur déjà
+ * saisie dans le champ visible — l'enregistrement effectif reste le clic sur "Enregistrer", comme
+ * pour toute autre modification du formulaire. */
+function bindFinContratFields() {
+  const dateFinContratInput = document.getElementById('f-dateFinContrat');
+  const dateDepartInput = document.getElementById('f-dateDepart');
+  const warning = document.getElementById('fin-contrat-sans-depart-warning');
+  if (!dateFinContratInput || !dateDepartInput || !warning) return;
+
+  const updateWarning = () => {
+    const concerne = dateFinContratInput.value && dateFinContratInput.value <= toISODate(new Date()) && !dateDepartInput.value;
+    warning.classList.toggle('visible', concerne);
+  };
+  dateFinContratInput.addEventListener('input', updateWarning);
+  dateDepartInput.addEventListener('input', updateWarning);
+
+  const reporterBtn = document.getElementById('btn-reporter-date-depart');
+  if (reporterBtn) reporterBtn.addEventListener('click', () => {
+    dateDepartInput.value = dateFinContratInput.value;
+    dateDepartInput.dispatchEvent(new Event('change', { bubbles: true })); // recalcule l'indemnité compensatrice (voir updateIndemniteHint ci-dessus)
+    updateWarning();
+  });
 }
 
 /** §retour Betty du 18/09/2026 (point 3, "régime RTT structuré") : remplace l'ancien champ libre
@@ -25860,6 +25926,13 @@ function submitEmployeeForm(evt, id, candidatureId) {
   }
 
   if (id) {
+    // §retour Betty du 19/09/2026 (point 1.1) : réenregistrer la fiche vaut relecture humaine du
+    // report automatique de dateDepart depuis dateFinContrat (voir ensureContratsTermineDateDepartAutoDeduite,
+    // data.js) — que ce report soit confirmé (la fiche est enregistrée telle quelle) ou corrigé (la
+    // personne a effacé la date de départ après avoir constaté un renouvellement). Dans les deux cas,
+    // l'avertissement ("à vérifier", voir getDataQualityIssues) n'a plus lieu d'être une fois la
+    // fiche relue et réenregistrée.
+    patch.departAutoDeduit = false;
     // §retour Betty du 18/09/2026 (point 8) : capturé AVANT update, sinon plus aucun moyen de savoir
     // si cette date de départ vient d'être renseignée (par opposition à déjà présente, resaisie
     // sans changement) une fois le patch appliqué.

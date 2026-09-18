@@ -777,6 +777,7 @@ async function hydrateCurrentCompanyWithMigrations() {
     await ensureVisitesMedicalesMigreesVersServeur(company, currentUser);
     await ensureCiviliteSexeMigresVersServeur(company, currentUser);
     await ensurePostesGenresBackfilled(company, currentUser);
+    await ensureContratsTermineDateDepartAutoDeduite(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -1001,6 +1002,50 @@ async function ensurePostesGenresBackfilled(company, currentUser) {
     await window.SupabaseSync.pushSettings(company.id, settings);
   } catch (err) {
     console.error('ensurePostesGenresBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** §retour Betty du 19/09/2026 (point 1.1, "date de départ et date de fin de contrat") : SEULE
+ * dateDepart retire un salarié des effectifs/planning/paie/tickets restaurant (voir
+ * isEmployedDuringPeriod/getEffectifActifAt, app.js) — dateFinContrat ne servait jusqu'ici qu'à
+ * l'affichage et aux alertes, jamais reportée sur dateDepart. Un CDD/Intérim/Stage arrivé à échéance
+ * sans dateDepart saisie restait donc compté présent indéfiniment (cas réel constaté : un an après
+ * la fin du contrat). Reporte automatiquement dateFinContrat sur dateDepart dès que cette date est
+ * ATTEINTE (jamais avant : un contrat dont la fin est encore à venir ne doit pas être marqué comme
+ * parti par anticipation), et pose departAutoDeduit=true pour que ce report reste signalé (voir
+ * getDataQualityIssues) jusqu'à relecture humaine — le contrat a pu en réalité être renouvelé, ce
+ * qui rendrait ce report faux. Même conception que les migrations ci-dessus (aucun drapeau de
+ * complétude : recalcule l'écart réel à chaque connexion, réservée à MODIFIER_SALARIE), sauf qu'elle
+ * trace aussi une entrée d'audit (contrairement aux simples reformatages ci-dessus, celle-ci change
+ * un fait métier réel — la date de sortie effective d'un salarié). */
+async function ensureContratsTermineDateDepartAutoDeduite(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.MODIFIER_SALARIE)) return;
+  const today = toISODate(new Date());
+  const modified = [];
+  (company.employees || []).forEach(e => {
+    const concerne = !e.archive && e.statut === 'Actif' &&
+      (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim' || e.typeContrat === 'Stage') &&
+      e.dateFinContrat && e.dateFinContrat <= today && !e.dateDepart;
+    if (!concerne) return;
+    e.dateDepart = e.dateFinContrat;
+    e.departAutoDeduit = true;
+    modified.push(e);
+  });
+  if (!modified.length) return;
+  // this.logAudit est hors de portée ici : cette fonction tourne AVANT que l'appelant ne remplace
+  // this._companiesCache par `company` (voir hydrateCurrentCompanyWithMigrations et ses propres
+  // appelants) — this.logAudit chercherait `company` dans un cache qui ne le contient pas encore.
+  // appendAuditLogEntry (import direct, prend `company` en paramètre) fait la même chose sans ce
+  // besoin. auteur = "Système" plutôt que currentUser : personne n'a réellement pris cette décision,
+  // ce serait mentir sur qui a fait quoi dans le journal.
+  const entries = modified.map(e => appendAuditLogEntry(company, 'Modification', 'Salarié', `${e.prenom} ${e.nom}`,
+    `Date de départ déduite automatiquement de la fin de contrat (${formatDate(e.dateFinContrat)}) — si le contrat a en réalité été renouvelé, effacez cette date de départ et mettez à jour le type/la date de fin de contrat.`,
+    'Système (report automatique)'));
+  try {
+    await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
+    await Promise.all(entries.map(entry => window.SupabaseSync.pushAuditLogEntry(entry, company.id)));
+  } catch (err) {
+    console.error('ensureContratsTermineDateDepartAutoDeduite : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -5402,6 +5447,15 @@ function makeEmptyEmployee() {
 
     statut: 'Actif',
     dateDepart: '',
+    // §retour Betty du 19/09/2026 (point 1.1, "date de départ et date de fin de contrat") : posé par
+    // ensureContratsTermineDateDepartAutoDeduite (data.js) quand dateDepart vient d'être déduite
+    // automatiquement de dateFinContrat (contrat CDD/Intérim/Stage arrivé à échéance sans départ
+    // saisi) — jamais par une saisie manuelle. Efface au premier enregistrement de la fiche via le
+    // formulaire (submitEmployeeForm, app.js) : rouvrir/réenregistrer la fiche vaut relecture humaine
+    // du report automatique, que le report soit correct (contrat bien terminé) ou faux (contrat en
+    // réalité renouvelé, à corriger avant de renregistrer). Voir getDataQualityIssues (app.js) pour
+    // l'alerte tant que ce n'est pas fait.
+    departAutoDeduit: false,
     archive: false,
     // §retour Betty du 11/09/2026 (point 4.3) : posé par anonymize_departed_employees() côté
     // serveur (0049_retention_anonymisation.sql), jamais par le client — juste lu ici pour adapter
