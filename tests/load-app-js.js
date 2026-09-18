@@ -251,6 +251,8 @@ globalThis.__applyThemePreference = applyThemePreference;
 globalThis.__performGlobalSearch = performGlobalSearch;
 globalThis.__getGlobalCommands = getGlobalCommands;
 globalThis.__renderCongesDemandes = renderCongesDemandes;
+globalThis.__renderCongesTypes = renderCongesTypes;
+globalThis.__bindCongesTypesEvents = bindCongesTypesEvents;
 globalThis.__bulkSelection = bulkSelection;
 globalThis.__renderCalendrier = renderCalendrier;
 globalThis.__renderCalendarCell = renderCalendarCell;
@@ -333,6 +335,9 @@ globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
 globalThis.__guessAbsencesColumnMapping = guessAbsencesColumnMapping;
 globalThis.__buildAbsencesPreviewRows = buildAbsencesPreviewRows;
 globalThis.__importAbsencesRows = importAbsencesRows;
+globalThis.__employeeFieldForRequest = employeeFieldForRequest;
+globalThis.__buildAbsencesImportTemplateWorkbook = buildAbsencesImportTemplateWorkbook;
+globalThis.__buildMultiSheetExcelXmlWorkbook = buildMultiSheetExcelXmlWorkbook;
 globalThis.__computeWorkingDays = computeWorkingDays;
 globalThis.__buildCreneauPropose = buildCreneauPropose;
 globalThis.__EVALUATION_CANDIDATURE_CRITERES = EVALUATION_CANDIDATURE_CRITERES;
@@ -341,6 +346,10 @@ globalThis.__computeEvaluationMoyenne = computeEvaluationMoyenne;
 globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
 globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
 globalThis.__buildExcelXmlWorkbook = buildExcelXmlWorkbook;
+globalThis.__downloadExcelXmlFile = downloadExcelXmlFile;
+globalThis.__exportRowsToCSVWithDelimiter = exportRowsToCSVWithDelimiter;
+globalThis.__exportLeaveRequestsCSV = exportLeaveRequestsCSV;
+globalThis.__exportExpensesCSV = exportExpensesCSV;
 globalThis.__buildCalendarExcelXmlWorkbook = buildCalendarExcelXmlWorkbook;
 globalThis.__excelColumnWidths = excelColumnWidths;
 globalThis.__excelXmlCell = excelXmlCell;
@@ -519,6 +528,8 @@ globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
     performGlobalSearch: sandbox.__performGlobalSearch,
     getGlobalCommands: sandbox.__getGlobalCommands,
     renderCongesDemandes: sandbox.__renderCongesDemandes,
+    renderCongesTypes: sandbox.__renderCongesTypes,
+    bindCongesTypesEvents: sandbox.__bindCongesTypesEvents,
     bulkSelection: sandbox.__bulkSelection,
     renderCalendrier: sandbox.__renderCalendrier,
     renderCalendarCell: sandbox.__renderCalendarCell,
@@ -601,6 +612,9 @@ globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
     guessAbsencesColumnMapping: sandbox.__guessAbsencesColumnMapping,
     buildAbsencesPreviewRows: sandbox.__buildAbsencesPreviewRows,
     importAbsencesRows: sandbox.__importAbsencesRows,
+    employeeFieldForRequest: sandbox.__employeeFieldForRequest,
+    buildAbsencesImportTemplateWorkbook: sandbox.__buildAbsencesImportTemplateWorkbook,
+    buildMultiSheetExcelXmlWorkbook: sandbox.__buildMultiSheetExcelXmlWorkbook,
     computeWorkingDays: sandbox.__computeWorkingDays,
     buildCreneauPropose: sandbox.__buildCreneauPropose,
     EVALUATION_CANDIDATURE_CRITERES: sandbox.__EVALUATION_CANDIDATURE_CRITERES,
@@ -621,6 +635,10 @@ globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
     renderExportPaiePreparationTab: sandbox.__renderExportPaiePreparationTab,
     renderExportPaieExportTab: sandbox.__renderExportPaieExportTab,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
+    downloadExcelXmlFile: sandbox.__downloadExcelXmlFile,
+    exportRowsToCSVWithDelimiter: sandbox.__exportRowsToCSVWithDelimiter,
+    exportLeaveRequestsCSV: sandbox.__exportLeaveRequestsCSV,
+    exportExpensesCSV: sandbox.__exportExpensesCSV,
     buildCalendarExcelXmlWorkbook: sandbox.__buildCalendarExcelXmlWorkbook,
     excelColumnWidths: sandbox.__excelColumnWidths,
     excelXmlCell: sandbox.__excelXmlCell,

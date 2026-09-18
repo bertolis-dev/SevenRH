@@ -8155,8 +8155,16 @@ function guessAbsencesColumnMapping(headers, leaveTypes) {
   const typeAliases = ['type', 'type de conge', 'type de congé', "type d'absence"];
   const dateDebutAliases = ['date debut', 'date début', 'debut', 'début', 'date de debut', 'date de début'];
   const dateFinAliases = ['date fin', 'fin', 'date de fin'];
+  // §retour Betty du 18/09/2026 (import historique, point 1) : deux colonnes plutôt qu'une, pour
+  // couvrir à la fois un jour unique (une seule des deux sera renseignée, voir buildAbsencesPreviewRows)
+  // et une demande de plusieurs jours qui commence et/ou finit sur une demi-journée (ex. Véronique
+  // BORGE, du 02/10 après-midi au 07/10 matin = 3,5 jours) — même vocabulaire que le formulaire
+  // manuel (openLeaveRequestModal : "Après-midi seulement" au premier jour, "Matin seulement" au
+  // dernier), jamais un texte libre.
+  const demiJourneeDebutAliases = ['demi-journee debut', 'demi journee debut', 'demi-journée début', 'demi journée début', 'demi journee de debut'];
+  const demiJourneeFinAliases = ['demi-journee fin', 'demi journee fin', 'demi-journée fin', 'demi journée fin', 'demi journee de fin'];
   const commentaireAliases = ['commentaire', 'motif', 'note', 'notes'];
-  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, commentaire: undefined };
+  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, demiJourneeDebut: undefined, demiJourneeFin: undefined, commentaire: undefined };
   headers.forEach((h, i) => {
     const norm = normalizeForSearch(h);
     if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].some(a => normalizeForSearch(a) === norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
@@ -8164,6 +8172,8 @@ function guessAbsencesColumnMapping(headers, leaveTypes) {
     if (mapping.type === undefined && typeAliases.some(a => normalizeForSearch(a) === norm)) { mapping.type = i; return; }
     if (mapping.dateDebut === undefined && dateDebutAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateDebut = i; return; }
     if (mapping.dateFin === undefined && dateFinAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateFin = i; return; }
+    if (mapping.demiJourneeDebut === undefined && demiJourneeDebutAliases.some(a => normalizeForSearch(a) === norm)) { mapping.demiJourneeDebut = i; return; }
+    if (mapping.demiJourneeFin === undefined && demiJourneeFinAliases.some(a => normalizeForSearch(a) === norm)) { mapping.demiJourneeFin = i; return; }
     if (mapping.commentaire === undefined && commentaireAliases.some(a => normalizeForSearch(a) === norm)) { mapping.commentaire = i; return; }
   });
   return mapping;
@@ -8190,6 +8200,18 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     const norm = normalizeForSearch(value);
     return leaveTypes.find(t => normalizeForSearch(t.nom) === norm) || null;
   };
+  // §retour Betty du 18/09/2026 (import historique, point 1) : seules deux valeurs ont un sens (voir
+  // le commentaire de guessAbsencesColumnMapping) — n'importe quel autre texte est une vraie erreur
+  // de saisie, jamais silencieusement ignoré (c'est précisément ce qui produirait les 10,5 jours en
+  // trop signalés : une case mal remplie qui repasse en journée complète sans avertir personne).
+  const parseDemiJourneeDebut = (value) => {
+    if (!value) return null;
+    return normalizeForSearch(value) === normalizeForSearch('Après-midi') ? 'apres-midi' : 'invalide';
+  };
+  const parseDemiJourneeFin = (value) => {
+    if (!value) return null;
+    return normalizeForSearch(value) === normalizeForSearch('Matin') ? 'matin' : 'invalide';
+  };
   return dataRows.map((cells, i) => {
     const get = (index) => (index !== undefined ? (cells[index] || '').trim() : '');
     const idValue = get(mapping.identifiant && mapping.identifiant.index);
@@ -8205,7 +8227,12 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     const dateFinParsed = parseImportDate(dateFinRaw);
     const dateFin = dateFinRaw ? dateFinParsed : dateDebut;
     const commentaire = get(mapping.commentaire);
+    const demiDebutRaw = get(mapping.demiJourneeDebut);
+    const demiFinRaw = get(mapping.demiJourneeFin);
+    const demiDebutParsed = parseDemiJourneeDebut(demiDebutRaw);
+    const demiFinParsed = parseDemiJourneeFin(demiFinRaw);
     let status = 'ok', message = '', nbJours = 0;
+    let demiJournee = null, demiJourneeDebut = null, demiJourneeFin = null;
     if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
     else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
     else if (!typeValue) { status = 'error'; message = 'Type de congé manquant.'; }
@@ -8214,8 +8241,21 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     else if (dateFinRaw && !dateFinParsed) { status = 'error'; message = 'Date de fin invalide (format non reconnu).'; }
     else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
     else if (dateFin < dateDebut) { status = 'error'; message = 'La date de fin est avant la date de début.'; }
+    else if (demiDebutParsed === 'invalide') { status = 'error'; message = `Demi-journée début "${demiDebutRaw}" non reconnue (seule valeur acceptée : "Après-midi", sinon laisser vide).`; }
+    else if (demiFinParsed === 'invalide') { status = 'error'; message = `Demi-journée fin "${demiFinRaw}" non reconnue (seule valeur acceptée : "Matin", sinon laisser vide).`; }
+    else if (dateDebut === dateFin && demiDebutParsed && demiFinParsed) { status = 'error'; message = 'Sur un seul jour, ne renseignez qu\'une seule des deux colonnes demi-journée (début OU fin), jamais les deux.'; }
     else {
-      nbJours = computeWorkingDays(dateDebut, dateFin, false, employee, settings, type.uniteDecompte);
+      // Jour unique : la case remplie (début OU fin, jamais les deux, voir juste au-dessus) donne
+      // directement la demi-journée du seul jour concerné — même champ que la saisie manuelle
+      // (demiJournee). Plusieurs jours : chaque case reste indépendante (demiJourneeDebut/Fin),
+      // exactement le cas Véronique BORGE (après-midi au premier jour ET matin au dernier).
+      if (dateDebut === dateFin) {
+        demiJournee = demiDebutParsed === 'apres-midi' ? 'apres-midi' : (demiFinParsed === 'matin' ? 'matin' : null);
+      } else {
+        demiJourneeDebut = demiDebutParsed === 'apres-midi' ? 'apres-midi' : null;
+        demiJourneeFin = demiFinParsed === 'matin' ? 'matin' : null;
+      }
+      nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settings, type.uniteDecompte, demiJourneeDebut, demiJourneeFin);
       if (!nbJours) { status = 'error'; message = 'Aucun jour ouvré sur cette période (jours fériés/week-end uniquement).'; }
       else if (hasActiveRequestOverlap(existingActive, employee.id, dateDebut, dateFin) || hasActiveRequestOverlap(acceptedInFile, employee.id, dateDebut, dateFin)) {
         status = 'error';
@@ -8223,8 +8263,18 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
       }
     }
     if (status === 'ok') acceptedInFile.push({ id: `import-${i}`, employeeId: employee.id, dateDebut, dateFin });
-    return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, commentaire, nbJours, status, message };
+    return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, commentaire, nbJours, status, message };
   });
+}
+
+/** Rappel visuel de la demi-journée dans l'aperçu d'import — une chaîne vide si journée(s)
+ * complète(s), pour ne jamais alourdir l'affichage des lignes qui n'en ont pas besoin. */
+function describeDemiJourneeImport(r) {
+  if (r.demiJournee) return ` (${r.demiJournee === 'matin' ? 'matin' : 'après-midi'})`;
+  if (r.demiJourneeDebut || r.demiJourneeFin) {
+    return ` (${r.demiJourneeDebut ? 'après-midi' : 'journée complète'} → ${r.demiJourneeFin ? 'matin' : 'journée complète'})`;
+  }
+  return '';
 }
 
 function importAbsencesRows(previewRows) {
@@ -8235,6 +8285,9 @@ function importAbsencesRows(previewRows) {
       typeId: r.type.id,
       dateDebut: r.dateDebut,
       dateFin: r.dateFin,
+      demiJournee: r.demiJournee,
+      demiJourneeDebut: r.demiJourneeDebut,
+      demiJourneeFin: r.demiJourneeFin,
       nbJours: r.nbJours,
       commentaire: r.commentaire
     });
@@ -8242,6 +8295,30 @@ function importAbsencesRows(previewRows) {
   });
   results.errors = previewRows.filter(r => r.status === 'error').length;
   return results;
+}
+
+/** §retour Betty du 18/09/2026 (import historique, points 2-3) : modèle téléchargeable, colonnes déjà
+ * nommées correctement, avec une ligne d'exemple montrant le format attendu pour les deux colonnes
+ * demi-journée (voir buildAbsencesPreviewRows) — et deux onglets de référence recopiés depuis
+ * l'entreprise au moment du téléchargement (salariés actifs + leur matricule, types existants de
+ * cette catégorie), pour que le fichier se remplisse sans jamais revenir consulter l'application. */
+function buildAbsencesImportTemplateWorkbook(categorie) {
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie && t.actif);
+  const modeleHeaders = ['Matricule', 'Type', 'Date début', 'Date fin', 'Demi-journée début', 'Demi-journée fin', 'Commentaire'];
+  const modeleRows = [
+    ['EXEMPLE, à remplacer', leaveTypes[0] ? leaveTypes[0].nom : 'Congés payés', '02/10/2026', '07/10/2026', 'Après-midi', 'Matin', 'Ligne d\'exemple : à supprimer avant import']
+  ];
+  const salariesRows = employees
+    .slice()
+    .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
+    .map(e => [e.matricule || '—', e.nom, e.prenom]);
+  const typesRows = leaveTypes.map(t => [t.nom]);
+  return buildMultiSheetExcelXmlWorkbook([
+    { name: 'Modèle', headers: modeleHeaders, rows: modeleRows },
+    { name: 'Salariés', headers: ['Matricule', 'Nom', 'Prénom'], rows: salariesRows },
+    { name: categorie === 'conge' ? 'Types de congés' : "Types d'absences", headers: ['Libellé exact à utiliser'], rows: typesRows }
+  ]);
 }
 
 function openImportAbsencesHistoriqueModal(categorie) {
@@ -8254,7 +8331,12 @@ function openImportAbsencesHistoriqueModal(categorie) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues : une colonne d'identification (Matricule ou Email), Type (nommé exactement comme un type existant${leaveTypes.length ? ' : ' + leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ') : ''}), Date début, Date fin, Commentaire (facultatif). Chaque ligne crée directement une demande au statut Validé, sans passer par une validation manager : à réserver aux absences déjà passées.</p>
+        <p class="text-muted">Chaque ligne crée directement une demande au statut Validé, sans passer par une validation manager : à réserver aux absences déjà passées.</p>
+        <div class="card" style="padding: 14px; margin-bottom: 14px;">
+          <button type="button" class="btn btn-secondary" id="btn-telecharger-modele-import">Télécharger le modèle</button>
+          <p class="form-hint" style="margin-top: 8px; margin-bottom: 0;">Colonnes déjà nommées, avec les salariés (et leur matricule) et les types existants de votre entreprise en onglets de référence : copiez-collez, aucun aller-retour nécessaire. Une ligne d'exemple montre le format des deux colonnes demi-journée (à supprimer avant import).</p>
+        </div>
+        <p class="text-muted" style="font-size: 13px;">Fichier construit à partir d'un autre outil ? L'identification par email reste reconnue en plus du matricule${leaveTypes.length ? ', et les types existants sont : ' + leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ') : ''}.</p>
         <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
         <div id="import-preview-zone" style="margin-top: 16px;"></div>
       </div>
@@ -8269,6 +8351,9 @@ function openImportAbsencesHistoriqueModal(categorie) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-telecharger-modele-import').addEventListener('click', () => {
+    downloadExcelXmlFile(buildAbsencesImportTemplateWorkbook(categorie), `modele-import-${categorie === 'conge' ? 'conges' : 'absences'}.xls`);
+  });
 
   let currentPreview = [];
 
@@ -8335,8 +8420,8 @@ function openImportAbsencesHistoriqueModal(categorie) {
                 <td>${r.rowIndex}</td>
                 <td>${r.employee ? escapeHtml(r.employee.prenom) + ' ' + escapeHtml(r.employee.nom) : (escapeHtml(r.idValue) || '—')}</td>
                 <td>${r.type ? escapeHtml(r.type.nom) : (escapeHtml(r.typeValue) || '—')}</td>
-                <td>${r.dateDebut ? formatDate(r.dateDebut) + (r.dateFin && r.dateFin !== r.dateDebut ? ' → ' + formatDate(r.dateFin) : '') : '—'}</td>
-                <td>${r.nbJours || '—'}</td>
+                <td>${r.dateDebut ? formatDate(r.dateDebut) + (r.dateFin && r.dateFin !== r.dateDebut ? ' → ' + formatDate(r.dateFin) : '') + describeDemiJourneeImport(r) : '—'}</td>
+                <td>${r.nbJours ? formatDurationFR(r.nbJours) : '—'}</td>
                 <td>${r.status === 'ok' ? '<span class="badge badge-success">Prêt</span>' : `<span class="badge badge-danger" title="${escapeHtml(r.message)}">${escapeHtml(r.message)}</span>`}</td>
               </tr>
             `).join('')}
@@ -12336,7 +12421,6 @@ const bulkSelection = { conge: new Set(), autre: new Set(), frais: new Set() };
 function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
-  const canImportHistorique = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.MODIFIER_COMPTEURS);
   const employees = getScopedEmployeesForFilters();
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const requests = getFilteredLeaveRequests(categorie);
@@ -12360,7 +12444,9 @@ function renderCongesDemandes(categorie = 'conge') {
       <p class="view-subtitle">${requests.length} demande${requests.length > 1 ? 's' : ''}</p>
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-export-conges">Exporter CSV</button>
-        ${canImportHistorique ? '<button class="btn btn-secondary" id="btn-import-absences-historique">Importer l\'historique</button>' : ''}
+        <!-- §retour Betty du 18/09/2026 (point 5) : "Importer l'historique" déplacé vers Paramètres
+             > Types d'absences (voir renderCongesTypes) — une opération de mise en service, pas un
+             usage quotidien, qui n'a plus sa place ici (risque de double import à portée de clic). -->
         <!-- §refonte "hiérarchie de boutons" du 01/09/2026 : jamais 2 boutons pleins en même temps sur
              cet écran — "Valider la sélection" (ci-dessous) prend le relais dès qu'une sélection est
              active, plus urgent à ce moment que créer une nouvelle demande. -->
@@ -12802,7 +12888,9 @@ function exportLeaveRequestsCSV(categorie = 'conge') {
     return [
       employee ? `${employee.prenom} ${employee.nom}` : '—',
       type ? type.nom : '—',
-      r.dateDebut, r.dateFin, formatNumberFR(r.nbJours),
+      // §retour Betty du 18/09/2026 (point 7) : dates au format français, jours en vrai nombre (pas
+      // formatNumberFR, qui produirait un texte aligné à gauche) — voir excelXmlCell/exportRowsToCSV.
+      formatDate(r.dateDebut), formatDate(r.dateFin), r.nbJours,
       type && type.paye ? 'Oui' : 'Non',
       r.statut
     ];
@@ -12818,8 +12906,6 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   bindFilterToggleButtons();
   document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
   document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
-  const importHistoriqueBtn = document.getElementById('btn-import-absences-historique');
-  if (importHistoriqueBtn) importHistoriqueBtn.addEventListener('click', () => openImportAbsencesHistoriqueModal(categorie));
   bindDraftsCardEvents((draft) => openLeaveRequestModal(undefined, categorie, draft));
 
   document.getElementById('conges-filter-employee').addEventListener('change', (e) => {
@@ -13319,7 +13405,12 @@ function employeeFieldForRequest(presetEmployeeId, employees, kind = 'absence') 
     `;
   }
   const scoped = targetIds === null ? employees : employees.filter(e => targetIds.includes(e.id));
-  return selectField('employeeId', 'Salarié', null, presetEmployeeId || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
+  // §retour Betty du 18/09/2026 (point 6) : sans presetEmployeeId (ouvert depuis l'écran de liste,
+  // pas depuis la fiche de quelqu'un d'autre), préselectionne l'utilisateur connecté plutôt qu'un
+  // tiret vide — user.id fait toujours partie de `scoped` (requestTargetIdsForCurrentUser inclut
+  // toujours soi-même), donc jamais une valeur hors liste. Vaut pour les 4 formulaires qui passent
+  // par cette fonction (congés, autres absences, télétravail, notes de frais).
+  return selectField('employeeId', 'Salarié', null, presetEmployeeId || user.id || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
 }
 
 /** Sprint SIRH premium §10 : `draft` (optionnel) = brouillon repris via "Reprendre" dans la liste
@@ -13788,7 +13879,12 @@ function renderCongesTypes(categorie = 'conge') {
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${types.length} type${plural} ${noun} configuré${plural}</p>
-      <button class="btn btn-primary btn-sm" id="btn-new-leave-type">+ Nouveau type</button>
+      <div class="detail-header-actions">
+        <!-- §retour Betty du 18/09/2026 (point 5) : déplacé depuis l'écran Congés & absences —
+             une opération de mise en service (à la création des types), pas un usage quotidien. -->
+        <button class="btn btn-secondary btn-sm" id="btn-import-absences-historique">Importer l'historique</button>
+        <button class="btn btn-primary btn-sm" id="btn-new-leave-type">+ Nouveau type</button>
+      </div>
     </div>
     <div class="card table-card">
       <table class="table">
@@ -13888,6 +13984,7 @@ function renderLeaveTypeRow(t) {
 
 function bindCongesTypesEvents(categorie = 'conge') {
   document.getElementById('btn-new-leave-type').addEventListener('click', () => openLeaveTypeModal(null, categorie));
+  document.getElementById('btn-import-absences-historique').addEventListener('click', () => openImportAbsencesHistoriqueModal(categorie));
 
   document.querySelectorAll('[data-edit-type]').forEach(btn => btn.addEventListener('click', () => openLeaveTypeModal(btn.dataset.editType)));
   document.querySelectorAll('[data-duplicate-type]').forEach(btn => btn.addEventListener('click', () => {
@@ -21110,11 +21207,17 @@ function excelXmlEscape(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** §retour Betty du 18/09/2026 (point 7, exports Excel) : un vrai nombre JS (jamais un montant/une
+ * durée déjà mis en texte par formatCurrencyFR/formatNumberFR AVANT d'arriver ici, voir les appelants
+ * d'exportRowsToCSV) déclenche automatiquement l'alignement à droite ('cell-number'/'cell-zebra-
+ * number', voir buildExcelXmlWorkbook/buildMultiSheetExcelXmlWorkbook) — jamais à coder au cas par
+ * cas par l'appelant, qui ne fait que passer la valeur brute. */
 function excelXmlCell(value, styleId = 'cell') {
   const isNumber = typeof value === 'number' && Number.isFinite(value);
   const text = neutralizeCsvFormulaInjection(value === null || value === undefined ? '' : String(value));
-  if (!text) return `<Cell ss:StyleID="${styleId}"/>`;
-  return `<Cell ss:StyleID="${styleId}"><Data ss:Type="${isNumber ? 'Number' : 'String'}">${excelXmlEscape(text)}</Data></Cell>`;
+  const resolvedStyleId = isNumber && (styleId === 'cell' || styleId === 'cell-zebra') ? `${styleId}-number` : styleId;
+  if (!text) return `<Cell ss:StyleID="${resolvedStyleId}"/>`;
+  return `<Cell ss:StyleID="${resolvedStyleId}"><Data ss:Type="${isNumber ? 'Number' : 'String'}">${excelXmlEscape(text)}</Data></Cell>`;
 }
 
 function excelColumnWidths(headers, rows) {
@@ -21156,6 +21259,15 @@ function buildExcelXmlWorkbook(headers, rows, sheetName, options) {
   <Style ss:ID="cell-zebra">
    <Interior ss:Color="#F8EFE0" ss:Pattern="Solid"/>
    <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+  <Style ss:ID="cell-number">
+   <Alignment ss:Vertical="Center" ss:Horizontal="Right"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+  <Style ss:ID="cell-zebra-number">
+   <Interior ss:Color="#F8EFE0" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center" ss:Horizontal="Right"/>
    <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
   </Style>
  </Styles>
@@ -21233,6 +21345,54 @@ function buildCalendarExcelXmlWorkbook(headers, rows, sheetName, weekendColumnIn
    <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane>
   </WorksheetOptions>
  </Worksheet>
+</Workbook>`;
+}
+
+/** §retour Betty du 18/09/2026 (import historique, points 2-3) : modèle téléchargeable à plusieurs
+ * onglets — le premier à remplir, les suivants purement des listes de référence (salariés avec
+ * matricule, types de congés existants) recopiées depuis l'entreprise au moment du téléchargement,
+ * pour que tout ce dont on a besoin soit dans le fichier, sans aller-retour avec l'application.
+ * Même Styles que buildExcelXmlWorkbook (un seul bloc, partagé par tous les onglets — SpreadsheetML
+ * ne le redéfinit qu'une fois par classeur). `sheets` : [{ name, headers, rows }, ...].
+ *
+ * Pas de menu déroulant Excel réel ici (contrairement à ce qui était demandé) : la validation de
+ * liste en SpreadsheetML (le format XML utilisé, pas le .xlsx moderne) n'est pas documentée de façon
+ * fiable, et je préfère un fichier sûrement valide à un menu déroulant hasardeux qui risquerait de
+ * corrompre l'ouverture. À la place, la ligne d'exemple du premier onglet montre déjà les deux seules
+ * valeurs valides ("Après-midi"/"Matin") telles qu'à écrire, et l'import reste insensible aux accents/
+ * majuscules — voir buildAbsencesPreviewRows. */
+function buildMultiSheetExcelXmlWorkbook(sheets) {
+  const worksheetsXml = sheets.map(sheet => {
+    const columnsXml = excelColumnWidths(sheet.headers, sheet.rows).map(w => `<Column ss:Width="${w}"/>`).join('');
+    const headerRowXml = `<Row ss:Height="20">${sheet.headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${excelXmlEscape(neutralizeCsvFormulaInjection(String(h)))}</Data></Cell>`).join('')}</Row>`;
+    const dataRowsXml = sheet.rows.map(row => `<Row>${sheet.headers.map((_, i) => excelXmlCell(row[i])).join('')}</Row>`).join('');
+    return `<Worksheet ss:Name="${excelXmlEscape(sheet.name)}">
+  <Table>${columnsXml}${headerRowXml}${dataRowsXml}</Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane>
+  </WorksheetOptions>
+ </Worksheet>`;
+  }).join('\n ');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#17284D" ss:Pattern="Solid"/>
+   <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#C99A54"/></Borders>
+  </Style>
+  <Style ss:ID="cell">
+   <Alignment ss:Vertical="Center"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+  <Style ss:ID="cell-number">
+   <Alignment ss:Vertical="Center" ss:Horizontal="Right"/>
+   <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DCE1E6"/></Borders>
+  </Style>
+ </Styles>
+ ${worksheetsXml}
 </Workbook>`;
 }
 
@@ -21806,13 +21966,15 @@ function exportExpensesCSV() {
     return [
       employee ? employee.matricule : '—',
       employee ? `${employee.prenom} ${employee.nom}` : '—',
-      n.date,
+      // §retour Betty du 18/09/2026 (point 7) : date au format français, montants en vrai nombre
+      // (jamais formatNumberFR, un texte qui s'alignerait à gauche) — voir excelXmlCell.
+      formatDate(n.date),
       n.categorie,
       n.libelle,
-      formatNumberFR(computeMontantHT(n.montantTTC, n.tauxTVA)),
-      formatNumberFR(computeMontantTVA(n.montantTTC, n.tauxTVA)),
+      computeMontantHT(n.montantTTC, n.tauxTVA),
+      computeMontantTVA(n.montantTTC, n.tauxTVA),
       tvaDeductible ? 'Oui' : 'Non',
-      formatNumberFR(n.montantTTC),
+      n.montantTTC,
       n.statut,
       n.statut === 'Remboursé' ? formatDate(getExpenseRembourseDate(n)) : ''
     ];
@@ -22608,13 +22770,15 @@ function exportTicketsCSV() {
   // frais déjà corrigé — sans lui, un rapprochement comptable ne se fait qu'à l'œil par nom (risque
   // d'homonymes/changement de nom).
   const headers = ['Matricule', 'Salarié', 'Tickets', 'Montant total', 'Part employeur', 'Part salarié'];
+  // §retour Betty du 18/09/2026 (point 7) : montants en vrai nombre, jamais formatNumberFR (un texte
+  // aligné à gauche) — voir excelXmlCell.
   const data = rows.map(r => [
     r.employee.matricule,
     `${r.employee.prenom} ${r.employee.nom}`,
     r.result.nbTickets,
-    formatNumberFR(r.result.montantTotal),
-    formatNumberFR(r.result.partEmployeur),
-    formatNumberFR(r.result.partSalarie)
+    r.result.montantTotal,
+    r.result.partEmployeur,
+    r.result.partSalarie
   ]);
   exportRowsToCSV(headers, data, `tickets-restaurant-${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}.csv`);
   auditLogRepository.logAudit('Export', 'Tickets restaurant', `${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear}`);
@@ -22719,9 +22883,10 @@ function exportCongesFraisMoisCSV() {
   const month = now.getMonth();
   const rows = getPaieRows(year, month);
   const headers = ['Matricule', 'Nom', 'Prénom', 'Congés payés (jours)', 'RTT (jours)', 'Notes de frais remboursées (€)'];
+  // §retour Betty du 18/09/2026 (point 7) : vrais nombres, jamais formatNumberFR — voir excelXmlCell.
   const data = rows.map(r => [
     r.employee.matricule, r.employee.nom, r.employee.prenom,
-    formatNumberFR(r.congesPayesJours), formatNumberFR(r.rttJours), formatNumberFR(r.notesRembourser)
+    r.congesPayesJours, r.rttJours, r.notesRembourser
   ]);
   exportRowsToCSV(headers, data, `conges-frais-${MONTH_NAMES[month]}-${year}.csv`);
   auditLogRepository.logAudit('Export', 'Congés + Notes de frais (export léger)', `${rows.length} ligne${rows.length > 1 ? 's' : ''} — ${MONTH_NAMES[month]} ${year}`);
