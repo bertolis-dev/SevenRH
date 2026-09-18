@@ -24130,7 +24130,7 @@ function renderConfidentialEmployeeFieldset(employee, settings) {
   if (!user || user.role !== ROLES.PROPRIETAIRE) return '';
   if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
   return `
-    <fieldset class="form-section" id="employee-form-section-confidentiel">
+    <fieldset class="form-section" id="employee-form-section-confidentiel" data-employee-tab-panel="confidentiel" hidden>
       <legend>Confidentiel</legend>
       <div class="form-grid">
         ${settings.masseSalarialeActivee ? textField('salaireBrutMensuel', 'Salaire brut mensuel (€)', employee.salaireBrutMensuel, false, 'number') : ''}
@@ -24578,27 +24578,64 @@ function openRejectCandidatureModal(candidature) {
  * haut de la modale permet de sauter directement à une section plutôt que de tout dérouler à la
  * main. `hasConfidentiel` : la section "Confidentiel" n'existe pas pour tout le monde (voir
  * renderConfidentialEmployeeFieldset) — inutile de proposer un lien mort vers une section absente. */
-function renderEmployeeFormSummary(hasConfidentiel) {
-  const sections = [
-    { id: 'employee-form-section-identite', label: 'Identité' },
-    { id: 'employee-form-section-contrat', label: 'Contrat & poste' },
-    { id: 'employee-form-section-temps', label: 'Temps de travail' },
-    { id: 'employee-form-section-statut', label: 'Statut' },
-    ...(hasConfidentiel ? [{ id: 'employee-form-section-confidentiel', label: 'Confidentiel' }] : [])
-  ];
+/** §retour Betty du 18/09/2026 (points 1+2+3+5, "vrais onglets, pas des ancres de défilement") :
+ * remplace le sommaire cliquable (qui ne faisait que scroller vers une section toujours visible,
+ * §demande du 09/09/2026) par de VRAIS onglets, un seul panneau affiché à la fois. Le formulaire
+ * reste un <form> unique (un seul submit, une seule validation native) : seule la VISIBILITÉ des
+ * fieldsets change (attribut hidden), jamais un ré-rendu de la modale (qui effacerait la saisie en
+ * cours dans les autres onglets). data-employee-tab-panel sur chaque <fieldset> sert d'ancre, voir
+ * bindEmployeeFormTabs/updateEmployeeFormTabErrors ci-dessous. */
+const EMPLOYEE_FORM_TABS = [
+  { key: 'identite', label: 'Identité' },
+  { key: 'contrat', label: 'Contrat & poste' },
+  { key: 'temps', label: 'Temps de travail' },
+  { key: 'statut', label: 'Statut' }
+];
+
+function employeeFormTabsList(hasConfidentiel) {
+  return hasConfidentiel ? [...EMPLOYEE_FORM_TABS, { key: 'confidentiel', label: 'Confidentiel' }] : EMPLOYEE_FORM_TABS;
+}
+
+function renderEmployeeFormTabs(hasConfidentiel) {
+  const tabs = employeeFormTabsList(hasConfidentiel);
   return `
-    <div class="form-summary-nav">
-      ${sections.map(s => `<button type="button" class="btn-link" data-scroll-to-section="${s.id}">${escapeHtml(s.label)}</button>`).join('')}
+    <div class="tabs" role="tablist">
+      ${tabs.map((t, i) => `
+        <button type="button" class="tab ${i === 0 ? 'active' : ''}" data-employee-tab="${t.key}">
+          ${escapeHtml(t.label)}
+          <span class="tab-error-dot" id="tab-error-${t.key}" hidden title="Champ obligatoire manquant dans cet onglet"></span>
+        </button>
+      `).join('')}
     </div>
   `;
 }
 
-function bindFormSummaryNav() {
-  document.querySelectorAll('[data-scroll-to-section]').forEach(btn => {
+/** Un seul panneau visible à la fois (le premier par défaut) ; les autres restent dans le DOM
+ * (leurs valeurs de saisie ne sont jamais perdues), simplement masqués via [hidden]. */
+function bindEmployeeFormTabs() {
+  const tabBtns = Array.from(document.querySelectorAll('[data-employee-tab]'));
+  const panels = Array.from(document.querySelectorAll('[data-employee-tab-panel]'));
+  tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      const target = document.getElementById(btn.dataset.scrollToSection);
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      tabBtns.forEach(b => b.classList.toggle('active', b === btn));
+      panels.forEach(p => { p.hidden = p.dataset.employeeTabPanel !== btn.dataset.employeeTab; });
     });
+  });
+  const form = document.getElementById('employee-form');
+  form.addEventListener('input', updateEmployeeFormTabErrors);
+  form.addEventListener('change', updateEmployeeFormTabErrors);
+  updateEmployeeFormTabErrors();
+}
+
+/** Un point rouge sur l'onglet dès qu'un champ obligatoire y est manquant/invalide, même si cet
+ * onglet n'est pas celui affiché : sans ça, un champ requis oublié dans un AUTRE onglet que celui
+ * ouvert au moment du submit échouerait silencieusement (la validation native du navigateur scrolle
+ * vers le premier champ invalide, mais rien ne dit qu'il n'est pas caché dans un onglet fermé). */
+function updateEmployeeFormTabErrors() {
+  document.querySelectorAll('[data-employee-tab-panel]').forEach(panel => {
+    const invalide = Array.from(panel.querySelectorAll('[required]')).some(el => !el.checkValidity());
+    const dot = document.getElementById(`tab-error-${panel.dataset.employeeTabPanel}`);
+    if (dot) dot.hidden = !invalide;
   });
 }
 
@@ -24834,7 +24871,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   const etablissementsSelectables = etablissements.filter(e => e.actif || e.id === employee.etablissementId);
 
   const html = `
-    <div class="modal modal-large">
+    <div class="modal modal-xlarge">
       <div class="modal-header">
         <h2>${isEdit ? 'Modifier le salarié' : 'Nouveau salarié'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
@@ -24842,8 +24879,8 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
       <form id="employee-form">
         <div class="modal-body">
           ${candidatureId && cvUrl ? `<p class="text-muted" style="margin-top:0;">Créé depuis une candidature — <button type="button" class="btn-link" onclick="window.open('${cvUrl}', '_blank', 'noopener')">voir le CV</button> pendant la saisie.</p>` : ''}
-          ${renderEmployeeFormSummary(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
-          <fieldset class="form-section" id="employee-form-section-identite">
+          ${renderEmployeeFormTabs(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
+          <fieldset class="form-section" id="employee-form-section-identite" data-employee-tab-panel="identite">
             <legend>Identité</legend>
             <div class="form-grid">
               ${selectField('civilite', 'Civilité', ['M.', 'Mme'], employee.civilite)}
@@ -24879,7 +24916,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section" id="employee-form-section-contrat">
+          <fieldset class="form-section" id="employee-form-section-contrat" data-employee-tab-panel="contrat" hidden>
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
               ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })))}
@@ -24902,7 +24939,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section" id="employee-form-section-temps">
+          <fieldset class="form-section" id="employee-form-section-temps" data-employee-tab-panel="temps" hidden>
             <legend>Temps de travail</legend>
             <div class="form-grid">
               ${selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail)}
@@ -24922,7 +24959,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.')}
               ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT, false, 'text', 'any', 'Jours de repos accordés en compensation d\'un temps de travail au-delà de 35h/semaine. Le mode de calcul (nombre de jours, méthode d\'acquisition) dépend de l\'accord d\'entreprise ou de la convention collective applicable.')}
             </div>
-            <p class="text-muted" style="margin-top: 14px;">Horaires (identiques chaque jour travaillé) — utilisés par le Planning (§3).</p>
+            <p class="form-subsection-title">Horaires (identiques chaque jour travaillé), utilisés par le Planning (§3).</p>
             <div class="form-grid">
               ${textField('horaireMatinDebut', 'Matin, début', employee.horaireMatinDebut || '09:00', false, 'time')}
               ${textField('horaireMatinFin', 'Matin, fin', employee.horaireMatinFin || '12:00', false, 'time')}
@@ -24931,7 +24968,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             </div>
           </fieldset>
 
-          <fieldset class="form-section" id="employee-form-section-statut">
+          <fieldset class="form-section" id="employee-form-section-statut" data-employee-tab-panel="statut" hidden>
             <legend>Statut</legend>
             <div class="form-grid">
               ${selectField('statut', 'Statut', ['Actif', 'Inactif'], employee.statut)}
@@ -24956,7 +24993,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  bindFormSummaryNav();
+  bindEmployeeFormTabs();
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 

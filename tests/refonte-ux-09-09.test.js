@@ -213,7 +213,8 @@ async function run() {
     assert.ok(htmlOrg.includes('data-toggle-filters="org-filters"'), 'Organigramme : bouton de repli des filtres présent');
   }
 
-  // ---- Formulaire salarié : sommaire cliquable au lieu d'un seul long défilement ----
+  // ---- Formulaire salarié : VRAIS onglets (retour Betty du 18/09/2026, point 1) au lieu d'un
+  // sommaire qui ne faisait que défiler vers une section déjà visible ----
   {
     const { DB, sandbox, openEmployeeModal, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
@@ -223,12 +224,16 @@ async function run() {
 
     openEmployeeModal();
     const html = sandbox.document.getElementById('modal-root').innerHTML;
-    assert.ok(html.includes('form-summary-nav'), 'le sommaire cliquable doit être présent en haut du formulaire');
+    assert.ok(html.includes('data-employee-tab="identite"'), 'un vrai bouton d\'onglet doit exister pour chaque section');
     ['Identité', 'Contrat &amp; poste', 'Temps de travail', 'Statut'].forEach(label => {
-      assert.ok(html.includes(`>${label}<`), `le sommaire doit proposer un lien vers "${label}"`);
+      assert.ok(html.includes(label), `un onglet doit exister pour "${label}"`);
     });
-    assert.ok(!html.includes('>Confidentiel<'), 'sans les réglages qui l\'activent, la section "Confidentiel" (et son lien) ne doit pas exister');
-    assert.ok(html.includes('id="employee-form-section-identite"'), 'chaque section ciblée par le sommaire doit exposer l\'id correspondant');
+    assert.ok(!html.includes('data-employee-tab="confidentiel"'), 'sans les réglages qui l\'activent, aucun onglet "Confidentiel" ne doit exister');
+    assert.ok(html.includes('id="employee-form-section-identite" data-employee-tab-panel="identite">'), 'le premier onglet (Identité) doit être visible par défaut, sans attribut hidden');
+    assert.ok(html.includes('id="employee-form-section-contrat" data-employee-tab-panel="contrat" hidden>'), 'les autres onglets doivent être masqués par défaut (hidden), pas juste plus bas dans un long défilement');
+    assert.ok(html.includes('id="employee-form-section-statut" data-employee-tab-panel="statut" hidden>'));
+    assert.ok(!html.includes('modal-large'), 'la fiche salarié ne doit plus être bornée à la largeur réduite des petites modales (760px)');
+    assert.ok(html.includes('modal-xlarge'), 'la fiche salarié doit utiliser la largeur disponible plutôt qu\'un plafond de 760px');
 
     const proprietaire = DB.getEmployees().find(e => e.role === 'proprietaire');
     DB._currentEmployeeId = proprietaire.id;
@@ -237,7 +242,7 @@ async function run() {
     DB.saveCurrentCompany(company);
     openEmployeeModal();
     const htmlProprietaire = sandbox.document.getElementById('modal-root').innerHTML;
-    assert.ok(htmlProprietaire.includes('>Confidentiel<'), 'un propriétaire avec le suivi de masse salariale activé doit voir le lien vers "Confidentiel"');
+    assert.ok(htmlProprietaire.includes('data-employee-tab="confidentiel"'), 'un propriétaire avec le suivi de masse salariale activé doit voir l\'onglet "Confidentiel"');
   }
 
   // ---- Notifications : pagination au lieu d'un plafond fixe sans suite possible ----

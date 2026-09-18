@@ -1212,6 +1212,11 @@ p { margin: 0; line-height: 1.5; }
 
 .modal-large { max-width: 760px; }
 .modal-small { max-width: 420px; }
+/* §retour Betty du 18/09/2026 (point 1) : la fiche salarié (onglets, plusieurs champs par ligne)
+   restait bornée à 760px comme n'importe quelle petite modale, gaspillant l'espace disponible sur un
+   grand écran — 95vw plafonné à 1100px reste raisonnable, et en dessous de 1100px de large (mobile
+   compris) .modal { width:100% } prend simplement le relais, comme pour toutes les autres modales. */
+.modal-xlarge { max-width: min(1100px, 95vw); }
 
 @keyframes modal-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
@@ -1239,22 +1244,42 @@ p { margin: 0; line-height: 1.5; }
 
 .modal-body a { color: var(--color-primary-text); }
 
-/* §demande Betty du 09/09/2026 : sommaire cliquable en haut du formulaire salarié (4-5 sections) —
-   voir renderEmployeeFormSummary (app.js). Collé en haut de .modal-body (son propre conteneur de
-   défilement, voir ci-dessus) pour rester accessible même après avoir défilé vers une section basse. */
-.form-summary-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+/* §demande Betty du 09/09/2026, puis retour du 18/09/2026 (point 1, "vrais onglets") : les onglets
+   d'un formulaire long (fiche salarié) restent collés en haut de .modal-body (son propre conteneur
+   de défilement, voir ci-dessus) même une fois descendu dans un onglet au contenu long. Scopé à
+   .modal-body (pas .tabs tout court, utilisé ailleurs hors modale) pour ne rien changer aux onglets
+   de page classiques. */
+.modal-body > .tabs:first-child {
   position: sticky;
   top: -22px;
   margin: -22px -22px 18px;
-  padding: 10px 22px;
+  padding: 10px 22px 0;
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
   z-index: 1;
 }
-.form-summary-nav .btn-link { padding: 2px 0; }
+
+/* Point rouge sur un onglet contenant un champ obligatoire manquant/invalide (voir
+   updateEmployeeFormTabErrors, app.js) — jamais bloquant en soi, juste un repère avant le submit. */
+.tab-error-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  vertical-align: middle;
+}
+
+/* Séparateur visible entre deux groupes de champs À L'INTÉRIEUR d'un même onglet (ex. Temps de
+   travail : champs principaux puis Horaires) — un simple espacement ne suffisait pas à signaler
+   qu'on entre dans un bloc distinct. */
+.form-subsection-title {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
 
 .modal-footer {
   display: flex;
