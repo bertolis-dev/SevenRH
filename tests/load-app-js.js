@@ -110,6 +110,10 @@ globalThis.__formatPrenom = formatPrenom;
 globalThis.__companyRepository = companyRepository;
 globalThis.__billingRepository = billingRepository;
 globalThis.__calculerJoursRTTAutoForfaitJours = calculerJoursRTTAutoForfaitJours;
+globalThis.__getSexe = getSexe;
+globalThis.__getCiviliteAffichee = getCiviliteAffichee;
+globalThis.__ensureCiviliteSexeMigresVersServeur = ensureCiviliteSexeMigresVersServeur;
+globalThis.__makeEmptyEmployee = makeEmptyEmployee;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -636,6 +640,10 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     companyRepository: sandbox.__companyRepository,
     billingRepository: sandbox.__billingRepository,
     calculerJoursRTTAutoForfaitJours: sandbox.__calculerJoursRTTAutoForfaitJours,
+    getSexe: sandbox.__getSexe,
+    getCiviliteAffichee: sandbox.__getCiviliteAffichee,
+    ensureCiviliteSexeMigresVersServeur: sandbox.__ensureCiviliteSexeMigresVersServeur,
+    makeEmptyEmployee: sandbox.__makeEmptyEmployee,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,

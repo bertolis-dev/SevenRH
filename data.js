@@ -762,6 +762,7 @@ async function hydrateCurrentCompanyWithMigrations() {
     // drapeau de complétude.
     await ensureNomsPrenomsMigresVersServeur(company, currentUser);
     await ensureVisitesMedicalesMigreesVersServeur(company, currentUser);
+    await ensureCiviliteSexeMigresVersServeur(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -935,6 +936,36 @@ async function ensureVisitesMedicalesMigreesVersServeur(company, currentUser) {
     await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
   } catch (err) {
     console.error('ensureVisitesMedicalesMigreesVersServeur : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** §retour Betty du 18/09/2026 (point 5) : "sexe (état civil)" devient obligatoire et le format de
+ * civilite change ('M.'/'Mme' -> 'Madame'/'Monsieur'/'ne_pas_accorder'). Sans reprise, TOUT salarié
+ * déjà existant perdrait sa mention de sexe sur le registre unique du personnel (obligation légale,
+ * art. L1221-13) jusqu'à ce que quelqu'un rouvre sa fiche pour la renseigner à la main — l'ancien
+ * civilite ('M.'/'Mme'), lui, était toujours renseigné et servait déjà (de fait) de mention de sexe
+ * dans le registre avant ce changement (voir l'historique de openRegistreUniquePersonnelModal) :
+ * assez fiable pour amorcer sexe une seule fois, jamais pour le réécrire ensuite si déjà renseigné.
+ * Même conception que les deux fonctions ci-dessus (aucun drapeau de complétude, réservée à
+ * MODIFIER_SALARIE, poussée réellement à Supabase). */
+async function ensureCiviliteSexeMigresVersServeur(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.MODIFIER_SALARIE)) return;
+  const modified = [];
+  (company.employees || []).forEach(e => {
+    let changed = false;
+    if (!e.sexe && (e.civilite === 'M.' || e.civilite === 'Mme')) {
+      e.sexe = e.civilite === 'Mme' ? 'Femme' : 'Homme';
+      changed = true;
+    }
+    if (e.civilite === 'M.') { e.civilite = 'Monsieur'; changed = true; }
+    else if (e.civilite === 'Mme') { e.civilite = 'Madame'; changed = true; }
+    if (changed) modified.push(e);
+  });
+  if (!modified.length) return;
+  try {
+    await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
+  } catch (err) {
+    console.error('ensureCiviliteSexeMigresVersServeur : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -1237,7 +1268,10 @@ function construireValeursFusionModele(employee, company) {
   const profile = company || {};
   const settings = (company && company.settings) || {};
   return {
-    civilite: employee.civilite || '', prenom: employee.prenom || '', nom: employee.nom || '',
+    // §retour Betty du 18/09/2026 (point 5) : jamais la valeur brute d'employee.civilite (qui peut
+    // valoir 'ne_pas_accorder', un mot-clé interne, pas un mot à imprimer) — toujours la civilité
+    // réellement AFFICHABLE (vide si "ne pas accorder", déduite du sexe à défaut d'un choix explicite).
+    civilite: getCiviliteAffichee(employee), prenom: employee.prenom || '', nom: employee.nom || '',
     matricule: employee.matricule || '', poste: employee.poste || '', service: employee.service || '',
     typeContrat: employee.typeContrat || '', dateEmbauche: employee.dateEmbauche || '',
     dateNaissance: employee.dateNaissance || '', lieuNaissance: employee.lieuNaissance || '',
@@ -5200,14 +5234,45 @@ const auditLogRepository = {
   clearAuditLog: () => DB.clearAuditLog()
 };
 
+/** §retour Betty du 18/09/2026 (point 5) : sexe (état civil, binaire, obligatoire : alimente
+ * registre/DSN/index égalité) reste lisible même sur une fiche créée avant l'existence de ce champ,
+ * qui n'avait alors que l'ancien "genre" (optionnel, cf. suiviGenreActive) — jamais une migration
+ * d'écriture, juste un repli de lecture qui ne s'éteint jamais. Voir getCiviliteAffichee ci-dessous
+ * pour la civilité d'usage (distincte, optionnelle, celle qui accorde réellement les documents). */
+function getSexe(employee) {
+  if (employee.sexe === 'Homme' || employee.sexe === 'Femme') return employee.sexe;
+  if (employee.genre === 'Homme' || employee.genre === 'Femme') return employee.genre;
+  return '';
+}
+
+/** Civilité D'USAGE (Madame/Monsieur/ne pas accorder), distincte du sexe à l'état civil ci-dessus :
+ * optionnelle, sert uniquement à accorder l'affichage/les documents. "ne_pas_accorder" (choix
+ * explicite) et une fiche non renseignée donnent tous les deux '' ici (aucune civilité affichée,
+ * jamais une civilité inventée) ; SEULE une fiche jamais renseignée retombe sur le sexe à l'état
+ * civil pour proposer une civilité par défaut RAISONNABLE, jamais sur une valeur figée ("M." par
+ * défaut, l'ancien comportement que Betty a explicitement demandé d'arrêter). */
+function getCiviliteAffichee(employee) {
+  if (employee.civilite === 'Madame' || employee.civilite === 'Monsieur') return employee.civilite;
+  if (employee.civilite === 'ne_pas_accorder') return '';
+  const sexe = getSexe(employee);
+  return sexe === 'Homme' ? 'Monsieur' : sexe === 'Femme' ? 'Madame' : '';
+}
+
 /** Structure complète d'une fiche salarié (valeurs par défaut). */
 function makeEmptyEmployee() {
   return {
     id: null,
     matricule: '',
     photo: null,
-    civilite: 'M.',
+    // §retour Betty du 18/09/2026 (point 5) : plus de valeur forcée à la création ("M." par défaut
+    // jusqu'ici) — un choix explicite (ou implicite via le sexe à l'état civil, voir
+    // getCiviliteAffichee) est désormais attendu, jamais présumé.
+    civilite: '',
     nom: '',
+    // §retour Betty du 18/09/2026 (point 5) : nom sous lequel le salarié souhaite être identifié au
+    // quotidien (mariage, usage personnel...), distinct du nom légal ci-dessus — jamais utilisé pour
+    // un document officiel (registre, paie, DSN), qui reste sur le nom légal.
+    nomUsage: '',
     prenom: '',
     email: '',
     telephone: '',
@@ -5216,6 +5281,12 @@ function makeEmptyEmployee() {
     lieuNaissance: '',
     nationalite: 'Française',
     numeroSecu: '',
+    // §retour Betty du 18/09/2026 (point 5) : "Sexe (état civil)" — binaire, obligatoire, alimente
+    // registre/DSN/index égalité (voir getSexe ci-dessus). Distinct de civilite (civilité D'USAGE,
+    // optionnelle, purement d'affichage). Remplace l'ancien champ "genre" pour cet usage légal :
+    // "genre" reste lu en repli sur une fiche déjà existante (voir getSexe), jamais réutilisé pour
+    // une saisie nouvelle.
+    sexe: '',
 
     dateEmbauche: '',
     etablissementId: '', // §12 : chaque salarié doit être rattaché à un établissement
@@ -5310,6 +5381,9 @@ function makeEmptyEmployee() {
     // motif, auteurId }], alimenté automatiquement par updateEmployee dès que salaireBrutMensuel
     // change — jamais saisi à la main, jamais réécrit une fois consigné.
     historiqueSalaire: [],
+    // §retour Betty du 18/09/2026 (point 5) : obsolète pour une NOUVELLE saisie (remplacé par sexe,
+    // ci-dessus, obligatoire et binaire) — conservé ici seulement pour qu'une fiche créée avant ce
+    // changement garde sa valeur lisible (voir getSexe), jamais retiré, jamais réutilisé en écriture.
     genre: '',
 
     compteurs: {},
@@ -7328,10 +7402,12 @@ function getAgePyramidBuckets(employees) {
     const bucket = buckets.find(b => age >= b.min && age <= b.max);
     if (!bucket) return;
     bucket.total += 1;
-    if (e.genre === 'Homme') bucket.hommes += 1;
-    else if (e.genre === 'Femme') bucket.femmes += 1;
-    // "Autre" et genre non renseigné : comptés dans total (toujours) et ici, pour que la vue par
-    // genre (§ renderAgePyramidSVG) ne les fasse pas disparaître silencieusement du graphique.
+    const sexe = getSexe(e);
+    if (sexe === 'Homme') bucket.hommes += 1;
+    else if (sexe === 'Femme') bucket.femmes += 1;
+    // Sexe non renseigné (obligatoire depuis le 18/09/2026, mais une fiche déjà existante peut ne pas
+    // encore l'avoir) : compté dans total (toujours) et ici, pour que la vue par genre
+    // (§ renderAgePyramidSVG) ne le fasse pas disparaître silencieusement du graphique.
     else bucket.autres += 1;
   });
   return buckets;
@@ -7339,9 +7415,13 @@ function getAgePyramidBuckets(employees) {
 
 function getGenderBreakdown(employees) {
   const actifs = employees.filter(e => e.statut === 'Actif');
-  const hommes = actifs.filter(e => e.genre === 'Homme').length;
-  const femmes = actifs.filter(e => e.genre === 'Femme').length;
-  const autre = actifs.filter(e => e.genre === 'Autre').length;
+  const hommes = actifs.filter(e => getSexe(e) === 'Homme').length;
+  const femmes = actifs.filter(e => getSexe(e) === 'Femme').length;
+  // §retour Betty du 18/09/2026 (point 5) : "Autre" ne peut plus être choisi pour une NOUVELLE fiche
+  // (sexe à l'état civil désormais binaire) — une ancienne valeur (employee.genre === 'Autre')
+  // reste montrée distinctement plutôt que fondue dans "non renseigné", pour ne jamais effacer un
+  // choix explicite déjà fait par l'intéressé avant ce changement.
+  const autre = actifs.filter(e => getSexe(e) === '' && e.genre === 'Autre').length;
   const nonRenseigne = actifs.length - hommes - femmes - autre;
   const rows = [
     { label: 'Hommes', value: hommes, color: '#2563eb' },

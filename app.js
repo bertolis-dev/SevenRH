@@ -11881,11 +11881,13 @@ function bindMenusAutorisesCardEvents(employeeId) {
   });
 }
 
-/** Salaire/genre : données sensibles, réservées au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant. */
+/** Salaire : donnée sensible, réservée au Propriétaire, et seulement si l'entreprise a activé le
+ * suivi correspondant. Sexe/civilité (§retour Betty du 18/09/2026, point 5) ne sont plus considérés
+ * "confidentiels" ici (obligatoires/toujours visibles, affichés sur la carte Identité elle-même). */
 function renderConfidentialEmployeeCard(e, user) {
   if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
   const settings = settingsRepository.getSettings();
-  if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
+  if (!settings.masseSalarialeActivee) return '';
   // §retour Betty du 14/09/2026 (Rémunération point 1, "historique des salaires") : les 5 derniers
   // changements, les plus récents en premier — alimenté automatiquement par updateEmployee, jamais
   // saisi à la main ici (voir DB.updateEmployee, data.js).
@@ -11893,10 +11895,9 @@ function renderConfidentialEmployeeCard(e, user) {
   return `
     <div class="card">
       <h2>Confidentiel</h2>
-      ${settings.masseSalarialeActivee ? infoRow('Salaire brut mensuel', formatCurrencyFR(e.salaireBrutMensuel || 0)) : ''}
-      ${settings.masseSalarialeActivee && e.salaireBrutMensuel ? infoRow('Coût employeur complet (estimé)', formatCurrencyFR(calculerCoutEmployeurComplet(e.salaireBrutMensuel, settings.tauxChargesPatronalesEstime))) : ''}
-      ${settings.suiviGenreActive ? infoRow('Genre', e.genre || '—') : ''}
-      ${settings.masseSalarialeActivee && historique.length ? `
+      ${infoRow('Salaire brut mensuel', formatCurrencyFR(e.salaireBrutMensuel || 0))}
+      ${e.salaireBrutMensuel ? infoRow('Coût employeur complet (estimé)', formatCurrencyFR(calculerCoutEmployeurComplet(e.salaireBrutMensuel, settings.tauxChargesPatronalesEstime))) : ''}
+      ${historique.length ? `
         <div class="search-section-label" style="padding-left:0; margin-top:12px;">Historique des salaires</div>
         <div class="mini-list">
           ${historique.map(h => `
@@ -12156,7 +12157,7 @@ function openAttestationEmployeurModal(id) {
           <h1>Attestation employeur</h1>
           <p>
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            atteste que ${escapeHtml(e.civilite)} ${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
+            atteste que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
             est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(e.poste || '____________________')},
             sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
           </p>
@@ -12186,8 +12187,8 @@ function openAttestationEmployeurModal(id) {
  * amende jusqu'à 3 750 € si absent ou incomplet lors d'un contrôle. Toutes les entrées, y compris
  * les salariés archivés (partis), classées par ordre chronologique d'embauche — jamais filtrées
  * par équipe visible (c'est un document légal de l'entreprise entière, pas un rapport managérial).
- * "Sexe" reprend genre s'il est renseigné (suivi RH optionnel), sinon déduit de civilite (toujours
- * renseignée) — jamais laissé vide si l'un des deux existe. */
+ * "Sexe" (état civil, obligatoire depuis le 18/09/2026) via getSexe (data.js), qui retombe sur
+ * l'ancien champ "genre" pour une fiche créée avant ce champ. */
 function openRegistreUniquePersonnelModal() {
   if (getVisibleEmployeeIdsForCurrentUser() !== null) {
     showToast('Vous n\'avez pas le droit d\'accéder au registre du personnel.', 'error');
@@ -12203,8 +12204,6 @@ function openRegistreUniquePersonnelModal() {
   const profile = companyRepository.getProfile();
   const employees = employeeRepository.getAll().slice()
     .sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
-
-  const sexeOf = (e) => e.genre || (e.civilite === 'Mme' ? 'Femme' : e.civilite === 'M.' ? 'Homme' : '—');
 
   const html = `
     <div class="modal modal-large">
@@ -12232,7 +12231,7 @@ function openRegistreUniquePersonnelModal() {
                   <tr>
                     <td>${escapeHtml(e.nom)}</td>
                     <td>${escapeHtml(e.prenom)}</td>
-                    <td>${escapeHtml(sexeOf(e))}</td>
+                    <td>${escapeHtml(getSexe(e) || '—')}</td>
                     <td>${escapeHtml(e.nationalite || '—')}</td>
                     <td>${formatDate(e.dateNaissance)}</td>
                     <td>${escapeHtml(e.poste || '—')}</td>
@@ -12432,7 +12431,7 @@ function openCertificatTravailModal(id) {
           <h1>Certificat de travail</h1>
           <p>
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            certifie que ${escapeHtml(e.civilite)} ${personNameHtml(e)} a été employé(e) au sein de notre entreprise
+            certifie que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)} a été employé(e) au sein de notre entreprise
             du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
             en qualité de ${escapeHtml(e.poste || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
           </p>
@@ -17478,7 +17477,8 @@ function renderParametresListes() {
           <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...) — à faire valider par votre gestionnaire de paie.</p>
         </div>
         <div class="form-field form-field-checkbox">
-          <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Suivre la répartition Hommes / Femmes</label>
+          <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Afficher la répartition Hommes / Femmes sur le tableau de bord</label>
+          <p class="form-hint">Le sexe (état civil) est désormais un champ obligatoire de la fiche salarié, indépendamment de ce réglage : celui-ci ne contrôle que l'affichage du graphique de répartition sur le tableau de bord Propriétaire.</p>
         </div>
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-age" ${settings.suiviAgeActive ? 'checked' : ''}> Suivre la pyramide des âges</label>
@@ -18698,9 +18698,10 @@ function getFilteredAuditLog() {
  * mentions obligatoires (Code du travail, art. L1221-13/D1221-23) — nom, prénom, sexe, date de
  * naissance, nationalité, emploi, dates d'entrée/sortie, type de contrat — pour CHAQUE salarié ayant
  * travaillé dans l'entreprise, y compris parti depuis longtemps (voir 0053_anonymize_conserve_registre.sql,
- * qui préserve exactement ces champs de l'anonymisation RGPD pour cette raison). Civilité utilisée
- * comme mention de sexe : c'est la seule donnée de ce type que Nexus collecte. Trié par date d'entrée
- * (ordre chronologique attendu d'un registre), présentable tel quel à un contrôle (bouton Imprimer). */
+ * qui préserve exactement ces champs de l'anonymisation RGPD pour cette raison). "Sexe" via getSexe
+ * (data.js, état civil obligatoire depuis le 18/09/2026 — retour Betty, point 5). Trié par date
+ * d'entrée (ordre chronologique attendu d'un registre), présentable tel quel à un contrôle (bouton
+ * Imprimer). */
 function renderParametresRegistrePersonnel() {
   const employees = employeeRepository.getAll().slice().sort((a, b) => (a.dateEmbauche || '').localeCompare(b.dateEmbauche || ''));
   return `
@@ -18720,7 +18721,7 @@ function renderParametresRegistrePersonnel() {
               <tr>
                 <td>${escapeHtml(e.nom)}</td>
                 <td>${escapeHtml(e.prenom)}</td>
-                <td>${escapeHtml(e.civilite || '—')}</td>
+                <td>${escapeHtml(getSexe(e) || '—')}</td>
                 <td>${e.dateNaissance ? formatDate(e.dateNaissance) : '—'}</td>
                 <td>${escapeHtml(e.nationalite || '—')}</td>
                 <td>${escapeHtml(e.poste || '—')}</td>
@@ -24131,16 +24132,18 @@ function updateEquipeOptionsForSelectedService() {
 }
 
 /** Salaire/genre : édition réservée au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
+/** §retour Betty du 18/09/2026 (point 5) : le genre n'est plus ici (déplacé vers un vrai champ
+ * "Sexe (état civil)" obligatoire, onglet Identité, jamais optionnel/confidentiel) — cette section
+ * ne porte plus que le salaire. */
 function renderConfidentialEmployeeFieldset(employee, settings) {
   const user = authRepository.getCurrentUser();
   if (!user || user.role !== ROLES.PROPRIETAIRE) return '';
-  if (!settings.masseSalarialeActivee && !settings.suiviGenreActive) return '';
+  if (!settings.masseSalarialeActivee) return '';
   return `
     <fieldset class="form-section" id="employee-form-section-confidentiel" data-employee-tab-panel="confidentiel" hidden>
       <legend>Confidentiel</legend>
       <div class="form-grid">
-        ${settings.masseSalarialeActivee ? textField('salaireBrutMensuel', 'Salaire brut mensuel (€)', employee.salaireBrutMensuel, false, 'number') : ''}
-        ${settings.suiviGenreActive ? selectField('genre', 'Genre', ['Homme', 'Femme', 'Autre'], employee.genre) : ''}
+        ${textField('salaireBrutMensuel', 'Salaire brut mensuel (€)', employee.salaireBrutMensuel, false, 'number')}
       </div>
     </fieldset>
   `;
@@ -24895,9 +24898,19 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
           <fieldset class="form-section" id="employee-form-section-identite" data-employee-tab-panel="identite">
             <legend>Identité</legend>
             <div class="form-grid">
-              ${selectField('civilite', 'Civilité', ['M.', 'Mme'], employee.civilite)}
+              <div class="form-field">
+                <label for="f-sexe">Sexe (état civil) *</label>
+                <select class="input" id="f-sexe" name="sexe" required>
+                  <option value="" ${!employee.sexe ? 'selected' : ''}>—</option>
+                  <option value="Homme" ${employee.sexe === 'Homme' ? 'selected' : ''}>Homme</option>
+                  <option value="Femme" ${employee.sexe === 'Femme' ? 'selected' : ''}>Femme</option>
+                </select>
+                <p class="form-hint">Obligatoire : alimente le registre unique du personnel, la DSN et l'index de l'égalité professionnelle.</p>
+              </div>
+              ${selectField('civilite', 'Civilité d\'usage', null, employee.civilite, [{ value: 'Madame', label: 'Madame' }, { value: 'Monsieur', label: 'Monsieur' }, { value: 'ne_pas_accorder', label: 'Ne pas accorder' }], 'Optionnelle : accorde l\'affichage et les documents (attestations, certificat de travail...). Sans choix, déduite du sexe à l\'état civil ci-contre.')}
               ${textField('prenom', 'Prénom', employee.prenom, true)}
               ${textField('nom', 'Nom', employee.nom, true)}
+              ${textField('nomUsage', 'Nom d\'usage', employee.nomUsage, false, 'text', 'any', 'Nom sous lequel le salarié souhaite être identifié au quotidien (mariage, usage personnel...), distinct du nom légal ci-dessus. Jamais utilisé sur un document officiel (registre, paie, DSN).')}
               <div class="form-field">
                 <label for="f-email">Email *</label>
                 <input class="input" type="email" id="f-email" name="email" value="${escapeHtml(employee.email || '')}" required
@@ -25039,6 +25052,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
 
   bindTempsTravailFields(settings);
   bindRegimeRTTFields();
+  bindSexeCiviliteDefault();
 
   // §correctif audit du 23/08/2026 (§7.20) : "rien ne calcule ce montant ni ne le signale au moment
   // où l'on renseigne une date de départ" — mis à jour dès la saisie, pas seulement après
@@ -25103,6 +25117,20 @@ function bindRegimeRTTFields() {
   regimeInput.addEventListener('change', update);
   forfaitJoursInput.addEventListener('input', update);
   update();
+}
+
+/** §retour Betty du 18/09/2026 (point 5) : "civilité d'usage... défaut depuis l'état civil" — un
+ * premier choix de sexe (état civil) propose une civilité d'usage cohérente, jamais une valeur
+ * imposée ("M." par défaut, l'ancien comportement) : seulement une SUGGESTION au moment du premier
+ * choix, jamais réécrite si la civilité a déjà été touchée (à la main, ou par ce même mécanisme). */
+function bindSexeCiviliteDefault() {
+  const sexeInput = document.getElementById('f-sexe');
+  const civiliteInput = document.getElementById('f-civilite');
+  sexeInput.addEventListener('change', () => {
+    if (civiliteInput.value) return;
+    if (sexeInput.value === 'Homme') civiliteInput.value = 'Monsieur';
+    else if (sexeInput.value === 'Femme') civiliteInput.value = 'Madame';
+  });
 }
 
 /** §retour Betty du 18/09/2026 (points 2.1/2.3) : fonction pure (testable sans DOM) déterminant
