@@ -4984,8 +4984,8 @@ function bindGlobalEvents() {
     }, 250);
   });
 
-  // Autocomplétion SIRET (API Recherche d'entreprises gouv.fr, gratuite/sans clé) — dès que 14
-  // chiffres valides sont saisis, remplit automatiquement la raison sociale et l'adresse du siège.
+  // §retour Betty du 18/09/2026 (point 4) : idem que l'autocomplétion SIRET juste en dessous, en
+  // parallèle plutôt qu'une deuxième saisie — voir fetchConventionCollectiveFromSiret.
   let siretAutocompleteTimer = null;
   document.addEventListener('input', (e) => {
     if (!e.target.hasAttribute('data-siret-autocomplete')) return;
@@ -5017,6 +5017,51 @@ function bindGlobalEvents() {
       if (raisonField && !raisonField.value) raisonField.value = result.nom_complet || '';
       if (adresseField && !adresseField.value) adresseField.value = result.siege.adresse || '';
       if (hint) hint.textContent = `✓ ${result.nom_complet || ''}`;
+
+      // §retour Betty du 18/09/2026 (point 4) : suggestion de convention collective, JAMAIS
+      // appliquée automatiquement (voir renderParametresEntreprise, #convention-suggestion) — un
+      // simple bouton "Confirmer" explicite. render() est volontairement évité ici : le formulaire
+      // porte peut-être déjà d'autres champs modifiés à la main (raison sociale, adresse...) pas
+      // encore enregistrés, qu'un ré-rendu complet effacerait en revenant à la version sauvegardée.
+      const suggestionEl = document.getElementById('convention-suggestion');
+      const conventionField = document.getElementById('f-conventionCollective');
+      if (suggestionEl && conventionField) {
+        suggestionEl.classList.remove('visible');
+        suggestionEl.innerHTML = '';
+        const convention = await fetchConventionCollectiveFromSiret(digits);
+        if (convention) {
+          if (convention.url) {
+            const settingsAvecUrl = settingsRepository.getSettings();
+            settingsAvecUrl.conventionCollectiveLegifranceUrl = convention.url;
+            settingsRepository.saveSettings(settingsAvecUrl);
+          }
+          const label = convention.label ? `${convention.label} (IDCC ${convention.idcc})` : null;
+          if (label && conventionField.value !== label) {
+            suggestionEl.classList.add('visible');
+            suggestionEl.innerHTML = `
+              <span>${icon(ICONS.warningTriangle, 13)} Convention proposée d'après le SIRET, à confirmer : <strong>${escapeHtml(label)}</strong></span>
+              <span style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-confirmer-convention">Confirmer</button>
+                <button type="button" class="btn-link" id="btn-ignorer-convention">Ignorer</button>
+              </span>
+            `;
+            document.getElementById('btn-confirmer-convention').addEventListener('click', () => {
+              const settingsAJour = settingsRepository.getSettings();
+              if (!(settingsAJour.conventionsCollectives || []).includes(label)) {
+                settingsAJour.conventionsCollectives = [...(settingsAJour.conventionsCollectives || []), label];
+                settingsRepository.saveSettings(settingsAJour);
+              }
+              conventionField.value = label;
+              suggestionEl.classList.remove('visible');
+              suggestionEl.innerHTML = '';
+            });
+            document.getElementById('btn-ignorer-convention').addEventListener('click', () => {
+              suggestionEl.classList.remove('visible');
+              suggestionEl.innerHTML = '';
+            });
+          }
+        }
+      }
     }, 400);
   });
 
@@ -16593,8 +16638,14 @@ function renderParametresEntreprise() {
           ${textField('adresse', 'Adresse', profile.adresse)}
           ${textField('telephone', 'Téléphone', profile.telephone)}
           ${textField('email', 'Email', profile.email, true, 'email')}
-          ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, profile.conventionCollective)}
+          ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', profile.conventionCollective)}
         </div>
+        <!-- §retour Betty du 18/09/2026 (point 4) : proposée automatiquement dès qu'un SIRET valide
+             est saisi ci-dessus (voir la recherche déjà en place pour la raison sociale/l'adresse),
+             mais JAMAIS appliquée sans confirmation explicite — un salarié qui saisit son SIRET ne
+             s'attend pas à voir un champ légal changer sous ses yeux. -->
+        <div id="convention-suggestion" class="field-warning" style="align-items: flex-start; flex-direction: column; gap: 8px;"></div>
+        ${settings.conventionCollectiveLegifranceUrl ? `<p class="form-hint"><a href="${escapeHtml(settings.conventionCollectiveLegifranceUrl)}" target="_blank" rel="noopener noreferrer">Voir mes accords d'entreprise (Légifrance)</a></p>` : ''}
         <p class="form-hint">${icon(ICONS.info, 12)} Liste des conventions collectives non exhaustive (~180 les plus courantes) et pas automatiquement mise à jour : si la vôtre n'apparaît pas ou que le code IDCC vous semble dépassé, <a href="https://code.travail.gouv.fr/outils/convention-collective" target="_blank" rel="noopener noreferrer">vérifiez sur l'outil officiel du Ministère du Travail</a>.</p>
         <button type="submit" class="btn btn-primary" style="margin-top: 14px;">Enregistrer</button>
       </form>
@@ -17057,6 +17108,35 @@ function bindParametresAbonnementEvents() {
 }
 
 function bindParametresEntrepriseEvents() {
+  bindConventionCollectiveAutocomplete();
+
+  // §retour Betty du 18/09/2026 (point 4) : le lien Légifrance ne doit pas attendre que quelqu'un
+  // ressaisisse le SIRET (déjà en place pour toute entreprise existante) — un aller simple, une
+  // seule fois par ouverture de cet écran si jamais encore récupéré, sans jamais toucher au champ
+  // Convention collective lui-même (juste le lien, voir fetchConventionCollectiveFromSiret).
+  const settingsInitiaux = settingsRepository.getSettings();
+  const siretActuel = (companyRepository.getProfile().siret || '').replace(/\s/g, '');
+  if (!settingsInitiaux.conventionCollectiveLegifranceUrl && /^\d{14}$/.test(siretActuel)) {
+    fetchConventionCollectiveFromSiret(siretActuel).then(convention => {
+      if (!convention || !convention.url) return;
+      const settingsAJour = settingsRepository.getSettings();
+      settingsAJour.conventionCollectiveLegifranceUrl = convention.url;
+      settingsRepository.saveSettings(settingsAJour);
+      // Jamais render() ici : un ré-rendu complet effacerait toute saisie en cours sur ce même
+      // formulaire depuis l'ouverture de l'écran (le délai réseau n'est pas instantané). Le lien
+      // est juste inséré directement s'il n'existe pas déjà, sans toucher au reste du formulaire.
+      const form = document.getElementById('entreprise-form');
+      if (form && !document.getElementById('lien-legifrance-accords')) {
+        const p = document.createElement('p');
+        p.className = 'form-hint';
+        p.id = 'lien-legifrance-accords';
+        p.innerHTML = `<a href="${escapeHtml(convention.url)}" target="_blank" rel="noopener noreferrer">Voir mes accords d'entreprise (Légifrance)</a>`;
+        const suggestionEl = document.getElementById('convention-suggestion');
+        if (suggestionEl) suggestionEl.insertAdjacentElement('afterend', p);
+      }
+    });
+  }
+
   document.getElementById('entreprise-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const formData = new FormData(evt.target);
@@ -25193,7 +25273,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${equipeSelectField(employee.service, employee.equipe)}
               ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).')}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
-              ${selectField('conventionCollective', 'Convention collective', settings.conventionsCollectives, employee.conventionCollective)}
+              ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })))}
               ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat)}
               <div class="form-field">
@@ -25291,6 +25371,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   bindEmployeeFormTabs();
+  bindConventionCollectiveAutocomplete();
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 
@@ -25457,6 +25538,92 @@ function companyNameAutocompleteField(name, label, value, required, siretName, a
       <div class="address-suggestions" id="f-${name}-suggestions"></div>
     </div>
   `;
+}
+
+/** §retour Betty du 18/09/2026 (point 4) : remplace la liste déroulante native (~180 entrées, pas
+ * facile à parcourir) par une recherche texte insensible aux accents/casse (même idiome que
+ * companyNameAutocompleteField/addressAutocompleteField ci-dessus : suggestions sous le champ,
+ * clic pour choisir, saisie manuelle toujours possible si aucune suggestion ne convient). La
+ * convention déjà retenue par l'entreprise (pinnedFirst) apparaît toujours en tête des résultats. */
+function conventionCollectiveAutocompleteField(name, label, value) {
+  return `
+    <div class="form-field address-autocomplete-field">
+      <label for="f-${name}">${escapeHtml(label)}</label>
+      <input class="input" type="text" id="f-${name}" name="${name}" value="${escapeHtml(value || '')}" autocomplete="off" data-convention-autocomplete="true">
+      <div class="address-suggestions" id="f-${name}-suggestions"></div>
+    </div>
+  `;
+}
+
+/** Secteur affiché à côté de chaque suggestion (voir IDCC_CONVENTIONS) — extrait du libellé
+ * "Nom (IDCC XXXX)" déjà stocké dans settings.conventionsCollectives, jamais une seconde source de
+ * vérité à maintenir en synchronisation. null pour une convention ajoutée automatiquement depuis
+ * l'API (hors des ~180 courantes du catalogue statique) : pas grave, juste pas de secteur affiché. */
+function secteurForConventionLabel(label) {
+  const m = /\(IDCC (\d+)\)/.exec(label || '');
+  if (!m) return null;
+  const conv = IDCC_CONVENTIONS.find(c => c.code === m[1]);
+  return conv ? conv.secteur : null;
+}
+
+/** §retour Betty du 18/09/2026 (point 4) : vérifiée moi-même (navigateur, plusieurs SIRET réels,
+ * dont un sous convention Syntec confirmée : IDCC 1486) avant de choisir cette API plutôt que
+ * l'autre candidate (recherche-entreprises.api.gouv.fr, déjà utilisée pour la raison sociale/
+ * l'adresse ci-dessus) :
+ *   - gratuite, sans clé, CORS ouvert depuis nexus-rh.com (testé en direct) ;
+ *   - renvoie directement le libellé OFFICIEL de la convention ET un lien Légifrance pointant sur
+ *     LE TEXTE PRÉCIS de cette convention (un identifiant Légifrance opaque, "KALICONT...", que
+ *     seule cette API donne — impossible à reconstruire soi-même à partir du seul numéro IDCC) ;
+ *   - "conventions": [] quand aucune convention n'est déterminée pour ce SIRET — l'autre API renvoie
+ *     alors le code sentinelle "9999" ("aucune convention déterminée"), à traiter à la main.
+ * Retourne null (jamais une exception) sur tout échec réseau/SIRET inconnu : une simple absence de
+ * suggestion, jamais bloquant pour la saisie manuelle. */
+async function fetchConventionCollectiveFromSiret(siret) {
+  try {
+    const res = await fetch(`https://api.recherche-entreprises.fabrique.social.gouv.fr/api/v1/etablissement/${siret}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const convention = (data.conventions || [])[0];
+    if (!convention) return null;
+    return { idcc: String(convention.idcc), label: convention.shortTitle || convention.title, url: convention.url || null };
+  } catch {
+    return null;
+  }
+}
+
+function bindConventionCollectiveAutocomplete() {
+  document.querySelectorAll('[data-convention-autocomplete]').forEach(input => {
+    const suggestionsEl = document.getElementById(input.id + '-suggestions');
+    if (!suggestionsEl) return;
+    const showSuggestions = () => {
+      const settings = settingsRepository.getSettings();
+      const profile = companyRepository.getProfile();
+      const q = normalizeForSearch(input.value.trim());
+      let list = settings.conventionsCollectives || [];
+      if (q) list = list.filter(c => normalizeForSearch(c).includes(q));
+      if (profile.conventionCollective && list.includes(profile.conventionCollective)) {
+        list = [profile.conventionCollective, ...list.filter(c => c !== profile.conventionCollective)];
+      }
+      list = list.slice(0, 30);
+      if (!list.length) { suggestionsEl.style.display = 'none'; suggestionsEl.innerHTML = ''; return; }
+      suggestionsEl.innerHTML = list.map(c => {
+        const secteur = secteurForConventionLabel(c);
+        return `<div class="address-suggestion-item" data-convention-value="${escapeHtml(c)}">${escapeHtml(c)}${secteur ? ` <span class="text-muted" style="font-size:11px;">· ${escapeHtml(secteur)}</span>` : ''}</div>`;
+      }).join('');
+      suggestionsEl.style.display = 'block';
+    };
+    input.addEventListener('input', showSuggestions);
+    input.addEventListener('focus', showSuggestions);
+  });
+
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-convention-value]');
+    if (!item) return;
+    const suggestionsEl = item.closest('.address-suggestions');
+    const input = suggestionsEl && document.getElementById(suggestionsEl.id.replace(/-suggestions$/, ''));
+    if (input) input.value = item.dataset.conventionValue;
+    if (suggestionsEl) { suggestionsEl.style.display = 'none'; suggestionsEl.innerHTML = ''; }
+  });
 }
 
 /** type='number' sans step : le navigateur applique step="1" par défaut et rejette silencieusement

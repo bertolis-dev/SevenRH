@@ -375,6 +375,8 @@ globalThis.__renderExportPaieExportTab = renderExportPaieExportTab;
 globalThis.__openAttestationEmployeurModal = openAttestationEmployeurModal;
 globalThis.__openCertificatTravailModal = openCertificatTravailModal;
 globalThis.__renderPrintDocumentHeader = renderPrintDocumentHeader;
+globalThis.__fetchConventionCollectiveFromSiret = fetchConventionCollectiveFromSiret;
+globalThis.__secteurForConventionLabel = secteurForConventionLabel;
 globalThis.__openRegistreUniquePersonnelModal = openRegistreUniquePersonnelModal;
 globalThis.__exportEmployeesExcel = exportEmployeesExcel;
 globalThis.__SETTINGS_LIST_USAGE_CHECK = SETTINGS_LIST_USAGE_CHECK;
@@ -672,6 +674,8 @@ globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
     openAttestationEmployeurModal: sandbox.__openAttestationEmployeurModal,
     openCertificatTravailModal: sandbox.__openCertificatTravailModal,
     renderPrintDocumentHeader: sandbox.__renderPrintDocumentHeader,
+    fetchConventionCollectiveFromSiret: sandbox.__fetchConventionCollectiveFromSiret,
+    secteurForConventionLabel: sandbox.__secteurForConventionLabel,
     openRegistreUniquePersonnelModal: sandbox.__openRegistreUniquePersonnelModal,
     exportEmployeesExcel: sandbox.__exportEmployeesExcel,
     SETTINGS_LIST_USAGE_CHECK: sandbox.__SETTINGS_LIST_USAGE_CHECK,
