@@ -46,6 +46,10 @@ globalThis.__seedLeaveTypes = seedLeaveTypes;
 globalThis.__ensureDefaultLeaveTypesBackfilled = ensureDefaultLeaveTypesBackfilled;
 globalThis.__migrateLeaveTypeAutoriserDemiJournee = migrateLeaveTypeAutoriserDemiJournee;
 globalThis.__hydrateCurrentCompanyWithMigrations = hydrateCurrentCompanyWithMigrations;
+globalThis.__ensureNomsPrenomsMigresVersServeur = ensureNomsPrenomsMigresVersServeur;
+globalThis.__ensureVisitesMedicalesMigreesVersServeur = ensureVisitesMedicalesMigreesVersServeur;
+globalThis.__formatNomFamille = formatNomFamille;
+globalThis.__formatPrenom = formatPrenom;
 globalThis.__hasPermission = hasPermission;
 globalThis.__PERMISSIONS = PERMISSIONS;
 globalThis.__calculateAcquisition = calculateAcquisition;
@@ -107,6 +111,10 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
     ensureDefaultLeaveTypesBackfilled: sandbox.__ensureDefaultLeaveTypesBackfilled,
     migrateLeaveTypeAutoriserDemiJournee: sandbox.__migrateLeaveTypeAutoriserDemiJournee,
     hydrateCurrentCompanyWithMigrations: sandbox.__hydrateCurrentCompanyWithMigrations,
+    ensureNomsPrenomsMigresVersServeur: sandbox.__ensureNomsPrenomsMigresVersServeur,
+    ensureVisitesMedicalesMigreesVersServeur: sandbox.__ensureVisitesMedicalesMigreesVersServeur,
+    formatNomFamille: sandbox.__formatNomFamille,
+    formatPrenom: sandbox.__formatPrenom,
     hasPermission: sandbox.__hasPermission,
     PERMISSIONS: sandbox.__PERMISSIONS,
     calculateAcquisition: sandbox.__calculateAcquisition,

@@ -748,6 +748,13 @@ async function hydrateCurrentCompanyWithMigrations() {
     // APRÈS avoir reçu ce retour. Retrouve donc l'utilisateur courant directement sur `company`.
     const currentUser = (company.employees || []).find(e => e.id === company._currentEmployeeId) || null;
     await ensureDefaultLeaveTypesBackfilled(company, currentUser);
+    // §retour Betty du 18/09/2026 : la mise en forme des noms et la reprise du suivi médical
+    // (getEmployees() ci-dessous) restaient purement locales — jamais un vrai envoi à Supabase,
+    // puisque saveCurrentCompany n'écrit que le cache local. Voir ensureNomsPrenomsMigresVersServeur/
+    // ensureVisitesMedicalesMigreesVersServeur pour le détail et le choix de ne jamais poser de
+    // drapeau de complétude.
+    await ensureNomsPrenomsMigresVersServeur(company, currentUser);
+    await ensureVisitesMedicalesMigreesVersServeur(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -844,6 +851,83 @@ async function ensureDefaultLeaveTypesBackfilled(company, currentUser) {
     // session, et la synchronisation sera retentée à la prochaine connexion (cette fonction est
     // idempotente, donc sans risque de doublon si elle se déclenche plusieurs fois).
     console.error('ensureDefaultLeaveTypesBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** §retour Betty du 18/09/2026 : contrepartie SERVEUR de la reprise de mise en forme des noms
+ * (company.nomsPrenomsMigres, voir DB.getEmployees() plus bas) — celle-ci ne fait que du formatage
+ * LOCAL, jamais un vrai envoi réseau. Sans cette fonction, un salarié gardait son ancien nom mal
+ * formaté côté serveur pour toujours ; notify-request-email (Edge Function, ligne ~172) le relit
+ * directement en base et envoyait par exemple "marie-caroline dupont : Congés payés" à un manager,
+ * alors que l'écran affichait partout "Marie-Caroline DUPONT".
+ *
+ * Volontairement SANS drapeau de complétude : recalcule à CHAQUE connexion l'écart réel entre le nom
+ * actuel et sa version formatée (comparaison de données, jamais un booléen qu'on se contente de
+ * croire) — un coût négligeable (quelques comparaisons de chaînes par salarié), qui évite exactement
+ * le défaut relevé sur company.nomsPrenomsMigres : un drapeau remonté par accident au serveur (ex.
+ * via DB.saveCompanyProfile, qui pousse tout ce qui reste du blob entreprise) ne peut plus jamais
+ * faire croire une correction déjà faite qui ne l'a en réalité pas été — il ne reste alors, par
+ * construction, plus rien à corriger la fois suivante. Réservée à qui a le droit d'écrire les
+ * salariés (MODIFIER_SALARIE) : sans ce garde-fou, l'écriture serait refusée par la RLS et l'erreur
+ * avalée par le catch ci-dessous, exactement le défaut déjà corrigé fin août sur
+ * ensureDefaultLeaveTypesBackfilled ci-dessus. */
+async function ensureNomsPrenomsMigresVersServeur(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.MODIFIER_SALARIE)) return;
+  const modified = [];
+  (company.employees || []).forEach(e => {
+    const nom = e.nom ? formatNomFamille(e.nom) : e.nom;
+    const prenom = e.prenom ? formatPrenom(e.prenom) : e.prenom;
+    if (nom !== e.nom || prenom !== e.prenom) {
+      e.nom = nom;
+      e.prenom = prenom;
+      modified.push(e);
+    }
+  });
+  if (!modified.length) return;
+  try {
+    await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
+  } catch (err) {
+    console.error('ensureNomsPrenomsMigresVersServeur : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** Contrepartie serveur de la reprise du suivi médical (company.visitesMedicalesMigrees, voir
+ * DB.getEmployees() plus bas) — même raisonnement, même choix de conception que
+ * ensureNomsPrenomsMigresVersServeur juste au-dessus (aucun drapeau de complétude, réservée à
+ * MODIFIER_SALARIE) : sans elle, l'historique converti à partir de l'ancien champ unique
+ * dateDerniereVisiteMedicale ne quittait jamais ce navigateur. */
+async function ensureVisitesMedicalesMigreesVersServeur(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.MODIFIER_SALARIE)) return;
+  const now = new Date().toISOString();
+  const modified = [];
+  (company.employees || []).forEach(e => {
+    let changed = false;
+    if (!e.suiviMedicalType) { e.suiviMedicalType = 'simple'; changed = true; }
+    if (!Array.isArray(e.visitesMedicales)) { e.visitesMedicales = []; changed = true; }
+    if (e.dateDerniereVisiteMedicale && !e.visitesMedicales.length) {
+      e.visitesMedicales.push({
+        id: generateId('visite'),
+        date: e.dateDerniereVisiteMedicale,
+        type: 'periodique',
+        conclusion: '',
+        dateProchaineEcheance: '',
+        contreVisite: false,
+        amenagements: '',
+        commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026) — aucune donnée médicale n\'a été reprise.',
+        pieceJointe: null,
+        dateCreation: now,
+        dateModification: now,
+        auteurId: null
+      });
+      changed = true;
+    }
+    if (changed) modified.push(e);
+  });
+  if (!modified.length) return;
+  try {
+    await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
+  } catch (err) {
+    console.error('ensureVisitesMedicalesMigreesVersServeur : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -1876,7 +1960,17 @@ const DB = {
    * même patron que getLeaveTypes() (couleurs des événements familiaux, 16/09/2026) : drapeau posé
    * directement sur `company` (jamais settings/saveEmployees, qui poussent vers Supabase — de
    * nombreux tests appellent employeeRepository.getAll() sans mocker SupabaseSync) et persisté via
-   * saveCurrentCompany, réseau-free. Ne s'exécute qu'une fois par entreprise. */
+   * saveCurrentCompany, réseau-free. Ne s'exécute qu'une fois par entreprise.
+   *
+   * §retour Betty du 18/09/2026 : cette reprise reste donc PUREMENT locale, y compris son drapeau —
+   * c'est voulu, pour un affichage immédiat sans dépendre du réseau ni casser les nombreux tests qui
+   * appellent cette fonction sans mocker SupabaseSync. Le vrai envoi vers Supabase (indispensable,
+   * ex. pour que notify-request-email reçoive le nom déjà formaté) est traité séparément par
+   * ensureNomsPrenomsMigresVersServeur/ensureVisitesMedicalesMigreesVersServeur (appelées à la
+   * connexion réelle, voir hydrateCurrentCompanyWithMigrations) — celles-ci ne posent JAMAIS de
+   * drapeau de complétude, justement pour ne jamais pouvoir mentir si jamais ce drapeau LOCAL migre
+   * par accident vers le serveur (ex. via DB.saveCompanyProfile). Ne pas réutiliser ce drapeau local
+   * comme preuve d'une synchronisation serveur. */
   getEmployees() {
     const company = this.getCurrentCompany();
     if (company && !company.visitesMedicalesMigrees) {
