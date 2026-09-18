@@ -1252,6 +1252,13 @@ p { margin: 0; line-height: 1.5; }
 
 .modal-large { max-width: 760px; }
 .modal-small { max-width: 420px; }
+/* §retour Betty du 19/09/2026 (point 8, "deux largeurs de fenêtre pour toute l'application... un
+   choix global qui ne tient plus dès qu'un formulaire dépasse quelques champs") : un premier palier
+   intermédiaire entre le défaut (480px, sans classe) et .modal-large (760px) — pour un formulaire à
+   un seul form-grid mais 5-6 champs (ex. openShiftModal), un peu à l'étroit à 480px sans avoir
+   besoin des 760px d'un vrai grand formulaire. Bénéficie automatiquement du même repli
+   width:100% déjà posé sur .modal (aucune media query supplémentaire nécessaire). */
+.modal-medium { max-width: 600px; }
 /* §retour Betty du 18/09/2026 (point 1) : la fiche salarié (onglets, plusieurs champs par ligne)
    restait bornée à 760px comme n'importe quelle petite modale, gaspillant l'espace disponible sur un
    grand écran — 95vw plafonné à 1100px reste raisonnable, et en dessous de 1100px de large (mobile

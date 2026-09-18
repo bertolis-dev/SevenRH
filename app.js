@@ -14415,7 +14415,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
   }
 
   const html = `
-    <div class="modal">
+    <div class="modal modal-large">
       <div class="modal-header">
         <h2>${categorie === 'autre' ? 'Nouvelle demande d\'absence' : categorie === 'conge' ? 'Nouvelle demande de congé' : 'Nouvelle demande'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
@@ -20999,7 +20999,7 @@ function openShiftModal(shift, preset) {
   const peutProposerEchange = shift && user.id === shift.employeeId && !echangeDejaPropose;
 
   const html = `
-    <div class="modal">
+    <div class="modal modal-medium">
       <div class="modal-header">
         <h2>${shift ? 'Modifier le quart' : 'Ajouter un quart'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
@@ -23147,7 +23147,7 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
   const justificatifObligatoire = isJustificatifObligatoireForExpense(champs.categorie || settings.categoriesFrais[0], champs.montantTTC, settings);
 
   const html = `
-    <div class="modal">
+    <div class="modal modal-large">
       <div class="modal-header">
         <h2>${editingExpense ? 'Modifier la note de frais' : 'Nouvelle note de frais'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
