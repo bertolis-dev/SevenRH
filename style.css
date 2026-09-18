@@ -3968,12 +3968,27 @@ textarea.input { resize: vertical; font-family: inherit; }
    --------------------------------------------------------------------- */
 
 .print-header {
-  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 8px;
   border-bottom: 2px solid var(--color-primary);
-  padding-bottom: 12px;
+  padding-bottom: 14px;
 }
 
 .print-header h1 { margin-bottom: 4px; }
+
+/* §retour Betty du 18/09/2026 (point 7) : logo + identité de l'entreprise d'un côté, "Fait à ...,
+   le ..." de l'autre (lieu et date ensemble, sur leur propre ligne, jamais mélangés avec autre
+   chose) — voir renderPrintDocumentHeader (app.js), modèle repris du registre du personnel. */
+.print-header-identity { display: flex; align-items: center; gap: 12px; }
+.print-logo { max-width: 56px; max-height: 56px; border-radius: var(--radius-sm); object-fit: contain; }
+.print-lieu-date { font-size: 13px; color: var(--color-text-muted); white-space: nowrap; margin-top: 2px; }
+
+/* Le titre reste DÉTACHÉ de l'en-tête (jamais coincé dans le même bloc bordé que le logo/la date) —
+   son propre espace, pour respirer avant que le corps du document ne commence. */
+.print-title { margin: 22px 0 18px; }
 
 .print-document h3 {
   font-size: 12px;
@@ -3985,8 +4000,8 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 .print-attestation-text {
-  line-height: 1.8;
-  margin: 24px 0;
+  line-height: 1.9;
+  margin: 22px 0;
   font-size: 15px;
 }
 
@@ -4007,13 +4022,32 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 
 @media print {
-  body * { visibility: hidden; }
-  .print-area, .print-area * { visibility: visible; }
+  /* §retour Betty du 18/09/2026 (point 7) : l'ancienne technique (visibility:hidden sur tout le
+     reste + .print-area en position:absolute) laissait chaque élément caché occuper SA PLACE dans
+     la mise en page (visibility:hidden ne retire jamais du flux, contrairement à display:none) —
+     le navigateur paginait donc sur la hauteur du document ENTIER (sidebar, topbar, cartes du
+     tableau de bord...), avec la vraie zone imprimable, positionnée en absolu, répétée à l'identique
+     sur chacune des pages "fantômes" ainsi générées (le "certificat de travail en 6 pages
+     identiques et vides" qu'elle a signalé). display:none retire réellement du flux : :has()
+     (support navigateur moderne, cette app cible Chrome/Edge/Firefox/Safari récents) cache tout
+     élément qui ne contient PAS .print-area nulle part en dessous de lui, à N'IMPORTE QUEL niveau
+     d'imbrication, sans avoir à lister chaque conteneur (modale, écran Paramètres...) un par un. */
+  body *:not(:has(.print-area)):not(.print-area):not(.print-area *) { display: none !important; }
+  /* Le chemin d'ancêtres restant (ex. #modal-root > .modal > .modal-body) garde son display normal
+     (jamais forcé) mais perd tout ce qui, à ce niveau-là, contraignait la zone imprimable à la
+     taille de l'écran (modale plafonnée à 90vh avec défilement interne, position fixe...) —
+     sans ce reset, un document un peu long resterait invisible au-delà du cadre de la modale. */
+  .modal, .modal-body, #modal-root {
+    position: static !important;
+    inset: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
   .print-area {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
     padding: 24px;
   }
   /* Le voile de couleur de .card (voir plus haut) n'a pas sa place sur un document imprimé — gaspille

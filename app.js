@@ -11178,8 +11178,13 @@ function renderEmployeeDetail(id) {
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> Favori` : icon(ICONS.star, 13) + ' Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">${icon(ICONS.printer, 14)} Fiche PDF</button>
-        ${canEdit ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
-        ${canEdit ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
+        <!-- §retour Betty du 18/09/2026 (point 7) : les deux boutons s'excluaient jamais l'un
+             l'autre jusqu'ici, laissant générer un certificat de travail (qui certifie une période
+             d'emploi ACHEVÉE) pour un salarié toujours en poste. dateDepart (jamais dateFinContrat,
+             propre aux seuls CDD/intérim) tranche : departure effective -> certificat de travail,
+             encore en poste -> attestation employeur. -->
+        ${canEdit && !e.dateDepart ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
+        ${canEdit && e.dateDepart ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
         ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
         ${canArchiveEmployeeRecord(e) ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
@@ -12200,10 +12205,7 @@ function openEmployeePrintModal(id) {
       </div>
       <div class="modal-body">
         <div class="print-area print-document">
-          <div class="print-header">
-            <h1>${personNameHtml(e)}</h1>
-            <p class="text-muted">Matricule ${escapeHtml(e.matricule)} · Fiche générée le ${formatDate(toISODate(new Date()))}</p>
-          </div>
+          ${renderPrintDocumentHeader(companyRepository.getProfile(), `${e.prenom} ${e.nom}`, `Matricule ${e.matricule} · Fiche générée le ${formatDate(toISODate(new Date()))}`)}
 
           <h3>Identité</h3>
           ${infoRow('Email', e.email)}
@@ -12252,6 +12254,29 @@ function openEmployeePrintModal(id) {
   });
 }
 
+/** §retour Betty du 18/09/2026 (point 7) : en-tête commun aux documents officiels imprimables
+ * (attestation employeur, certificat de travail, attestation de salaire, registre du personnel),
+ * repris sur le modèle du registre (déjà le mieux structuré des quatre) : logo + identité de
+ * l'entreprise, une ligne "Fait à ..., le ..." séparée (lieu et date ensemble, jamais mélangés avec
+ * autre chose), puis un TITRE DÉTACHÉ (jamais coincé dans le même bloc que l'en-tête). `subtitle` est
+ * un texte libre optionnel affiché sous le titre (ex. "Document généré le ..."). */
+function renderPrintDocumentHeader(profile, title, subtitle) {
+  return `
+    <div class="print-header">
+      <div class="print-header-identity">
+        ${profile.logo ? `<img src="${escapeHtml(profile.logo)}" alt="Logo" class="print-logo">` : ''}
+        <div>
+          <strong>${escapeHtml(profile.raisonSociale || 'Entreprise')}</strong>
+          ${profile.siret ? `<div class="text-muted" style="font-size:12px;">SIRET ${escapeHtml(profile.siret)}</div>` : ''}
+        </div>
+      </div>
+      <p class="print-lieu-date">Fait ${profile.adresse ? `à ${escapeHtml(profile.adresse)}, ` : ''}le ${formatDate(toISODate(new Date()))}</p>
+    </div>
+    <h1 class="print-title">${escapeHtml(title)}</h1>
+    ${subtitle ? `<p class="text-muted" style="margin-top: -8px; margin-bottom: 20px;">${escapeHtml(subtitle)}</p>` : ''}
+  `;
+}
+
 /** Générateurs de documents RH (attestation employeur, certificat de travail) — même mécanique
  * d'impression que openEmployeePrintModal ci-dessus (.print-area + window.print(), pas de .docx :
  * aucune dépendance externe fiable pour ça dans ce projet 100% vanilla JS, et le risque vécu — "un
@@ -12274,18 +12299,18 @@ function openAttestationEmployeurModal(id) {
       <div class="modal-body">
         <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
-          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
-          <p style="text-align: right;">${formatDate(today)}</p>
-          <h1>Attestation employeur</h1>
-          <p>
+          ${renderPrintDocumentHeader(profile, 'Attestation employeur')}
+          <p class="print-attestation-text">
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
             atteste que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
             est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')},
             sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
           </p>
-          <p>Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.</p>
-          <p style="margin-top: 48px;">Fait pour servir et valoir ce que de droit.</p>
-          <p style="margin-top: 48px;">Signature et cachet de l'entreprise :</p>
+          <p class="print-attestation-text">Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.</p>
+          <div class="print-signature">
+            <span>Cachet de l'entreprise</span>
+            <span class="print-signature-line">Signature</span>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -12337,10 +12362,7 @@ function openRegistreUniquePersonnelModal() {
       <div class="modal-body">
         <p class="text-muted" style="margin-bottom: 14px;">Document obligatoire (Code du travail, art. L1221-13), à présenter sur demande de l'inspection du travail. Classé par ordre chronologique d'embauche, salariés partis compris.</p>
         <div class="print-area print-document">
-          <div class="print-header">
-            <h1>Registre unique du personnel</h1>
-            <p class="text-muted">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.siret ? ' · SIRET ' + escapeHtml(profile.siret) : ''} · Document généré le ${formatDate(toISODate(new Date()))}</p>
-          </div>
+          ${renderPrintDocumentHeader(profile, 'Registre unique du personnel')}
           <div style="overflow-x: auto;">
             <table class="table">
               <thead>
@@ -12535,10 +12557,14 @@ function openCertificatTravailModal(id) {
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const profile = companyRepository.getProfile();
   const settings = settingsRepository.getSettings();
-  const today = toISODate(new Date());
-  // Le certificat de travail (Code du travail, art. L1234-19) est obligatoire à la SORTIE — reste
-  // générable pour un contrat en cours (préparation à l'avance), juste avec un avertissement.
-  const dateSortie = e.dateFinContrat || (e.statut !== 'Actif' ? today : '');
+  // §retour Betty du 18/09/2026 (point 7) : utilisait dateFinContrat (propre aux CDD/intérim, voir
+  // employee.dateFinContrat) comme repli pour deviner une date de sortie — un CDI en cours n'a
+  // jamais ce champ renseigné, mais rien n'empêchait alors de générer un certificat de travail pour
+  // un salarié toujours en poste. dateDepart est LA vraie date de sortie, quel que soit le type de
+  // contrat (voir aussi le bouton conditionnel sur la fiche salarié, qui ne propose ce document QUE
+  // si dateDepart est renseignée — l'avertissement ci-dessous ne devrait donc plus jamais s'afficher
+  // en pratique, gardé par sécurité si la modale était un jour ouverte par un autre chemin).
+  const dateSortie = e.dateDepart;
 
   const html = `
     <div class="modal modal-large">
@@ -12547,21 +12573,21 @@ function openCertificatTravailModal(id) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de fin de contrat renseignée sur cette fiche : ce salarié semble toujours en poste. Le certificat de travail est obligatoire à la sortie (Code du travail, art. L1234-19) ; vérifiez la date avant remise.</p>` : ''}
+        ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de départ renseignée sur cette fiche : ce salarié semble toujours en poste. Le certificat de travail est réservé à une sortie effective (Code du travail, art. L1234-19) ; une attestation employeur convient tant qu'il est encore en poste.</p>` : ''}
         <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
         <div class="print-area print-document">
-          <p style="text-align: right;">${escapeHtml(profile.raisonSociale || 'Entreprise')}${profile.adresse ? ', ' + escapeHtml(profile.adresse) : ''}</p>
-          <p style="text-align: right;">${formatDate(today)}</p>
-          <h1>Certificat de travail</h1>
-          <p>
+          ${renderPrintDocumentHeader(profile, 'Certificat de travail')}
+          <p class="print-attestation-text">
             Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
             certifie que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)} a été employé(e) au sein de notre entreprise
             du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
             en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
           </p>
-          <p>Le salarié est libre de tout engagement à l'issue de cette période.</p>
-          <p style="margin-top: 48px;">Fait pour servir et valoir ce que de droit.</p>
-          <p style="margin-top: 48px;">Signature et cachet de l'entreprise :</p>
+          <p class="print-attestation-text">Le salarié est libre de tout engagement à l'issue de cette période.</p>
+          <div class="print-signature">
+            <span>Cachet de l'entreprise</span>
+            <span class="print-signature-line">Signature</span>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -13410,6 +13436,7 @@ function openLeaveAttestationModal(requestId) {
   const employee = employeeRepository.getById(r.employeeId);
   const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
   if (!employee || !type) { showToast('Salarié ou type de congé introuvable.', 'error'); return; }
+  const profile = companyRepository.getProfile();
   const settings = settingsRepository.getSettings();
   const posteFallback = getSexe(employee) === 'Homme' ? 'salarié' : getSexe(employee) === 'Femme' ? 'salariée' : 'salarié·e';
   const periode = r.dateDebut === r.dateFin
@@ -13424,12 +13451,9 @@ function openLeaveAttestationModal(requestId) {
       </div>
       <div class="modal-body">
         <div class="print-area print-document">
-          <div class="print-header">
-            <h1>Attestation de congés</h1>
-            <p class="text-muted">Émise le ${formatDate(toISODate(new Date()))}</p>
-          </div>
+          ${renderPrintDocumentHeader(profile, 'Attestation de congés')}
           <p class="print-attestation-text">
-            Nexus atteste que <strong>${personNameHtml(employee)}</strong>
+            ${escapeHtml(profile.raisonSociale || 'Nexus')} atteste que <strong>${personNameHtml(employee)}</strong>
             (matricule ${escapeHtml(employee.matricule)}), ${escapeHtml(getPosteAccorde(employee, settings) || posteFallback)},
             a bénéficié d'un congé de type <strong>${escapeHtml(type.nom)}</strong> ${periode},
             soit ${formatNumberFR(r.nbJours)} jour${r.nbJours > 1 ? 's' : ''}.
@@ -13517,10 +13541,7 @@ function openAttestationSalaireModal(requestId) {
       <div class="modal-body">
         <p class="text-muted">${icon(ICONS.warningTriangle, 12)} Document préparatoire, à relire et compléter (salaire de référence, dates) avant transmission à la CPAM. Aucune indemnité n'est calculée par Nexus.</p>
         <div class="print-area print-document">
-          <div class="print-header">
-            <h1>Attestation de salaire</h1>
-            <p class="text-muted">Préparée le ${formatDate(toISODate(new Date()))}</p>
-          </div>
+          ${renderPrintDocumentHeader(profile, 'Attestation de salaire')}
           <h2>Employeur</h2>
           <p>${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' · SIRET ' + escapeHtml(profile.siret) : ''}</p>
           <p>${escapeHtml(profile.adresse || '____________________')}</p>
