@@ -164,10 +164,14 @@ function getInitialViewState() {
     sortDir: 'asc',
     employeesPage: 1,
     congesTab: 'demandes',
-    congesFilters: { employeeId: '', typeId: '', statut: '' },
+    // §retour Betty du 19/09/2026 (blocage 5.3, "aucun filtre par période dans les congés") : periode
+    // au format 'YYYY-MM' (vide = pas de filtre), même convention que fraisFilters.periode — mais
+    // testée en CHEVAUCHEMENT avec [dateDebut, dateFin] (une demande est une PLAGE, contrairement à
+    // une note de frais qui n'a qu'une seule date), voir getFilteredLeaveRequests.
+    congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' },
     congesPage: 1,
     autresAbsencesTab: 'demandes',
-    autresAbsencesFilters: { employeeId: '', typeId: '', statut: '' },
+    autresAbsencesFilters: { employeeId: '', typeId: '', statut: '', periode: '' },
     autresAbsencesPage: 1,
     pendingAttachment: null,
     pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
@@ -199,6 +203,12 @@ function getInitialViewState() {
     ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel' — même principe que calendrierVue/planningVue
     mesTicketsYear: new Date().getFullYear(),
     mesTicketsMonth: new Date().getMonth(),
+    // §retour Betty du 19/09/2026 (blocage 5.2, "la pointeuse est plafonnée à sept jours") : même
+    // patron que ticketsYear/ticketsMonth ci-dessus — l'historique de renderPointeuse portait sur les
+    // 7 derniers jours en dur, sans aucun moyen de remonter au mois précédent pour vérifier un
+    // pointage contesté au moment de la paie.
+    pointeuseHistoriqueYear: new Date().getFullYear(),
+    pointeuseHistoriqueMonth: new Date().getMonth(),
     notifTab: 'non-lues',
     notifPage: 1,
     paieYear: new Date().getFullYear(),
@@ -288,7 +298,7 @@ function applyThemePreference(value) {
 /** Sprint SIRH premium §5/§7 : navParams "aller aux demandes en attente" — partagés entre l'entrée
  * de sidebar équipe (NAV_ITEMS) et le Centre d'action du tableau de bord (renderDashboardActionCenter),
  * pour que les deux points d'entrée vers le même filtre ne puissent pas silencieusement diverger. */
-const NAVPARAMS_CONGES_A_VALIDER = { absencesHubTab: 'conges', congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente' } };
+const NAVPARAMS_CONGES_A_VALIDER = { absencesHubTab: 'conges', congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente', periode: '' } };
 const NAVPARAMS_TELETRAVAIL_A_VALIDER = { absencesHubTab: 'teletravail', teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
 const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
 
@@ -432,7 +442,7 @@ const NAV_ITEMS = [
   // attente" (Object.assign(state, {}) ne réinitialise rien) — cette entrée restait donc filtrée sur
   // les demandes en attente au lieu de revenir à la vue personnelle par défaut. Remet explicitement
   // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
-  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '' } } },
+  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' } } },
   { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'frais' },
   { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: ['salarie'], group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
@@ -6150,6 +6160,7 @@ function render() {
     renderInner();
     updateHelpButtonVisibility();
     hydrateAvatarImages();
+    enhanceScrollableTabs();
   } catch (err) {
     console.error('render() a levé une exception : affichage du filet de sécurité au lieu d\'un écran vide.', err);
     reportClientError(err, 'render');
@@ -9031,6 +9042,50 @@ function hydrateAvatarImages() {
     const path = img.getAttribute('data-photo-path');
     if (!path || img.src) return;
     resolveAvatarUrl(path).then((url) => { if (url) img.src = url; });
+  });
+}
+
+/** §retour Betty du 19/09/2026 (blocage 5.1, "les derniers onglets des Paramètres sont
+ * inatteignables à la souris") : voir style.css (.tabs/.tabs-arrow) pour le constat complet — la
+ * barre de défilement native était masquée sans aucun remplaçant, et le menu déroulant de repli
+ * n'apparaît que sous 860px, donc jamais sur un ordinateur de bureau. Injecte deux flèches sticky
+ * directement dans CHAQUE .tabs qui déborde réellement (jamais posées en dur dans un template : ~30
+ * endroits construisent un <div class="tabs"> dans app.js, tous en profitent d'un coup sans être
+ * modifiés). Rappelée après CHAQUE rendu (voir render() ci-dessus, même patron que
+ * hydrateAvatarImages) : #view-root est entièrement reconstruit à chaque navigation, donc toute
+ * flèche déjà injectée disparaît avec lui — dataset.scrollArrowsReady évite de la réinjecter en double
+ * dans le cas contraire (ex. un ré-rendu partiel qui réutiliserait le même noeud .tabs). */
+function enhanceScrollableTabs() {
+  document.querySelectorAll('.tabs').forEach((tabsEl) => {
+    if (tabsEl.dataset.scrollArrowsReady) return;
+    tabsEl.dataset.scrollArrowsReady = 'true';
+
+    const left = document.createElement('button');
+    left.type = 'button';
+    left.className = 'tabs-arrow tabs-arrow-left';
+    left.setAttribute('aria-label', 'Onglets précédents');
+    left.textContent = '‹';
+    const right = document.createElement('button');
+    right.type = 'button';
+    right.className = 'tabs-arrow tabs-arrow-right';
+    right.setAttribute('aria-label', 'Onglets suivants');
+    right.textContent = '›';
+    tabsEl.prepend(left);
+    tabsEl.append(right);
+
+    const updateArrows = () => {
+      const overflow = tabsEl.scrollWidth > tabsEl.clientWidth + 1;
+      left.classList.toggle('visible', overflow && tabsEl.scrollLeft > 4);
+      right.classList.toggle('visible', overflow && tabsEl.scrollLeft < tabsEl.scrollWidth - tabsEl.clientWidth - 4);
+    };
+    left.addEventListener('click', () => tabsEl.scrollBy({ left: -160, behavior: 'smooth' }));
+    right.addEventListener('click', () => tabsEl.scrollBy({ left: 160, behavior: 'smooth' }));
+    tabsEl.addEventListener('scroll', updateArrows);
+    // Pas seulement un calcul unique à l'injection : la largeur disponible peut changer ensuite
+    // (redimensionnement de la fenêtre, ouverture/fermeture de la barre latérale mobile...), sans
+    // quoi une flèche resterait affichée (ou cachée) à tort après un tel changement.
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateArrows).observe(tabsEl);
+    updateArrows();
   });
 }
 
@@ -12938,7 +12993,17 @@ function getFilteredLeaveRequests(categorie = 'conge') {
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     return type && type.categorie === categorie;
   });
-  return applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
+  const filtered = applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
+  if (!filters.periode) return filtered;
+  // §retour Betty du 19/09/2026 (blocage 5.3, "aucun filtre par période dans les congés") : une
+  // demande est une PLAGE [dateDebut, dateFin], contrairement à une note de frais (une seule date,
+  // simple startsWith — voir getFilteredExpenses). "Appartenir" au mois choisi veut dire le
+  // CHEVAUCHER, pas y être strictement contenue : une demande du 28/08 au 03/09 doit apparaître si on
+  // filtre sur septembre, même si elle a commencé en août.
+  const [year, month] = filters.periode.split('-').map(Number);
+  const debutMois = `${filters.periode}-01`;
+  const finMois = toISODate(new Date(year, month, 0));
+  return filtered.filter(r => r.dateDebut <= finMois && r.dateFin >= debutMois);
 }
 
 // §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
@@ -12984,7 +13049,7 @@ function renderCongesDemandes(categorie = 'conge') {
 
     ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
 
-    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
+    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut, filters.periode].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
     <div class="toolbar card toolbar-collapsible" id="conges-filters">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
@@ -12998,6 +13063,10 @@ function renderCongesDemandes(categorie = 'conge') {
         <option value="">Tous les statuts</option>
         ${['En attente', 'Validé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${filters.statut === s ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
+      <!-- §retour Betty du 19/09/2026 (blocage 5.3, "aucun filtre par période dans les congés... deux
+           écrans jumeaux, deux comportements différents") : même champ que Notes de frais
+           (frais-filter-periode), pour que les deux écrans se comportent enfin pareil. -->
+      <input class="input" type="month" id="conges-filter-periode" value="${escapeHtml(filters.periode)}" title="Filtrer par mois (demandes qui chevauchent ce mois)">
     </div>
 
     ${selectedCount > 0 ? `
@@ -13448,6 +13517,11 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   });
   document.getElementById('conges-filter-statut').addEventListener('change', (e) => {
     filters.statut = e.target.value;
+    state[pageKey] = 1;
+    render();
+  });
+  document.getElementById('conges-filter-periode').addEventListener('change', (e) => {
+    filters.periode = e.target.value;
     state[pageKey] = 1;
     render();
   });
@@ -15195,8 +15269,8 @@ function bindFilterToggleButtons() {
  * getInitialViewState (jamais dupliquées à la main pour ne pas risquer de diverger). */
 const FILTER_RESET_HANDLERS = {
   employees: () => { state.search = ''; state.filters = { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false }; state.employeesPage = 1; },
-  conges: () => { state.congesFilters = { employeeId: '', typeId: '', statut: '' }; state.congesPage = 1; },
-  'autres-absences': () => { state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '' }; state.autresAbsencesPage = 1; },
+  conges: () => { state.congesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.congesPage = 1; },
+  'autres-absences': () => { state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.autresAbsencesPage = 1; },
   teletravail: () => { state.teletravailFilters = { employeeId: '', statut: '' }; state.teletravailPage = 1; },
   frais: () => { state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' }; state.fraisPage = 1; },
   organigramme: () => { state.organigrammeFilters = { search: '', etablissementId: '', service: '', equipe: '' }; }
@@ -21466,6 +21540,24 @@ function openRegulariserPointageModal(employeeId, dateStr) {
   });
 }
 
+/** §retour Betty du 19/09/2026 (blocage 5.2, "la pointeuse est plafonnée à sept jours") : "pour
+ * vérifier un pointage contesté du mois dernier au moment de la paie, c'est impossible depuis cet
+ * écran" — remplacé le plafond dur de 7 jours par un sélecteur de mois (state.pointeuseHistoriqueYear/
+ * Month, même patron que ticketsYear/Month, voir shiftTicketsMonth). "Suivant" reste désactivé au-delà
+ * du mois en cours : un pointage futur n'existe par définition jamais, un mois vide y serait juste
+ * déroutant. */
+function joursDuMoisPointeuse(user, year, month) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const historique = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = toISODate(new Date(year, month, day));
+    if (date > toISODate(new Date())) break; // jamais un jour futur, même à l'intérieur du mois en cours
+    const pointages = pointageRepository.getForEmployeeOnDate(user.id, date);
+    if (pointages.length) historique.push({ date, pointages });
+  }
+  return historique.reverse(); // le plus récent en premier, comme l'ancien historique 7 jours
+}
+
 function renderPointeuse() {
   const user = authRepository.getCurrentUser();
   const today = toISODate(new Date());
@@ -21473,14 +21565,9 @@ function renderPointeuse() {
   const dernier = todaysPointages[todaysPointages.length - 1];
   const enCours = dernier && !dernier.heureDepart;
 
-  // 7 derniers jours (hors aujourd'hui, déjà résumé ci-dessus) pour un historique rapide — pas de
-  // pagination/filtre pour un premier jet, juste de quoi vérifier que ça s'est bien enregistré.
-  const historique = [];
-  for (let i = 1; i <= 7; i++) {
-    const date = toISODate(addDays(new Date(), -i));
-    const pointages = pointageRepository.getForEmployeeOnDate(user.id, date);
-    if (pointages.length) historique.push({ date, pointages });
-  }
+  const now = new Date();
+  const estMoisEnCours = state.pointeuseHistoriqueYear === now.getFullYear() && state.pointeuseHistoriqueMonth === now.getMonth();
+  const historique = joursDuMoisPointeuse(user, state.pointeuseHistoriqueYear, state.pointeuseHistoriqueMonth);
 
   return `
     <div class="view-header">
@@ -21511,9 +21598,16 @@ function renderPointeuse() {
 
     ${renderPointeuseEquipe()}
 
-    ${historique.length ? `
-      <div class="card" style="margin-top: 16px;">
-        <h2>Historique (7 derniers jours)</h2>
+    <div class="card" style="margin-top: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <h2>Historique — ${MONTH_NAMES[state.pointeuseHistoriqueMonth]} ${state.pointeuseHistoriqueYear}</h2>
+        <div class="detail-header-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-pointeuse-historique-prev">← Précédent</button>
+          <button class="btn btn-secondary btn-sm" id="btn-pointeuse-historique-today">Ce mois-ci</button>
+          <button class="btn btn-secondary btn-sm" id="btn-pointeuse-historique-next" ${estMoisEnCours ? 'disabled' : ''}>Suivant →</button>
+        </div>
+      </div>
+      ${historique.length ? `
         <table class="table">
           <thead><tr><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th></tr></thead>
           <tbody>
@@ -21527,8 +21621,13 @@ function renderPointeuse() {
             `).join('')).join('')}
           </tbody>
         </table>
-      </div>
-    ` : ''}
+      ` : `
+        <div class="empty-state">
+          <div class="empty-icon">${icon(ICONS.schedule, 26)}</div>
+          <p>Aucun pointage ${estMoisEnCours ? 'ce mois-ci' : `en ${MONTH_NAMES[state.pointeuseHistoriqueMonth]} ${state.pointeuseHistoriqueYear}`}.</p>
+        </div>
+      `}
+    </div>
 
     ${renderRapportMensuelPointageCard(user)}
   `;
@@ -21568,8 +21667,30 @@ function renderRapportMensuelPointageCard(user) {
   `;
 }
 
+/** Même patron que shiftTicketsMonth (Tickets restaurant) — jamais au-delà du mois en cours (voir
+ * estMoisEnCours, renderPointeuse) : un mois futur n'aurait jamais de pointage à afficher. */
+function shiftPointeuseHistoriqueMonth(delta) {
+  let month = state.pointeuseHistoriqueMonth + delta;
+  let year = state.pointeuseHistoriqueYear;
+  if (month < 0) { month = 11; year -= 1; }
+  if (month > 11) { month = 0; year += 1; }
+  const now = new Date();
+  if (year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth())) return;
+  state.pointeuseHistoriqueMonth = month;
+  state.pointeuseHistoriqueYear = year;
+  render();
+}
+
 function bindPointeuseEvents() {
   document.getElementById('btn-open-scan-pointage').addEventListener('click', openPointageScanModal);
+  document.getElementById('btn-pointeuse-historique-prev').addEventListener('click', () => shiftPointeuseHistoriqueMonth(-1));
+  document.getElementById('btn-pointeuse-historique-next').addEventListener('click', () => shiftPointeuseHistoriqueMonth(1));
+  document.getElementById('btn-pointeuse-historique-today').addEventListener('click', () => {
+    const now = new Date();
+    state.pointeuseHistoriqueYear = now.getFullYear();
+    state.pointeuseHistoriqueMonth = now.getMonth();
+    render();
+  });
   // §retour Betty du 11/09/2026 ("pour le directeur et les manageurs un bouton qr code") : jusqu'ici
   // seul Paramètres > Établissements (RH/Propriétaire, voir renderEtablissementCard) permettait
   // d'afficher/régénérer ce QR — un manager n'a pas accès à Paramètres du tout. Réutilise la même

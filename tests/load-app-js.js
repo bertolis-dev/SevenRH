@@ -141,6 +141,9 @@ globalThis.__renderLandingScreen = renderLandingScreen;
 globalThis.__computeAlacarteTotal = computeAlacarteTotal;
 globalThis.__bindLandingScreenEvents = bindLandingScreenEvents;
 globalThis.__renderPointeuse = renderPointeuse;
+globalThis.__joursDuMoisPointeuse = joursDuMoisPointeuse;
+globalThis.__shiftPointeuseHistoriqueMonth = shiftPointeuseHistoriqueMonth;
+globalThis.__enhanceScrollableTabs = enhanceScrollableTabs;
 globalThis.__renderPointeuseEquipe = renderPointeuseEquipe;
 globalThis.__openRegulariserPointageModal = openRegulariserPointageModal;
 globalThis.__renderEcartsPointageCard = renderEcartsPointageCard;
@@ -458,6 +461,9 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     computeAlacarteTotal: sandbox.__computeAlacarteTotal,
     bindLandingScreenEvents: sandbox.__bindLandingScreenEvents,
     renderPointeuse: sandbox.__renderPointeuse,
+    joursDuMoisPointeuse: sandbox.__joursDuMoisPointeuse,
+    shiftPointeuseHistoriqueMonth: sandbox.__shiftPointeuseHistoriqueMonth,
+    enhanceScrollableTabs: sandbox.__enhanceScrollableTabs,
     renderPointeuseEquipe: sandbox.__renderPointeuseEquipe,
     openRegulariserPointageModal: sandbox.__openRegulariserPointageModal,
     renderEcartsPointageCard: sandbox.__renderEcartsPointageCard,

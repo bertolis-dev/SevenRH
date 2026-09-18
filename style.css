@@ -1379,9 +1379,14 @@ p { margin: 0; line-height: 1.5; }
   border-bottom: 1px solid var(--color-border);
   margin-bottom: 18px;
   overflow-x: auto;
+  position: relative; /* ancrage pour .tabs-arrow (position: sticky), voir enhanceScrollableTabs (app.js) */
   /* La scrollbar native (avec ses flèches sur certains navigateurs/OS) apparaissait dès que le
      contenu dépassait la largeur de quelques pixels et provoquait un léger décalage visuel au
-     survol. Le défilement tactile reste actif (overflow-x:auto), seule la barre est masquée. */
+     survol. Le défilement tactile reste actif (overflow-x:auto), seule la barre est masquée — voir
+     .tabs-arrow ci-dessous, qui la remplace par un vrai contrôle à la souris (retour Betty du
+     19/09/2026, blocage 5.1 : sans lui, une rangée de 15 onglets comme Paramètres n'avait
+     LITTÉRALEMENT aucun moyen d'être atteinte à la souris sur un ordinateur de bureau — le menu
+     déroulant de repli, .parametres-tab-select plus bas, n'apparaît que sous 860px). */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -1389,6 +1394,36 @@ p { margin: 0; line-height: 1.5; }
 .tabs::-webkit-scrollbar { display: none; }
 
 .tab { flex-shrink: 0; }
+
+/* §retour Betty du 19/09/2026 (blocage 5.1) : injectées en JS (enhanceScrollableTabs, app.js) dans
+   CHAQUE .tabs qui déborde réellement — jamais posées en dur dans un template, sinon les ~30 endroits
+   qui construisent un <div class="tabs"> devraient tous être modifiés un par un. `position: sticky`
+   à l'intérieur du conteneur qui défile lui-même (pas un wrapper séparé) : reste à l'écran pendant le
+   défilement sans changer la structure DOM existante. Cachées par défaut (`display: none`, pas
+   seulement une opacité) : une rangée de 2-3 onglets qui ne débordent jamais ne doit montrer AUCUNE
+   flèche inutile. */
+.tabs-arrow {
+  position: sticky;
+  align-self: center;
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  z-index: 2;
+}
+.tabs-arrow.visible { display: flex; }
+.tabs-arrow-left { left: 2px; }
+.tabs-arrow-right { right: 2px; }
 
 .tab {
   background: none;
