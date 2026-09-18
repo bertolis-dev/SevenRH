@@ -24979,8 +24979,17 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                 <p class="form-hint">218 jours = plafond légal par défaut (L3121-64), sauf accord collectif fixant un plafond différent.</p>
               </div>
               ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.')}
-              ${textField('regimeRTT', 'Régime RTT', employee.regimeRTT, false, 'text', 'any', 'Jours de repos accordés en compensation d\'un temps de travail au-delà de 35h/semaine. Le mode de calcul (nombre de jours, méthode d\'acquisition) dépend de l\'accord d\'entreprise ou de la convention collective applicable.')}
+              ${selectField('regimeRTT', 'Régime RTT', null, employee.regimeRTT || 'aucun', REGIME_RTT_OPTIONS, 'Jours de repos accordés en compensation d\'un temps de travail au-delà de la durée de référence. "Acquisition au réel" utilise le compteur RTT standard (Paramètres &gt; Types de congés) ; les deux autres options sont propres à ce salarié.')}
+              <div class="form-field" id="field-nombre-jours-rtt-annuel" ${employee.regimeRTT === 'forfait_annuel' ? '' : 'hidden'}>
+                <label for="f-nombreJoursRTTAnnuel">Nombre de jours RTT par an</label>
+                <input class="input" type="number" id="f-nombreJoursRTTAnnuel" name="nombreJoursRTTAnnuel" min="0" value="${escapeHtml(employee.nombreJoursRTTAnnuel != null ? employee.nombreJoursRTTAnnuel : '')}">
+              </div>
+              <div class="form-field" id="field-rtt-calcul-auto" ${employee.regimeRTT === 'calcul_auto_forfait_jours' ? '' : 'hidden'}>
+                <label>Estimation RTT calculée</label>
+                <p class="form-hint" id="rtt-calcul-auto-resultat">${escapeHtml(libelleRegimeRTTAutoCalcul(employee, new Date().getFullYear()))}</p>
+              </div>
             </div>
+            <p class="form-hint" id="rtt-calcul-auto-disclaimer" ${employee.regimeRTT === 'calcul_auto_forfait_jours' ? '' : 'hidden'}>${icon(ICONS.warningTriangle, 13)} Estimation à titre indicatif (365 jours moins week-ends, 25 jours de CP, jours fériés en semaine et jours du forfait) : aucun accord d'entreprise n'encadre encore le forfait jours dans Nexus RH. Ne remplace pas une confirmation par votre expert-comptable/juriste avant d'attribuer ce nombre de jours réellement.</p>
             <div class="form-hint-block" id="forfait-jours-rappels-legaux" ${tempsTravailAffichage.joursForfaitVisible ? '' : 'hidden'}>
               <strong>Forfait jours : rappels légaux</strong>
               <ul>
@@ -25029,6 +25038,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 
   bindTempsTravailFields(settings);
+  bindRegimeRTTFields();
 
   // §correctif audit du 23/08/2026 (§7.20) : "rien ne calcule ce montant ni ne le signale au moment
   // où l'on renseigne une date de départ" — mis à jour dès la saisie, pas seulement après
@@ -25044,6 +25054,55 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   };
   dateDepartInput.addEventListener('change', updateIndemniteHint);
   updateIndemniteHint();
+}
+
+/** §retour Betty du 18/09/2026 (point 3, "régime RTT structuré") : remplace l'ancien champ libre
+ * "Régime RTT" (décoratif, jamais relié à rien) par un choix fermé. "acquisition_reelle" s'appuie
+ * sur le compteur RTT générique déjà existant (un type de congé "RTT" comme un autre, voir
+ * getLeaveBalance) ; les deux autres valeurs sont propres à CE salarié (forfait annuel fixe, ou
+ * estimation calculée pour un forfait jours). Betty n'a pas encore d'accord d'entreprise encadrant
+ * le forfait jours : ce champ construit le choix structuré et l'estimation, SANS jamais l'injecter
+ * automatiquement dans un vrai compteur RTT (voir calculerJoursRTTAutoForfaitJours, data.js) — une
+ * décision métier qui lui revient, pas un blocage technique.
+ */
+const REGIME_RTT_OPTIONS = [
+  { value: 'aucun', label: 'Aucun' },
+  { value: 'forfait_annuel', label: 'Forfait annuel avec jours' },
+  { value: 'acquisition_reelle', label: 'Acquisition au réel' },
+  { value: 'calcul_auto_forfait_jours', label: 'Calcul automatique (forfait jours)' }
+];
+
+function libelleRegimeRTTAutoCalcul(employee, annee) {
+  if (employee.regimeRTT !== 'calcul_auto_forfait_jours') return '';
+  const jours = calculerJoursRTTAutoForfaitJours(annee, employee.nombreJoursForfait || 218);
+  return `${jours} jour${Math.abs(jours) > 1 ? 's' : ''} de RTT estimés pour ${annee} (forfait de ${employee.nombreJoursForfait || 218} jours).`;
+}
+
+/** Bascule le sous-champ pertinent (jours/an fixes, ou estimation calculée) selon le régime RTT
+ * choisi, et recalcule l'estimation en direct si le nombre de jours du forfait change à côté. */
+function bindRegimeRTTFields() {
+  const regimeInput = document.getElementById('f-regimeRTT');
+  const forfaitJoursInput = document.getElementById('f-nombreJoursForfait');
+  const champJoursAnnuel = document.getElementById('field-nombre-jours-rtt-annuel');
+  const champCalculAuto = document.getElementById('field-rtt-calcul-auto');
+  const resultatCalculAuto = document.getElementById('rtt-calcul-auto-resultat');
+  const disclaimer = document.getElementById('rtt-calcul-auto-disclaimer');
+
+  const update = () => {
+    const regime = regimeInput.value;
+    champJoursAnnuel.hidden = regime !== 'forfait_annuel';
+    const enCalculAuto = regime === 'calcul_auto_forfait_jours';
+    champCalculAuto.hidden = !enCalculAuto;
+    disclaimer.hidden = !enCalculAuto;
+    if (enCalculAuto) {
+      const nombreJoursForfait = Number(forfaitJoursInput.value) || 218;
+      resultatCalculAuto.textContent = libelleRegimeRTTAutoCalcul({ regimeRTT: regime, nombreJoursForfait }, new Date().getFullYear());
+    }
+  };
+
+  regimeInput.addEventListener('change', update);
+  forfaitJoursInput.addEventListener('input', update);
+  update();
 }
 
 /** §retour Betty du 18/09/2026 (points 2.1/2.3) : fonction pure (testable sans DOM) déterminant
@@ -25224,6 +25283,7 @@ function submitEmployeeForm(evt, id, candidatureId) {
   // directement (ou collé depuis ailleurs) reste accepté tel quel.
   patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || settingsRepository.getSettings().dureeHebdomadaireReferenceHeures;
   if ('nombreJoursForfait' in patch) patch.nombreJoursForfait = Number(patch.nombreJoursForfait) || 218;
+  if ('nombreJoursRTTAnnuel' in patch) patch.nombreJoursRTTAnnuel = patch.nombreJoursRTTAnnuel === '' ? null : Number(patch.nombreJoursRTTAnnuel) || 0;
   patch.managerIds = formData.getAll('managerIds');
   if ('salaireBrutMensuel' in patch) patch.salaireBrutMensuel = Number(patch.salaireBrutMensuel) || 0;
 

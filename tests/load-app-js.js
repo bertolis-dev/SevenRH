@@ -109,6 +109,7 @@ globalThis.__formatNomFamille = formatNomFamille;
 globalThis.__formatPrenom = formatPrenom;
 globalThis.__companyRepository = companyRepository;
 globalThis.__billingRepository = billingRepository;
+globalThis.__calculerJoursRTTAutoForfaitJours = calculerJoursRTTAutoForfaitJours;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -372,6 +373,8 @@ globalThis.__openGererLicencesModal = openGererLicencesModal;
 globalThis.__releaseModuleLicensesForDeparture = releaseModuleLicensesForDeparture;
 globalThis.__LICENSED_MODULE_KEYS = LICENSED_MODULE_KEYS;
 globalThis.__computeTempsTravailAffichage = computeTempsTravailAffichage;
+globalThis.__REGIME_RTT_OPTIONS = REGIME_RTT_OPTIONS;
+globalThis.__libelleRegimeRTTAutoCalcul = libelleRegimeRTTAutoCalcul;
 `;
   vm.runInContext(appSource + exposeAfterApp, sandbox, { filename: 'app.js' });
 
@@ -632,6 +635,7 @@ globalThis.__computeTempsTravailAffichage = computeTempsTravailAffichage;
     renderCandidatureEvaluationsCard: sandbox.__renderCandidatureEvaluationsCard,
     companyRepository: sandbox.__companyRepository,
     billingRepository: sandbox.__billingRepository,
+    calculerJoursRTTAutoForfaitJours: sandbox.__calculerJoursRTTAutoForfaitJours,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
@@ -659,6 +663,8 @@ globalThis.__computeTempsTravailAffichage = computeTempsTravailAffichage;
     releaseModuleLicensesForDeparture: sandbox.__releaseModuleLicensesForDeparture,
     LICENSED_MODULE_KEYS: sandbox.__LICENSED_MODULE_KEYS,
     computeTempsTravailAffichage: sandbox.__computeTempsTravailAffichage,
+    REGIME_RTT_OPTIONS: sandbox.__REGIME_RTT_OPTIONS,
+    libelleRegimeRTTAutoCalcul: sandbox.__libelleRegimeRTTAutoCalcul,
   };
 }
 

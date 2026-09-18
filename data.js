@@ -5280,7 +5280,12 @@ function makeEmptyEmployee() {
     // l'affichage entre horairesHebdo et ce champ selon la valeur de `forfait`). 218 = plafond légal
     // par défaut (L3121-64), sauf accord collectif fixant un plafond différent.
     nombreJoursForfait: 218,
-    regimeRTT: '',
+    // §retour Betty du 18/09/2026 (point 3) : régime RTT structuré (voir REGIME_RTT_OPTIONS, app.js)
+    // à la place d'un ancien champ libre décoratif. nombreJoursRTTAnnuel ne sert qu'en régime
+    // 'forfait_annuel' (nombre fixe propre à ce salarié) ; 'calcul_auto_forfait_jours' ne stocke
+    // rien, la valeur est recalculée à l'affichage (voir calculerJoursRTTAutoForfaitJours).
+    regimeRTT: 'aucun',
+    nombreJoursRTTAnnuel: null,
     joursTravailles: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'],
     // Sprint SIRH premium §3 : horaires matin/après-midi, identiques chaque jour travaillé pour
     // l'instant (pas de variante par jour de la semaine — cf. renderPlanningHoraires).
@@ -7551,6 +7556,31 @@ function getFrenchPublicHolidays(year) {
     [`${year}-12-25`, 'Noël']
   ];
   return holidays.map(([date, label]) => ({ date, label }));
+}
+
+/** §retour Betty du 18/09/2026 (point 3, "calcul automatique pour forfait jours") : formule qu'elle
+ * a donnée elle-même : 365 (ou 366) jours dans l'année, moins les week-ends, moins 25 jours de
+ * congés payés (droit légal plein, 5 semaines), moins les jours fériés tombant en semaine, moins le
+ * nombre de jours du forfait = le nombre de jours de RTT restant. RESTE UNE ESTIMATION tant qu'aucun
+ * accord d'entreprise n'encadre le forfait jours (elle l'a explicitement signalé, aucun accord au
+ * dossier à ce jour) : à afficher à titre indicatif uniquement, JAMAIS à injecter automatiquement
+ * dans un compteur RTT réel sans confirmation explicite de sa part (voir regimeRTT ci-dessous,
+ * makeEmptyEmployee) — c'est une décision métier, pas un blocage technique.
+ */
+function calculerJoursRTTAutoForfaitJours(annee, nombreJoursForfait) {
+  const debut = new Date(annee, 0, 1);
+  const fin = new Date(annee, 11, 31);
+  const nbJoursAnnee = Math.round((fin - debut) / 86400000) + 1;
+  let weekEnds = 0;
+  for (let d = new Date(debut); d <= fin; d = addDays(d, 1)) {
+    const jour = d.getDay();
+    if (jour === 0 || jour === 6) weekEnds++;
+  }
+  const feriesEnSemaine = getFrenchPublicHolidays(annee).filter(h => {
+    const jour = parseISODateLocal(h.date).getDay();
+    return jour !== 0 && jour !== 6;
+  }).length;
+  return nbJoursAnnee - weekEnds - 25 - feriesEnSemaine - (Number(nombreJoursForfait) || 218);
 }
 
 /** getFrenchPublicHolidays() + les jours fériés ajoutés manuellement par l'entreprise
