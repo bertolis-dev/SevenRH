@@ -159,7 +159,7 @@ function getInitialViewState() {
     search: '',
     filters: { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false },
     organigrammeFilters: { search: '', etablissementId: '', service: '', equipe: '' },
-    orgCollapsedIds: new Set(), // §12 : replier/déplier les branches — ids de salariés dont les enfants sont masqués
+    orgCollapsedIds: new Set(), // §12 : replier/déplier les branches, ids de salariés dont les enfants sont masqués
     sortBy: 'nom',
     sortDir: 'asc',
     employeesPage: 1,
@@ -174,7 +174,7 @@ function getInitialViewState() {
     autresAbsencesFilters: { employeeId: '', typeId: '', statut: '', periode: '' },
     autresAbsencesPage: 1,
     pendingAttachment: null,
-    pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
+    pendingAttachmentFile: null, // File brut transitoire (jamais persisté), voir uploadJustificatifBestEffort
     editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
     editingExpenseId: null, // §retour Betty du 07/09/2026 (point 5) : note de frais en cours de correction par son auteur, avant toute validation
     editingTeleworkRequestId: null, // §tour de bugs du 07/09/2026 : même principe pour le télétravail
@@ -183,7 +183,7 @@ function getInitialViewState() {
     calendarServiceFilter: '', // §demande Betty du 09/09/2026 : filtre service de la vue "Calendrier des absences" (renderAbsenceCalendarBoard)
     parametresTab: 'listes',
     parametresTypesCategorie: 'conge', // Sprint SIRH premium §1 : sous-onglet de Paramètres > Types d'absences
-    absencesHubTab: 'conges', // 'conges' | 'autres' | 'teletravail' — voir renderAbsencesHub
+    absencesHubTab: 'conges', // 'conges' | 'autres' | 'teletravail', voir renderAbsencesHub
     parametresFeriesYear: new Date().getFullYear(),
     teletravailTab: 'demandes',
     teletravailFilters: { employeeId: '', statut: '' },
@@ -200,7 +200,7 @@ function getInitialViewState() {
     fraisPage: 1,
     ticketsYear: new Date().getFullYear(),
     ticketsMonth: new Date().getMonth(),
-    ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel' — même principe que calendrierVue/planningVue
+    ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel', même principe que calendrierVue/planningVue
     mesTicketsYear: new Date().getFullYear(),
     mesTicketsMonth: new Date().getMonth(),
     // §retour Betty du 19/09/2026 (blocage 5.2, "la pointeuse est plafonnée à sept jours") : même
@@ -258,7 +258,7 @@ function getInitialViewState() {
     calendrierVue: 'entreprise', // Sprint SIRH premium §2 : 'entreprise' (vue équipe/entreprise selon le rôle) | 'personnel'
     horairesView: 'semaine', // Sprint SIRH premium §3 : 'jour' | 'semaine' | 'mois'
     horairesDay: toISODate(new Date()),
-    planningVue: 'equipe', // Sprint SIRH premium §5 : 'equipe' | 'personnel' — même principe que calendrierVue
+    planningVue: 'equipe', // Sprint SIRH premium §5 : 'equipe' | 'personnel', même principe que calendrierVue
     // §retour QA du 26/08/2026 (point 7.2) : tableau des compteurs — état de filtre/pagination
     // dédié, séparé de `filters` (partagé par renderEmployeesList) pour ne jamais interférer avec
     // le filtre service de l'écran Salariés.
@@ -582,7 +582,7 @@ const SOURCE_KEY_MODULE_RULES = [
  * notification jamais vérifiée — voir SOURCE_KEY_MODULE_RULES ci-dessus. */
 function requiredModuleForSourceKey(sourceKey) {
   const rule = SOURCE_KEY_MODULE_RULES.find(r => sourceKey.startsWith(r.prefix));
-  if (!rule) throw new Error(`sourceKey sans règle connue : "${sourceKey}" — ajouter une entrée à SOURCE_KEY_MODULE_RULES (app.js)`);
+  if (!rule) throw new Error(`sourceKey sans règle connue : "${sourceKey}", ajouter une entrée à SOURCE_KEY_MODULE_RULES (app.js)`);
   return rule.module;
 }
 
@@ -2043,7 +2043,7 @@ const LEGAL_CONTENT = {
       Directrice de la publication : Betty Aubert<br>
       Contact : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       <p><strong>Hébergement</strong><br>
-      Hébergement du site : GitHub, Inc. — 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis<br>
+      Hébergement du site : GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis<br>
       Hébergement des données applicatives : Supabase Pte. Ltd.</p>
       <p><strong>Paiement</strong><br>
       Les paiements sont traités par Stripe. Nexus ne stocke aucune donnée de carte bancaire.</p>
@@ -4382,7 +4382,7 @@ async function runGroupSummaryRefresh() {
         restoreError = (err && err.message) || String(err);
       }
     }
-    render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale — jamais #modal-root, laissé intact ci-dessous.
+    render(); // rafraîchit l'écran de fond (#view-root)/la barre latérale, jamais #modal-root, laissé intact ci-dessous.
 
     renderGroupSummaryResult(rows, restoreError);
   } finally {
@@ -4399,7 +4399,7 @@ function renderGroupSummaryResult(rows, restoreError) {
   if (restoreError) {
     contentEl.innerHTML = `
       <p class="text-danger" style="font-weight:600;">Erreur : impossible de revenir automatiquement sur votre compte d'origine (${escapeHtml(restoreError)}).</p>
-      <p class="form-hint">Vérifiez avant de continuer sur quel compte vous êtes actuellement connecté (menu utilisateur en haut à droite) — reconnectez-vous avec votre mot de passe si nécessaire.</p>
+      <p class="form-hint">Vérifiez avant de continuer sur quel compte vous êtes actuellement connecté (menu utilisateur en haut à droite), reconnectez-vous avec votre mot de passe si nécessaire.</p>
     `;
     return;
   }
@@ -4749,7 +4749,7 @@ const HELP_CONTENT = {
   'mes-tickets': {
     title: 'Mes tickets',
     body: `<p>Vos demandes de support envoyées à l'équipe BERTOLIS (éditeur du logiciel), pas un ticket restaurant. Créez-en un pour un bug, une question ou une demande d'évolution ; suivez les réponses et le statut directement ici.</p>`,
-    faq: [{ q: 'Je cherche mes tickets restaurant, pas mes demandes de support ?', r: 'C\'est l\'écran "Tickets restaurant" (module dédié) qu\'il vous faut, pas "Mes tickets" — le nom se ressemble, mais ce sont deux choses différentes.' }]
+    faq: [{ q: 'Je cherche mes tickets restaurant, pas mes demandes de support ?', r: 'C\'est l\'écran "Tickets restaurant" (module dédié) qu\'il vous faut, pas "Mes tickets", le nom se ressemble, mais ce sont deux choses différentes.' }]
   },
   entretiens: {
     title: 'Entretiens',
@@ -5149,7 +5149,7 @@ function bindGlobalEvents() {
       }
       suggestionsEl._companies = results;
       suggestionsEl.innerHTML = results
-        .map((r, i) => `<div class="company-suggestion-item" data-company-index="${i}">${escapeHtml(r.nom_complet || '')} — ${escapeHtml(r.siege.siret || '')}<br><span class="text-muted">${escapeHtml(r.siege.adresse || '')}</span></div>`)
+        .map((r, i) => `<div class="company-suggestion-item" data-company-index="${i}">${escapeHtml(r.nom_complet || '')}, ${escapeHtml(r.siege.siret || '')}<br><span class="text-muted">${escapeHtml(r.siege.adresse || '')}</span></div>`)
         .join('');
       suggestionsEl.style.display = 'block';
     }, 300);
@@ -6829,7 +6829,7 @@ function renderRadarSeuilsCard(employees) {
           ${s.obligationsLongDelai.length ? `<p class="text-muted" style="margin: 4px 0 0;">${s.longDelaiApplicable ? 'Applicables (délai de 5 ans écoulé)' : 'Applicables après 5 années civiles consécutives si le seuil se maintient'} : ${s.obligationsLongDelai.map(o => escapeHtml(o)).join(', ')}.</p>` : ''}
         </div>
       `).join('')}
-      <p class="form-hint" style="margin-top:10px;">Estimation indicative à partir de l'effectif enregistré dans Nexus (peut ne pas couvrir tout l'historique réel de l'entreprise) — les délais précis varient par obligation ; à confirmer avec votre expert-comptable/juriste social avant toute décision de mise en conformité.</p>
+      <p class="form-hint" style="margin-top:10px;">Estimation indicative à partir de l'effectif enregistré dans Nexus (peut ne pas couvrir tout l'historique réel de l'entreprise), les délais précis varient par obligation ; à confirmer avec votre expert-comptable/juriste social avant toute décision de mise en conformité.</p>
     </div>
   `;
 }
@@ -7776,7 +7776,7 @@ function renderUpcomingProbationEndsCard(probationEnds) {
             </div>
           `; }).join('')}
         </div>
-        <p class="form-hint" style="margin-top:10px;">Délai de prévenance estimé (article L1221-25 du Code du travail) — à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>
+        <p class="form-hint" style="margin-top:10px;">Délai de prévenance estimé (article L1221-25 du Code du travail), à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>
       `}
     </div>
   `;
@@ -7813,7 +7813,7 @@ function renderVisitesRepriseCard(visitesReprise) {
       <div class="mini-list" style="margin-top: 8px;">
         ${visitesReprise.map(x => `
           <div class="mini-list-item">
-            <span>${personNameHtml(x.employee)} <span class="text-muted">— ${escapeHtml(TYPE_ARRET_LABELS_COURT[x.request.arretTravail.typeArret] || x.request.arretTravail.typeArret)}, retour le ${formatDate(x.request.dateFin)}</span></span>
+            <span>${personNameHtml(x.employee)} <span class="text-muted">${escapeHtml(TYPE_ARRET_LABELS_COURT[x.request.arretTravail.typeArret] || x.request.arretTravail.typeArret)}, retour le ${formatDate(x.request.dateFin)}</span></span>
             <button type="button" class="btn-link" data-marquer-visite-reprise="${x.request.id}">Marquer comme faite</button>
           </div>
         `).join('')}
@@ -7897,7 +7897,7 @@ function renderPresenceCard() {
             </div>
           `).join('')}
         </div>
-        ${rows.length > visibleRows.length ? `<p class="text-muted" style="margin-top: 10px; font-size: 12px;">Affichage limité aux ${visibleRows.length} premiers (${rows.length} au total) — voir le Planning pour le détail complet.</p>` : ''}
+        ${rows.length > visibleRows.length ? `<p class="text-muted" style="margin-top: 10px; font-size: 12px;">Affichage limité aux ${visibleRows.length} premiers (${rows.length} au total), voir le Planning pour le détail complet.</p>` : ''}
       `}
     </div>
   `;
@@ -8287,7 +8287,7 @@ function renderTableauCompteursCell(b) {
   // à un bug — ce rappel explique d'où vient l'écart, avec le même disclaincer que les autres calculs
   // légaux du fichier.
   const conventionBonus = b.conventionCollectiveBonus
-    ? `<div class="tc-convention text-muted">Dont ${formatDurationFR(b.conventionCollectiveBonus)} de congé(s) d'ancienneté (convention collective) — à confirmer avec votre expert-comptable/juriste.</div>`
+    ? `<div class="tc-convention text-muted">Dont ${formatDurationFR(b.conventionCollectiveBonus)} de congé(s) d'ancienneté (convention collective), à confirmer avec votre expert-comptable/juriste.</div>`
     : '';
   return `
     <div class="tc-disponible">${formatDurationFR(b.disponible)}</div>
@@ -10568,7 +10568,7 @@ function renderEntretienDetail(id) {
          croisée d'un simple formulaire partagé. Ne masque jamais la propre saisie de son auteur :
          le salarié voit toujours son propre formulaire, le manager le sien. */ -->
     <div class="card">
-      <div class="search-section-label" style="padding-left:0;">Auto-évaluation ${employee ? `— ${escapeHtml(employee.prenom)}` : ''}</div>
+      <div class="search-section-label" style="padding-left:0;">Auto-évaluation ${employee ? `: ${escapeHtml(employee.prenom)}` : ''}</div>
       ${isSalarie && !cloture ? `
         <form id="entretien-auto-eval-form">
           <textarea class="input" id="f-entretien-auto-eval" rows="4" placeholder="Votre bilan de la période écoulée, vos réussites, vos difficultés, vos souhaits d'évolution...">${escapeHtml(entretien.autoEvaluation)}</textarea>
@@ -11130,7 +11130,7 @@ function renderBoussole() {
   return `
     <div class="view-header">
       <h1>${icon(ICONS.compass, 20)} Boussole</h1>
-      <p class="view-subtitle">Posez une question sur les données RH de votre entreprise (congés, notes de frais...) — la Boussole ne répond qu'à partir de vos propres données, jamais d'internet.</p>
+      <p class="view-subtitle">Posez une question sur les données RH de votre entreprise (congés, notes de frais...), la Boussole ne répond qu'à partir de vos propres données, jamais d'internet.</p>
     </div>
     <div class="card">
       <div id="boussole-messages" class="boussole-messages">
@@ -11321,7 +11321,7 @@ function renderVisitesMedicalesCard(employee, canEdit) {
         const overdue = echeance.next < today;
         const kindLabel = echeance.kind === 'embauche' ? ' (visite d\'embauche)' : echeance.kind === 'intermediaire' ? ' (rendez-vous intermédiaire par un professionnel de santé)' : '';
         const autre = echeance.autreEcheance ? `<br>Visite périodique suivante (sauf nouvel enregistrement d'ici là) : ${formatDate(toISODate(echeance.autreEcheance))}` : '';
-        return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin: 0 0 10px;">Prochaine échéance : ${formatDate(toISODate(echeance.next))}${kindLabel}${overdue ? ' — en retard' : ''}${autre}</p>`;
+        return `<p class="text-muted${overdue ? ' text-danger' : ''}" style="margin: 0 0 10px;">Prochaine échéance : ${formatDate(toISODate(echeance.next))}${kindLabel}${overdue ? ', en retard' : ''}${autre}</p>`;
       })() : ''}
       ${visites.length === 0 ? `<p class="text-muted" style="margin-bottom: 10px;">Aucune visite enregistrée.</p>` : `
         <div class="mini-list" style="margin-bottom: 10px;">
@@ -11632,7 +11632,7 @@ function openVisiteMedicaleModal(employeeId, visiteId) {
       </div>
       <form id="visite-medicale-form">
         <div class="modal-body">
-          <p class="text-muted" style="margin-top: 0;">${escapeHtml(rules.label)} — les options de conclusion ci-dessous en tiennent compte.</p>
+          <p class="text-muted" style="margin-top: 0;">${escapeHtml(rules.label)}, les options de conclusion ci-dessous en tiennent compte.</p>
           <div class="form-field">
             <label for="f-visite-type">Type de visite</label>
             <select class="input" id="f-visite-type">
@@ -11646,7 +11646,7 @@ function openVisiteMedicaleModal(employeeId, visiteId) {
           <div class="form-field">
             <label for="f-visite-conclusion">Conclusion</label>
             <select class="input" id="f-visite-conclusion">
-              <option value="">— Non renseignée —</option>
+              <option value="">Non renseignée</option>
               ${rules.conclusionOptions.map(c => `<option value="${escapeHtml(c)}" ${existing && existing.conclusion === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
             </select>
           </div>
@@ -11957,7 +11957,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
           const enRetard = delai.dateLimitePrevenance < toISODate(new Date());
           return infoRow('Délai de prévenance', `${enRetard ? 'Dépassé' : `Prévenir avant le ${formatDate(delai.dateLimitePrevenance)}`} (préavis ${delai.delaiLabel})`);
         })()}
-        ${canSeeContractuel && e.dateFinPeriodeEssai ? `<p class="form-hint">Délai de prévenance estimé (article L1221-25 du Code du travail) — à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>` : ''}
+        ${canSeeContractuel && e.dateFinPeriodeEssai ? `<p class="form-hint">Délai de prévenance estimé (article L1221-25 du Code du travail), à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>` : ''}
         ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
       </div>
 
@@ -12302,7 +12302,7 @@ function openChangeRoleModal(employeeId) {
       </div>
       <form id="changer-role-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — rôle actuel : <strong>${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</strong>.</p>
+          <p class="text-muted">${personNameHtml(employee)}, rôle actuel : <strong>${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</strong>.</p>
           <div class="form-field">
             <label for="f-nouveau-role">Nouveau rôle *</label>
             <select class="input" id="f-nouveau-role" name="nouveauRole" required>
@@ -12423,7 +12423,7 @@ function openForcerMotDePasseModal(employeeId) {
       </div>
       <form id="forcer-mdp-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — communiquez ce nouveau mot de passe au salarié par un autre moyen que cette application.</p>
+          <p class="text-muted">${personNameHtml(employee)} : communiquez ce nouveau mot de passe au salarié par un autre moyen que cette application.</p>
           <div class="form-field">
             <label for="f-nouveau-mdp">Nouveau mot de passe (6 caractères minimum) *</label>
             <input class="input" type="text" id="f-nouveau-mdp" name="nouveauMotDePasse" minlength="6" required>
@@ -12770,12 +12770,12 @@ function openAjusterCompteurModal(employeeId, typeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Ajuster le compteur — ${escapeHtml(type.nom)}</h2>
+        <h2>Ajuster le compteur : ${escapeHtml(type.nom)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="adjust-compteur-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
+          <p class="text-muted">${personNameHtml(employee)} : cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
           <div class="form-field">
             <label for="f-montant">Ajustement (jours, + ou -) *</label>
             <input class="input" type="number" id="f-montant" name="montant" step="0.5" value="${current}" required>
@@ -13164,7 +13164,7 @@ function openIndexEgaliteModal() {
             return `
               <div class="mini-list-item" style="align-items: flex-start;">
                 <span>
-                  <strong>${year}</strong> — <span class="${r.note < 75 ? 'text-danger' : ''}">${r.note}/100</span>
+                  <strong>${year}</strong> : <span class="${r.note < 75 ? 'text-danger' : ''}">${r.note}/100</span>
                   ${r.datePublication ? ` · publié le ${formatDate(r.datePublication)}` : ''}
                   ${r.note < 75 && r.mesuresCorrectives ? `<br><span class="text-muted">Mesures correctives : ${escapeHtml(r.mesuresCorrectives)}</span>` : ''}
                 </span>
@@ -13202,7 +13202,7 @@ function openAjouterIndexEgaliteModal(defaultYear) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Index égalité pro — ${defaultYear}</h2>
+        <h2>Index égalité pro : ${defaultYear}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="index-egalite-form">
@@ -13966,7 +13966,7 @@ function openRegulariserModal(requestId) {
       </div>
       <form id="regulariser-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
+          <p class="text-muted">${personNameHtml(employee)} : actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
           ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.actif ? t.nom : `${t.nom} (désactivé)` })))}
           <div class="form-grid" style="margin-top: 12px;">
             ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
@@ -14243,7 +14243,7 @@ function renderEstimationIndemnitesArret(r, employee) {
     <p>IJ sécurité sociale estimée : <strong>${formatCurrencyFR(estimation.ijSecuEstimee)}</strong></p>
     ${m.ancienneteInsuffisante
       ? `<p>Maintien de salaire employeur : <strong>aucun</strong> (ancienneté inférieure à 1 an, minimum légal L1226-1, une convention collective peut prévoir mieux, non appliqué ici).</p>`
-      : `<p>Maintien de salaire employeur (ancienneté retenue : ${estimation.ancienneteAnneesEntieres} an(s)) : <strong>${m.joursPlein}</strong> jour(s) à 90% + <strong>${m.joursDemi}</strong> jour(s) à 66,66%${m.joursNonCouverts > 0 ? ` · <strong>${m.joursNonCouverts}</strong> jour(s) hors capacité 12 mois glissants` : ''} — maintien total estimé <strong>${formatCurrencyFR(m.montant)}</strong>, dont complément employeur (au-delà de l'IJ sécu) estimé à <strong>${formatCurrencyFR(estimation.complementEmployeurEstime)}</strong>.</p>`}
+      : `<p>Maintien de salaire employeur (ancienneté retenue : ${estimation.ancienneteAnneesEntieres} an(s)) : <strong>${m.joursPlein}</strong> jour(s) à 90% + <strong>${m.joursDemi}</strong> jour(s) à 66,66%${m.joursNonCouverts > 0 ? ` · <strong>${m.joursNonCouverts}</strong> jour(s) hors capacité 12 mois glissants` : ''}, maintien total estimé <strong>${formatCurrencyFR(m.montant)}</strong>, dont complément employeur (au-delà de l'IJ sécu) estimé à <strong>${formatCurrencyFR(estimation.complementEmployeurEstime)}</strong>.</p>`}
   `;
 }
 
@@ -14281,8 +14281,8 @@ function openAttestationSalaireModal(requestId) {
           <p>Subrogation employeur : <strong>${arret.subrogation ? 'Oui (l\'entreprise perçoit les IJ et maintient le salaire)' : 'Non'}</strong></p>
           <h2>Salaire de référence</h2>
           ${settings.masseSalarialeActivee && employee.salaireBrutMensuel
-            ? `<p>Salaire brut mensuel actuel (fiche salarié) : ${formatCurrencyFR(employee.salaireBrutMensuel)} — à vérifier sur les 3 derniers mois réels avant transmission (primes, heures supplémentaires, changement de taux...), Nexus n'alimentant pas votre historique de paie détaillé.</p>`
-            : `<p class="text-muted">Non renseigné dans Nexus (suivi de la masse salariale désactivé, ou champ vide sur la fiche salarié) — à compléter manuellement avec votre gestionnaire de paie.</p>`}
+            ? `<p>Salaire brut mensuel actuel (fiche salarié) : ${formatCurrencyFR(employee.salaireBrutMensuel)}, à vérifier sur les 3 derniers mois réels avant transmission (primes, heures supplémentaires, changement de taux...), Nexus n'alimentant pas votre historique de paie détaillé.</p>`
+            : `<p class="text-muted">Non renseigné dans Nexus (suivi de la masse salariale désactivé, ou champ vide sur la fiche salarié), à compléter manuellement avec votre gestionnaire de paie.</p>`}
           ${settings.masseSalarialeActivee ? renderEstimationIndemnitesArret(r, employee) : ''}
           <div class="print-signature">
             <span>Fait pour servir et valoir ce que de droit.</span>
@@ -14712,7 +14712,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
   updateLeaveRequestHints();
 }
 
-const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo — plafond conservé même avec Storage réel (taille raisonnable pour un justificatif/document RH)
+const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo, plafond conservé même avec Storage réel (taille raisonnable pour un justificatif/document RH)
 
 /** state.pendingAttachmentFile (le File brut) n'est JAMAIS placé dans un enregistrement persisté —
  * il ne sert qu'à uploadJustificatifBestEffort juste après la création (voir plus bas), tant que le
@@ -14836,7 +14836,7 @@ function updateLeaveRequestHints() {
         const dejaAbsents = getAbsentsForQuota(quota, dateStr, employee.id);
         if (dejaAbsents.length + 1 >= quota.maxSimultane) {
           const noms = dejaAbsents.map(e => `${e.prenom} ${e.nom}`).join(', ');
-          quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''}${noms ? ` : déjà absent${dejaAbsents.length > 1 ? 's' : ''} ce jour-là — ${noms}` : ''})`;
+          quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''}${noms ? ` : déjà absent${dejaAbsents.length > 1 ? 's' : ''} ce jour-là, ${noms}` : ''})`;
           break;
         }
         cursor.setDate(cursor.getDate() + 1);
@@ -15253,16 +15253,16 @@ function openLeaveTypeModal(id, categorie = 'conge') {
                   <option value="aucune" ${resolveProratisationTempsPartiel(type) === 'aucune' ? 'selected' : ''}>Jamais réduite (ex. congés payés)</option>
                   <option value="exclu" ${resolveProratisationTempsPartiel(type) === 'exclu' ? 'selected' : ''}>Nulle pour un temps partiel (ex. RTT)</option>
                 </select>
-                <p class="form-hint">Confirmé par votre expert-comptable pour Congés payés (jamais réduite) et RTT (nulle) — à vérifier avant de changer ce réglage pour un autre type.</p>
+                <p class="form-hint">Confirmé par votre expert-comptable pour Congés payés (jamais réduite) et RTT (nulle), à vérifier avant de changer ce réglage pour un autre type.</p>
               </div>
               <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
                 <label><input type="checkbox" id="f-suspendAcquisitionAutresCompteurs" ${type.suspendAcquisitionAutresCompteurs ? 'checked' : ''}> Une absence validée de CE type suspend l'acquisition des autres compteurs (ex. CP)</label>
-                <p class="form-hint">Ex. congé sabbatique. Décoché par défaut pour tous les types (y compris déjà existants) — votre expert-comptable n'a pas donné de liste type par type, à cocher au cas par cas selon ses réponses.</p>
+                <p class="form-hint">Ex. congé sabbatique. Décoché par défaut pour tous les types (y compris déjà existants). Votre expert-comptable n'a pas donné de liste type par type, à cocher au cas par cas selon ses réponses.</p>
               </div>
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Paliers d'ancienneté (optionnel)</label>
-              <p class="form-hint">Remplace "Nombre de jours par an" ci-dessus par le palier le plus haut atteint (non cumulatif) — évite de créer un type par tranche d'ancienneté.</p>
+              <p class="form-hint">Remplace "Nombre de jours par an" ci-dessus par le palier le plus haut atteint (non cumulatif), évite de créer un type par tranche d'ancienneté.</p>
               <div id="paliers-anciennete-rows"></div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-add-palier" style="margin-top:8px;">+ Ajouter un palier</button>
             </div>
@@ -16631,7 +16631,7 @@ function renderIndisponibilitesCard(user) {
         <h2>Disponibilités</h2>
         <button class="btn btn-secondary btn-sm" id="btn-add-indisponibilite">+ Déclarer une indisponibilité</button>
       </div>
-      <p class="text-muted" style="margin: 0 0 8px;">Récurrent chaque semaine (pas une date précise) — le planning signale un quart posé dessus, sans jamais bloquer sa création.</p>
+      <p class="text-muted" style="margin: 0 0 8px;">Récurrent chaque semaine (pas une date précise). Le planning signale un quart posé dessus, sans jamais bloquer sa création.</p>
       ${indisponibilites.length === 0 ? '<p class="text-muted">Aucune indisponibilité déclarée.</p>' : indisponibilites.map(i => `
         <div class="mini-list-item">
           <span>${escapeHtml(i.weekday)} ${escapeHtml(i.heureDebut)}-${escapeHtml(i.heureFin)}${i.motif ? ` · ${escapeHtml(i.motif)}` : ''}</span>
@@ -18003,18 +18003,18 @@ function renderPointageQrModalContent(etab, code) {
   const qr = qrcode(0, 'M');
   qr.addData(payload);
   qr.make();
-  const qrSvg = qr.createSvgTag({ cellSize: 5, margin: 8, alt: 'QR code de pointage', title: `Pointage — ${etab.nom}` });
+  const qrSvg = qr.createSvgTag({ cellSize: 5, margin: 8, alt: 'QR code de pointage', title: `Pointage, ${etab.nom}` });
 
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>QR de pointage — ${escapeHtml(etab.nom)}</h2>
+        <h2>QR de pointage : ${escapeHtml(etab.nom)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body" style="text-align: center;">
         <p class="text-muted">À afficher en direct sur un écran à l'accueil de cet établissement (tablette, ordinateur) : ce QR change automatiquement toutes les 30 secondes, il ne peut plus être imprimé sur papier. Chaque salarié le scanne (bouton "Pointeuse") pour enregistrer son arrivée puis son départ.</p>
         <div class="print-area" id="pointage-qr-print-area" style="margin: 16px 0;">
-          <h3 style="margin: 0 0 12px;">Pointage — ${escapeHtml(etab.nom)}</h3>
+          <h3 style="margin: 0 0 12px;">Pointage : ${escapeHtml(etab.nom)}</h3>
           ${qrSvg}
         </div>
       </div>
@@ -18424,7 +18424,7 @@ function renderParametresListes() {
         <div class="form-field">
           <label for="f-taux-charges-patronales">Taux de charges patronales estimé (%)</label>
           <input class="input" type="number" min="0" max="100" step="0.1" id="f-taux-charges-patronales" value="${escapeHtml(Math.round(settings.tauxChargesPatronalesEstime * 1000) / 10)}">
-          <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...) — à faire valider par votre gestionnaire de paie.</p>
+          <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...), à faire valider par votre gestionnaire de paie.</p>
         </div>
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Afficher la répartition Hommes / Femmes sur le tableau de bord</label>
@@ -19409,7 +19409,7 @@ function renderParametresFermetures() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Fermetures d'entreprise</h2>
-          <p class="text-muted">Fermeture exceptionnelle, pont, fermeture annuelle... — une plage de dates où personne (ou seulement certaines catégories) ne travaille, sans jamais entamer le solde de congés des salariés concernés.</p>
+          <p class="text-muted">Fermeture exceptionnelle, pont, fermeture annuelle... Une plage de dates où personne (ou seulement certaines catégories) ne travaille, sans jamais entamer le solde de congés des salariés concernés.</p>
         </div>
         <button class="btn btn-primary btn-sm" id="btn-add-fermeture">+ Ajouter une fermeture</button>
       </div>
@@ -20239,7 +20239,7 @@ function renderPlanningAnnee() {
 
   return `
     <div class="view-header-row">
-      <p class="view-subtitle">Jours de congé validés par mois — ${year}</p>
+      <p class="view-subtitle">Jours de congé validés par mois, ${year}</p>
       <div class="calendar-nav">
         <button class="btn btn-secondary btn-sm" id="btn-planning-year-prev">← ${year - 1}</button>
         <button class="btn btn-secondary btn-sm" id="btn-planning-year-next">${year + 1} →</button>
@@ -20327,7 +20327,7 @@ function renderHorairesSemaine() {
 
   return `
     <div class="view-header-row">
-      <p class="view-subtitle">Semaine du ${formatDate(toISODate(weekDates[0]))} au ${formatDate(toISODate(weekDates[6]))} — total automatique des heures</p>
+      <p class="view-subtitle">Semaine du ${formatDate(toISODate(weekDates[0]))} au ${formatDate(toISODate(weekDates[6]))}, total automatique des heures</p>
       <div class="calendar-nav">
         <button class="btn btn-secondary btn-sm" id="btn-planning-week-prev">← Précédente</button>
         <button class="btn btn-secondary btn-sm" id="btn-planning-week-today">Cette semaine</button>
@@ -20422,7 +20422,7 @@ function renderHorairesMois() {
 
   return `
     <div class="view-header-row">
-      <p class="view-subtitle">${MONTH_NAMES[month]} ${year} — total automatique des heures</p>
+      <p class="view-subtitle">${MONTH_NAMES[month]} ${year}, total automatique des heures</p>
       <div class="calendar-nav">
         <button class="btn btn-secondary btn-sm" id="btn-planning-month-prev">← Précédent</button>
         <button class="btn btn-secondary btn-sm" id="btn-planning-month-today">Ce mois-ci</button>
@@ -20457,7 +20457,7 @@ function openHorairesModal(employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Horaires — ${personNameHtml(employee)}</h2>
+        <h2>Horaires : ${personNameHtml(employee)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="horaires-form">
@@ -20652,7 +20652,7 @@ function openAstreinteDetailModal(employeeId, astreinteId) {
   const html = `
     <div class="modal">
       <div class="modal-header">
-        <h2>Astreinte — ${personNameHtml(employee)}</h2>
+        <h2>Astreinte : ${personNameHtml(employee)}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
@@ -22100,7 +22100,7 @@ function openRegulariserPointageModal(employeeId, dateStr) {
       </div>
       <form id="regulariser-pointage-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — ${formatDate(date)}</p>
+          <p class="text-muted">${personNameHtml(employee)} : ${formatDate(date)}</p>
           ${!dernier ? `<p class="text-muted">Aucun pointage ce jour-là : cette action en crée un.</p>
             <div class="form-field"><label for="f-etablissement">Établissement</label>
               <select class="input" id="f-etablissement">${etablissements.map(et => `<option value="${et.id}">${escapeHtml(et.nom)}</option>`).join('')}</select>
@@ -22180,7 +22180,7 @@ function renderPointeuse() {
 
     <div class="card pointage-today-card">
       ${enCours
-        ? `<p class="pointage-today-status">${icon(ICONS.checkCircle, 16)} Arrivée enregistrée à <strong>${escapeHtml(dernier.heureArrivee)}</strong> — en cours.</p>`
+        ? `<p class="pointage-today-status">${icon(ICONS.checkCircle, 16)} Arrivée enregistrée à <strong>${escapeHtml(dernier.heureArrivee)}</strong> : en cours.</p>`
         : dernier
           ? `<p class="pointage-today-status">${icon(ICONS.checkCircle, 16)} Aujourd'hui : ${escapeHtml(dernier.heureArrivee)} → ${escapeHtml(dernier.heureDepart)} (${formatNumberFR(round2(todaysPointages.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0) / 60))} h travaillées).</p>`
           : `<p class="text-muted pointage-today-status">Aucun pointage aujourd'hui.</p>`}
@@ -22203,7 +22203,7 @@ function renderPointeuse() {
 
     <div class="card" style="margin-top: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <h2>Historique — ${MONTH_NAMES[state.pointeuseHistoriqueMonth]} ${state.pointeuseHistoriqueYear}</h2>
+        <h2>Historique : ${MONTH_NAMES[state.pointeuseHistoriqueMonth]} ${state.pointeuseHistoriqueYear}</h2>
         <div class="detail-header-actions">
           <button class="btn btn-secondary btn-sm" id="btn-pointeuse-historique-prev">← Précédent</button>
           <button class="btn btn-secondary btn-sm" id="btn-pointeuse-historique-today">Ce mois-ci</button>
@@ -22258,7 +22258,7 @@ function renderRapportMensuelPointageCard(user) {
 
   return `
     <div class="card" style="margin-top: 16px;">
-      <h2>Rapport mensuel — ${MONTH_NAMES[month]} ${year}</h2>
+      <h2>Rapport mensuel : ${MONTH_NAMES[month]} ${year}</h2>
       <p class="text-muted">${pointagesDuMois.length} pointage${pointagesDuMois.length > 1 ? 's' : ''} · ${formatNumberFR(totalHeures)} h travaillées au total.</p>
       ${validation
         ? `<p class="${validation.statut === 'valide' ? '' : 'text-danger'}">${icon(validation.statut === 'valide' ? ICONS.checkCircle : ICONS.warningTriangle, 14)} ${validation.statut === 'valide' ? 'Validé' : 'Contesté'} le ${formatDate(validation.date.slice(0, 10))}${validation.commentaire ? ` · ${escapeHtml(validation.commentaire)}` : ''}</p>`
@@ -23839,7 +23839,7 @@ function renderMesTicketsRestaurant() {
 
     ${result.ajustement ? `
       <div class="card" style="margin-top: 12px;">
-        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? ` — ${escapeHtml(regularisation)}` : ''}</p>
+        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? `, ${escapeHtml(regularisation)}` : ''}</p>
       </div>
     ` : ''}
 
@@ -24016,12 +24016,12 @@ function openCorrigerTicketsModal(employeeId, deltaSuggere) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Corriger les tickets — ${MONTH_NAMES[month]} ${year}</h2>
+        <h2>Corriger les tickets : ${MONTH_NAMES[month]} ${year}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="corriger-tickets-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.${deltaSuggere != null ? ' Valeur pré-remplie suggérée automatiquement (absence déclarée après la génération du fichier de commande) : vérifiez avant de valider.' : ''}</p>
+          <p class="text-muted">${personNameHtml(employee)} : cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.${deltaSuggere != null ? ' Valeur pré-remplie suggérée automatiquement (absence déclarée après la génération du fichier de commande) : vérifiez avant de valider.' : ''}</p>
           <div class="form-field">
             <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
             <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
@@ -24234,7 +24234,7 @@ function exportCongesFraisMoisCSV() {
     r.congesPayesJours, r.rttJours, r.notesRembourser
   ]);
   exportRowsToCSV(headers, data, `conges-frais-${MONTH_NAMES[month]}-${year}.csv`);
-  auditLogRepository.logAudit('Export', 'Congés + Notes de frais (export léger)', `${rows.length} ligne${rows.length > 1 ? 's' : ''} — ${MONTH_NAMES[month]} ${year}`);
+  auditLogRepository.logAudit('Export', 'Congés + Notes de frais (export léger)', `${rows.length} ligne${rows.length > 1 ? 's' : ''}, ${MONTH_NAMES[month]} ${year}`);
   showToast('Export téléchargé.');
 }
 
@@ -24315,13 +24315,13 @@ function getPaieAnomalies(year, month) {
     }
 
     if (e.dateDepart && e.dateDepart >= monthStart && e.dateDepart <= monthEnd) {
-      anomalies.push({ severity: 'information', type: 'contrat_termine', employee: e, message: `Contrat terminé le ${formatDate(e.dateDepart)} — dernier mois de paie` });
+      anomalies.push({ severity: 'information', type: 'contrat_termine', employee: e, message: `Contrat terminé le ${formatDate(e.dateDepart)}, dernier mois de paie` });
       // §correctif audit du 23/08/2026 (§7.20) : signale l'indemnité compensatrice ESTIMÉE ici aussi
       // (pas seulement dans la fiche salarié) — la Préparation de paie est l'écran où ce montant a
       // le plus de chances d'être effectivement vu au bon moment, le mois du départ.
       const { montant, joursRestants } = calculateIndemniteCompensatrice(e, e.dateDepart);
       if (joursRestants > 0) {
-        anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris) — à valider avec votre expert-comptable` });
+        anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris), à valider avec votre expert-comptable` });
       }
     }
 
@@ -24392,7 +24392,7 @@ function renderExportPaiePreparationTab(rows) {
     <div class="card" style="margin-bottom: 12px;">
       <h3 style="margin-bottom: 8px;">${title} <span class="badge ${badgeClass}">${list.length}</span></h3>
       <ul class="anomaly-list">
-        ${list.map(a => `<li><strong>${personNameHtml(a.employee)}</strong> — ${escapeHtml(a.message)}</li>`).join('')}
+        ${list.map(a => `<li><strong>${personNameHtml(a.employee)}</strong> : ${escapeHtml(a.message)}</li>`).join('')}
       </ul>
     </div>
   `;
@@ -24646,7 +24646,7 @@ function renderRemuneration() {
       ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), ICONS.chart)}
       ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), ICONS.trendingUp)}
     </div>
-    <p class="form-hint">Coût employeur estimé avec un taux de charges patronales de ${Math.round(settings.tauxChargesPatronalesEstime * 100)}% (Paramètres > Entreprise) — un ordre de grandeur, à affiner avec votre gestionnaire de paie. <button type="button" class="btn-link" id="btn-variables-paie-remuneration">Éléments variables du mois →</button></p>
+    <p class="form-hint">Coût employeur estimé avec un taux de charges patronales de ${Math.round(settings.tauxChargesPatronalesEstime * 100)}% (Paramètres > Entreprise), un ordre de grandeur, à affiner avec votre gestionnaire de paie. <button type="button" class="btn-link" id="btn-variables-paie-remuneration">Éléments variables du mois →</button></p>
     ${renderRevisionSalarialeCard()}
     ${renderRadarTresorerieCard(getRadarTresorerieRH(employees, new Date()))}
     <div class="card table-card">
@@ -24780,13 +24780,13 @@ function openProposerRevisionModal(campagneId, employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Révision salariale — ${escapeHtml(employee ? employee.prenom + ' ' + employee.nom : '')}</h2>
+        <h2>Révision salariale : ${escapeHtml(employee ? employee.prenom + ' ' + employee.nom : '')}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="revision-form">
         <div class="modal-body">
           <p class="text-muted">Salaire brut mensuel actuel : ${formatCurrencyFR(proposition.salaireActuel)}.</p>
-          ${dernierEntretien ? `<p class="text-muted">Dernier entretien le ${formatDate(dernierEntretien.datePrevue)}${dernierEntretien.besoinsFormation ? ` — besoin de formation identifié : ${escapeHtml(dernierEntretien.besoinsFormation)}` : ''}.</p>` : ''}
+          ${dernierEntretien ? `<p class="text-muted">Dernier entretien le ${formatDate(dernierEntretien.datePrevue)}${dernierEntretien.besoinsFormation ? `, besoin de formation identifié : ${escapeHtml(dernierEntretien.besoinsFormation)}` : ''}.</p>` : ''}
           <div class="form-field">
             <label for="f-revision-montant">Nouveau salaire brut mensuel (€) *</label>
             <input class="input" type="number" step="0.01" id="f-revision-montant" value="${proposition.salairePropose != null ? proposition.salairePropose : proposition.salaireActuel}" required>
@@ -24884,12 +24884,12 @@ function openVariablesPaieModal(employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Variables de paie — ${MONTH_NAMES[month]} ${year}</h2>
+        <h2>Variables de paie : ${MONTH_NAMES[month]} ${year}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="variables-paie-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — primes, heures supplémentaires ou autre élément variable ponctuel pour ce mois (€). Remplace le montant précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} : primes, heures supplémentaires ou autre élément variable ponctuel pour ce mois (€). Remplace le montant précédemment saisi pour ce même mois.</p>
           <div class="form-field">
             <label for="f-montant">Montant (€) *</label>
             <input class="input" type="number" id="f-montant" name="montant" step="0.01" value="${current}" required>
@@ -24939,12 +24939,12 @@ function openHeuresSupModal(employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Heures supplémentaires — ${MONTH_NAMES[month]} ${year}</h2>
+        <h2>Heures supplémentaires : ${MONTH_NAMES[month]} ${year}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="heures-sup-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — nombre d'heures supplémentaires effectuées ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} : nombre d'heures supplémentaires effectuées ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
           <div class="form-field">
             <label for="f-heures">Heures supplémentaires (h) *</label>
             <input class="input" type="number" id="f-heures" name="heures" step="0.5" min="0" value="${current}" required>
@@ -24998,12 +24998,12 @@ function openReposCompensateurPrisModal(employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Repos compensateur pris — ${MONTH_NAMES[month]} ${year}</h2>
+        <h2>Repos compensateur pris : ${MONTH_NAMES[month]} ${year}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="repos-compensateur-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} — nombre d'heures de repos compensateur prises ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
+          <p class="text-muted">${personNameHtml(employee)} : nombre d'heures de repos compensateur prises ce mois-ci. Remplace le nombre précédemment saisi pour ce même mois.</p>
           <p class="form-hint">Solde disponible avant cette saisie : ${formatNumberFR(solde.solde)} h (${formatNumberFR(solde.credit)} h acquises − ${formatNumberFR(solde.pris)} h déjà prises, toutes années confondues).</p>
           <div class="form-field">
             <label for="f-heures">Heures prises (h) *</label>
@@ -25098,7 +25098,7 @@ function exportPaieCSV() {
     ...(showColonne('teletravail') ? ['Télétravail (jours)'] : []),
     ...(showColonne('tickets') ? ['Tickets restaurant (nb)', 'Tickets, part salarié (€)'] : []),
     ...(showColonne('frais') ? ['Notes de frais à rembourser (€)'] : []),
-    'Variables (€)', // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée — donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
+    'Variables (€)', // Sprint SIRH premium §6 : toujours incluse (comme Matricule/Nom/Prénom), pas de case à cocher dédiée, donnée financière essentielle, pas un simple complément de congés/télétravail/tickets/frais
     'Heures supplémentaires (h)', // même raisonnement : élément de paie essentiel, toujours inclus
     'Repos compensateur pris (h)' // §retour QA du 26/08/2026 (point 7.21) : même raisonnement, toujours inclus
   ];
@@ -25849,7 +25849,7 @@ function renderCandidatureCreneauxCard(candidature) {
         <h2>Créneaux d'entretien</h2>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-proposer-creneaux">${creneaux.length ? 'Proposer d\'autres créneaux' : '+ Proposer des créneaux'}</button>
       </div>
-      <p class="text-muted" style="margin: 0 0 8px;">À communiquer au candidat par téléphone ou email (aucun compte candidat dans Nexus) — cochez ensuite celui qu'il confirme.</p>
+      <p class="text-muted" style="margin: 0 0 8px;">À communiquer au candidat par téléphone ou email (aucun compte candidat dans Nexus), cochez ensuite celui qu'il confirme.</p>
       ${creneaux.length === 0 ? '<p class="text-muted">Aucun créneau proposé pour l\'instant.</p>' : creneaux.map(c => {
         const choisi = candidature.creneauChoisiId === c.id;
         return `
@@ -26038,7 +26038,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
       </div>
       <form id="employee-form">
         <div class="modal-body">
-          ${candidatureId && cvUrl ? `<p class="text-muted" style="margin-top:0;">Créé depuis une candidature — <button type="button" class="btn-link" onclick="window.open('${cvUrl}', '_blank', 'noopener')">voir le CV</button> pendant la saisie.</p>` : ''}
+          ${candidatureId && cvUrl ? `<p class="text-muted" style="margin-top:0;">Créé depuis une candidature, <button type="button" class="btn-link" onclick="window.open('${cvUrl}', '_blank', 'noopener')">voir le CV</button> pendant la saisie.</p>` : ''}
           ${renderEmployeeFormTabs(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
           <fieldset class="form-section" id="employee-form-section-identite" data-employee-tab-panel="identite">
             <legend>Identité</legend>
@@ -26180,7 +26180,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                  tant que ce n'est pas fait). -->
             <p class="form-subsection-title">Fin de contrat</p>
             <div class="form-grid">
-              ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date', undefined, 'Date PRÉVUE au contrat (CDD, intérim, stage) — jamais la date de sortie réelle. Seule, elle ne retire le salarié de rien : ni planning, ni paie, ni effectif.')}
+              ${textField('dateFinContrat', 'Date de fin de contrat', employee.dateFinContrat, false, 'date', undefined, 'Date PRÉVUE au contrat (CDD, intérim, stage), jamais la date de sortie réelle. Seule, elle ne retire le salarié de rien : ni planning, ni paie, ni effectif.')}
               ${textField('dateDepart', 'Date de départ', employee.dateDepart, false, 'date', undefined, 'Date de SORTIE RÉELLE, pour tout type de contrat, CDI compris. C\'est cette date, et elle seule, qui retire le salarié du planning, de la paie, des tickets restaurant et de l\'effectif légal (seuils à 11/50/250 salariés).')}
             </div>
             <p class="field-warning ${employee.dateFinContrat && employee.dateFinContrat <= toISODate(new Date()) && !employee.dateDepart ? 'visible' : ''}" id="fin-contrat-sans-depart-warning">
@@ -26229,7 +26229,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
     if (!dateDepartInput.value || !isEdit || !settings.masseSalarialeActivee || !employee.salaireBrutMensuel) { hint.textContent = ''; return; }
     const { montant, joursRestants } = calculateIndemniteCompensatrice(employee, dateDepartInput.value);
     hint.textContent = joursRestants > 0
-      ? `Estimation indemnité compensatrice de congés payés non pris à cette date : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)}) — à valider avec votre expert-comptable avant tout virement.`
+      ? `Estimation indemnité compensatrice de congés payés non pris à cette date : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)}), à valider avec votre expert-comptable avant tout virement.`
       : '';
   };
   dateDepartInput.addEventListener('change', updateIndemniteHint);

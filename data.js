@@ -218,7 +218,7 @@ function makeEmptyAbonnement() {
     dateDebut: toISODate(new Date()),
     dateRenouvellement: '',
     nombreSalariesMax: OFFRES_BERTOLIS.essai.nombreSalariesMax,
-    modules: [] // [{ key, quantite }] — seulement rempli quand offre === 'a_la_carte'
+    modules: [] // [{ key, quantite }], seulement rempli quand offre === 'a_la_carte'
   };
 }
 
@@ -500,7 +500,7 @@ const DEFAULT_SETTINGS = {
   typesContrat: ['CDI', 'CDD', 'Stage', 'Alternance', 'Apprentissage', 'Intérim'],
   forfaits: ['Aucun', 'Forfait jours', 'Forfait heures'],
   joursOuvres: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
-  schoolZone: 'C', // 'A' | 'B' | 'C' — code court, aligné avec LeaveType.zones / seedSchoolHolidays()
+  schoolZone: 'C', // 'A' | 'B' | 'C', code court, aligné avec LeaveType.zones / seedSchoolHolidays()
   // §correctif retour QA du 27/08/2026 : format des NOUVEAUX matricules (AAAA-NNNN par défaut, ex.
   // 2026-0001) — false retire le tiret (20260001). Purement cosmétique : voir formatMatricule ;
   // n'affecte jamais l'unicité, garantie côté serveur indépendamment de ce réglage.
@@ -664,12 +664,12 @@ function makeEmptyCompany() {
     // assignMatricule ci-dessous et 0040_matricule_atomique.sql) — ce champ ne sert plus qu'à ne pas
     // casser la lecture d'anciens blobs company déjà persistés.
     matriculeSeq: 0,
-    abonnement: null, // §36 — voir makeEmptyAbonnement()/migrateCompanyAbonnement()
+    abonnement: null, // §36, voir makeEmptyAbonnement()/migrateCompanyAbonnement()
     etablissements: [],
     employees: [],
     services: [],
-    shifts: [], // Planning par postes (§10/09/2026) — voir shiftRepository, computeShiftHeures()
-    pointages: [], // Pointeuse QR (§11/09/2026) — voir pointageRepository, computeDureeTravailleeMinutes()
+    shifts: [], // Planning par postes (§10/09/2026), voir shiftRepository, computeShiftHeures()
+    pointages: [], // Pointeuse QR (§11/09/2026), voir pointageRepository, computeDureeTravailleeMinutes()
 
     settings: Object.assign({}, DEFAULT_SETTINGS),
     leaveTypes: [],
@@ -680,7 +680,7 @@ function makeEmptyCompany() {
     supportTickets: [],
     schoolHolidays: null,
     auditLog: [],
-    favorites: {}, // { [idDuSalariéConnecté]: [idsSalariésFavoris] } — personnel à chaque utilisateur, pas partagé
+    favorites: {}, // { [idDuSalariéConnecté]: [idsSalariésFavoris] }, personnel à chaque utilisateur, pas partagé
     notifications: []
   };
 }
@@ -939,7 +939,7 @@ async function ensureVisitesMedicalesMigreesVersServeur(company, currentUser) {
         dateProchaineEcheance: '',
         contreVisite: false,
         amenagements: '',
-        commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026) — aucune donnée médicale n\'a été reprise.',
+        commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026), aucune donnée médicale n\'a été reprise.',
         pieceJointe: null,
         dateCreation: now,
         dateModification: now,
@@ -1042,7 +1042,7 @@ async function ensureContratsTermineDateDepartAutoDeduite(company, currentUser) 
   // besoin. auteur = "Système" plutôt que currentUser : personne n'a réellement pris cette décision,
   // ce serait mentir sur qui a fait quoi dans le journal.
   const entries = modified.map(e => appendAuditLogEntry(company, 'Modification', 'Salarié', `${e.prenom} ${e.nom}`,
-    `Date de départ déduite automatiquement de la fin de contrat (${formatDate(e.dateFinContrat)}) — si le contrat a en réalité été renouvelé, effacez cette date de départ et mettez à jour le type/la date de fin de contrat.`,
+    `Date de départ déduite automatiquement de la fin de contrat (${formatDate(e.dateFinContrat)}), si le contrat a en réalité été renouvelé, effacez cette date de départ et mettez à jour le type/la date de fin de contrat.`,
     'Système (report automatique)'));
   try {
     await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
@@ -2220,7 +2220,7 @@ const DB = {
             dateProchaineEcheance: '',
             contreVisite: false,
             amenagements: '',
-            commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026) — aucune donnée médicale n\'a été reprise.',
+            commentaire: 'Reprise de l\'ancien champ "Dernière visite médicale" (migration du 17/09/2026), aucune donnée médicale n\'a été reprise.',
             pieceJointe: null,
             dateCreation: now,
             dateModification: now,
@@ -4281,7 +4281,7 @@ const DB = {
       employeeId: data.employeeId,
       type: data.type || 'professionnel', // 'professionnel' | 'bilan'
       datePrevue: data.datePrevue,
-      heurePrevue: data.heurePrevue || '', // 'HH:MM', optionnel — voir openPlanEntretienModal
+      heurePrevue: data.heurePrevue || '', // 'HH:MM', optionnel, voir openPlanEntretienModal
       dateRealisee: null,
       statut: 'a_planifier',
       objectifs: data.objectifs || '',
@@ -4485,7 +4485,7 @@ const DB = {
     const proposition = (campagne.propositions || []).find(p => p.employeeId === employeeId);
     if (!proposition) return { success: false, error: 'Ce salarié n\'est pas concerné par cette campagne.' };
     if (proposition.statut !== 'proposee') return { success: false, error: 'Aucune proposition en attente de validation pour ce salarié : proposez d\'abord un montant.' };
-    this.updateEmployee(employeeId, { salaireBrutMensuel: proposition.salairePropose }, `Révision salariale — ${campagne.nom}${proposition.motif ? ` (${proposition.motif})` : ''}`);
+    this.updateEmployee(employeeId, { salaireBrutMensuel: proposition.salairePropose }, `Révision salariale, ${campagne.nom}${proposition.motif ? ` (${proposition.motif})` : ''}`);
     proposition.statut = 'validee';
     proposition.dateValidation = new Date().toISOString();
     this.saveCampagnesRevisionSalariale(list);
@@ -4854,7 +4854,7 @@ const DB = {
       company = await hydrateCurrentCompanyWithMigrations();
     } catch (err) {
       await this._restoreSessionAfterFailedSwitch(previousAccountId);
-      return { success: false, error: `Bascule interrompue (${(err && err.message) || err}) — vous restez connecté(e) sur votre compte précédent.` };
+      return { success: false, error: `Bascule interrompue (${(err && err.message) || err}), vous restez connecté(e) sur votre compte précédent.` };
     }
     if (!company) {
       this.removeSavedAccount(accountId);
@@ -5566,8 +5566,8 @@ function makeEmptyEmployee() {
     poste: '',
     managerIds: [], // un salarié peut avoir zéro, un ou plusieurs managers
     conventionCollective: '',
-    statutPro: 'Non cadre', // conservé pour compatibilité (affichage/exports existants) — voir categorieSalarieId
-    categorieSalarieId: null, // §10 sprint amélioration — voir getEffectiveCategorieSalarieId()
+    statutPro: 'Non cadre', // conservé pour compatibilité (affichage/exports existants), voir categorieSalarieId
+    categorieSalarieId: null, // §10 sprint amélioration, voir getEffectiveCategorieSalarieId()
 
     typeContrat: 'CDI',
     dateFinContrat: '',
@@ -5688,17 +5688,17 @@ function makeEmptyEmployee() {
     genre: '',
 
     compteurs: {},
-    ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta } — voir calculateTicketsRestaurant()
+    ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta }, voir calculateTicketsRestaurant()
     // §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois
     // précédent") : { 'AAAA-MM': nbTickets } — nombre de titres tel que calculé au moment où le
     // fichier de commande a été généré pour ce mois (voir enregistrerCommandeTickets). Si une
     // absence déclarée après coup change le calcul, comparer ce nombre au calcul actuel permet de
     // proposer automatiquement la correction plutôt que d'attendre qu'un humain remarque l'écart.
     ticketsCommandesEnregistrees: {},
-    variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant } — éléments variables de paie (primes...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
+    variablesPaie: {}, // Sprint SIRH premium §6 : { 'AAAA-MM': montant }, éléments variables de paie (primes...), saisie manuelle par mois, voir DB.ajusterVariablesPaie()
     // §retour Betty du 14/09/2026 (Pointeuse QR point 4) : { 'AAAA-MM': { statut, commentaire, date } } — voir DB.validerPointagesMensuels().
     pointageValidationsMensuelles: {},
-    heuresSupplementaires: {}, // { 'AAAA-MM': heures } — heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
+    heuresSupplementaires: {}, // { 'AAAA-MM': heures }, heures supplémentaires du mois, saisie manuelle (voir DB.ajusterHeuresSupplementaires) ; le cumul sur l'année civile est comparé à settings.contingentAnnuelHeuresSup, voir getHeuresSupAnnee (app.js)
     // §retour QA du 26/08/2026 (point 7.21) : { 'AAAA-MM': heures } — heures de repos compensateur
     // PRISES ce mois-ci (saisie manuelle, même principe que heuresSupplementaires ci-dessus, aucun
     // module de pointage ne les détecte automatiquement). Le solde disponible se calcule en
@@ -6127,7 +6127,7 @@ function makeEmptyLeaveRequest() {
     typeId: null,
     dateDebut: '',
     dateFin: '',
-    demiJournee: null, // null | 'matin' | 'apres-midi' — seulement si dateDebut === dateFin
+    demiJournee: null, // null | 'matin' | 'apres-midi', seulement si dateDebut === dateFin
     // §correctif audit du 23/08/2026 (§7.12) : demi-journée sur une période de plusieurs jours
     // (voir computeWorkingDays) — jamais renseignés en même temps que demiJournee ci-dessus.
     demiJourneeDebut: null, // null | 'apres-midi'
@@ -6194,7 +6194,7 @@ function makeEmptyExpense() {
     libelle: '',
     montantTTC: 0,
     tauxTVA: 20,
-    kilometrage: null, // { distanceKm, puissanceFiscale } | null — renseigné pour la catégorie "Kilométrique"
+    kilometrage: null, // { distanceKm, puissanceFiscale } | null, renseigné pour la catégorie "Kilométrique"
     justificatif: null, // { nom, dataUrl } | null
     // §retour Betty du 14/09/2026 (Notes de frais point 5, "note de frais groupée") : null tant que
     // cette note n'appartient à aucun dossier — voir expenseDossierRepository/DB.creerDossierFrais.
@@ -6236,7 +6236,7 @@ function makeEmptyDocument() {
     employeeId: null,
     categorie: '',
     nom: '',
-    dateExpiration: '', // optionnel — utilisé pour les alertes d'échéance (permis, CNI, visite médicale...)
+    dateExpiration: '', // optionnel, utilisé pour les alertes d'échéance (permis, CNI, visite médicale...)
     fichier: null, // { nom, dataUrl } | null
     // §retour Betty du 14/09/2026 (Module RH point 4, "accusé de lecture") : un document remis au
     // salarié (règlement intérieur, note de service...) peut exiger sa confirmation de prise de
@@ -6268,9 +6268,9 @@ function makeEmptyTicket() {
     statut: 'ouvert', // 'ouvert' | 'en_cours' | 'resolu' | 'livre' | 'ferme'
     pieceJointe: null, // { nom, dataUrl } | null
     comments: [], // [{ auteur, texte, date }]
-    historique: [], // [{ date, action, auteur }] — un changement de statut par entrée
+    historique: [], // [{ date, action, auteur }], un changement de statut par entrée
     dateLivraison: null, // renseignée automatiquement quand statut passe à 'livre'
-    aiAnalysis: null, // { categorieSuggeree, prioriteSuggeree, resume, pointsCles } | null — suggestion IA, jamais appliquée automatiquement
+    aiAnalysis: null, // { categorieSuggeree, prioriteSuggeree, resume, pointsCles } | null, suggestion IA, jamais appliquée automatiquement
     dateCreation: null,
     dateModification: null
   };
