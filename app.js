@@ -170,9 +170,20 @@ function getInitialViewState() {
     // une note de frais qui n'a qu'une seule date), voir getFilteredLeaveRequests.
     congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' },
     congesPage: 1,
+    // §retour Betty du 19/09/2026 (revue de la livraison, point 3, "le socle commun n'est déployé
+    // que sur deux écrans... Congés et absences, Notes de frais, ce sont ceux qu'on ouvre tous les
+    // jours") : recherche + tri par colonne, même principe que tableauCompteursSearch/entretiensSearch
+    // ci-dessous — une paire dédiée par catégorie (congé/autre absence), jamais partagée, sinon trier
+    // "Congés" retrierait aussi "Autres absences" au changement d'onglet.
+    congesSearch: '',
+    congesSortBy: 'periode',
+    congesSortDir: 'desc',
     autresAbsencesTab: 'demandes',
     autresAbsencesFilters: { employeeId: '', typeId: '', statut: '', periode: '' },
     autresAbsencesPage: 1,
+    autresAbsencesSearch: '',
+    autresAbsencesSortBy: 'periode',
+    autresAbsencesSortDir: 'desc',
     pendingAttachment: null,
     pendingAttachmentFile: null, // File brut transitoire (jamais persisté) — voir uploadJustificatifBestEffort
     editingDraftId: null, // Sprint SIRH premium §10 : brouillon en cours de reprise, converti/supprimé au submit
@@ -198,6 +209,10 @@ function getInitialViewState() {
     // préfixe de date), voir getFilteredExpenses.
     fraisFilters: { employeeId: '', categorie: '', statut: '', periode: '' },
     fraisPage: 1,
+    // §retour Betty du 19/09/2026 (revue de la livraison, point 3) : même socle que Congés ci-dessus.
+    fraisSearch: '',
+    fraisSortBy: 'date',
+    fraisSortDir: 'desc',
     ticketsYear: new Date().getFullYear(),
     ticketsMonth: new Date().getMonth(),
     ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel' — même principe que calendrierVue/planningVue
@@ -13546,16 +13561,46 @@ function applyStateFilters(list, filters, fieldMap) {
 
 function getFilteredLeaveRequests(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
+  const searchKey = categorie === 'conge' ? 'congesSearch' : 'autresAbsencesSearch';
+  const sortByKey = categorie === 'conge' ? 'congesSortBy' : 'autresAbsencesSortBy';
+  const sortDirKey = categorie === 'conge' ? 'congesSortDir' : 'autresAbsencesSortDir';
   const list = leaveRepository.getAll().filter(r => {
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     return type && type.categorie === categorie;
   });
-  const filtered = applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
+  let filtered = applyStateFilters(scopeToVisibleEmployees(list), filters, [['employeeId', 'employeeId'], ['typeId', 'typeId'], ['statut', 'statut']]);
   // §retour Betty du 19/09/2026 (blocage 5.3, puis socle commun point 6) : matchesPeriodeFilter
   // gère elle-même le CHEVAUCHEMENT d'une plage [dateDebut, dateFin] — une demande est une plage,
   // contrairement à une note de frais (une seule date, voir getFilteredExpenses) : une demande du
   // 28/08 au 03/09 doit apparaître si on filtre sur septembre, même commencée en août.
-  return filtered.filter(r => matchesPeriodeFilter([r.dateDebut, r.dateFin], filters.periode));
+  filtered = filtered.filter(r => matchesPeriodeFilter([r.dateDebut, r.dateFin], filters.periode));
+
+  // §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche... Congés et
+  // absences") : recherche par nom de salarié, en complément du filtre déroulant existant (qui reste
+  // le plus pratique dès que la liste d'employés est longue à parcourir) — même idiome que
+  // getFilteredEntretiens (showEmployee toujours vrai ici, cet écran n'a jamais de vue "un seul salarié").
+  const term = normalizeForSearch(state[searchKey].trim());
+  if (term) {
+    filtered = filtered.filter(r => {
+      const employee = employeeRepository.getById(r.employeeId);
+      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+    });
+  }
+
+  return sortListBy(filtered, (r) => {
+    const sortBy = state[sortByKey];
+    if (sortBy === 'employee') {
+      const employee = employeeRepository.getById(r.employeeId);
+      return employee ? `${employee.nom} ${employee.prenom}` : '';
+    }
+    if (sortBy === 'type') {
+      const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
+      return type ? type.nom : '';
+    }
+    if (sortBy === 'jours') return r.nbJours || 0;
+    if (sortBy === 'statut') return r.statut || '';
+    return r.dateDebut || ''; // 'periode' (tri par défaut, le plus utile : les demandes récentes en premier)
+  }, state[sortDirKey]);
 }
 
 // §correctif audit du 23/08/2026 (§7.14) : sélection de validation en masse, séparée par catégorie
@@ -13566,6 +13611,10 @@ const bulkSelection = { conge: new Set(), autre: new Set(), frais: new Set() };
 function renderCongesDemandes(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
+  const searchKey = categorie === 'conge' ? 'congesSearch' : 'autresAbsencesSearch';
+  const sortByKey = categorie === 'conge' ? 'congesSortBy' : 'autresAbsencesSortBy';
+  const sortDirKey = categorie === 'conge' ? 'congesSortDir' : 'autresAbsencesSortDir';
+  const searchInputId = categorie === 'conge' ? 'conges-search' : 'autres-absences-search';
   const employees = getScopedEmployeesForFilters();
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const requests = getFilteredLeaveRequests(categorie);
@@ -13580,7 +13629,7 @@ function renderCongesDemandes(categorie = 'conge') {
   // "aucune demande ne correspond à ces filtres" induisait en erreur quand il n'y avait tout
   // simplement AUCUNE demande créée pour l'instant (pas un souci de filtre à ajuster) — un cas
   // fréquent pour une entreprise qui démarre sur ce module.
-  const emptyStateMessage = Object.values(filters).some(Boolean)
+  const emptyStateMessage = (Object.values(filters).some(Boolean) || state[searchKey])
     ? 'Aucune demande ne correspond à ces filtres.'
     : `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant. Utilisez le bouton "+ Nouvelle demande" ci-dessus pour créer la première.`;
 
@@ -13601,8 +13650,12 @@ function renderCongesDemandes(categorie = 'conge') {
 
     ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
 
-    ${renderFilterToggleBar('conges-filters', [filters.employeeId, filters.typeId, filters.statut, filters.periode].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
+    ${renderFilterToggleBar('conges-filters', [state[searchKey], filters.employeeId, filters.typeId, filters.statut, filters.periode].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
     <div class="toolbar card toolbar-collapsible" id="conges-filters">
+      <!-- §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche") :
+           recherche par nom, en complément du filtre déroulant ci-dessous (gardé, plus pratique pour
+           choisir un salarié précis dans une petite équipe). -->
+      <input type="text" id="${searchInputId}" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state[searchKey])}">
       <select id="conges-filter-employee" class="input">
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
@@ -13635,11 +13688,11 @@ function renderCongesDemandes(categorie = 'conge') {
           <thead>
             <tr>
               <th>${selectablePageItems.length ? `<input type="checkbox" id="conges-select-all" ${selectablePageItems.every(r => selection.has(r.id)) ? 'checked' : ''} aria-label="Tout sélectionner">` : ''}</th>
-              <th>Salarié</th>
-              <th>Type</th>
-              <th>Période</th>
-              <th>Jours</th>
-              <th>Statut</th>
+              ${renderSortableHeader('Salarié', 'employee', sortByKey, sortDirKey)}
+              ${renderSortableHeader('Type', 'type', sortByKey, sortDirKey)}
+              ${renderSortableHeader('Période', 'periode', sortByKey, sortDirKey)}
+              ${renderSortableHeader('Jours', 'jours', sortByKey, sortDirKey)}
+              ${renderSortableHeader('Statut', 'statut', sortByKey, sortDirKey)}
               <th></th>
             </tr>
           </thead>
@@ -14051,12 +14104,25 @@ function exportLeaveRequestsCSV(categorie = 'conge') {
 function bindCongesDemandesEvents(categorie = 'conge') {
   const filters = categorie === 'conge' ? state.congesFilters : state.autresAbsencesFilters;
   const pageKey = categorie === 'conge' ? 'congesPage' : 'autresAbsencesPage';
+  const searchKey = categorie === 'conge' ? 'congesSearch' : 'autresAbsencesSearch';
+  const searchInputId = categorie === 'conge' ? 'conges-search' : 'autres-absences-search';
 
   bindFilterToggleButtons();
   document.getElementById('btn-new-leave-request').addEventListener('click', () => openLeaveRequestModal(undefined, categorie));
   document.getElementById('btn-export-conges').addEventListener('click', () => exportLeaveRequestsCSV(categorie));
   bindDraftsCardEvents((draft) => openLeaveRequestModal(undefined, categorie, draft));
 
+  // §retour Betty du 19/09/2026 (revue de la livraison, point 3) : même idiome que
+  // bindEntretiensEvents (focus/curseur restaurés après le re-render complet déclenché par l'input).
+  const searchInput = document.getElementById(searchInputId);
+  if (searchInput) searchInput.addEventListener('input', (e) => {
+    state[searchKey] = e.target.value;
+    state[pageKey] = 1;
+    render();
+    const input = document.getElementById(searchInputId);
+    input.focus();
+    input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
+  });
   document.getElementById('conges-filter-employee').addEventListener('change', (e) => {
     filters.employeeId = e.target.value;
     state[pageKey] = 1;
@@ -15821,10 +15887,10 @@ function bindFilterToggleButtons() {
  * getInitialViewState (jamais dupliquées à la main pour ne pas risquer de diverger). */
 const FILTER_RESET_HANDLERS = {
   employees: () => { state.search = ''; state.filters = { etablissementId: '', service: '', statutContrat: '', statut: '', favorisOnly: false }; state.employeesPage = 1; },
-  conges: () => { state.congesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.congesPage = 1; },
-  'autres-absences': () => { state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.autresAbsencesPage = 1; },
+  conges: () => { state.congesSearch = ''; state.congesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.congesPage = 1; },
+  'autres-absences': () => { state.autresAbsencesSearch = ''; state.autresAbsencesFilters = { employeeId: '', typeId: '', statut: '', periode: '' }; state.autresAbsencesPage = 1; },
   teletravail: () => { state.teletravailFilters = { employeeId: '', statut: '' }; state.teletravailPage = 1; },
-  frais: () => { state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' }; state.fraisPage = 1; },
+  frais: () => { state.fraisSearch = ''; state.fraisFilters = { employeeId: '', categorie: '', statut: '', periode: '' }; state.fraisPage = 1; },
   organigramme: () => { state.organigrammeFilters = { search: '', etablissementId: '', service: '', equipe: '' }; },
   entretiens: () => { state.entretiensSearch = ''; state.entretiensFilters = { type: '', statut: '', periode: '' }; state.entretiensPage = 1; },
   'tableau-compteurs': () => { state.tableauCompteursSearch = ''; state.tableauCompteursFilters = { service: '', etablissementId: '' }; state.tableauCompteursPage = 1; }
@@ -19132,11 +19198,11 @@ function renderParametresModelesDocuments() {
           <tbody>
             ${templates.map(t => `
               <tr>
-                <td>${escapeHtml(t.nom)}</td>
+                <td>${escapeHtml(t.nom)}${t.cle ? ' <span class="badge badge-muted" title="Modèle fourni par Nexus RH : personnalisable, jamais supprimable">Fourni</span>' : ''}</td>
                 <td>${t.dateModification ? formatDate(t.dateModification.slice(0, 10)) : (t.dateCreation ? formatDate(t.dateCreation.slice(0, 10)) : '—')}</td>
                 <td>
                   <button type="button" class="btn-link" data-edit-modele-document="${t.id}">Modifier</button>
-                  <button type="button" class="btn-link btn-link-danger" data-delete-modele-document="${t.id}" data-delete-modele-document-nom="${escapeHtml(t.nom)}">Supprimer</button>
+                  ${t.cle ? '' : `<button type="button" class="btn-link btn-link-danger" data-delete-modele-document="${t.id}" data-delete-modele-document-nom="${escapeHtml(t.nom)}">Supprimer</button>`}
                 </td>
               </tr>
             `).join('')}
@@ -22770,11 +22836,33 @@ function hydrationWindowCutoffDateISO() {
 }
 
 function getFilteredExpenses() {
-  const filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
+  let filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
     [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
   // §retour Betty du 19/09/2026 (socle commun, point 6) : matchesPeriodeFilter (une seule
   // implémentation, désormais partagée avec Congés/Entretiens) plutôt qu'un startsWith réécrit ici.
-  return filtered.filter(n => matchesPeriodeFilter(n.date, state.fraisFilters.periode));
+  filtered = filtered.filter(n => matchesPeriodeFilter(n.date, state.fraisFilters.periode));
+
+  // §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche... Notes de
+  // frais") : même idiome que getFilteredLeaveRequests/getFilteredEntretiens.
+  const term = normalizeForSearch(state.fraisSearch.trim());
+  if (term) {
+    filtered = filtered.filter(n => {
+      const employee = employeeRepository.getById(n.employeeId);
+      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+    });
+  }
+
+  return sortListBy(filtered, (n) => {
+    if (state.fraisSortBy === 'employee') {
+      const employee = employeeRepository.getById(n.employeeId);
+      return employee ? `${employee.nom} ${employee.prenom}` : '';
+    }
+    if (state.fraisSortBy === 'categorie') return n.categorie || '';
+    if (state.fraisSortBy === 'libelle') return n.libelle || '';
+    if (state.fraisSortBy === 'montant') return n.montantTTC || 0;
+    if (state.fraisSortBy === 'statut') return n.statut || '';
+    return n.date || ''; // 'date' (tri par défaut)
+  }, state.fraisSortDir);
 }
 
 function renderFrais() {
@@ -22812,7 +22900,7 @@ function renderFrais() {
   const periodeAvantFenetre = Boolean(state.fraisFilters.periode && `${state.fraisFilters.periode}-01` < hydrationWindowCutoffDateISO());
   const emptyStateMessage = periodeAvantFenetre
     ? 'Aucune note dans le cache local pour cette période (plus de 40 mois) : contactez BERTOLIS si vous avez besoin de cet historique.'
-    : Object.values(state.fraisFilters).some(Boolean)
+    : (Object.values(state.fraisFilters).some(Boolean) || state.fraisSearch)
       ? 'Aucune note de frais ne correspond à ces filtres.'
       : 'Aucune note de frais pour l\'instant. Utilisez le bouton "+ Nouvelle note" ci-dessus pour créer la première.';
 
@@ -22839,6 +22927,9 @@ function renderFrais() {
     ${canValider ? renderRapprochementBancaireCard() : ''}
 
     <div class="toolbar card">
+      <!-- §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche... Notes
+           de frais") : recherche par nom, en complément du filtre déroulant ci-dessous. -->
+      <input type="text" id="frais-search" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state.fraisSearch)}">
       <select id="frais-filter-employee" class="input">
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${state.fraisFilters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
@@ -22858,7 +22949,16 @@ function renderFrais() {
       ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
         <table class="table mobile-cards">
           <thead>
-            <tr><th></th><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Libellé</th><th class="cell-numeric">Montant TTC</th><th>Statut</th><th></th></tr>
+            <tr>
+              <th></th>
+              ${renderSortableHeader('Salarié', 'employee', 'fraisSortBy', 'fraisSortDir')}
+              ${renderSortableHeader('Date', 'date', 'fraisSortBy', 'fraisSortDir')}
+              ${renderSortableHeader('Catégorie', 'categorie', 'fraisSortBy', 'fraisSortDir')}
+              ${renderSortableHeader('Libellé', 'libelle', 'fraisSortBy', 'fraisSortDir')}
+              <th class="cell-numeric sortable" data-sort="montant" data-sort-by-key="fraisSortBy" data-sort-dir-key="fraisSortDir">Montant TTC${state.fraisSortBy === 'montant' ? (state.fraisSortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+              ${renderSortableHeader('Statut', 'statut', 'fraisSortBy', 'fraisSortDir')}
+              <th></th>
+            </tr>
           </thead>
           <tbody>${pageItems.map(renderExpenseRow).join('')}</tbody>
         </table>
@@ -23150,6 +23250,15 @@ function bindFraisEvents() {
     });
   }
 
+  const fraisSearchInput = document.getElementById('frais-search');
+  if (fraisSearchInput) fraisSearchInput.addEventListener('input', (e) => {
+    state.fraisSearch = e.target.value;
+    state.fraisPage = 1;
+    render();
+    const input = document.getElementById('frais-search');
+    input.focus();
+    input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
+  });
   document.getElementById('frais-filter-employee').addEventListener('change', (e) => {
     state.fraisFilters.employeeId = e.target.value;
     state.fraisPage = 1;

@@ -2961,8 +2961,17 @@ const DB = {
     return list[index];
   },
 
+  /** §retour Betty du 19/09/2026 (revue de la livraison, point 4, "les deux modèles système sont
+   * supprimables sans repère") : "Attestation employeur"/"Certificat de travail" (cle non nul, voir
+   * seedDocumentTemplatesDefaut) s'affichaient comme un modèle créé à la main, avec le même bouton
+   * Supprimer — la suppression ne cassait rien (repli sur corpsOrigine, voir openAttestationEmployeurModal/
+   * openCertificatTravailModal) mais faisait disparaître la personnalisation sans le moindre
+   * avertissement, un modèle absent de la liste restant pourtant utilisable depuis la fiche salarié.
+   * Le bouton Supprimer est retiré côté écran pour ces deux modèles (voir renderParametresModelesDocuments) ;
+   * ce garde-fou côté données est la seconde ligne de défense, jamais la seule. */
   deleteDocumentTemplate(id) {
     const template = this.getDocumentTemplateById(id);
+    if (template && template.cle) return;
     this.saveDocumentTemplates(this.getDocumentTemplates().filter(t => t.id !== id));
     if (template) this.logAudit('Suppression', 'Modèle de document', template.nom);
   },
@@ -5855,17 +5864,23 @@ function parsePosteGenre(posteNeutre) {
   return { masculin: masculin.trim(), feminin: feminin.trim() };
 }
 
-/** §retour Betty du 18/09/2026 (point 5) : sélectionne la forme du poste qui correspond à ce
- * salarié précis (masculin/féminin selon getSexe, forme neutre au point médian par défaut si le
- * sexe n'est pas encore renseigné ou si ce poste n'a pas/plus d'entrée dans settings.postes — ex. un
- * intitulé tapé librement à la création, jamais ajouté au catalogue). employee.poste (la forme
- * neutre) reste la SEULE valeur stockée sur le salarié, jamais réécrite : ceci ne change que
+/** §retour Betty du 19/09/2026 (revue de la livraison, point 2, "ne pas accorder reste sans effet
+ * sur les postes") : accordait jusqu'ici directement sur getSexe (état civil), sans jamais consulter
+ * la civilité D'USAGE (getCiviliteAffichee ci-dessus) — un salarié ayant explicitement choisi
+ * "ne pas accorder" voyait quand même "Commercial·e" accordé au masculin/féminin sur son certificat
+ * de travail et l'organigramme, exactement le cas que ce champ existe pour couvrir. Même priorité que
+ * getCiviliteAffichee : civilite explicite (Monsieur/Madame) d'abord, forme neutre si "ne_pas_accorder",
+ * repli sur le sexe à l'état civil UNIQUEMENT si la civilité n'a jamais été renseignée. employee.poste
+ * (la forme neutre) reste la SEULE valeur stockée sur le salarié, jamais réécrite : ceci ne change que
  * l'AFFICHAGE, jamais les données. */
 function getPosteAccorde(employee, settings) {
   const neutre = employee && employee.poste;
   if (!neutre) return '';
   const entree = ((settings && settings.postes) || []).find(p => p.neutre === neutre);
   if (!entree) return neutre;
+  if (employee.civilite === 'Monsieur') return entree.masculin || neutre;
+  if (employee.civilite === 'Madame') return entree.feminin || neutre;
+  if (employee.civilite === 'ne_pas_accorder') return neutre;
   const sexe = getSexe(employee);
   if (sexe === 'Homme') return entree.masculin || neutre;
   if (sexe === 'Femme') return entree.feminin || neutre;

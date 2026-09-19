@@ -97,9 +97,11 @@ async function runUi() {
 
     // §retour Betty du 19/09/2026 (point 2) : DB.init() seede désormais 2 modèles système par
     // défaut (voir seedDocumentTemplatesDefaut, data.js) — ce scénario teste spécifiquement le cas
-    // "aucun modèle configuré", donc on les retire explicitement d'abord plutôt que de supposer
-    // qu'aucun n'existe.
-    documentTemplateRepository.getAll().forEach(t => documentTemplateRepository.delete(t.id));
+    // "aucun modèle configuré". documentTemplateRepository.delete() refuse désormais ces 2 modèles
+    // (revue de la livraison du 19/09, point 4 : plus supprimables, voir DB.deleteDocumentTemplate) —
+    // ce cas "zéro modèle" n'est donc plus atteignable par ce chemin en usage réel ; on le simule ici
+    // directement au niveau des données pour continuer à couvrir le rendu de renderEmployeeDetail.
+    DB.saveDocumentTemplates([]);
 
     const htmlSansModele = renderEmployeeDetail(salarie.id);
     assert.ok(!htmlSansModele.includes('Documents à générer'), 'sans aucun modèle configuré, la carte doit être entièrement masquée, même pour RH');

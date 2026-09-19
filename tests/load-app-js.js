@@ -210,6 +210,7 @@ globalThis.__handleApproveExpense = handleApproveExpense;
 globalThis.__refuseRequest = refuseRequest;
 globalThis.__expenseRepository = expenseRepository;
 globalThis.__renderFrais = renderFrais;
+globalThis.__renderParametresModelesDocuments = renderParametresModelesDocuments;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
 globalThis.__teleworkRepository = teleworkRepository;
 globalThis.__leaveRepository = leaveRepository;
@@ -530,6 +531,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     refuseRequest: sandbox.__refuseRequest,
     expenseRepository: sandbox.__expenseRepository,
     renderFrais: sandbox.__renderFrais,
+    renderParametresModelesDocuments: sandbox.__renderParametresModelesDocuments,
     renderAbsencesHub: sandbox.__renderAbsencesHub,
     teleworkRepository: sandbox.__teleworkRepository,
     leaveRepository: sandbox.__leaveRepository,
