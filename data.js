@@ -705,7 +705,8 @@ function seedCompany() {
     // RÉELLES préexistantes n'ayant jamais eu le moindre quart).
     exampleShiftsSeeded: true,
     leaveTypes: seedLeaveTypes(),
-    schoolHolidays: seedSchoolHolidays()
+    schoolHolidays: seedSchoolHolidays(),
+    documentTemplates: seedDocumentTemplatesDefaut()
   });
 }
 
@@ -778,6 +779,7 @@ async function hydrateCurrentCompanyWithMigrations() {
     await ensureCiviliteSexeMigresVersServeur(company, currentUser);
     await ensurePostesGenresBackfilled(company, currentUser);
     await ensureContratsTermineDateDepartAutoDeduite(company, currentUser);
+    await ensureDocumentTemplatesAttestationCertificatBackfilled(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -1046,6 +1048,41 @@ async function ensureContratsTermineDateDepartAutoDeduite(company, currentUser) 
     await Promise.all(entries.map(entry => window.SupabaseSync.pushAuditLogEntry(entry, company.id)));
   } catch (err) {
     console.error('ensureContratsTermineDateDepartAutoDeduite : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** Contrepartie de seedDocumentTemplatesDefaut() ci-dessus pour une entreprise déjà existante,
+ * créée avant ce changement — même patron que ensureDefaultLeaveTypesBackfilled : un drapeau
+ * APPEND-ONLY (company.defaultDocumentTemplatesSeeded, jamais retiré même si le client supprime
+ * ensuite le modèle) pour ne jamais ressusciter un modèle explicitement supprimé. Comparaison par
+ * `cle` (stable), jamais par `nom` (que le client peut renommer sans que ça doive re-déclencher un
+ * second seed). */
+async function ensureDocumentTemplatesAttestationCertificatBackfilled(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.GERER_PARAMETRES)) return;
+
+  const defaults = seedDocumentTemplatesDefaut();
+  const alreadySeeded = new Set(company.defaultDocumentTemplatesSeeded || []);
+  const existingCles = new Set((company.documentTemplates || []).map(t => t.cle).filter(Boolean));
+  const manquants = defaults.filter(t => !existingCles.has(t.cle) && !alreadySeeded.has(t.cle));
+
+  const newSeededList = Array.from(new Set([...alreadySeeded, ...defaults.map(t => t.cle)]));
+  const seededChanged = newSeededList.length !== alreadySeeded.size;
+  if (!manquants.length && !seededChanged) return;
+
+  if (manquants.length) company.documentTemplates = [...(company.documentTemplates || []), ...manquants];
+  company.defaultDocumentTemplatesSeeded = newSeededList;
+
+  try {
+    // documentTemplates/defaultDocumentTemplatesSeeded font partie du blob entreprise (pas exclus
+    // ci-dessous) : ce seul appel les pousse tous les deux, comme le fait déjà DB._pushCompanyDataBlob
+    // (jamais accessible ici via `this`, ce contexte tourne avant que l'appelant ne remplace
+    // this._companiesCache par `company` — même contrainte que ensureContratsTermineDateDepartAutoDeduite).
+    const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
+      teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
+      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+    await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
+  } catch (err) {
+    console.error('ensureDocumentTemplatesAttestationCertificatBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -1319,8 +1356,15 @@ function makeEmptyWeekTemplate() {
  * décision pour l'attestation de salaire) contenant des espaces réservés "{{champ}}", remplis à la
  * génération (voir fusionnerModeleDocument) avec les données réelles du salarié/de l'entreprise.
  * Jamais de calcul ni de logique dans le modèle lui-même : un simple remplacement texte. */
+/** §retour Betty du 19/09/2026 (point 2, "l'attestation employeur et le certificat de travail...
+ * livrés comme modèles de base, modifiables, avec un bouton pour revenir au texte d'origine") :
+ * `cle`/`corpsOrigine` réservés aux 2 modèles système livrés par défaut (voir
+ * ensureDocumentTemplatesAttestationCertificatBackfilled) — `cle` (jamais affichée, sert
+ * uniquement à les retrouver de façon stable même renommés) et `corpsOrigine` (texte de départ,
+ * jamais réécrit une fois posé, même si `corps` est ensuite modifié) restent `null` pour tout
+ * modèle créé normalement par le client. */
 function makeEmptyDocumentTemplate() {
-  return { id: null, nom: '', corps: '', dateCreation: null, dateModification: null };
+  return { id: null, nom: '', corps: '', cle: null, corpsOrigine: null, dateCreation: null, dateModification: null };
 }
 
 /** Liste des champs de fusion disponibles, dans l'ordre où on veut les proposer à la saisie — sert à
@@ -1335,14 +1379,24 @@ const CHAMPS_FUSION_MODELE = [
   { champ: 'adresseComplete', label: 'Adresse complète' }, { champ: 'email', label: 'Email' }, { champ: 'telephone', label: 'Téléphone' },
   { champ: 'salaireBrutMensuel', label: 'Salaire brut mensuel' }, { champ: 'conventionCollective', label: 'Convention collective' },
   { champ: 'raisonSociale', label: "Raison sociale de l'entreprise" }, { champ: 'siret', label: 'SIRET' },
-  { champ: 'adresseEntreprise', label: "Adresse de l'entreprise" }, { champ: 'dateAujourdhui', label: "Date d'aujourd'hui" }
+  { champ: 'adresseEntreprise', label: "Adresse de l'entreprise" }, { champ: 'dateAujourdhui', label: "Date d'aujourd'hui" },
+  // §retour Betty du 19/09/2026 (point 2) : manquants pour couvrir le texte de l'attestation
+  // employeur/du certificat de travail, jusqu'ici écrit en dur (voir openAttestationEmployeurModal/
+  // openCertificatTravailModal, app.js). posteAccorde (accord de genre via getPosteAccorde, distinct
+  // de `poste` ci-dessus qui reste la forme neutre brute) préserve ce que faisaient déjà ces deux
+  // documents avant de passer par ce système générique — jamais une régression silencieuse.
+  { champ: 'tempsTravail', label: 'Temps de travail' }, { champ: 'dateDepart', label: 'Date de départ' },
+  { champ: 'posteAccorde', label: 'Poste (accordé au sexe du salarié)' }
 ];
 
 /** Construit le dictionnaire champ→valeur pour UN salarié donné (jamais de calcul métier ici, que du
- * formatage d'affichage — formatDate/formatCurrencyFR/personNameHtml vivent côté app.js, donc les
- * dates/montants restent en valeur brute ou pré-formatée simple ici, reformatées si besoin à
- * l'affichage). salaireBrutMensuel vide volontairement si le suivi de la masse salariale est
- * désactivé (settings.masseSalarialeActivee) — même garde que l'attestation de salaire. */
+ * formatage d'affichage). formatCurrencyFR/personNameHtml vivent côté app.js (montants/mise en
+ * forme du nom), mais formatDate est bien ici (data.js) — les dates sont donc déjà formatées à la
+ * française (JJ/MM/AAAA), jamais la valeur ISO brute dans un document destiné à être lu. Un champ
+ * date absent reste une chaîne vide (jamais le "—" que renvoie formatDate pour une date manquante :
+ * ce serait pire qu'un simple blanc dans un document officiel). salaireBrutMensuel vide
+ * volontairement si le suivi de la masse salariale est désactivé (settings.masseSalarialeActivee)
+ * — même garde que l'attestation de salaire. */
 function construireValeursFusionModele(employee, company) {
   const adresse = employee.adresse || {};
   const profile = company || {};
@@ -1353,8 +1407,8 @@ function construireValeursFusionModele(employee, company) {
     // réellement AFFICHABLE (vide si "ne pas accorder", déduite du sexe à défaut d'un choix explicite).
     civilite: getCiviliteAffichee(employee), prenom: employee.prenom || '', nom: employee.nom || '',
     matricule: employee.matricule || '', poste: employee.poste || '', service: employee.service || '',
-    typeContrat: employee.typeContrat || '', dateEmbauche: employee.dateEmbauche || '',
-    dateNaissance: employee.dateNaissance || '', lieuNaissance: employee.lieuNaissance || '',
+    typeContrat: employee.typeContrat || '', dateEmbauche: employee.dateEmbauche ? formatDate(employee.dateEmbauche) : '',
+    dateNaissance: employee.dateNaissance ? formatDate(employee.dateNaissance) : '', lieuNaissance: employee.lieuNaissance || '',
     nationalite: employee.nationalite || '', numeroSecu: employee.numeroSecu || '',
     adresseComplete: [adresse.rue, adresse.codePostal, adresse.ville].filter(Boolean).join(', '),
     email: employee.email || '', telephone: employee.telephone || '',
@@ -1362,7 +1416,9 @@ function construireValeursFusionModele(employee, company) {
     conventionCollective: employee.conventionCollective || '',
     raisonSociale: profile.raisonSociale || '', siret: profile.siret || '',
     adresseEntreprise: profile.adresse || '',
-    dateAujourdhui: toISODate(new Date())
+    dateAujourdhui: formatDate(toISODate(new Date())),
+    tempsTravail: employee.tempsTravail || '', dateDepart: employee.dateDepart ? formatDate(employee.dateDepart) : '',
+    posteAccorde: getPosteAccorde(employee, settings) || ''
   };
 }
 
@@ -1376,6 +1432,29 @@ function fusionnerModeleDocument(corps, valeurs) {
     const valeur = valeurs[champ];
     return valeur === undefined || valeur === null ? '' : String(valeur);
   });
+}
+
+/** §retour Betty du 19/09/2026 (point 2, "l'attestation employeur et le certificat de travail...
+ * livrés comme modèles de base") : les 2 modèles système livrés par défaut. `cle` les distingue de
+ * façon stable (jamais par `nom`, que le client peut renommer) — voir
+ * ensureDocumentTemplatesAttestationCertificatBackfilled ci-dessous, appelée pour une entreprise
+ * déjà existante. `corpsOrigine` = `corps` au moment du seed, jamais réécrit ensuite : permet
+ * "Revenir au texte d'origine" (openModeleDocumentModal, app.js) même après plusieurs modifications
+ * du client. Texte identique à ce qui était jusqu'ici écrit en dur dans
+ * openAttestationEmployeurModal/openCertificatTravailModal (app.js) — cette migration ne change
+ * rien à ce qui s'imprime tant que personne n'a encore modifié le modèle. */
+function seedDocumentTemplatesDefaut() {
+  const attestationEmployeurCorps = `Je soussigné(e), représentant de la société {{raisonSociale}} (SIRET {{siret}}), atteste que {{civilite}} {{prenom}} {{nom}}, né(e) le {{dateNaissance}}, est employé(e) au sein de notre entreprise depuis le {{dateEmbauche}}, en qualité de {{posteAccorde}}, sous contrat {{typeContrat}}, à {{tempsTravail}}.
+
+Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.`;
+  const certificatTravailCorps = `Je soussigné(e), représentant de la société {{raisonSociale}} (SIRET {{siret}}), certifie que {{civilite}} {{prenom}} {{nom}} a été employé(e) au sein de notre entreprise du {{dateEmbauche}} au {{dateDepart}}, en qualité de {{posteAccorde}} au sein du service {{service}}.
+
+Le salarié est libre de tout engagement à l'issue de cette période.`;
+  const now = new Date().toISOString();
+  return [
+    { id: generateId('modele'), nom: 'Attestation employeur', corps: attestationEmployeurCorps, cle: 'attestation_employeur', corpsOrigine: attestationEmployeurCorps, dateCreation: now, dateModification: now },
+    { id: generateId('modele'), nom: 'Certificat de travail', corps: certificatTravailCorps, cle: 'certificat_travail', corpsOrigine: certificatTravailCorps, dateCreation: now, dateModification: now }
+  ];
 }
 
 /** Durée effective d'un quart en heures décimales : (fin − début) − pause. Toutes les valeurs sont

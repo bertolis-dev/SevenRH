@@ -12796,12 +12796,26 @@ function renderPrintDocumentHeader(profile, title, subtitle) {
  * .docx généré peut être accepté par la lib mais refusé par Word" — n'existe pas avec Imprimer/PDF
  * natif du navigateur). Toujours une AIDE À LA PRÉPARATION : texte type à relire avant remise, un
  * humain reste responsable du contenu final et de la signature. */
+/** §retour Betty du 19/09/2026 (point 2, "livrés comme modèles de base, modifiables") : le texte
+ * vient désormais de documentTemplateRepository (cle 'attestation_employeur'), jamais écrit en dur
+ * ici — modifiable dans Paramètres &gt; Modèles de documents, avec un bouton "Revenir au texte
+ * d'origine" (voir openModeleDocumentModal). Le filet de sécurité (seedDocumentTemplatesDefaut(),
+ * si le modèle a été supprimé ou qu'une entreprise n'a pas encore été migrée) réutilise le MÊME
+ * texte que le seed, jamais une troisième copie divergente à maintenir. L'en-tête/le cachet restent
+ * générés par du code (renderPrintDocumentHeader), pas dans le corps modifiable, pour une
+ * présentation commune à tous les documents. */
 function openAttestationEmployeurModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const profile = companyRepository.getProfile();
-  const settings = settingsRepository.getSettings();
-  const today = toISODate(new Date());
+  const company = DB.getCurrentCompany();
+  const template = documentTemplateRepository.getAll().find(t => t.cle === 'attestation_employeur')
+    || seedDocumentTemplatesDefaut().find(t => t.cle === 'attestation_employeur');
+
+  const valeursBrutes = construireValeursFusionModele(e, company);
+  const valeursEchappees = {};
+  Object.keys(valeursBrutes).forEach(champ => { valeursEchappees[champ] = escapeHtml(String(valeursBrutes[champ] ?? '')); });
+  const corpsFusionne = fusionnerModeleDocument(escapeHtml(template.corps), valeursEchappees);
 
   const html = `
     <div class="modal modal-large">
@@ -12810,16 +12824,10 @@ function openAttestationEmployeurModal(id) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
+        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression (modifiable dans Paramètres &gt; Modèles de documents).</p>
         <div class="print-area print-document">
           ${renderPrintDocumentHeader(profile, 'Attestation employeur')}
-          <p class="print-attestation-text">
-            Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            atteste que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)}, né(e) le ${formatDate(e.dateNaissance) || '____________________'},
-            est employé(e) au sein de notre entreprise depuis le ${formatDate(e.dateEmbauche)}, en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')},
-            sous contrat ${escapeHtml(e.typeContrat)}${e.tempsTravail ? ', à ' + escapeHtml(e.tempsTravail).toLowerCase() : ''}.
-          </p>
-          <p class="print-attestation-text">Cette attestation est délivrée à la demande de l'intéressé(e) pour servir et valoir ce que de droit.</p>
+          <p class="print-attestation-text" style="white-space: pre-wrap;">${corpsFusionne}</p>
           <div class="print-signature">
             <span>Cachet de l'entreprise</span>
             <span class="print-signature-line">Signature</span>
@@ -13065,11 +13073,18 @@ function openAjouterIndexEgaliteModal(defaultYear) {
   });
 }
 
+/** §retour Betty du 19/09/2026 (point 2, "livrés comme modèles de base, modifiables") : même
+ * principe que openAttestationEmployeurModal ci-dessus — texte issu de documentTemplateRepository
+ * (cle 'certificat_travail'), jamais écrit en dur ici. L'avertissement "aucune date de départ" et
+ * son article de loi restent générés par du code (pas dans le corps modifiable, une mention légale
+ * ne devrait pas pouvoir être supprimée par erreur en modifiant le modèle). */
 function openCertificatTravailModal(id) {
   const e = employeeRepository.getById(id);
   if (!e) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const profile = companyRepository.getProfile();
-  const settings = settingsRepository.getSettings();
+  const company = DB.getCurrentCompany();
+  const template = documentTemplateRepository.getAll().find(t => t.cle === 'certificat_travail')
+    || seedDocumentTemplatesDefaut().find(t => t.cle === 'certificat_travail');
   // §retour Betty du 18/09/2026 (point 7) : utilisait dateFinContrat (propre aux CDD/intérim, voir
   // employee.dateFinContrat) comme repli pour deviner une date de sortie — un CDI en cours n'a
   // jamais ce champ renseigné, mais rien n'empêchait alors de générer un certificat de travail pour
@@ -13079,6 +13094,17 @@ function openCertificatTravailModal(id) {
   // en pratique, gardé par sécurité si la modale était un jour ouverte par un autre chemin).
   const dateSortie = e.dateDepart;
 
+  const valeursBrutes = construireValeursFusionModele(e, company);
+  const valeursEchappees = {};
+  Object.keys(valeursBrutes).forEach(champ => { valeursEchappees[champ] = escapeHtml(String(valeursBrutes[champ] ?? '')); });
+  // fusionnerModeleDocument transforme un champ manquant en chaîne vide (règle générale, correcte
+  // pour la plupart des champs) — mais SANS départ effectif, une date de sortie silencieusement
+  // blanche serait pire que la modale elle-même (déjà déconseillée par l'avertissement ci-dessous) :
+  // reprend l'espace à compléter à la main déjà utilisé avant le passage aux modèles, uniquement
+  // dans ce cas précis.
+  if (!dateSortie) valeursEchappees.dateDepart = '____________________';
+  const corpsFusionne = fusionnerModeleDocument(escapeHtml(template.corps), valeursEchappees);
+
   const html = `
     <div class="modal modal-large">
       <div class="modal-header">
@@ -13087,16 +13113,10 @@ function openCertificatTravailModal(id) {
       </div>
       <div class="modal-body">
         ${!dateSortie ? `<p class="field-warning visible">${icon(ICONS.warningTriangle, 13)} Aucune date de départ renseignée sur cette fiche : ce salarié semble toujours en poste. Le certificat de travail est réservé à une sortie effective (Code du travail, art. L1234-19) ; une attestation employeur convient tant qu'il est encore en poste.</p>` : ''}
-        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression.</p>
+        <p class="text-muted">Modèle type à relire avant remise : complétez/ajustez si besoin avant impression (modifiable dans Paramètres &gt; Modèles de documents).</p>
         <div class="print-area print-document">
           ${renderPrintDocumentHeader(profile, 'Certificat de travail')}
-          <p class="print-attestation-text">
-            Je soussigné(e), représentant de la société ${escapeHtml(profile.raisonSociale || '____________________')}${profile.siret ? ' (SIRET ' + escapeHtml(profile.siret) + ')' : ''},
-            certifie que ${getCiviliteAffichee(e) ? escapeHtml(getCiviliteAffichee(e)) + ' ' : ''}${personNameHtml(e)} a été employé(e) au sein de notre entreprise
-            du ${formatDate(e.dateEmbauche)} au ${dateSortie ? formatDate(dateSortie) : '____________________'},
-            en qualité de ${escapeHtml(getPosteAccorde(e, settings) || '____________________')}${e.service ? ' au sein du service ' + escapeHtml(e.service) : ''}.
-          </p>
-          <p class="print-attestation-text">Le salarié est libre de tout engagement à l'issue de cette période.</p>
+          <p class="print-attestation-text" style="white-space: pre-wrap;">${corpsFusionne}</p>
           <div class="print-signature">
             <span>Cachet de l'entreprise</span>
             <span class="print-signature-line">Signature</span>
@@ -18987,6 +19007,13 @@ function openModeleDocumentModal(template) {
             <label for="f-corps">Corps du document</label>
             <textarea class="input" id="f-corps" rows="12" placeholder="Ex. Nous attestons que {{prenom}} {{nom}}, matricule {{matricule}}, est employé(e) au poste de {{poste}} depuis le {{dateEmbauche}}.">${escapeHtml(template ? template.corps : '')}</textarea>
             <p class="form-hint">Insérez un champ en cliquant sur son nom ci-dessous : il sera remplacé par la vraie valeur du salarié à la génération.</p>
+            <!-- §retour Betty du 19/09/2026 (point 2, "un bouton pour revenir au texte d'origine") :
+                 réservé aux 2 modèles système (attestation employeur/certificat de travail) livrés
+                 par défaut — corpsOrigine reste null pour un modèle créé normalement par le client,
+                 qui n'a donc pas de "texte d'origine" auquel revenir. Remplit juste le brouillon du
+                 formulaire (pas de soumission automatique) : comme les boutons d'insertion de champ
+                 ci-dessus, rien n'est enregistré avant un clic sur "Enregistrer". -->
+            ${template && template.corpsOrigine ? `<button type="button" class="btn-link" id="btn-revenir-texte-origine" style="margin-top: 6px;">Revenir au texte d'origine</button>` : ''}
           </div>
         </form>
         <div class="badge-row" style="gap: 6px; margin-top: 4px;">
@@ -19006,6 +19033,11 @@ function openModeleDocumentModal(template) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 
   const corpsField = document.getElementById('f-corps');
+  const revenirBtn = document.getElementById('btn-revenir-texte-origine');
+  if (revenirBtn) revenirBtn.addEventListener('click', () => {
+    corpsField.value = template.corpsOrigine;
+    corpsField.focus();
+  });
   document.querySelectorAll('[data-insert-champ]').forEach(btn => {
     btn.addEventListener('click', () => {
       const insertion = btn.dataset.insertChamp;

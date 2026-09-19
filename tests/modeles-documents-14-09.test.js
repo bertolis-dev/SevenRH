@@ -63,16 +63,21 @@ async function runUi() {
     const rh = DB.getEmployees().find(e => e.role === 'rh');
     DB._currentEmployeeId = rh.id;
 
-    assert.strictEqual(documentTemplateRepository.getAll().length, 0, 'aucun modèle par défaut');
+    // §retour Betty du 19/09/2026 (point 2, "attestation employeur et certificat de travail livrés
+    // comme modèles de base") : 2 modèles système désormais seedés par défaut (voir
+    // seedDocumentTemplatesDefaut, data.js) — plus "aucun modèle par défaut" comme avant ce
+    // changement. Le CRUD ci-dessous reste testé RELATIVEMENT à ce socle de 2, pas en absolu.
+    const nombreModelesParDefaut = documentTemplateRepository.getAll().length;
+    assert.strictEqual(nombreModelesParDefaut, 2, 'les 2 modèles système (attestation employeur, certificat de travail) doivent être livrés par défaut');
     const template = documentTemplateRepository.create({ nom: 'Attestation de travail', corps: 'Nous attestons que {{prenom}} {{nom}} travaille chez nous depuis le {{dateEmbauche}}.' });
     assert.ok(template.id);
-    assert.strictEqual(documentTemplateRepository.getAll().length, 1);
+    assert.strictEqual(documentTemplateRepository.getAll().length, nombreModelesParDefaut + 1);
 
     documentTemplateRepository.update(template.id, { nom: 'Attestation de travail (à jour)' });
     assert.strictEqual(documentTemplateRepository.getById(template.id).nom, 'Attestation de travail (à jour)');
 
     documentTemplateRepository.delete(template.id);
-    assert.strictEqual(documentTemplateRepository.getAll().length, 0);
+    assert.strictEqual(documentTemplateRepository.getAll().length, nombreModelesParDefaut);
   }
 
   // ---- Fiche salarié : la carte "Documents à générer" liste les modèles pour qui peut modifier la
@@ -89,6 +94,12 @@ async function runUi() {
     // §retour Betty du 18/09/2026 (point 6) : "Documents à générer" vit désormais sous l'onglet
     // "Documents" (16 cartes empilées remplacées par des onglets), plus sous "Fiche" par défaut.
     state.employeeDetailTab = 'documents';
+
+    // §retour Betty du 19/09/2026 (point 2) : DB.init() seede désormais 2 modèles système par
+    // défaut (voir seedDocumentTemplatesDefaut, data.js) — ce scénario teste spécifiquement le cas
+    // "aucun modèle configuré", donc on les retire explicitement d'abord plutôt que de supposer
+    // qu'aucun n'existe.
+    documentTemplateRepository.getAll().forEach(t => documentTemplateRepository.delete(t.id));
 
     const htmlSansModele = renderEmployeeDetail(salarie.id);
     assert.ok(!htmlSansModele.includes('Documents à générer'), 'sans aucun modèle configuré, la carte doit être entièrement masquée, même pour RH');

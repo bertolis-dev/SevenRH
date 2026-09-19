@@ -121,6 +121,8 @@ globalThis.__getPosteAccorde = getPosteAccorde;
 globalThis.__ensurePostesGenresBackfilled = ensurePostesGenresBackfilled;
 globalThis.__ensureContratsTermineDateDepartAutoDeduite = ensureContratsTermineDateDepartAutoDeduite;
 globalThis.__ROLES = ROLES;
+globalThis.__seedDocumentTemplatesDefaut = seedDocumentTemplatesDefaut;
+globalThis.__ensureDocumentTemplatesAttestationCertificatBackfilled = ensureDocumentTemplatesAttestationCertificatBackfilled;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -698,6 +700,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     ensurePostesGenresBackfilled: sandbox.__ensurePostesGenresBackfilled,
     ensureContratsTermineDateDepartAutoDeduite: sandbox.__ensureContratsTermineDateDepartAutoDeduite,
     ROLES: sandbox.__ROLES,
+    seedDocumentTemplatesDefaut: sandbox.__seedDocumentTemplatesDefaut,
+    ensureDocumentTemplatesAttestationCertificatBackfilled: sandbox.__ensureDocumentTemplatesAttestationCertificatBackfilled,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,
