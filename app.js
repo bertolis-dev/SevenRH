@@ -11494,6 +11494,12 @@ function openNouveauContratModal(employeeId) {
       showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
       return;
     }
+    const contratsExistants = (employee.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
+    const contratCourant = contratsExistants.find(c => !c.dateFin) || contratsExistants[0] || null;
+    if (contratCourant && contratCourant.dateDebut && dateDebut <= contratCourant.dateDebut) {
+      showToast('La date de début ne peut pas être avant celle du contrat en cours.', 'error');
+      return;
+    }
     employeeRepository.ajouterContrat(employeeId, {
       dateDebut,
       typeContrat: document.getElementById('f-contrat-type').value,
@@ -25768,7 +25774,7 @@ function bindEmployeeFormTabs() {
   // laissera simplement 'submit' se déclencher comme d'habitude).
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.addEventListener('click', () => {
-    const invalide = Array.from(form.querySelectorAll('[required]')).find(el => !el.checkValidity());
+    const invalide = Array.from(form.elements).find(el => el.willValidate && !el.checkValidity());
     if (!invalide) return;
     const panel = invalide.closest('[data-employee-tab-panel]');
     if (panel && panel.hidden) activateEmployeeFormTab(panel.dataset.employeeTabPanel);
@@ -25781,7 +25787,7 @@ function bindEmployeeFormTabs() {
  * vers le premier champ invalide, mais rien ne dit qu'il n'est pas caché dans un onglet fermé). */
 function updateEmployeeFormTabErrors() {
   document.querySelectorAll('[data-employee-tab-panel]').forEach(panel => {
-    const invalide = Array.from(panel.querySelectorAll('[required]')).some(el => !el.checkValidity());
+    const invalide = Array.from(panel.querySelectorAll('input, select, textarea')).some(el => el.willValidate && !el.checkValidity());
     const dot = document.getElementById(`tab-error-${panel.dataset.employeeTabPanel}`);
     if (dot) dot.hidden = !invalide;
   });
@@ -27081,6 +27087,7 @@ function applyQuickAddValue(select, value, estNouvelle) {
   });
 
   closeQuickAddInline(select); // lit dataset.quickAddPrevious, déjà mis à jour juste au-dessus.
+  select.dispatchEvent(new Event('change', { bubbles: true }));
   showToast(estNouvelle ? `« ${escapeHtml(optionValue)} » ajouté${def.feminin ? 'e' : ''}.` : 'Valeur déjà existante, sélectionnée.');
 }
 
