@@ -26,14 +26,17 @@ function setup() {
 async function runSixOngletsExactsEtFicheParDefaut() {
   const { EMPLOYEE_DETAIL_TABS, sandbox, navigateTo, employeeRepository } = setup();
   const cles = Array.from(EMPLOYEE_DETAIL_TABS).map(t => t.key);
-  assert.deepStrictEqual(cles, ['fiche', 'conges', 'frais', 'acces', 'documents', 'parcours']);
+  // §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : 7e onglet ajouté, entre Fiche
+  // et Congés — l'historique des avenants qui vivait sur Fiche (renderAvenantsCard) y a déménagé,
+  // rejoint désormais par la vraie suite de contrats (employee.contrats, voir DB.addContrat).
+  assert.deepStrictEqual(cles, ['fiche', 'contrat', 'conges', 'frais', 'acces', 'documents', 'parcours']);
 
   const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
   navigateTo('employee-detail', { currentEmployeeId: salarie.id });
   const html = sandbox.document.getElementById('view-root').innerHTML;
   assert.ok(html.includes('data-employee-detail-tab="fiche"') && html.includes('tab active'), '"Fiche" doit être l\'onglet actif par défaut, sans deep-link explicite');
 
-  console.log('OK — fiche-salarie-onglets-navigation-18-09.test.js (6 onglets exacts, "Fiche" par défaut)');
+  console.log('OK — fiche-salarie-onglets-navigation-18-09.test.js (7 onglets exacts, "Fiche" par défaut)');
 }
 
 async function runDeepLinkDepuisNotificationOuvreLeBonOnglet() {

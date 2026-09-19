@@ -11347,37 +11347,181 @@ function renderVisitesMedicalesCard(employee, canEdit) {
   `;
 }
 
-/** Trace manuelle des avenants (voir data.js, employee.avenants) — le plus récent en premier,
- * comme les autres historiques de l'app (buildRequestTimeline, entretien.historique...). */
-function renderAvenantsCard(avenants, canEdit) {
-  const sorted = avenants.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+/** §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : liste, pour chacun,
+ * champModifie/label — sert à la fois au formulaire (openAjouterAvenantModal) et à l'affichage
+ * (formatValeurAvenantChange ci-dessous). '' = aucun changement de valeur, un avenant purement
+ * narratif comme avant ce changement (ex. type "Autre"). */
+const CHAMP_AVENANT_OPTIONS = [
+  { value: '', label: 'Aucun changement de valeur (juste une note)' },
+  { value: 'typeContrat', label: 'Type de contrat' },
+  { value: 'tempsTravail', label: 'Temps de travail' },
+  { value: 'forfait', label: 'Forfait' },
+  { value: 'salaireBrutMensuel', label: 'Salaire brut mensuel (€)' },
+  { value: 'horairesHebdo', label: 'Heures hebdomadaires' },
+  { value: 'pourcentageActivite', label: 'Pourcentage d\'activité (%)' }
+];
+
+function formatValeurAvenantChange(a) {
+  if (a.champModifie === 'salaireBrutMensuel') return formatCurrencyFR(Number(a.nouvelleValeur));
+  if (a.champModifie === 'horairesHebdo') return formatNumberFR(Number(a.nouvelleValeur)) + ' h';
+  if (a.champModifie === 'pourcentageActivite') return formatPercentFR(Number(a.nouvelleValeur));
+  return escapeHtml(a.nouvelleValeur);
+}
+
+function libelleContrat(c) {
+  return `${escapeHtml(c.typeContrat || '—')}${c.dateFin ? ' du ' + formatDate(c.dateDebut) + ' au ' + formatDate(c.dateFin) : ' depuis le ' + formatDate(c.dateDebut) + ' (courant)'}`;
+}
+
+/** §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : remplace la carte "Historique
+ * des avenants" (jusqu'ici seule sur l'onglet Fiche) — un vrai onglet séparé, avec la suite de
+ * contrats (employee.contrats, voir DB.addContrat) au-dessus des avenants qui s'y rattachent
+ * désormais réellement (contratId). "Pour deux CDD qui se suivent, le second effaçait le premier" :
+ * ici, les deux restent visibles, dans l'ordre. */
+function renderEmployeeContratTab(e, canEdit) {
+  const contrats = (e.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
+  const avenants = (e.avenants || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const contratsById = new Map((e.contrats || []).map(c => [c.id, c]));
   return `
-    <div class="card">
-      <h2>Historique des avenants</h2>
-      ${sorted.length === 0 ? `<p class="text-muted" style="margin-bottom: 10px;">Aucun avenant enregistré.</p>` : `
-        <div class="mini-list" style="margin-bottom: 10px;">
-          ${sorted.map(a => `
-            <div class="mini-list-item" style="align-items: flex-start;">
-              <span>
-                <span class="badge badge-info">${escapeHtml(a.type)}</span>
-                ${escapeHtml(a.description)}
-              </span>
-              <span class="text-muted">${formatDate(a.date)}</span>
-            </div>
-          `).join('')}
+    <div class="detail-grid-cards">
+      <div class="card">
+        <div class="view-header-row">
+          <h2>Contrats</h2>
+          ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-nouveau-contrat">+ Nouveau contrat</button>` : ''}
         </div>
-      `}
-      ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-avenant">Enregistrer un avenant</button>` : ''}
+        <p class="text-muted" style="margin: 0 0 10px;">Chaque nouveau contrat s'ajoute à la suite, sans jamais effacer le précédent : l'ancienneté continue de s'accumuler depuis la date d'embauche.</p>
+        ${contrats.length === 0 ? `<p class="text-muted">Aucun contrat enregistré.</p>` : `
+          <div class="mini-list">
+            ${contrats.map((c, i) => `
+              <div class="mini-list-item" style="align-items: flex-start;">
+                <span>
+                  <span class="badge ${!c.dateFin ? 'badge-success' : 'badge-muted'}">${!c.dateFin ? 'Courant' : 'Terminé'}</span>
+                  ${escapeHtml(c.typeContrat || '—')} · ${escapeHtml(c.tempsTravail || '—')}${c.forfait && c.forfait !== 'Aucun' ? ' · ' + escapeHtml(c.forfait) : ''}
+                  ${c.salaireBrutMensuel ? `<br><span class="text-muted">${formatCurrencyFR(c.salaireBrutMensuel)} brut/mois</span>` : ''}
+                </span>
+                <span class="text-muted" style="text-align: right; white-space: nowrap;">${formatDate(c.dateDebut)} → ${c.dateFin ? formatDate(c.dateFin) : 'en cours'}</span>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="card">
+        <div class="view-header-row">
+          <h2>Avenants</h2>
+          ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-ajouter-avenant">+ Avenant</button>` : ''}
+        </div>
+        ${avenants.length === 0 ? `<p class="text-muted">Aucun avenant enregistré.</p>` : `
+          <div class="mini-list">
+            ${avenants.map(a => `
+              <div class="mini-list-item" style="align-items: flex-start;">
+                <span>
+                  <span class="badge badge-info">${escapeHtml(a.type)}</span>
+                  ${a.champModifie ? `<br><strong>${escapeHtml((CHAMP_AVENANT_OPTIONS.find(o => o.value === a.champModifie) || {}).label || a.champModifie)} → ${formatValeurAvenantChange(a)}</strong>` : ''}
+                  ${a.description ? `<br>${escapeHtml(a.description)}` : ''}
+                  ${a.contratId && contratsById.get(a.contratId) ? `<br><span class="text-muted">Contrat : ${libelleContrat(contratsById.get(a.contratId))}</span>` : ''}
+                </span>
+                <span class="text-muted" style="white-space: nowrap;">${formatDate(a.date)}</span>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
     </div>
   `;
 }
 
+/** §retour Betty du 19/09/2026 (point 1.3) : AJOUTE un contrat à la suite (voir DB.addContrat) —
+ * jamais un remplacement du contrat courant, contrairement à l'ancien formulaire d'édition qui
+ * écrasait typeContrat/salaire/dates en place. */
+function openNouveauContratModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee || !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
+  const settings = settingsRepository.getSettings();
+  const html = `
+    <div class="modal modal-medium">
+      <div class="modal-header">
+        <h2>Nouveau contrat</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="nouveau-contrat-form">
+        <div class="modal-body">
+          <p class="text-muted">Le contrat en cours sera clôturé à la veille de la date de début ci-dessous ; la date d'embauche et l'ancienneté ne sont jamais affectées.</p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="f-contrat-date-debut">Date de début *</label>
+              <input class="input" type="date" id="f-contrat-date-debut" required>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-type">Type de contrat</label>
+              <select class="input" id="f-contrat-type">
+                ${(settings.typesContrat || []).map(t => `<option value="${escapeHtml(t)}" ${employee.typeContrat === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-temps-travail">Temps de travail</label>
+              <select class="input" id="f-contrat-temps-travail">
+                ${['Temps plein', 'Temps partiel'].map(t => `<option value="${t}" ${employee.tempsTravail === t ? 'selected' : ''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-forfait">Forfait</label>
+              <select class="input" id="f-contrat-forfait">
+                ${(settings.forfaits || []).map(f => `<option value="${escapeHtml(f)}" ${employee.forfait === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
+              <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(employee.salaireBrutMensuel || 0)}" step="any">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer le contrat</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('nouveau-contrat-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const dateDebut = document.getElementById('f-contrat-date-debut').value;
+    if (!dateDebut) return;
+    if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+      showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
+      return;
+    }
+    employeeRepository.ajouterContrat(employeeId, {
+      dateDebut,
+      typeContrat: document.getElementById('f-contrat-type').value,
+      tempsTravail: document.getElementById('f-contrat-temps-travail').value,
+      forfait: document.getElementById('f-contrat-forfait').value,
+      pourcentageActivite: employee.pourcentageActivite,
+      horairesHebdo: employee.horairesHebdo,
+      salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0
+    });
+    closeModal();
+    showToast('Nouveau contrat créé.');
+    render();
+  });
+}
+
+/** §retour Betty du 19/09/2026 (point 1.3, "les avenants... modifient réellement les valeurs") :
+ * champModifie/nouvelleValeur (optionnels — un avenant "Autre" reste une simple note comme avant)
+ * appliquent réellement le changement (DB.addAvenant) sur l'employé ET sur le contrat rattaché.
+ * contratId présélectionne le contrat courant (le plus récent sans date de fin), modifiable si
+ * l'avenant concerne en réalité un contrat déjà clos (rare, mais possible en rattrapage de saisie). */
 function openAjouterAvenantModal(employeeId) {
   const employeeForCheck = employeeRepository.getById(employeeId);
   if (!employeeForCheck || !canEditEmployeeRecord(employeeForCheck)) {
     showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error');
     return;
   }
+  const contrats = (employeeForCheck.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
+  const contratCourant = contrats.find(c => !c.dateFin) || contrats[0] || null;
   const html = `
     <div class="modal">
       <div class="modal-header">
@@ -11396,9 +11540,28 @@ function openAjouterAvenantModal(employeeId) {
             <label for="f-avenant-date">Date d'effet *</label>
             <input class="input" type="date" id="f-avenant-date" required>
           </div>
+          ${contrats.length ? `
+            <div class="form-field">
+              <label for="f-avenant-contrat">Contrat concerné</label>
+              <select class="input" id="f-avenant-contrat">
+                ${contrats.map(c => `<option value="${c.id}" ${contratCourant && c.id === contratCourant.id ? 'selected' : ''}>${libelleContrat(c)}</option>`).join('')}
+              </select>
+            </div>
+          ` : ''}
+          <div class="form-field">
+            <label for="f-avenant-champ">Valeur à modifier</label>
+            <select class="input" id="f-avenant-champ">
+              ${CHAMP_AVENANT_OPTIONS.map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field" id="field-avenant-nouvelle-valeur" hidden>
+            <label for="f-avenant-nouvelle-valeur">Nouvelle valeur</label>
+            <input class="input" type="text" id="f-avenant-nouvelle-valeur" placeholder="Ex. 2 800">
+            <p class="form-hint">Change réellement cette valeur sur la fiche (et sur le compteur/historique concerné), à la date d'effet ci-dessus.</p>
+          </div>
           <div class="form-field">
             <label for="f-avenant-description">Description</label>
-            <textarea class="input" id="f-avenant-description" rows="3" placeholder="Ex. Passage de Technicien à Responsable technique, salaire porté à 2 800 € brut/mois"></textarea>
+            <textarea class="input" id="f-avenant-description" rows="3" placeholder="Ex. Passage de Technicien à Responsable technique"></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -11413,20 +11576,29 @@ function openAjouterAvenantModal(employeeId) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const champSelect = document.getElementById('f-avenant-champ');
+  const nouvelleValeurField = document.getElementById('field-avenant-nouvelle-valeur');
+  champSelect.addEventListener('change', () => { nouvelleValeurField.hidden = !champSelect.value; });
   document.getElementById('avenant-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const date = document.getElementById('f-avenant-date').value;
     if (!date) return;
     const employee = employeeRepository.getById(employeeId);
     if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); closeModal(); return; }
-    const avenant = {
-      id: generateId('aven'),
+    const champModifie = champSelect.value;
+    const contratSelect = document.getElementById('f-avenant-contrat');
+    if (champModifie && !document.getElementById('f-avenant-nouvelle-valeur').value.trim()) {
+      showToast('Indiquez la nouvelle valeur, ou choisissez "Aucun changement de valeur".', 'error');
+      return;
+    }
+    employeeRepository.ajouterAvenant(employeeId, {
       type: document.getElementById('f-avenant-type').value,
       date,
       description: document.getElementById('f-avenant-description').value.trim(),
-      dateEnregistrement: new Date().toISOString()
-    };
-    employeeRepository.update(employeeId, { avenants: [...(employee.avenants || []), avenant] });
+      contratId: contratSelect ? contratSelect.value : null,
+      champModifie: champModifie || null,
+      nouvelleValeur: champModifie ? document.getElementById('f-avenant-nouvelle-valeur').value.trim() : null
+    });
     closeModal();
     showToast('Avenant enregistré.');
     render();
@@ -11661,6 +11833,7 @@ function renderEmployeeDetail(id) {
   // au lieu de dupliquer la même condition à deux endroits (le bouton d'onglet ET son contenu).
   const tabContents = {
     fiche: renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEdit),
+    contrat: canSeeContractuel ? renderEmployeeContratTab(e, canEdit) : '',
     conges: renderEmployeeCongesTab(e, user),
     frais: renderEmployeeFraisCard(e, user),
     acces: renderEmployeeAccesTab(e, user),
@@ -11714,6 +11887,7 @@ function renderEmployeeDetail(id) {
 
 const EMPLOYEE_DETAIL_TABS = [
   { key: 'fiche', label: 'Fiche' },
+  { key: 'contrat', label: 'Contrat' },
   { key: 'conges', label: 'Congés et absences' },
   { key: 'frais', label: 'Notes de frais' },
   { key: 'acces', label: 'Accès et droits' },
@@ -11782,8 +11956,6 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
       </div>
 
       ${ifModule('rh', renderVisitesMedicalesCard(e, canEdit))}
-
-      ${canSeeContractuel ? renderAvenantsCard(e.avenants || [], canEdit) : ''}
 
       <div class="card">
         <h2>Temps de travail</h2>
@@ -13200,6 +13372,8 @@ function bindEmployeeDetailEvents() {
 
   const avenantBtn = document.getElementById('btn-ajouter-avenant');
   if (avenantBtn) avenantBtn.addEventListener('click', () => openAjouterAvenantModal(state.currentEmployeeId));
+  const nouveauContratBtn = document.getElementById('btn-nouveau-contrat');
+  if (nouveauContratBtn) nouveauContratBtn.addEventListener('click', () => openNouveauContratModal(state.currentEmployeeId));
 
   const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
   if (editCoordonneesBtn) editCoordonneesBtn.addEventListener('click', () => openCoordonneesModal(state.currentEmployeeId));

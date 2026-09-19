@@ -123,6 +123,7 @@ globalThis.__ensureContratsTermineDateDepartAutoDeduite = ensureContratsTermineD
 globalThis.__ROLES = ROLES;
 globalThis.__seedDocumentTemplatesDefaut = seedDocumentTemplatesDefaut;
 globalThis.__ensureDocumentTemplatesAttestationCertificatBackfilled = ensureDocumentTemplatesAttestationCertificatBackfilled;
+globalThis.__ensureContratsBackfilled = ensureContratsBackfilled;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -316,6 +317,9 @@ globalThis.__reportClientError = reportClientError;
 globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
 globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 globalThis.__renderEmployeeDetail = renderEmployeeDetail;
+globalThis.__openAjouterAvenantModal = openAjouterAvenantModal;
+globalThis.__openNouveauContratModal = openNouveauContratModal;
+globalThis.__renderEmployeeContratTab = renderEmployeeContratTab;
 globalThis.__computeNextVisiteMedicale = computeNextVisiteMedicale;
 globalThis.__getLatestVisiteMedicale = getLatestVisiteMedicale;
 globalThis.__SUIVI_MEDICAL_RULES = SUIVI_MEDICAL_RULES;
@@ -624,6 +628,9 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
     ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
     renderEmployeeDetail: sandbox.__renderEmployeeDetail,
+    openAjouterAvenantModal: sandbox.__openAjouterAvenantModal,
+    openNouveauContratModal: sandbox.__openNouveauContratModal,
+    renderEmployeeContratTab: sandbox.__renderEmployeeContratTab,
     computeNextVisiteMedicale: sandbox.__computeNextVisiteMedicale,
     getLatestVisiteMedicale: sandbox.__getLatestVisiteMedicale,
     SUIVI_MEDICAL_RULES: sandbox.__SUIVI_MEDICAL_RULES,
@@ -702,6 +709,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     ROLES: sandbox.__ROLES,
     seedDocumentTemplatesDefaut: sandbox.__seedDocumentTemplatesDefaut,
     ensureDocumentTemplatesAttestationCertificatBackfilled: sandbox.__ensureDocumentTemplatesAttestationCertificatBackfilled,
+    ensureContratsBackfilled: sandbox.__ensureContratsBackfilled,
     renderParametresAbonnement: sandbox.__renderParametresAbonnement,
     renderAbonnementAlaCarteComposer: sandbox.__renderAbonnementAlaCarteComposer,
     renderAbonnementAlaCarteActif: sandbox.__renderAbonnementAlaCarteActif,

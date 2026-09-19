@@ -780,6 +780,7 @@ async function hydrateCurrentCompanyWithMigrations() {
     await ensurePostesGenresBackfilled(company, currentUser);
     await ensureContratsTermineDateDepartAutoDeduite(company, currentUser);
     await ensureDocumentTemplatesAttestationCertificatBackfilled(company, currentUser);
+    await ensureContratsBackfilled(company, currentUser);
     // §correctif du 10/09/2026 : contrairement aux AUTRES migrations client mentionnées ci-dessus
     // (restées seulement dans DB.init(), cache local), celle-ci corrige aussi une VRAIE connexion —
     // son absence a un impact fonctionnel silencieux et immédiat (la demi-journée ne peut jamais être
@@ -1083,6 +1084,38 @@ async function ensureDocumentTemplatesAttestationCertificatBackfilled(company, c
     await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
     console.error('ensureDocumentTemplatesAttestationCertificatBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
+  }
+}
+
+/** §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : reconstitue un "contrat n°1"
+ * pour une fiche déjà existante (créée avant ce changement), à partir de ses champs à plat déjà
+ * renseignés — aucune perte : dateEmbauche/typeContrat/tempsTravail/salaireBrutMensuel restent
+ * exactement ce qu'ils étaient, simplement recopiés dans le premier contrat de la suite. Idempotence
+ * par simple longueur (comme migrateCompanyEtablissements) plutôt qu'un drapeau séparé : une fois
+ * qu'UN contrat existe (par ce backfill ou par un vrai DB.addContrat), ne retouche plus jamais rien. */
+async function ensureContratsBackfilled(company, currentUser) {
+  if (!currentUser || !hasPermission(currentUser, PERMISSIONS.MODIFIER_SALARIE)) return;
+
+  const modified = [];
+  (company.employees || []).forEach(e => {
+    if (e.contrats && e.contrats.length) return;
+    e.contrats = [Object.assign(makeEmptyContrat(), {
+      id: generateId('contrat'),
+      dateDebut: e.dateEmbauche || '', dateFin: e.dateFinContrat || '', typeContrat: e.typeContrat || '',
+      tempsTravail: e.tempsTravail || 'Temps plein',
+      pourcentageActivite: e.pourcentageActivite != null ? e.pourcentageActivite : 100,
+      horairesHebdo: e.horairesHebdo != null ? e.horairesHebdo : 35,
+      forfait: e.forfait || 'Aucun', salaireBrutMensuel: e.salaireBrutMensuel || 0,
+      dateCreation: new Date().toISOString()
+    })];
+    modified.push(e);
+  });
+  if (!modified.length) return;
+
+  try {
+    await window.SupabaseSync.pushEmployees({ added: [], modified }, company.id);
+  } catch (err) {
+    console.error('ensureContratsBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
   }
 }
 
@@ -2293,6 +2326,68 @@ const DB = {
     this.saveEmployees(list);
     this.logAudit('Modification', 'Salarié', `${list[index].prenom} ${list[index].nom}`);
     return list[index];
+  },
+
+  /** §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : AJOUTE un contrat à la suite
+   * (jamais un remplacement) — "pour deux CDD qui se suivent, le second effaçait le premier" jusqu'ici.
+   * Ferme le contrat "courant" précédent (dateFin = veille de la nouvelle dateDebut) SEULEMENT s'il
+   * n'avait pas déjà sa propre date de fin (un CDD à terme déjà connu garde SA vraie date). Reporte
+   * les nouvelles valeurs sur les champs à plat de l'employé via updateEmployee (donc alimente aussi
+   * historiqueSalaire au passage si le salaire change) : le reste de l'application, qui lit déjà ces
+   * champs à plat à des dizaines d'endroits, reste correct sans être réécrit. dateEmbauche n'est
+   * JAMAIS touchée ici — c'est ce qui permet à l'ancienneté de continuer à s'accumuler sans
+   * interruption à travers ce changement de contrat. */
+  addContrat(employeeId, data) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return null;
+    const contrats = (employee.contrats || []).map(c => ({ ...c }));
+    if (data.dateDebut) {
+      const veille = toISODate(new Date(parseISODateLocal(data.dateDebut).getTime() - 86400000));
+      contrats.forEach(c => { if (!c.dateFin) c.dateFin = veille; });
+    }
+    const contrat = Object.assign(makeEmptyContrat(), data, { id: generateId('contrat'), dateCreation: new Date().toISOString() });
+    contrats.push(contrat);
+    this.updateEmployee(employeeId, {
+      contrats,
+      typeContrat: contrat.typeContrat, dateFinContrat: contrat.dateFin,
+      tempsTravail: contrat.tempsTravail, pourcentageActivite: contrat.pourcentageActivite,
+      horairesHebdo: contrat.horairesHebdo, forfait: contrat.forfait, salaireBrutMensuel: contrat.salaireBrutMensuel
+    }, `Nouveau contrat (${contrat.typeContrat}) à compter du ${formatDate(contrat.dateDebut)}`);
+    this.logAudit('Création', 'Contrat', `${employee.prenom} ${employee.nom}`, `${contrat.typeContrat} à compter du ${formatDate(contrat.dateDebut)}`);
+    return contrat;
+  },
+
+  /** §retour Betty du 19/09/2026 (point 1.3) : reprend le mécanisme historique de l'avenant (texte
+   * libre avec type/date/description) mais lui donne la capacité de modifier RÉELLEMENT une valeur —
+   * "un avenant... ne modifie rien... le changement de salaire, lui, est tracé ailleurs... deux
+   * historiques parallèles qui ne se parlent pas". champModifie/nouvelleValeur restent optionnels
+   * (un avenant "Autre" purement narratif n'en a pas besoin) ; quand ils sont fournis, la vraie
+   * valeur change sur l'employé (via updateEmployee, qui alimente donc historiqueSalaire au passage
+   * si champModifie === 'salaireBrutMensuel' — motifSalaire cite l'avenant, les deux historiques se
+   * recoupent enfin) et, si le contrat visé est encore identifiable, sur ce contrat aussi. */
+  addAvenant(employeeId, data) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return null;
+    const avenant = {
+      id: generateId('aven'), type: data.type, date: data.date, description: (data.description || '').trim(),
+      contratId: data.contratId || null, champModifie: data.champModifie || null,
+      nouvelleValeur: (data.nouvelleValeur !== undefined && data.nouvelleValeur !== '') ? data.nouvelleValeur : null,
+      dateEnregistrement: new Date().toISOString()
+    };
+    const patch = { avenants: [...(employee.avenants || []), avenant] };
+    let motifSalaire = '';
+    const champsNumeriques = ['salaireBrutMensuel', 'pourcentageActivite', 'horairesHebdo'];
+    if (avenant.champModifie && avenant.nouvelleValeur !== null) {
+      const valeur = champsNumeriques.includes(avenant.champModifie) ? Number(avenant.nouvelleValeur) : avenant.nouvelleValeur;
+      patch[avenant.champModifie] = valeur;
+      if (avenant.champModifie === 'salaireBrutMensuel') motifSalaire = `Avenant du ${formatDate(avenant.date)}${avenant.description ? ' : ' + avenant.description : ''}`;
+      if (avenant.contratId) {
+        patch.contrats = (employee.contrats || []).map(c => c.id === avenant.contratId ? { ...c, [avenant.champModifie]: valeur } : c);
+      }
+    }
+    this.updateEmployee(employeeId, patch, motifSalaire);
+    this.logAudit('Création', 'Avenant', `${employee.prenom} ${employee.nom}`, `${avenant.type} du ${formatDate(avenant.date)}${avenant.champModifie ? ' (valeur modifiée réellement)' : ''}`);
+    return avenant;
   },
 
   /** Suppression définitive : nettoie aussi les références qui pointeraient vers ce salarié ailleurs dans l'entreprise (managers, équipes, demandes, documents, favoris). */
@@ -5050,6 +5145,8 @@ const employeeRepository = {
   getById: (id) => DB.getEmployeeById(id),
   create: (data) => DB.addEmployee(data),
   update: (id, patch) => DB.updateEmployee(id, patch),
+  ajouterContrat: (employeeId, data) => DB.addContrat(employeeId, data),
+  ajouterAvenant: (employeeId, data) => DB.addAvenant(employeeId, data),
   archive: (id, archived = true) => DB.setArchived(id, archived),
   delete: (id) => DB.deleteEmployee(id),
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
@@ -5417,6 +5514,21 @@ function getCiviliteAffichee(employee) {
   return sexe === 'Homme' ? 'Monsieur' : sexe === 'Femme' ? 'Madame' : '';
 }
 
+/** §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : un contrat de la suite
+ * employee.contrats (voir makeEmptyEmployee ci-dessous). Champs volontairement identiques à ceux
+ * jusqu'ici à plat sur l'employé (typeContrat/tempsTravail/pourcentageActivite/horairesHebdo/
+ * forfait/salaireBrutMensuel) : DB.addContrat les reporte sur l'employé à chaque nouveau contrat,
+ * pour que le reste de l'application (paie estimée, effectifs, exports...) continue de les lire
+ * sans être réécrit. dateFin reste vide tant que le contrat est "courant" — DB.addContrat la remplit
+ * automatiquement (veille de la dateDebut du contrat suivant) au moment où un nouveau contrat
+ * commence, sauf si elle a déjà été fixée à l'avance (ex. un CDD à terme connu). */
+function makeEmptyContrat() {
+  return {
+    id: null, dateDebut: '', dateFin: '', typeContrat: '', tempsTravail: 'Temps plein',
+    pourcentageActivite: 100, horairesHebdo: 35, forfait: 'Aucun', salaireBrutMensuel: 0, dateCreation: null
+  };
+}
+
 /** Structure complète d'une fiche salarié (valeurs par défaut). */
 function makeEmptyEmployee() {
   return {
@@ -5478,12 +5590,33 @@ function makeEmptyEmployee() {
     // qu'il n'est pas explicitement déclenché depuis la fiche salarié.
     onboardingChecklist: [],
     offboardingChecklist: [],
-    // Historique des avenants (demande du 18/08/2026) : [{ id, date, type, description, dateEnregistrement }]
-    // — trace manuelle ("un avenant a été signé, voici ce qu'il change"), pas une détection
-    // automatique des modifications de champs (aurait exigé d'intercepter chaque chemin d'édition
-    // de la fiche pour un signal beaucoup plus bruyant que ce qui compte réellement : les avenants
-    // formels, pas chaque correction de coquille). Voir openAjouterAvenantModal (app.js).
+    // Historique des avenants (demande du 18/08/2026) : [{ id, date, type, description, dateEnregistrement,
+    // contratId, champModifie, nouvelleValeur }] — trace manuelle ("un avenant a été signé, voici ce
+    // qu'il change"), pas une détection automatique des modifications de champs (aurait exigé
+    // d'intercepter chaque chemin d'édition de la fiche pour un signal beaucoup plus bruyant que ce
+    // qui compte réellement : les avenants formels, pas chaque correction de coquille). Voir
+    // openAjouterAvenantModal (app.js).
+    // §retour Betty du 19/09/2026 (point 1.3, "un avenant... ne modifie rien") : contratId/
+    // champModifie/nouvelleValeur (les 3 derniers champs ci-dessus) restent optionnels — un avenant
+    // "Autre" purement narratif n'en a pas besoin — mais quand ils sont fournis, DB.addAvenant
+    // applique RÉELLEMENT le changement (sur l'employé ET sur le contrat visé), au lieu de rester un
+    // texte sans effet. Voir aussi historiqueSalaire ci-dessous, alimenté automatiquement au passage
+    // pour un avenant qui change le salaire (motifSalaire cite l'avenant) : les deux historiques,
+    // jusqu'ici parallèles et sans lien, se recoupent enfin.
     avenants: [],
+    // §retour Betty du 19/09/2026 (point 1.3, "intercalaire Contrat") : [{ id, dateDebut, dateFin,
+    // typeContrat, tempsTravail, pourcentageActivite, horairesHebdo, forfait, salaireBrutMensuel,
+    // dateCreation }] — une VRAIE suite de contrats successifs (voir DB.addContrat), jamais une
+    // valeur unique écrasée à chaque changement (le défaut qu'elle a signalé : "pour deux CDD qui se
+    // suivent, le second efface le premier"). Les champs à plat ci-dessus (typeContrat,
+    // dateFinContrat, tempsTravail...) restent la source de vérité pour tout le reste de
+    // l'application (paie estimée, effectifs, tickets restaurant, exports...) — DB.addContrat les
+    // reporte automatiquement depuis le contrat le plus récent, pour ne jamais avoir à réécrire les
+    // dizaines d'endroits qui les lisent déjà. dateEmbauche (ci-dessus, jamais dans un contrat)
+    // reste elle aussi inchangée d'un contrat à l'autre : c'est ce qui permet à l'ancienneté
+    // (calculée dessus) de continuer à s'accumuler sans interruption à travers un changement de
+    // contrat, sans qu'aucun calcul existant n'ait besoin d'être réécrit.
+    contrats: [],
     // §correctif audit du 23/08/2026 (§7.21) : périodes d'astreinte — [{ id, dateDebut, dateFin,
     // indemniteMontant, commentaire, interventions: [{id, date, heureDebut, heureFin, description}],
     // dateCreation }]. Même patron que avenants ci-dessus (champ sur l'employé, pas une table à part)
