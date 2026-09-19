@@ -25736,21 +25736,43 @@ function renderEmployeeFormTabs(hasConfidentiel) {
   `;
 }
 
+/** Bascule par programme sur l'onglet `key` — extrait du handler de clic ci-dessous pour être
+ * réutilisable par bindEmployeeFormTabs (recherche découverte le 19/09/2026, "échec silencieux de
+ * soumission") : un champ obligatoire invalide caché dans un AUTRE onglet fait échouer la
+ * soumission sans aucun message ("An invalid form control is not focusable" en console) — le
+ * navigateur valide bien le champ comme invalide (l'attribut `hidden` ne l'exempte pas de
+ * checkValidity(), voir updateEmployeeFormTabErrors plus bas), mais échoue à le focaliser puisqu'il
+ * n'est pas rendu, et n'émet alors jamais l'événement 'submit'. */
+function activateEmployeeFormTab(key) {
+  document.querySelectorAll('[data-employee-tab]').forEach(b => b.classList.toggle('active', b.dataset.employeeTab === key));
+  document.querySelectorAll('[data-employee-tab-panel]').forEach(p => { p.hidden = p.dataset.employeeTabPanel !== key; });
+}
+
 /** Un seul panneau visible à la fois (le premier par défaut) ; les autres restent dans le DOM
  * (leurs valeurs de saisie ne sont jamais perdues), simplement masqués via [hidden]. */
 function bindEmployeeFormTabs() {
-  const tabBtns = Array.from(document.querySelectorAll('[data-employee-tab]'));
-  const panels = Array.from(document.querySelectorAll('[data-employee-tab-panel]'));
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabBtns.forEach(b => b.classList.toggle('active', b === btn));
-      panels.forEach(p => { p.hidden = p.dataset.employeeTabPanel !== btn.dataset.employeeTab; });
-    });
+  document.querySelectorAll('[data-employee-tab]').forEach(btn => {
+    btn.addEventListener('click', () => activateEmployeeFormTab(btn.dataset.employeeTab));
   });
   const form = document.getElementById('employee-form');
   form.addEventListener('input', updateEmployeeFormTabErrors);
   form.addEventListener('change', updateEmployeeFormTabErrors);
   updateEmployeeFormTabErrors();
+
+  // §retour Betty du 19/09/2026 ("échec silencieux de soumission") : le clic sur le bouton
+  // type="submit" déclenche la validation native du navigateur APRÈS que ce listener 'click' (posé
+  // avant, sur le même bouton) ait fini de s'exécuter — donc encore à temps pour basculer sur le bon
+  // onglet AVANT que le navigateur ne tente de focaliser un champ resté caché. Jamais un
+  // evt.preventDefault() ici : on laisse ensuite la validation native reprendre la main normalement
+  // (elle réussira cette fois à focaliser le champ, désormais visible ; si tout est valide, elle
+  // laissera simplement 'submit' se déclencher comme d'habitude).
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.addEventListener('click', () => {
+    const invalide = Array.from(form.querySelectorAll('[required]')).find(el => !el.checkValidity());
+    if (!invalide) return;
+    const panel = invalide.closest('[data-employee-tab-panel]');
+    if (panel && panel.hidden) activateEmployeeFormTab(panel.dataset.employeeTabPanel);
+  });
 }
 
 /** Un point rouge sur l'onglet dès qu'un champ obligatoire y est manquant/invalide, même si cet
