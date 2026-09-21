@@ -26,7 +26,11 @@ async function runCatalogueQuatreTypesAvecLesBonsAccordsGrammaticaux() {
 }
 
 async function runOptionCreerVisibleSeulementAvecLaPermission() {
-  const { DB, sandbox, openEmployeeModal, employeeRepository } = loadAppJs();
+  // §point 3.1 du 22/09/2026 : l'établissement appartient désormais au contrat, plus à "Modifier le
+  // salarié" en édition (voir openEmployeeModal/openNouveauContratModal, app.js) — sa création
+  // rapide vit donc maintenant dans "Nouveau contrat"/"Corriger le contrat" ; services/équipes/
+  // catégorie de salarié restent inchangés, encore dans la fiche.
+  const { DB, sandbox, openEmployeeModal, openNouveauContratModal, employeeRepository } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
   const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -36,19 +40,27 @@ async function runOptionCreerVisibleSeulementAvecLaPermission() {
   DB._currentEmployeeId = rh.id;
   openEmployeeModal(salarie.id);
   const htmlAvecPermission = sandbox.document.getElementById('modal-root').innerHTML;
-  ['etablissements', 'services', 'equipes', 'categoriesSalarie'].forEach(type => {
+  ['services', 'equipes', 'categoriesSalarie'].forEach(type => {
     assert.ok(htmlAvecPermission.includes(`data-quick-create-type="${type}"`), `un RH (gererParametres) doit voir l'ajout rapide pour "${type}"`);
   });
-  assert.ok(htmlAvecPermission.includes('+ Créer un établissement...'));
   assert.ok(htmlAvecPermission.includes('+ Créer un service...'));
   assert.ok(htmlAvecPermission.includes('+ Créer une équipe...'));
   assert.ok(htmlAvecPermission.includes('+ Créer une catégorie de salarié...'));
+
+  openNouveauContratModal(salarie.id);
+  const htmlContratAvecPermission = sandbox.document.getElementById('modal-root').innerHTML;
+  assert.ok(htmlContratAvecPermission.includes('data-quick-create-type="etablissements"'), 'un RH (gererParametres) doit voir l\'ajout rapide pour "etablissements" dans "Nouveau contrat"');
+  assert.ok(htmlContratAvecPermission.includes('+ Créer un établissement...'));
 
   DB._currentEmployeeId = manager.id;
   openEmployeeModal(salarie.id);
   const htmlSansPermission = sandbox.document.getElementById('modal-root').innerHTML;
   assert.ok(!htmlSansPermission.includes('data-quick-create-type='), 'un manager sans gererParametres ne doit voir AUCUNE option de création rapide, jamais un bouton visible qui échouerait en silence');
   assert.ok(!htmlSansPermission.includes('+ Créer'));
+
+  openNouveauContratModal(salarie.id);
+  const htmlContratSansPermission = sandbox.document.getElementById('modal-root').innerHTML;
+  assert.ok(!htmlContratSansPermission.includes('data-quick-create-type='), 'un manager sans gererParametres ne doit voir AUCUNE option de création rapide dans "Nouveau contrat" non plus');
 
   console.log('OK — ajout-rapide-referentiels-famille2-19-09.test.js (option "+ Créer..." réservée à gererParametres, sur les 4 types, totalement absente du HTML sinon)');
 }

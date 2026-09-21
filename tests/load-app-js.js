@@ -98,6 +98,8 @@ globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTic
 globalThis.__getLeaveBalance = getLeaveBalance;
 globalThis.__calculateAcquisition = calculateAcquisition;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
+globalThis.__makeEmptyContrat = makeEmptyContrat;
+globalThis.__MOTIFS_RECOURS_CDD = MOTIFS_RECOURS_CDD;
 globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
 globalThis.__seedExampleShifts = seedExampleShifts;
@@ -337,6 +339,15 @@ globalThis.__openAjouterAvenantModal = openAjouterAvenantModal;
 globalThis.__openNouveauContratModal = openNouveauContratModal;
 globalThis.__openCorrigerContratModal = openCorrigerContratModal;
 globalThis.__renderEmployeeContratTab = renderEmployeeContratTab;
+// §point 3.1 du 22/09/2026 : socle de contrat enrichi + bibliothèque de clauses.
+globalThis.__renderContratFormFields = renderContratFormFields;
+globalThis.__readAndValidateContratForm = readAndValidateContratForm;
+globalThis.__estTypeContratATerme = estTypeContratATerme;
+globalThis.__openGenererProjetContratModal = openGenererProjetContratModal;
+globalThis.__openApercuProjetContratModal = openApercuProjetContratModal;
+globalThis.__openClauseContratModal = openClauseContratModal;
+globalThis.__clauseContratRepository = clauseContratRepository;
+globalThis.__bindParametresModelesDocumentsEvents = bindParametresModelesDocumentsEvents;
 globalThis.__computeNextVisiteMedicale = computeNextVisiteMedicale;
 globalThis.__getLatestVisiteMedicale = getLatestVisiteMedicale;
 globalThis.__SUIVI_MEDICAL_RULES = SUIVI_MEDICAL_RULES;
@@ -470,6 +481,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getLeaveBalance: sandbox.__getLeaveBalance,
     calculateAcquisition: sandbox.__calculateAcquisition,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
+    makeEmptyContrat: sandbox.__makeEmptyContrat,
+    MOTIFS_RECOURS_CDD: sandbox.__MOTIFS_RECOURS_CDD,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,
     confirmerAccuseLectureDocument: sandbox.__confirmerAccuseLectureDocument,
@@ -681,6 +694,14 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     openNouveauContratModal: sandbox.__openNouveauContratModal,
     openCorrigerContratModal: sandbox.__openCorrigerContratModal,
     renderEmployeeContratTab: sandbox.__renderEmployeeContratTab,
+    renderContratFormFields: sandbox.__renderContratFormFields,
+    readAndValidateContratForm: sandbox.__readAndValidateContratForm,
+    estTypeContratATerme: sandbox.__estTypeContratATerme,
+    openGenererProjetContratModal: sandbox.__openGenererProjetContratModal,
+    openApercuProjetContratModal: sandbox.__openApercuProjetContratModal,
+    openClauseContratModal: sandbox.__openClauseContratModal,
+    clauseContratRepository: sandbox.__clauseContratRepository,
+    bindParametresModelesDocumentsEvents: sandbox.__bindParametresModelesDocumentsEvents,
     computeNextVisiteMedicale: sandbox.__computeNextVisiteMedicale,
     getLatestVisiteMedicale: sandbox.__getLatestVisiteMedicale,
     SUIVI_MEDICAL_RULES: sandbox.__SUIVI_MEDICAL_RULES,

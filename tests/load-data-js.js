@@ -90,6 +90,9 @@ globalThis.__calculerEstimationIndemnitesArret = calculerEstimationIndemnitesArr
 globalThis.__fusionnerModeleDocument = fusionnerModeleDocument;
 globalThis.__construireValeursFusionModele = construireValeursFusionModele;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
+globalThis.__construireValeursFusionContrat = construireValeursFusionContrat;
+globalThis.__makeEmptyContrat = makeEmptyContrat;
+globalThis.__MOTIFS_RECOURS_CDD = MOTIFS_RECOURS_CDD;
 globalThis.__verifierControlesLegauxPlanning = verifierControlesLegauxPlanning;
 globalThis.__calculerTauxHoraireEmploye = calculerTauxHoraireEmploye;
 globalThis.__calculerCoutShifts = calculerCoutShifts;
@@ -157,6 +160,9 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
     fusionnerModeleDocument: sandbox.__fusionnerModeleDocument,
     construireValeursFusionModele: sandbox.__construireValeursFusionModele,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
+    construireValeursFusionContrat: sandbox.__construireValeursFusionContrat,
+    makeEmptyContrat: sandbox.__makeEmptyContrat,
+    MOTIFS_RECOURS_CDD: sandbox.__MOTIFS_RECOURS_CDD,
     verifierControlesLegauxPlanning: sandbox.__verifierControlesLegauxPlanning,
     calculerTauxHoraireEmploye: sandbox.__calculerTauxHoraireEmploye,
     calculerCoutShifts: sandbox.__calculerCoutShifts,

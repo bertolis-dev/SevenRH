@@ -54,7 +54,10 @@ async function runFindDuplicateInListSurListeDobjets() {
 }
 
 async function runOptionAjouterVisibleSeulementAvecLaPermission() {
-  const { DB, sandbox, openEmployeeModal, employeeRepository } = loadAppJs();
+  // §point 3.1 du 22/09/2026 : le poste appartient désormais au contrat, plus à "Modifier le
+  // salarié" en édition (voir openEmployeeModal/openNouveauContratModal, app.js) — l'ajout rapide de
+  // poste vit donc maintenant dans "Nouveau contrat"/"Corriger le contrat", plus dans la fiche.
+  const { DB, sandbox, openNouveauContratModal, employeeRepository } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
   const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -62,13 +65,13 @@ async function runOptionAjouterVisibleSeulementAvecLaPermission() {
   const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
 
   DB._currentEmployeeId = rh.id;
-  openEmployeeModal(salarie.id);
+  openNouveauContratModal(salarie.id);
   const htmlAvecPermission = sandbox.document.getElementById('modal-root').innerHTML;
   assert.ok(htmlAvecPermission.includes('data-quick-add-list="postes"'), 'un RH (gererParametres) doit voir l\'option "+ Ajouter un poste..."');
   assert.ok(htmlAvecPermission.includes('+ Ajouter un poste...'));
 
   DB._currentEmployeeId = manager.id;
-  openEmployeeModal(salarie.id);
+  openNouveauContratModal(salarie.id);
   const htmlSansPermission = sandbox.document.getElementById('modal-root').innerHTML;
   assert.ok(!htmlSansPermission.includes('data-quick-add-list='), 'un manager sans gererParametres ne doit voir AUCUNE option d\'ajout rapide, jamais un bouton visible qui échouerait en silence');
   assert.ok(!htmlSansPermission.includes('+ Ajouter'));

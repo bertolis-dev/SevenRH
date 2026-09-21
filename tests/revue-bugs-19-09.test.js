@@ -45,7 +45,10 @@ async function runNouveauContratRefuseUneDateAnterieureAuContratEnCours() {
 
   assert.ok(body.includes('contratsExistants') && body.includes("sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''))"),
     'doit retrouver le contrat le plus récent (même tri que openAjouterAvenantModal), pas seulement se fier à dateEmbauche');
-  assert.ok(/contratCourant\.dateDebut\s*&&\s*dateDebut\s*<=\s*contratCourant\.dateDebut/.test(body),
+  // §point 3.1 du 22/09/2026 : la lecture/validation du formulaire est passée par
+  // readAndValidateContratForm (partagée avec "Corriger le contrat"), d'où values.dateDebut plutôt
+  // qu'une variable locale dateDebut — même garde-fou, seule la variable qui le porte a changé.
+  assert.ok(/contratCourant\.dateDebut\s*&&\s*values\.dateDebut\s*<=\s*contratCourant\.dateDebut/.test(body),
     'doit refuser une nouvelle date de début antérieure ou égale à celle du contrat en cours, pour ne jamais produire une plage inversée dans DB.addContrat');
 
   // Confirme aussi, côté données, que sans ce garde-fou DB.addContrat produirait bien la plage

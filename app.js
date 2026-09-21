@@ -11590,7 +11590,7 @@ function renderEmployeeContratTab(e, canEdit) {
                 </span>
                 <span style="text-align: right; white-space: nowrap;">
                   <span class="text-muted">${formatDate(c.dateDebut)} → ${c.dateFin ? formatDate(c.dateFin) : 'en cours'}</span>
-                  ${canEdit ? `<br><button type="button" class="btn-link" data-corriger-contrat="${c.id}">Corriger</button>` : ''}
+                  ${canEdit ? `<br><button type="button" class="btn-link" data-corriger-contrat="${c.id}">Corriger</button> · <button type="button" class="btn-link" data-generer-projet-contrat="${c.id}">Générer un projet</button>` : ''}
                 </span>
               </div>
             `).join('')}
@@ -11622,6 +11622,154 @@ function renderEmployeeContratTab(e, canEdit) {
   `;
 }
 
+/** §retour Betty du 22/09/2026 (point 3.1, "le modèle de contrat est trop pauvre") : champs partagés
+ * entre "Nouveau contrat" et "Corriger le contrat" (mêmes ids de champ, un seul des deux formulaires
+ * n'est jamais ouvert à la fois) — un seul endroit à faire évoluer plutôt que deux formulaires qui
+ * finissent par diverger. `contrat` fournit les valeurs à préremplir (le contrat existant en
+ * correction, ou un contrat "vide" enrichi des valeurs actuelles du salarié à la création, voir
+ * openNouveauContratModal). Regroupé en 3 sous-sections, comme le formulaire salarié (point 2.4). */
+function renderContratFormFields(contrat, employee, settings) {
+  const etablissementsSelectables = etablissementRepository.getAll().filter(e => e.actif || e.id === contrat.etablissementId);
+  return `
+    <p class="form-subsection-title">Socle du contrat</p>
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="f-contrat-date-debut">Date de début *</label>
+        <input class="input" type="date" id="f-contrat-date-debut" value="${escapeHtml(contrat.dateDebut || '')}" required>
+      </div>
+      <div class="form-field">
+        <label for="f-contrat-type">Type de contrat</label>
+        <select class="input" id="f-contrat-type">
+          ${(settings.typesContrat || []).map(t => `<option value="${escapeHtml(t)}" ${contrat.typeContrat === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field" id="field-contrat-date-fin">
+        <label for="f-contrat-date-fin">Date de fin ${estTypeContratATerme(contrat.typeContrat) ? '*' : ''}${fieldHelpIcon('Obligatoire pour un CDD/intérim (terme du contrat). Sans effet sur le planning/la paie/l\'effectif : seule "Date de départ" (fiche, onglet Statut) retire réellement un salarié, voir son propre repère si le contrat arrive à échéance sans départ renseigné.')}</label>
+        <input class="input" type="date" id="f-contrat-date-fin" value="${escapeHtml(contrat.dateFin || '')}">
+      </div>
+      <div class="form-field" id="field-contrat-motif-recours">
+        <label for="f-contrat-motif-recours">Motif de recours ${estTypeContratATerme(contrat.typeContrat) ? '*' : ''}${fieldHelpIcon('Obligatoire pour un CDD/intérim (Art. L1242-12) : la raison légale justifiant un contrat à terme plutôt qu\'un CDI.')}</label>
+        <select class="input" id="f-contrat-motif-recours">
+          <option value="" ${!contrat.motifRecours ? 'selected' : ''}>—</option>
+          ${MOTIFS_RECOURS_CDD.map(m => `<option value="${escapeHtml(m)}" ${contrat.motifRecours === m ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+      </div>
+      ${selectField('contrat-poste', 'Poste', null, contrat.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Le poste appartient désormais au contrat : un changement de poste se fait via un nouveau contrat ou un avenant, jamais en modifiant directement la fiche.', 'postes')}
+      <div class="form-field">
+        <label for="f-contrat-classification">Classification</label>
+        <input class="input" type="text" id="f-contrat-classification" value="${escapeHtml(contrat.classification || '')}" placeholder="Ex. Niveau III, coefficient 240 (convention collective)">
+      </div>
+      <div class="form-field form-field-checkbox">
+        <label><input type="checkbox" id="f-contrat-statut-cadre" ${contrat.statutCadre ? 'checked' : ''}> Statut cadre</label>
+      </div>
+      ${selectField('contrat-etablissement', 'Établissement', null, contrat.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements')}
+      <div class="form-field">
+        <label for="f-contrat-temps-travail">Temps de travail</label>
+        <select class="input" id="f-contrat-temps-travail">
+          ${['Temps plein', 'Temps partiel'].map(t => `<option value="${t}" ${contrat.tempsTravail === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="f-contrat-forfait">Forfait</label>
+        <select class="input" id="f-contrat-forfait">
+          ${(settings.forfaits || []).map(f => `<option value="${escapeHtml(f)}" ${contrat.forfait === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="f-contrat-fin-periode-essai">Fin de période d'essai</label>
+        <input class="input" type="date" id="f-contrat-fin-periode-essai" value="${escapeHtml(contrat.dateFinPeriodeEssai || '')}">
+      </div>
+      <div class="form-field form-field-checkbox">
+        <label><input type="checkbox" id="f-contrat-periode-essai-renouvelee" ${contrat.periodeEssaiRenouvelee ? 'checked' : ''}> Période d'essai renouvelée</label>
+      </div>
+    </div>
+
+    <p class="form-subsection-title">Rémunération</p>
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
+        <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(contrat.salaireBrutMensuel || 0)}" step="any">
+      </div>
+      <div class="form-field">
+        <label for="f-contrat-part-variable">Part variable${fieldHelpIcon('Description libre (conditions, objectifs, plafond...), jamais un montant calculé automatiquement.')}</label>
+        <textarea class="input" id="f-contrat-part-variable" rows="2">${escapeHtml(contrat.partVariable || '')}</textarea>
+      </div>
+      <div class="form-field">
+        <label for="f-contrat-avantages-nature">Avantages en nature${fieldHelpIcon('Ex. véhicule de fonction, logement, téléphone... Description libre.')}</label>
+        <textarea class="input" id="f-contrat-avantages-nature" rows="2">${escapeHtml(contrat.avantagesNature || '')}</textarea>
+      </div>
+    </div>
+    <p class="form-subsection-title">Primes récurrentes${fieldHelpIcon('Une prime EXCEPTIONNELLE/ponctuelle reste un avenant, pas une ligne ici.')}</p>
+    <div class="form-grid">
+      ${[0, 1, 2].map(i => {
+        const p = (contrat.primesRecurrentes || [])[i] || {};
+        return `
+        <div class="form-field-pair" style="grid-column: span 3; grid-template-columns: 2fr 1fr 1fr;">
+          <input class="input" type="text" id="f-contrat-prime-libelle-${i}" value="${escapeHtml(p.libelle || '')}" placeholder="Ex. Prime d'ancienneté">
+          <input class="input" type="number" id="f-contrat-prime-montant-${i}" value="${escapeHtml(p.montant || '')}" step="any" placeholder="Montant (€)">
+          <select class="input" id="f-contrat-prime-periodicite-${i}">
+            <option value="" ${!p.periodicite ? 'selected' : ''}>—</option>
+            ${['Mensuelle', 'Trimestrielle', 'Semestrielle', 'Annuelle'].map(per => `<option value="${per}" ${p.periodicite === per ? 'selected' : ''}>${per}</option>`).join('')}
+          </select>
+        </div>
+      `; }).join('')}
+    </div>
+
+    <p class="form-subsection-title">Commentaire</p>
+    <div class="form-field">
+      <label for="f-contrat-commentaire">Commentaire libre</label>
+      <textarea class="input" id="f-contrat-commentaire" rows="2">${escapeHtml(contrat.commentaire || '')}</textarea>
+    </div>
+  `;
+}
+
+function estTypeContratATerme(typeContrat) {
+  return typeContrat === 'CDD' || typeContrat === 'Intérim';
+}
+
+/** Lit les champs communs posés par renderContratFormFields ci-dessus, applique la validation du
+ * socle (défaut 3.1, "dateFin/motif de recours obligatoires pour un CDD/intérim") — retourne `null`
+ * (après avoir déjà affiché le message d'erreur) si la saisie doit être bloquée. */
+function readAndValidateContratForm(employee) {
+  const dateDebut = document.getElementById('f-contrat-date-debut').value;
+  if (!dateDebut) return null;
+  if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+    showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
+    return null;
+  }
+  const typeContrat = document.getElementById('f-contrat-type').value;
+  const dateFin = document.getElementById('f-contrat-date-fin').value;
+  const motifRecours = document.getElementById('f-contrat-motif-recours').value;
+  if (estTypeContratATerme(typeContrat)) {
+    if (!dateFin) { showToast('La date de fin est obligatoire pour un CDD/intérim.', 'error'); return null; }
+    if (!motifRecours) { showToast('Le motif de recours est obligatoire pour un CDD/intérim.', 'error'); return null; }
+    if (dateFin < dateDebut) { showToast('La date de fin ne peut pas être avant la date de début.', 'error'); return null; }
+  }
+  const primesRecurrentes = [0, 1, 2]
+    .map(i => ({
+      libelle: document.getElementById(`f-contrat-prime-libelle-${i}`).value.trim(),
+      montant: Number(document.getElementById(`f-contrat-prime-montant-${i}`).value) || 0,
+      periodicite: document.getElementById(`f-contrat-prime-periodicite-${i}`).value
+    }))
+    .filter(p => p.libelle);
+  return {
+    dateDebut, typeContrat, dateFin, motifRecours,
+    poste: document.getElementById('f-contrat-poste').value,
+    classification: document.getElementById('f-contrat-classification').value.trim(),
+    statutCadre: document.getElementById('f-contrat-statut-cadre').checked,
+    etablissementId: document.getElementById('f-contrat-etablissement').value,
+    tempsTravail: document.getElementById('f-contrat-temps-travail').value,
+    forfait: document.getElementById('f-contrat-forfait').value,
+    dateFinPeriodeEssai: document.getElementById('f-contrat-fin-periode-essai').value,
+    periodeEssaiRenouvelee: document.getElementById('f-contrat-periode-essai-renouvelee').checked,
+    salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0,
+    partVariable: document.getElementById('f-contrat-part-variable').value.trim(),
+    avantagesNature: document.getElementById('f-contrat-avantages-nature').value.trim(),
+    primesRecurrentes,
+    commentaire: document.getElementById('f-contrat-commentaire').value.trim()
+  };
+}
+
 /** §retour Betty du 19/09/2026 (point 1.3) : AJOUTE un contrat à la suite (voir DB.addContrat) —
  * jamais un remplacement du contrat courant, contrairement à l'ancien formulaire d'édition qui
  * écrasait typeContrat/salaire/dates en place. */
@@ -11629,8 +11777,18 @@ function openNouveauContratModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
   if (!employee || !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   const settings = settingsRepository.getSettings();
+  // Contrat "vierge" enrichi des valeurs ACTUELLES du salarié (pourcentageActivite/horairesHebdo
+  // recopiés comme avant ce correctif, poste/classification/etablissement etc. désormais aussi
+  // préremplis plutôt que de forcer à tout ressaisir pour un contrat qui, la plupart du temps, ne
+  // change qu'un ou deux champs par rapport au précédent).
+  const contratVierge = Object.assign(makeEmptyContrat(), {
+    poste: employee.poste, classification: employee.classification, statutCadre: employee.statutCadre,
+    etablissementId: employee.etablissementId, dateFinPeriodeEssai: '',
+    tempsTravail: employee.tempsTravail, forfait: employee.forfait, salaireBrutMensuel: employee.salaireBrutMensuel,
+    typeContrat: employee.typeContrat
+  });
   const html = `
-    <div class="modal modal-medium">
+    <div class="modal modal-large">
       <div class="modal-header">
         <h2>Nouveau contrat</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
@@ -11638,34 +11796,7 @@ function openNouveauContratModal(employeeId) {
       <form id="nouveau-contrat-form">
         <div class="modal-body">
           <p class="text-muted">Le contrat en cours sera clôturé à la veille de la date de début ci-dessous ; la date d'embauche et l'ancienneté ne sont jamais affectées.</p>
-          <div class="form-grid">
-            <div class="form-field">
-              <label for="f-contrat-date-debut">Date de début *</label>
-              <input class="input" type="date" id="f-contrat-date-debut" required>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-type">Type de contrat</label>
-              <select class="input" id="f-contrat-type">
-                ${(settings.typesContrat || []).map(t => `<option value="${escapeHtml(t)}" ${employee.typeContrat === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-temps-travail">Temps de travail</label>
-              <select class="input" id="f-contrat-temps-travail">
-                ${['Temps plein', 'Temps partiel'].map(t => `<option value="${t}" ${employee.tempsTravail === t ? 'selected' : ''}>${t}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-forfait">Forfait</label>
-              <select class="input" id="f-contrat-forfait">
-                ${(settings.forfaits || []).map(f => `<option value="${escapeHtml(f)}" ${employee.forfait === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
-              <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(employee.salaireBrutMensuel || 0)}" step="any">
-            </div>
-          </div>
+          ${renderContratFormFields(contratVierge, employee, settings)}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
@@ -11681,26 +11812,18 @@ function openNouveauContratModal(employeeId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('nouveau-contrat-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const dateDebut = document.getElementById('f-contrat-date-debut').value;
-    if (!dateDebut) return;
-    if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
-      showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
-      return;
-    }
+    const values = readAndValidateContratForm(employee);
+    if (!values) return;
     const contratsExistants = (employee.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
     const contratCourant = contratsExistants.find(c => !c.dateFin) || contratsExistants[0] || null;
-    if (contratCourant && contratCourant.dateDebut && dateDebut <= contratCourant.dateDebut) {
+    if (contratCourant && contratCourant.dateDebut && values.dateDebut <= contratCourant.dateDebut) {
       showToast('La date de début ne peut pas être avant celle du contrat en cours.', 'error');
       return;
     }
     employeeRepository.ajouterContrat(employeeId, {
-      dateDebut,
-      typeContrat: document.getElementById('f-contrat-type').value,
-      tempsTravail: document.getElementById('f-contrat-temps-travail').value,
-      forfait: document.getElementById('f-contrat-forfait').value,
+      ...values,
       pourcentageActivite: employee.pourcentageActivite,
-      horairesHebdo: employee.horairesHebdo,
-      salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0
+      horairesHebdo: employee.horairesHebdo
     });
     closeModal();
     showToast('Nouveau contrat créé.');
@@ -11727,7 +11850,7 @@ function openCorrigerContratModal(employeeId, contratId) {
   const settings = settingsRepository.getSettings();
 
   const html = `
-    <div class="modal modal-medium">
+    <div class="modal modal-large">
       <div class="modal-header">
         <h2>Corriger le contrat</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
@@ -11735,34 +11858,7 @@ function openCorrigerContratModal(employeeId, contratId) {
       <form id="corriger-contrat-form">
         <div class="modal-body">
           <p class="text-muted">Modifie ce contrat directement, sans en créer un nouveau. Réservé aux corrections de saisie : un vrai changement (nouveau salaire, nouveau poste...) reste un nouveau contrat ou un avenant.</p>
-          <div class="form-grid">
-            <div class="form-field">
-              <label for="f-contrat-date-debut">Date de début *</label>
-              <input class="input" type="date" id="f-contrat-date-debut" value="${escapeHtml(contrat.dateDebut || '')}" required>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-type">Type de contrat</label>
-              <select class="input" id="f-contrat-type">
-                ${(settings.typesContrat || []).map(t => `<option value="${escapeHtml(t)}" ${contrat.typeContrat === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-temps-travail">Temps de travail</label>
-              <select class="input" id="f-contrat-temps-travail">
-                ${['Temps plein', 'Temps partiel'].map(t => `<option value="${t}" ${contrat.tempsTravail === t ? 'selected' : ''}>${t}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-forfait">Forfait</label>
-              <select class="input" id="f-contrat-forfait">
-                ${(settings.forfaits || []).map(f => `<option value="${escapeHtml(f)}" ${contrat.forfait === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-field">
-              <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
-              <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(contrat.salaireBrutMensuel || 0)}" step="any">
-            </div>
-          </div>
+          ${renderContratFormFields(contrat, employee, settings)}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
@@ -11778,34 +11874,141 @@ function openCorrigerContratModal(employeeId, contratId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('corriger-contrat-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const dateDebut = document.getElementById('f-contrat-date-debut').value;
-    if (!dateDebut) return;
-    if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
-      showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
-      return;
-    }
+    const values = readAndValidateContratForm(employee);
+    if (!values) return;
     // Une correction ne doit jamais inverser l'ordre des contrats entre eux — contrairement à
     // "Nouveau contrat", il n'y a ici ni contrat précédent à clôturer ni contrat suivant à décaler :
     // la date corrigée doit simplement rester à sa place dans la suite déjà existante.
-    if (precedent && dateDebut <= (precedent.dateFin || precedent.dateDebut)) {
+    if (precedent && values.dateDebut <= (precedent.dateFin || precedent.dateDebut)) {
       showToast('La date de début ne peut pas précéder la fin du contrat précédent.', 'error');
       return;
     }
-    if (suivant && dateDebut >= suivant.dateDebut) {
+    if (suivant && values.dateDebut >= suivant.dateDebut) {
       showToast('La date de début ne peut pas dépasser le début du contrat suivant.', 'error');
       return;
     }
-    employeeRepository.corrigerContrat(employeeId, contratId, {
-      dateDebut,
-      typeContrat: document.getElementById('f-contrat-type').value,
-      tempsTravail: document.getElementById('f-contrat-temps-travail').value,
-      forfait: document.getElementById('f-contrat-forfait').value,
-      salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0
-    });
+    employeeRepository.corrigerContrat(employeeId, contratId, values);
     closeModal();
     showToast('Contrat corrigé.');
     render();
   });
+}
+
+/** §retour Betty du 22/09/2026 (point 3.1, "bibliothèque de clauses réutilisables") : étape 1,
+ * sélection à la carte des clauses (clauseContratRepository) à intégrer au projet — aucune
+ * présélectionnée, une clause ne s'ajoute que si elle est vraiment pertinente pour CE contrat.
+ * openApercuProjetContratModal (juste en dessous) construit l'aperçu une fois la sélection validée. */
+function openGenererProjetContratModal(employeeId, contratId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const contrat = (employee.contrats || []).find(c => c.id === contratId);
+  if (!contrat) { showToast('Ce contrat n\'est plus disponible.', 'error'); return; }
+  const clauses = clauseContratRepository.getAll().slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  const clauseIdsDejaChoisies = new Set(contrat.clauseIds || []);
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Générer un projet de contrat</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="card" style="border-color: var(--color-warning); background: var(--color-warning-soft); margin-bottom: 16px;">
+          <p style="margin: 0;">${icon(ICONS.warningTriangle, 14)} <strong>Ceci génère un PROJET de travail</strong>, à relire et faire valider par un professionnel du droit (expert-comptable, avocat en droit du travail) avant toute signature. Jamais un contrat prêt à signer tel quel.</p>
+        </div>
+        <p class="text-muted">Contrat du ${formatDate(contrat.dateDebut)}${contrat.dateFin ? ' au ' + formatDate(contrat.dateFin) : ', en cours'}, sélectionnez les clauses à intégrer au projet (aucune n'est pré-cochée).</p>
+        ${clauses.length === 0
+          ? `<p class="text-muted">Aucune clause dans la bibliothèque pour l'instant (Paramètres &gt; Modèles de documents &gt; Clauses de contrat). Le projet généré ne contiendra que le socle du contrat.</p>`
+          : `<div class="form-grid checkbox-grid">
+              ${clauses.map(c => `
+                <div class="form-field form-field-checkbox">
+                  <label><input type="checkbox" data-clause-checkbox="${c.id}" ${clauseIdsDejaChoisies.has(c.id) ? 'checked' : ''}> ${escapeHtml(c.nom)}</label>
+                </div>
+              `).join('')}
+            </div>`}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-apercu-projet-contrat">Aperçu du projet</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-apercu-projet-contrat').addEventListener('click', () => {
+    const clauseIds = Array.from(document.querySelectorAll('[data-clause-checkbox]'))
+      .filter(cb => cb.checked)
+      .map(cb => cb.dataset.clauseCheckbox);
+    // La sélection est mémorisée SUR LE CONTRAT (jamais une référence vivante aux clauses elles-
+    // mêmes, voir le commentaire de contrat.clauseIds, data.js) : rouvrir "Générer un projet" plus
+    // tard sur ce même contrat retrouve la même sélection, pas une case toujours vide.
+    employeeRepository.corrigerContrat(employeeId, contratId, { clauseIds });
+    openApercuProjetContratModal(employeeId, contratId);
+  });
+}
+
+/** Étape 2 : fusionne le socle du contrat + chaque clause choisie (construireValeursFusionContrat,
+ * data.js) dans un aperçu imprimable — même mécanique .print-area + window.print() que le reste de
+ * l'application (voir openEmployeePrintModal), jamais un export .docx/.pptx (voir le commentaire
+ * historique sur cette réserve, plus haut dans ce fichier). L'avertissement légal reste visible EN
+ * HAUT de l'aperçu, pas seulement dans la modale de sélection qui précède : un aperçu imprimé/exporté
+ * en PDF doit porter le même avertissement que ce qui a été vu à l'écran. */
+function openApercuProjetContratModal(employeeId, contratId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const contrat = (employee.contrats || []).find(c => c.id === contratId);
+  if (!contrat) { showToast('Ce contrat n\'est plus disponible.', 'error'); return; }
+  const company = DB.getCurrentCompany();
+  const valeurs = construireValeursFusionContrat(employee, contrat, company);
+  const clausesChoisies = (contrat.clauseIds || [])
+    .map(id => clauseContratRepository.getById(id))
+    .filter(Boolean);
+
+  const socleRows = [
+    ['Type de contrat', valeurs.typeContrat], ['Motif de recours', valeurs.motifRecours],
+    ['Poste', valeurs.poste], ['Classification', valeurs.classification], ['Statut', valeurs.statutCadre],
+    ['Établissement', valeurs.etablissement], ['Temps de travail', valeurs.tempsTravail],
+    ['Début du contrat', valeurs.dateDebutContrat], ['Fin du contrat', valeurs.dateFinContrat],
+    ['Salaire brut mensuel', valeurs.salaireBrutMensuel ? formatCurrencyFR(valeurs.salaireBrutMensuel) : ''],
+    ['Part variable', valeurs.partVariable], ['Avantages en nature', valeurs.avantagesNature]
+  ].filter(([, value]) => value);
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Projet de contrat : aperçu</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="print-area print-document">
+          <div class="card" style="border-color: var(--color-warning); background: var(--color-warning-soft); margin-bottom: 16px;">
+            <p style="margin: 0;">${icon(ICONS.warningTriangle, 14)} <strong>Projet de travail</strong>, à relire et faire valider par un professionnel du droit avant toute signature. Ne constitue pas un contrat prêt à signer.</p>
+          </div>
+          ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Projet de contrat de travail', `${valeurs.civilite} ${valeurs.prenom} ${valeurs.nom}`)}
+          <h3>Socle du contrat</h3>
+          ${socleRows.map(([label, value]) => infoRow(label, value)).join('')}
+          ${clausesChoisies.length ? clausesChoisies.map(c => `
+            <h3>${escapeHtml(c.nom)}</h3>
+            <p style="white-space: pre-wrap;">${escapeHtml(fusionnerModeleDocument(c.corps, valeurs))}</p>
+          `).join('') : ''}
+          ${valeurs.commentaireContrat ? `<h3>Commentaire</h3><p style="white-space: pre-wrap;">${escapeHtml(valeurs.commentaireContrat)}</p>` : ''}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-retour-selection-clauses">Retour à la sélection</button>
+        <button type="button" class="btn btn-primary" id="btn-print-projet-contrat">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-retour-selection-clauses').addEventListener('click', () => openGenererProjetContratModal(employeeId, contratId));
+  document.getElementById('btn-print-projet-contrat').addEventListener('click', () => window.print());
 }
 
 /** §retour Betty du 19/09/2026 (point 1.3, "les avenants... modifient réellement les valeurs") :
@@ -12264,6 +12467,8 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
         ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
         ${canSeeContractuel ? infoRow('Type de contrat', e.typeContrat) : ''}
+        ${canSeeContractuel && e.classification ? infoRow('Classification', e.classification) : ''}
+        ${canSeeContractuel ? infoRow('Statut', e.statutCadre ? 'Cadre' : 'Non-cadre') : ''}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
         ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
@@ -13848,6 +14053,9 @@ function bindEmployeeDetailEvents() {
   if (nouveauContratBtn) nouveauContratBtn.addEventListener('click', () => openNouveauContratModal(state.currentEmployeeId));
   document.querySelectorAll('[data-corriger-contrat]').forEach(btn => {
     btn.addEventListener('click', () => openCorrigerContratModal(state.currentEmployeeId, btn.dataset.corrigerContrat));
+  });
+  document.querySelectorAll('[data-generer-projet-contrat]').forEach(btn => {
+    btn.addEventListener('click', () => openGenererProjetContratModal(state.currentEmployeeId, btn.dataset.genererProjetContrat));
   });
 
   const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
@@ -19829,6 +20037,7 @@ function submitSchoolPeriodForm(evt, index) {
  * à insérer, liste de référence affichée à côté du champ de saisie. */
 function renderParametresModelesDocuments() {
   const templates = documentTemplateRepository.getAll().slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  const clauses = clauseContratRepository.getAll().slice().sort((a, b) => a.nom.localeCompare(b.nom));
   return `
     <div class="card table-card">
       <div class="view-header-row" style="padding: 20px 20px 0;">
@@ -19856,6 +20065,38 @@ function renderParametresModelesDocuments() {
         </table>
       ` : `<p class="text-muted" style="padding: 0 20px 20px;">Aucun modèle pour l'instant.</p>`}
     </div>
+
+    <!-- §retour Betty du 22/09/2026 (point 3.1, "une bibliothèque de clauses réutilisables") : même
+         mécanisme de fusion que les modèles ci-dessus, mais des textes COURTS et COMPOSABLES (non-
+         concurrence, confidentialité...), piochés à la carte lors de la génération d'un projet de
+         contrat (voir openGenererProjetContratModal, onglet Contrat de la fiche salarié), plutôt
+         qu'un unique modèle figé par type de document. -->
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Clauses de contrat</h2>
+          <p class="text-muted">Bibliothèque de clauses réutilisables (non-concurrence, confidentialité...), sélectionnées à la carte lors de la génération d'un projet de contrat. Toujours des textes de départ à adapter, jamais prêts à signer tels quels.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-clause-contrat">+ Nouvelle clause</button>
+      </div>
+      ${clauses.length ? `
+        <table class="table">
+          <thead><tr><th>Nom</th><th>Dernière modification</th><th></th></tr></thead>
+          <tbody>
+            ${clauses.map(c => `
+              <tr>
+                <td>${escapeHtml(c.nom)}</td>
+                <td>${c.dateModification ? formatDate(c.dateModification.slice(0, 10)) : (c.dateCreation ? formatDate(c.dateCreation.slice(0, 10)) : '—')}</td>
+                <td>
+                  <button type="button" class="btn-link" data-edit-clause-contrat="${c.id}">Modifier</button>
+                  <button type="button" class="btn-link btn-link-danger" data-delete-clause-contrat="${c.id}" data-delete-clause-contrat-nom="${escapeHtml(c.nom)}">Supprimer</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `<p class="text-muted" style="padding: 0 20px 20px;">Aucune clause pour l'instant.</p>`}
+    </div>
   `;
 }
 
@@ -19878,6 +20119,95 @@ function bindParametresModelesDocumentsEvents() {
         }
       });
     });
+  });
+
+  document.getElementById('btn-add-clause-contrat').addEventListener('click', () => openClauseContratModal(null));
+  document.querySelectorAll('[data-edit-clause-contrat]').forEach(btn => {
+    btn.addEventListener('click', () => openClauseContratModal(clauseContratRepository.getById(btn.dataset.editClauseContrat)));
+  });
+  document.querySelectorAll('[data-delete-clause-contrat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Supprimer cette clause ?',
+        message: `"${btn.dataset.deleteClauseContratNom}" sera définitivement supprimée. Les projets de contrat déjà générés n'en sont pas affectés.`,
+        confirmLabel: 'Supprimer',
+        danger: true,
+        onConfirm: () => {
+          clauseContratRepository.delete(btn.dataset.deleteClauseContrat);
+          showToast('Clause supprimée.');
+          render();
+        }
+      });
+    });
+  });
+}
+
+/** Même patron qu'openModeleDocumentModal ci-dessus (fusion {{champ}}, insertion de champ au clic) —
+ * pas de "Revenir au texte d'origine" ici : les clauses fournies par défaut ne sont pas des modèles
+ * système protégés (voir seedClausesContratDefaut, data.js), juste un point de départ éditable et
+ * supprimable comme n'importe quelle clause créée par le client. */
+function openClauseContratModal(clause) {
+  const isEdit = Boolean(clause);
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${isEdit ? 'Modifier la clause' : 'Nouvelle clause'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <form id="clause-contrat-form">
+          <div class="form-group">
+            <label for="f-nom">Nom de la clause</label>
+            <input type="text" class="input" id="f-nom" value="${escapeHtml(clause ? clause.nom : '')}" required placeholder="Ex. Clause de non-concurrence">
+          </div>
+          <div class="form-group">
+            <label for="f-corps">Texte de la clause</label>
+            <textarea class="input" id="f-corps" rows="8">${escapeHtml(clause ? clause.corps : '')}</textarea>
+            <p class="form-hint">Insérez un champ en cliquant sur son nom ci-dessous : il sera remplacé par la vraie valeur au moment de la génération du projet de contrat.</p>
+          </div>
+        </form>
+        <div class="badge-row" style="gap: 6px; margin-top: 4px;">
+          ${CHAMPS_FUSION_MODELE.map(c => `<button type="button" class="btn btn-secondary btn-sm" data-insert-champ="{{${c.champ}}}" title="${escapeHtml(c.label)}">${escapeHtml(c.label)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="submit" form="clause-contrat-form" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  const corpsField = document.getElementById('f-corps');
+  document.querySelectorAll('[data-insert-champ]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const insertion = btn.dataset.insertChamp;
+      const debut = corpsField.selectionStart ?? corpsField.value.length;
+      const fin = corpsField.selectionEnd ?? corpsField.value.length;
+      corpsField.value = corpsField.value.slice(0, debut) + insertion + corpsField.value.slice(fin);
+      corpsField.focus();
+      corpsField.selectionStart = corpsField.selectionEnd = debut + insertion.length;
+    });
+  });
+
+  document.getElementById('clause-contrat-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const nom = document.getElementById('f-nom').value.trim();
+    const corps = document.getElementById('f-corps').value;
+    if (!nom) { showToast('Le nom de la clause est obligatoire.', 'error'); return; }
+    if (isEdit) {
+      clauseContratRepository.update(clause.id, { nom, corps });
+      showToast('Clause enregistrée.');
+    } else {
+      clauseContratRepository.create({ nom, corps });
+      showToast('Clause créée.');
+    }
+    closeModal();
+    render();
   });
 }
 
@@ -26933,10 +27263,10 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
           <fieldset class="form-section" id="employee-form-section-contrat" data-employee-tab-panel="contrat" hidden>
             <legend>Contrat &amp; poste</legend>
             <div class="form-grid">
-              ${selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements')}
+              ${!isEdit ? selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements') : ''}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service, null, undefined, undefined, 'services')}
               ${equipeSelectField(employee.service, employee.equipe)}
-              ${selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).', 'postes')}
+              ${!isEdit ? selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).', 'postes') : ''}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })), undefined, undefined, 'categoriesSalarie')}
@@ -26946,16 +27276,17 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                 <input class="input" type="date" id="f-dateEmbauche" name="dateEmbauche" value="${escapeHtml(employee.dateEmbauche || '')}" required data-live-anciennete="true">
                 <span class="field-hint-computed" id="f-dateEmbauche-anciennete"></span>
               </div>
-              ${textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date')}
+              ${!isEdit ? textField('dateFinPeriodeEssai', 'Fin de période d\'essai', employee.dateFinPeriodeEssai, false, 'date') : ''}
               ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
               ${selectField('suiviMedicalType', 'Type de suivi médical', null, employee.suiviMedicalType || 'simple', Object.entries(SUIVI_MEDICAL_RULES).map(([key, r]) => ({ value: key, label: r.label })))}
             </div>
-            <!-- §retour Betty du 22/09/2026 (défaut 1.3, "le contrat est modifiable à deux endroits,
-                 et les deux divergent") : le type de contrat/temps de travail/forfait/salaire ne se
-                 modifient plus que depuis l'onglet Contrat de la fiche (nouveau contrat ou
-                 correction du contrat en cours) — jamais plus ici, où la fiche et le contrat
-                 pouvaient jusqu'ici afficher deux valeurs différentes pour la même chose. -->
-            ${isEdit ? `<p class="form-hint">Type de contrat : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche (bouton "Corriger" sur le contrat en cours, ou "+ Nouveau contrat").</p>` : ''}
+            <!-- §retour Betty du 22/09/2026 (défauts 1.3 et 3.1, "le contrat est modifiable à deux
+                 endroits, et les deux divergent") : type de contrat/temps de travail/forfait/salaire
+                 (1.3), puis poste/établissement/fin de période d'essai (3.1, "le poste appartient
+                 désormais au contrat") ne se modifient plus que depuis l'onglet Contrat de la fiche
+                 (nouveau contrat ou correction du contrat en cours) — jamais plus ici, où la fiche et
+                 le contrat pouvaient jusqu'ici afficher deux valeurs différentes pour la même chose. -->
+            ${isEdit ? `<p class="form-hint">Type de contrat, poste, établissement, fin de période d'essai : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche (bouton "Corriger" sur le contrat en cours, ou "+ Nouveau contrat").</p>` : ''}
           </fieldset>
 
           <fieldset class="form-section" id="employee-form-section-temps" data-employee-tab-panel="temps" hidden>

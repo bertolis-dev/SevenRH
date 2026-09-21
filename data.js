@@ -1425,7 +1425,15 @@ const CHAMPS_FUSION_MODELE = [
   // de `poste` ci-dessus qui reste la forme neutre brute) préserve ce que faisaient déjà ces deux
   // documents avant de passer par ce système générique — jamais une régression silencieuse.
   { champ: 'tempsTravail', label: 'Temps de travail' }, { champ: 'dateDepart', label: 'Date de départ' },
-  { champ: 'posteAccorde', label: 'Poste (accordé au sexe du salarié)' }
+  { champ: 'posteAccorde', label: 'Poste (accordé au sexe du salarié)' },
+  // §retour Betty du 22/09/2026 (point 3.1, "bibliothèque de clauses") : propres à UN CONTRAT (voir
+  // construireValeursFusionContrat) — absents des documents RH classiques ci-dessus (attestation,
+  // certificat), qui ne portent que sur l'employé, jamais sur un contrat précis.
+  { champ: 'dateDebutContrat', label: 'Date de début du contrat' }, { champ: 'dateFinContrat', label: 'Date de fin du contrat' },
+  { champ: 'motifRecours', label: 'Motif de recours (CDD/intérim)' }, { champ: 'classification', label: 'Classification' },
+  { champ: 'statutCadre', label: 'Statut (cadre/non-cadre)' }, { champ: 'etablissement', label: 'Établissement' },
+  { champ: 'partVariable', label: 'Part variable' }, { champ: 'avantagesNature', label: 'Avantages en nature' },
+  { champ: 'commentaireContrat', label: 'Commentaire du contrat' }
 ];
 
 /** Construit le dictionnaire champ→valeur pour UN salarié donné (jamais de calcul métier ici, que du
@@ -1461,6 +1469,32 @@ function construireValeursFusionModele(employee, company) {
   };
 }
 
+/** §retour Betty du 22/09/2026 (point 3.1) : surcouche de construireValeursFusionModele avec les
+ * champs propres à UN CONTRAT donné (jamais les champs à plat de l'employé, qui ne reflètent que le
+ * contrat COURANT — un projet de contrat en cours de rédaction, avant même sa création, doit
+ * fusionner ses propres valeurs de formulaire, pas celles déjà enregistrées ailleurs). Utilisée par
+ * openGenererProjetContratModal (app.js) pour fusionner les clauses de clauseContratRepository. */
+function construireValeursFusionContrat(employee, contrat, company) {
+  const base = construireValeursFusionModele(employee, company);
+  const settings = (company && company.settings) || {};
+  const c = contrat || {};
+  return Object.assign({}, base, {
+    poste: c.poste || base.poste,
+    typeContrat: c.typeContrat || base.typeContrat,
+    tempsTravail: c.tempsTravail || base.tempsTravail,
+    salaireBrutMensuel: settings.masseSalarialeActivee ? (c.salaireBrutMensuel || '') : '',
+    dateDebutContrat: c.dateDebut ? formatDate(c.dateDebut) : '',
+    dateFinContrat: c.dateFin ? formatDate(c.dateFin) : '',
+    motifRecours: c.motifRecours || '',
+    classification: c.classification || '',
+    statutCadre: c.statutCadre ? 'cadre' : 'non-cadre',
+    etablissement: (((company && company.etablissements) || []).find(et => et.id === c.etablissementId) || {}).nom || '',
+    partVariable: c.partVariable || '',
+    avantagesNature: c.avantagesNature || '',
+    commentaireContrat: c.commentaire || ''
+  });
+}
+
 /** Remplacement texte pur "{{champ}}" → valeur — jamais d'échappement HTML ici (voir
  * renderGenererDocumentModal, app.js, qui applique escapeHtml à chaque valeur AVANT de rappeler
  * cette fonction, pour ne jamais laisser un champ salarié injecter du HTML dans le document généré).
@@ -1494,6 +1528,37 @@ Le salarié est libre de tout engagement à l'issue de cette période.`;
     { id: generateId('modele'), nom: 'Attestation employeur', corps: attestationEmployeurCorps, cle: 'attestation_employeur', corpsOrigine: attestationEmployeurCorps, dateCreation: now, dateModification: now },
     { id: generateId('modele'), nom: 'Certificat de travail', corps: certificatTravailCorps, cle: 'certificat_travail', corpsOrigine: certificatTravailCorps, dateCreation: now, dateModification: now }
   ];
+}
+
+/** §retour Betty du 22/09/2026 (point 3.1, "une bibliothèque de clauses réutilisables plutôt que
+ * réécrire à chaque contrat") : même mécanique de fusion que les modèles de document ci-dessus
+ * ({{champ}}, voir fusionnerModeleDocument/construireValeursFusionContrat) — chaque clause reste un
+ * texte de DÉPART, à adapter au cas par cas, jamais une clause juridiquement prête à l'emploi telle
+ * quelle (voir l'avertissement affiché à la génération, openGenererProjetContratModal, app.js). */
+function makeEmptyClauseContrat() {
+  return { id: null, nom: '', corps: '', dateCreation: null, dateModification: null };
+}
+
+function seedClausesContratDefaut() {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: generateId('clause'), nom: 'Non-concurrence',
+      corps: `À l'issue du présent contrat, quelle qu'en soit la cause, {{prenom}} {{nom}} s'interdit d'exercer, directement ou indirectement, pour son compte ou celui d'un tiers, une activité concurrente de celle de {{raisonSociale}}, dans un rayon de [à compléter] autour de [à compléter], pendant une durée de [à compléter] à compter de la cessation effective du contrat. En contrepartie de cette interdiction, le salarié percevra une indemnité mensuelle de [à compléter], versée pendant toute la durée de l'interdiction.`
+    },
+    {
+      id: generateId('clause'), nom: 'Confidentialité',
+      corps: `{{prenom}} {{nom}} s'engage à conserver la plus stricte confidentialité sur l'ensemble des informations, documents et procédés dont il/elle pourrait avoir connaissance dans l'exercice de ses fonctions de {{poste}} au sein de {{raisonSociale}}, tant pendant l'exécution du présent contrat qu'après sa cessation, quelle qu'en soit la cause.`
+    },
+    {
+      id: generateId('clause'), nom: 'Mobilité géographique',
+      corps: `Compte tenu de la nature de ses fonctions, {{prenom}} {{nom}} pourra être amené(e) à exercer son activité sur tout autre site de {{raisonSociale}} situé dans [à compléter, ex. la même zone géographique/le même département]. Un délai de prévenance de [à compléter] sera respecté avant toute mise en œuvre de cette clause.`
+    },
+    {
+      id: generateId('clause'), nom: 'Propriété intellectuelle',
+      corps: `Toute création, invention, méthode ou œuvre réalisée par {{prenom}} {{nom}} dans l'exercice de ses fonctions de {{poste}} au sein de {{raisonSociale}} sera la propriété exclusive de l'entreprise, dans les conditions prévues par le Code de la propriété intellectuelle et, le cas échéant, la convention collective applicable.`
+    }
+  ].map(c => Object.assign(makeEmptyClauseContrat(), c, { dateCreation: now, dateModification: now }));
 }
 
 /** Durée effective d'un quart en heures décimales : (fin − début) − pause. Toutes les valeurs sont
@@ -2310,7 +2375,13 @@ const DB = {
         dateDebut: employee.dateEmbauche || '', dateFin: employee.dateFinContrat || '', typeContrat: employee.typeContrat || '',
         tempsTravail: employee.tempsTravail || 'Temps plein', pourcentageActivite: employee.pourcentageActivite != null ? employee.pourcentageActivite : 100,
         horairesHebdo: employee.horairesHebdo != null ? employee.horairesHebdo : 35, forfait: employee.forfait || 'Aucun',
-        salaireBrutMensuel: employee.salaireBrutMensuel || 0, dateCreation: now
+        salaireBrutMensuel: employee.salaireBrutMensuel || 0,
+        // §retour Betty du 22/09/2026 (point 3.1) : socle enrichi, mêmes champs à plat que le
+        // formulaire de création vient de soumettre.
+        poste: employee.poste || '', classification: employee.classification || '', statutCadre: Boolean(employee.statutCadre),
+        etablissementId: employee.etablissementId || '', dateFinPeriodeEssai: employee.dateFinPeriodeEssai || '',
+        motifRecours: employee.motifRecours || '',
+        dateCreation: now
       })];
     }
     // Passe par saveEmployees (pas un push direct sur company.employees) pour que la nouvelle
@@ -2366,13 +2437,20 @@ const DB = {
       const veille = toISODate(new Date(parseISODateLocal(data.dateDebut).getTime() - 86400000));
       contrats.forEach(c => { if (!c.dateFin) c.dateFin = veille; });
     }
-    const contrat = Object.assign(makeEmptyContrat(), data, { id: generateId('contrat'), dateCreation: new Date().toISOString() });
+    // §retour Betty du 22/09/2026 (point 3.1) : poste/classification/statutCadre/etablissementId/
+    // dateFinPeriodeEssai reprennent la valeur ACTUELLE du salarié par défaut (comme le faisaient
+    // déjà silencieusement pourcentageActivite/horairesHebdo, recopiés côté écran) — un nouveau
+    // contrat qui ne précise rien sur ces champs (ex. un simple avenant de salaire créé comme
+    // nouveau contrat) ne doit jamais effacer un poste/une classification déjà connus.
+    const contrat = Object.assign(makeEmptyContrat(), {
+      poste: employee.poste, classification: employee.classification, statutCadre: employee.statutCadre,
+      etablissementId: employee.etablissementId, dateFinPeriodeEssai: employee.dateFinPeriodeEssai,
+      motifRecours: employee.motifRecours
+    }, data, { id: generateId('contrat'), dateCreation: new Date().toISOString() });
     contrats.push(contrat);
     this.updateEmployee(employeeId, {
       contrats,
-      typeContrat: contrat.typeContrat, dateFinContrat: contrat.dateFin,
-      tempsTravail: contrat.tempsTravail, pourcentageActivite: contrat.pourcentageActivite,
-      horairesHebdo: contrat.horairesHebdo, forfait: contrat.forfait, salaireBrutMensuel: contrat.salaireBrutMensuel
+      ...champsContratAMirorerSurEmploye(contrat)
     }, `Nouveau contrat (${contrat.typeContrat}) à compter du ${formatDate(contrat.dateDebut)}`);
     this.logAudit('Création', 'Contrat', `${employee.prenom} ${employee.nom}`, `${contrat.typeContrat} à compter du ${formatDate(contrat.dateDebut)}`);
     return contrat;
@@ -2392,19 +2470,23 @@ const DB = {
     const contrats = (employee.contrats || []).map(c => ({ ...c }));
     const index = contrats.findIndex(c => c.id === contratId);
     if (index === -1) return null;
-    const contratCorrige = Object.assign({}, contrats[index], data);
+    // §retour Betty du 22/09/2026 (point 3.1) : un contrat créé AVANT ce socle enrichi n'a pas
+    // poste/classification/statutCadre/etablissementId/dateFinPeriodeEssai — sans repli, une simple
+    // correction de date sur un TEL contrat effacerait silencieusement ces champs de l'employé au
+    // mirorage (voir champsContratAMirorerSurEmploye ci-dessous). Repli sur la valeur ACTUELLE de
+    // l'employé (jamais makeEmptyContrat() seul, qui les remettrait à '' plutôt que les préserver).
+    const contratCorrige = Object.assign(makeEmptyContrat(), {
+      poste: employee.poste, classification: employee.classification, statutCadre: employee.statutCadre,
+      etablissementId: employee.etablissementId, dateFinPeriodeEssai: employee.dateFinPeriodeEssai,
+      motifRecours: employee.motifRecours
+    }, contrats[index], data);
     contrats[index] = contratCorrige;
 
     const plusRecent = contrats.slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''))[0];
     const estLeContratActuel = plusRecent && plusRecent.id === contratId;
     const motif = `Correction du contrat du ${formatDate(contratCorrige.dateDebut)}`;
     const patch = estLeContratActuel
-      ? {
-          contrats,
-          typeContrat: contratCorrige.typeContrat, dateFinContrat: contratCorrige.dateFin,
-          tempsTravail: contratCorrige.tempsTravail, pourcentageActivite: contratCorrige.pourcentageActivite,
-          horairesHebdo: contratCorrige.horairesHebdo, forfait: contratCorrige.forfait, salaireBrutMensuel: contratCorrige.salaireBrutMensuel
-        }
+      ? { contrats, ...champsContratAMirorerSurEmploye(contratCorrige) }
       : { contrats };
     this.updateEmployee(employeeId, patch, estLeContratActuel ? motif : '');
     this.logAudit('Modification', 'Contrat', `${employee.prenom} ${employee.nom}`, motif);
@@ -3028,6 +3110,60 @@ const DB = {
     if (template && template.cle) return;
     this.saveDocumentTemplates(this.getDocumentTemplates().filter(t => t.id !== id));
     if (template) this.logAudit('Suppression', 'Modèle de document', template.nom);
+  },
+
+  // ---- Clauses de contrat (§retour Betty du 22/09/2026, point 3.1) ----
+
+  /** Même patron que getDocumentTemplates/documentTemplateRepository (CRUD identique, texte fusionné
+   * avec fusionnerModeleDocument) — une bibliothèque de clauses réutilisables (non-concurrence,
+   * confidentialité...) plutôt qu'à réécrire à chaque contrat. §backfill lazy, plus léger que le
+   * marqueur dédié utilisé pour les modèles de document (defaultDocumentTemplatesSeeded) : une
+   * bibliothèque de clauses reste un point de départ éditable/supprimable librement, pas une donnée
+   * réglementaire à re-garantir après suppression — `undefined` (jamais créée) déclenche le seed une
+   * fois, `[]` (le client a tout supprimé depuis) ne le redéclenche jamais. */
+  getClausesContrat() {
+    const company = this.getCurrentCompany();
+    if (company && company.clausesContrat === undefined) {
+      company.clausesContrat = seedClausesContratDefaut();
+      this.saveCurrentCompany(company);
+    }
+    return (company.clausesContrat || []).slice();
+  },
+
+  saveClausesContrat(list) {
+    const company = this.getCurrentCompany();
+    company.clausesContrat = list;
+    this.saveCurrentCompany(company);
+    this._pushCompanyDataBlob(company);
+  },
+
+  getClauseContratById(id) {
+    return this.getClausesContrat().find(c => c.id === id) || null;
+  },
+
+  addClauseContrat(data) {
+    const list = this.getClausesContrat();
+    const clause = Object.assign(makeEmptyClauseContrat(), data, { id: generateId('clause'), dateCreation: new Date().toISOString() });
+    list.push(clause);
+    this.saveClausesContrat(list);
+    this.logAudit('Création', 'Clause de contrat', clause.nom);
+    return clause;
+  },
+
+  updateClauseContrat(id, patch) {
+    const list = this.getClausesContrat();
+    const index = list.findIndex(c => c.id === id);
+    if (index === -1) return null;
+    list[index] = Object.assign({}, list[index], patch, { dateModification: new Date().toISOString() });
+    this.saveClausesContrat(list);
+    this.logAudit('Modification', 'Clause de contrat', list[index].nom);
+    return list[index];
+  },
+
+  deleteClauseContrat(id) {
+    const clause = this.getClauseContratById(id);
+    this.saveClausesContrat(this.getClausesContrat().filter(c => c.id !== id));
+    if (clause) this.logAudit('Suppression', 'Clause de contrat', clause.nom);
   },
 
   // ---- Pointeuse QR (§11/09/2026) ----
@@ -5311,6 +5447,14 @@ const documentTemplateRepository = {
   delete: (id) => DB.deleteDocumentTemplate(id)
 };
 
+const clauseContratRepository = {
+  getAll: () => DB.getClausesContrat(),
+  getById: (id) => DB.getClauseContratById(id),
+  create: (data) => DB.addClauseContrat(data),
+  update: (id, patch) => DB.updateClauseContrat(id, patch),
+  delete: (id) => DB.deleteClauseContrat(id)
+};
+
 const expenseRepository = {
   getAll: () => DB.getExpenses(),
   getById: (id) => DB.getExpenseById(id),
@@ -5606,10 +5750,70 @@ function getCiviliteAffichee(employee) {
  * sans être réécrit. dateFin reste vide tant que le contrat est "courant" — DB.addContrat la remplit
  * automatiquement (veille de la dateDebut du contrat suivant) au moment où un nouveau contrat
  * commence, sauf si elle a déjà été fixée à l'avance (ex. un CDD à terme connu). */
+/** §retour Betty du 22/09/2026 (point 3.1, "le modèle de contrat est trop pauvre") : jusqu'ici
+ * seuls dateDebut/dateFin/typeContrat/tempsTravail/pourcentageActivite/horairesHebdo/forfait/
+ * salaireBrutMensuel existaient, et "Nouveau contrat" n'en exposait que 5 des 8 (pourcentageActivite/
+ * horairesHebdo recopiés silencieusement depuis la fiche, jamais réellement saisis à la création).
+ * Complété avec le "socle indispensable" cité par Betty (motif de recours, poste, classification,
+ * statut cadre, établissement, période d'essai) + la rémunération (primes récurrentes, part
+ * variable, avantages en nature) + un commentaire libre et des clauses piochées dans la bibliothèque
+ * (clauseContratRepository, voir openGenererProjetContratModal, app.js).
+ * §clarifications actées avec Betty avant de commencer :
+ *   - le POSTE appartient désormais au contrat (comme typeContrat) : un changement de poste passe
+ *     par un nouveau contrat ou un avenant, jamais une simple modification de la fiche (voir
+ *     openEmployeeModal, renderConfidentialEmployeeFieldset — même traitement que typeContrat) ; la
+ *     fiche continue de n'afficher QUE la valeur du contrat en cours (employee.poste, mirroré comme
+ *     les autres champs contractuels, voir DB.addContrat/corrigerContrat).
+ *   - les congés/RTT ne sont JAMAIS dupliqués ici : ce sont des compteurs vivants gérés ailleurs
+ *     (Types de congés), pas des valeurs figées sur un contrat. Seule une VRAIE dérogation plus
+ *     favorable qu'un accord/la loi aurait un sens sur un contrat — hors périmètre pour l'instant,
+ *     à documenter au cas par cas dans le commentaire libre plutôt que d'ajouter un champ dédié
+ *     qui inviterait à ressaisir (et donc désynchroniser) un compteur qui vit déjà ailleurs. */
 function makeEmptyContrat() {
   return {
-    id: null, dateDebut: '', dateFin: '', typeContrat: '', tempsTravail: 'Temps plein',
-    pourcentageActivite: 100, horairesHebdo: 35, forfait: 'Aucun', salaireBrutMensuel: 0, dateCreation: null
+    id: null, dateDebut: '', dateFin: '', typeContrat: '',
+    // Obligatoire pour un CDD/intérim (Art. L1242-12) : la raison légale du recours à un contrat à
+    // terme plutôt qu'un CDI (remplacement, accroissement d'activité, emploi saisonnier...). Jamais
+    // un champ libre sans guide : voir MOTIFS_RECOURS_CDD (app.js) pour les intitulés proposés.
+    motifRecours: '',
+    poste: '', classification: '', statutCadre: false, etablissementId: '',
+    dateFinPeriodeEssai: '', periodeEssaiRenouvelee: false,
+    tempsTravail: 'Temps plein', pourcentageActivite: 100, horairesHebdo: 35, forfait: 'Aucun',
+    salaireBrutMensuel: 0,
+    // [{ id, libelle, montant, periodicite }] — primes récurrentes distinctes d'une prime
+    // exceptionnelle (qui resterait un simple avenant ponctuel, pas une clause du contrat).
+    primesRecurrentes: [],
+    partVariable: '', avantagesNature: '',
+    commentaire: '',
+    // Ids piochés dans clauseContratRepository au moment de la génération du projet — une COPIE du
+    // choix, jamais une référence vivante : supprimer/modifier une clause plus tard ne doit jamais
+    // changer silencieusement ce qu'un contrat déjà généré est censé avoir contenu.
+    clauseIds: [],
+    dateCreation: null
+  };
+}
+
+/** Intitulés usuels (Art. L1242-2/L1251-6) — point de départ, jamais exhaustif : la qualification
+ * juridique exacte d'un motif de recours reste la responsabilité de l'entreprise/son conseil. */
+const MOTIFS_RECOURS_CDD = [
+  'Remplacement d\'un salarié absent', 'Accroissement temporaire d\'activité', 'Emploi à caractère saisonnier',
+  'Contrat d\'usage (secteur défini par décret ou accord)', 'Remplacement d\'un chef d\'entreprise/exploitant', 'Autre motif légal'
+];
+
+/** §retour Betty du 22/09/2026 (point 3.1) : un seul endroit pour la liste des champs contractuels
+ * mirorés sur l'employé quand le contrat concerné est bien le plus récent (voir DB.addContrat/
+ * corrigerContrat) — évite qu'ajouter un champ au socle du contrat oublie l'un des deux appelants.
+ * poste rejoint ici la liste historique (typeContrat, tempsTravail...) : le poste appartient
+ * désormais au contrat (défaut 3.1), un changement de poste passe par un nouveau contrat/avenant,
+ * jamais une simple modification de la fiche — voir renderEmployeeFicheTab/openEmployeeModal. */
+function champsContratAMirorerSurEmploye(contrat) {
+  return {
+    typeContrat: contrat.typeContrat, dateFinContrat: contrat.dateFin,
+    tempsTravail: contrat.tempsTravail, pourcentageActivite: contrat.pourcentageActivite,
+    horairesHebdo: contrat.horairesHebdo, forfait: contrat.forfait, salaireBrutMensuel: contrat.salaireBrutMensuel,
+    poste: contrat.poste, classification: contrat.classification, statutCadre: contrat.statutCadre,
+    etablissementId: contrat.etablissementId, dateFinPeriodeEssai: contrat.dateFinPeriodeEssai,
+    motifRecours: contrat.motifRecours
   };
 }
 
@@ -5648,6 +5852,11 @@ function makeEmptyEmployee() {
     service: '',
     equipe: '',
     poste: '',
+    // §retour Betty du 22/09/2026 (point 3.1) : poste appartient désormais au contrat (comme
+    // typeContrat) — ces 2 champs à plat, ainsi que motifRecours, suivent le même traitement
+    // (mirorés depuis le contrat courant, voir champsContratAMirorerSurEmploye, jamais modifiables
+    // directement depuis "Modifier le salarié" en édition).
+    classification: '', statutCadre: false, motifRecours: '',
     managerIds: [], // un salarié peut avoir zéro, un ou plusieurs managers
     conventionCollective: '',
     statutPro: 'Non cadre', // conservé pour compatibilité (affichage/exports existants), voir categorieSalarieId
