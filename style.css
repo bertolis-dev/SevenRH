@@ -1312,8 +1312,18 @@ p { margin: 0; line-height: 1.5; }
 }
 
 /* Point rouge sur un onglet contenant un champ obligatoire manquant/invalide (voir
-   updateEmployeeFormTabErrors, app.js) — jamais bloquant en soi, juste un repère avant le submit. */
-.tab-error-dot {
+   updateEmployeeFormTabErrors, app.js) — jamais bloquant en soi, juste un repère avant le submit.
+   §retour Betty du 22/09/2026 ("4 points rouges" visibles sur sa propre fiche, non reproduit à la
+   lecture du JS) : la cause n'était pas côté validation mais ici — `display: inline-block` posé
+   directement sur `.tab-error-dot` a la même spécificité que la règle UA `[hidden] { display: none }`
+   (un sélecteur simple chacune), et une feuille d'auteur l'emporte sur la feuille du navigateur à
+   spécificité égale : l'attribut `hidden` posé par défaut sur ce <span> (voir renderEmployeeFormTabs)
+   n'avait donc AUCUN effet visuel, le point restait affiché sur TOUS les onglets dès l'ouverture de
+   la modale, jamais piloté par updateEmployeeFormTabErrors — d'où exactement 4 points rouges sur
+   n'importe quelle fiche en édition, jamais spécifique à une saisie invalide. `:not([hidden])`
+   (même idiome que .quick-add-inline plus haut) ne pose ces styles que si l'attribut est absent,
+   laissant la règle UA `display: none` agir normalement quand il est présent. */
+.tab-error-dot:not([hidden]) {
   display: inline-block;
   width: 7px;
   height: 7px;
