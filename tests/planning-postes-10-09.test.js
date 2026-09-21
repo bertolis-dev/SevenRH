@@ -156,7 +156,11 @@ async function run() {
     state.planningVue = 'equipe';
     const planningHtml = renderPlanning();
     assert.ok(!planningHtml.includes('data-planning-view'), 'Planning ne doit plus avoir aucun onglet Semaine/Mois/Année/Horaires/Astreintes');
-    assert.ok(!planningHtml.includes('class="toolbar'), 'Planning ne doit plus avoir de barre d\'outils (filtre service)');
+    // §retour Betty du 21/09/2026 (relecture par rôle, point 5, "un manager de vingt personnes ne
+    // peut pas isoler un service") : SEULE exception réintroduite à la sobriété du 10/09/2026 —
+    // rien d'autre (recherche, navigation semaine, sélecteur de vue) ne doit être revenu avec lui.
+    assert.ok(planningHtml.includes('id="planning-postes-filter-service"'), 'le filtre service doit être réintroduit en vue équipe');
+    assert.ok(!planningHtml.includes('id="planning-search"') && !planningHtml.includes('btn-planning-week'), 'seul le filtre service doit être revenu, jamais la recherche ni la navigation semaine retirées le 10/09/2026');
     assert.ok(planningHtml.includes('data-moi-equipe'), 'le bascule "Planning équipe / Moi" doit rester');
     assert.ok(planningHtml.includes('09:00-16:00'), 'la grille de quarts doit être affichée directement dans Planning');
 
@@ -165,6 +169,7 @@ async function run() {
     state.planningVue = 'personnel';
     const planningHtmlMoi = renderPlanning();
     assert.ok(!planningHtmlMoi.includes('09:00-16:00'), '"Moi" doit limiter la grille au salarié connecté, pas montrer les quarts des autres');
+    assert.ok(!planningHtmlMoi.includes('id="planning-postes-filter-service"'), 'le filtre service n\'a aucun sens en vue "Moi" (un seul salarié déjà affiché) : masqué comme le filtre service du Calendrier en vue personnelle');
 
     shiftRepository.delete(shift.id);
   }

@@ -261,7 +261,12 @@ function getInitialViewState() {
     // le rendu de la grille (cases "+" à combler...).
     planningPostesFilters: {
       etablissementId: '',
-      search: '', // filtre les salariés (barre d'outils)
+      // §retour Betty du 21/09/2026 (relecture par rôle, point 5, "un manager de vingt personnes ne
+      // peut pas isoler un service") : seul filtre réintroduit dans l'interface (voir
+      // renderPlanningPostes) — la demande porte explicitement sur celui-ci, jamais sur le reste du
+      // panneau retiré le 10/09/2026 ("enlève tous les boutons"), qui reste volontairement absent.
+      service: '',
+      search: '', // filtre les salariés (barre d'outils, retiré de l'interface, garde sa valeur par défaut)
       afficherQuartsACombler: true,
       masquerQuartsConfirmes: false,
       afficherBudget: false,
@@ -293,7 +298,12 @@ function getInitialViewState() {
     entretiensFilters: { type: '', statut: '', periode: '' },
     entretiensSortBy: 'datePrevue',
     entretiensSortDir: 'desc',
-    entretiensPage: 1
+    entretiensPage: 1,
+    // §retour Betty du 21/09/2026 (relecture par rôle, point 5, "Mes documents n'a ni recherche ni
+    // classement par catégorie, alors que les documents sont pourtant catégorisés ailleurs") :
+    // recherche par nom/catégorie + regroupement par catégorie (voir renderMesDocuments) — pas de
+    // pagination ici, cet écran ne montre jamais que les documents d'UNE seule personne.
+    mesDocumentsSearch: ''
   };
 }
 
@@ -362,6 +372,7 @@ const ICONS = {
   personPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><line x1="18" y1="7" x2="18" y2="13"/><line x1="15" y1="10" x2="21" y2="10"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.9 7.9 0 0 0 0-2l2-1.5-2-3.5-2.4.6a8 8 0 0 0-1.7-1L15 3h-6l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-.6-2 3.5L4.6 11a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-.6a8 8 0 0 0 1.7 1L9 21h6l.3-2.6a8 8 0 0 0 1.7-1l2.4.6 2-3.5-2-1.5z"/></svg>',
   card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>',
+  idCard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5.3 16c.4-1.6 1.5-2.5 2.7-2.5s2.3.9 2.7 2.5"/><line x1="14" y1="10" x2="19" y2="10"/><line x1="14" y1="13.5" x2="19" y2="13.5"/></svg>',
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7"/><line x1="4" y1="21" x2="20" y2="21"/><path d="M4 17c1.2 0 1.2-1 2.4-1s1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1"/><line x1="12" y1="12" x2="12" y2="8.5"/><path d="M12 8.5c-.8 0-1.4-.7-1.4-1.5S11.2 5.5 12 4.5c.8 1 1.4 1.7 1.4 2.5S12.8 8.5 12 8.5z"/></svg>',
   rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2 4 5.5 4 9 0 2-.5 3.7-1.3 5.2L12 19l-2.7-2.8C8.5 14.7 8 13 8 11c0-3.5 1.5-7 4-9z"/><path d="M9.5 14.5 7 16v3l2.5-1.2"/><path d="M14.5 14.5 17 16v3l-2.5-1.2"/><circle cx="12" cy="10" r="1.3"/></svg>',
   exitDoor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4"/><path d="M16 17l4-5-4-5"/><line x1="20" y1="12" x2="9" y2="12"/></svg>',
@@ -474,10 +485,23 @@ const NAV_ITEMS = [
   // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
   { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' } } },
   { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'frais' },
-  { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: ['salarie'], group: 'personnel', module: 'rh' },
+  // §retour Betty du 21/09/2026 (relecture par rôle, point 1, "le salarié n'a aucun accès à sa
+  // propre fiche") : VOIR_PROPRE_FICHE (PERMISSIONS, data.js) existait déjà, accordée par défaut à
+  // tous les rôles, mais n'était lue nulle part dans le code — un écran pensé, jamais branché. Cette
+  // entrée le branche enfin : `permissions` plutôt que `roles`, pour que retirer cette permission à
+  // un rôle (ou individuellement, via "Menus autorisés") désactive réellement l'accès. Réutilise
+  // TEL QUEL renderEmployeeDetail (voir le cas 'ma-fiche' de render(), plus bas) plutôt qu'un nouvel
+  // écran — getVisibleEmployeeIdsForCurrentUser() inclut déjà l'utilisateur courant pour tous les
+  // rôles, donc la fiche s'affiche automatiquement en lecture seule pour qui n'a pas le droit de
+  // modifier sa propre fiche (canEdit = canEditEmployeeRecord(e), déjà faux pour un salarié).
+  { key: 'ma-fiche', label: 'Ma fiche', icon: ICONS.idCard, permissions: [PERMISSIONS.VOIR_PROPRE_FICHE], group: 'personnel' },
+  { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: Object.values(ROLES), group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
-  { key: 'mes-tickets', label: 'Mes tickets', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
+  // §retour Betty du 21/09/2026 (relecture par rôle, point 4) : renommé "Aide et support" — "Mes
+  // tickets" se lisait comme un doublon de "Tickets restaurant" juste en dessous dans le même
+  // groupe, deux écrans sans aucun rapport (support technique vs titres-restaurant).
+  { key: 'mes-tickets', label: 'Aide et support', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
   // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
   // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
   // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
@@ -1614,7 +1638,7 @@ const LANDING_FEATURES = [
     related: [6, 0],
     screenshot: 'landing-feature-support.jpg',
     mock: {
-      title: 'Mes tickets',
+      title: 'Aide et support',
       kpis: [['2', 'Ouverts'], ['5', 'Résolus ce mois'], ['4h', 'Délai moyen']],
       rows: [
         [ICONS.ticket, 'Question sur mes congés', 'info', 'En cours'],
@@ -2015,7 +2039,7 @@ const LANDING_FAQ_ITEMS = [
   },
   {
     q: "Le support est-il inclus ?",
-    a: "Oui, dans toutes les offres. Chaque salarié peut ouvrir un ticket directement depuis l'application (Mes tickets), sans surcoût ni module additionnel."
+    a: "Oui, dans toutes les offres. Chaque salarié peut ouvrir un ticket directement depuis l'application (Aide et support), sans surcoût ni module additionnel."
   },
   {
     q: "Mes données sont-elles isolées des autres entreprises ?",
@@ -4762,9 +4786,11 @@ const HELP_CONTENT = {
     bonnesPratiques: ['Filtrez par service avant d\'exporter/comparer les soldes d\'une grande équipe.']
   },
   'mes-tickets': {
-    title: 'Mes tickets',
-    body: `<p>Vos demandes de support envoyées à l'équipe BERTOLIS (éditeur du logiciel), pas un ticket restaurant. Créez-en un pour un bug, une question ou une demande d'évolution ; suivez les réponses et le statut directement ici.</p>`,
-    faq: [{ q: 'Je cherche mes tickets restaurant, pas mes demandes de support ?', r: 'C\'est l\'écran "Tickets restaurant" (module dédié) qu\'il vous faut, pas "Mes tickets" — le nom se ressemble, mais ce sont deux choses différentes.' }]
+    // §retour Betty du 21/09/2026 (relecture par rôle, point 4, "Mes tickets et Tickets restaurant
+    // prêtent à confusion") : renommé "Aide et support" — la FAQ ci-dessous expliquait jusqu'ici
+    // cette confusion au lieu de la supprimer ; devenue sans objet une fois les deux noms distincts.
+    title: 'Aide et support',
+    body: `<p>Vos demandes de support envoyées à l'équipe BERTOLIS (éditeur du logiciel), pas un ticket restaurant. Créez-en une pour un bug, une question ou une demande d'évolution ; suivez les réponses et le statut directement ici.</p>`
   },
   entretiens: {
     title: 'Entretiens',
@@ -5816,7 +5842,7 @@ async function syncNotifications() {
   }
 
   // Sans ce bloc, le salarié qui a envoyé un ticket n'était jamais prévenu de sa résolution — il
-  // devait aller vérifier manuellement dans "Mes tickets". dateModification (pas juste l'id+statut)
+  // devait aller vérifier manuellement dans "Aide et support". dateModification (pas juste l'id+statut)
   // dans le sourceKey : un ticket réouvert puis re-résolu doit renotifier, pas rester silencieux au
   // 2e passage à ce même statut (addNotificationsIfNew ne recrée jamais un sourceKey déjà vu).
   supportTicketRepository.getAll().filter(t => t.statut === 'resolu' || t.statut === 'livre').forEach(t => {
@@ -6085,7 +6111,7 @@ function navigateTo(view, params = {}) {
   // doit toujours repartir sur "Fiche", jamais hériter d'un onglet resté ouvert par hasard. Seuls
   // les appelants qui veulent explicitement cibler un autre onglet (voir syncNotifications
   // ci-dessus) passent employeeDetailTab dans leurs propres params.
-  if (view === 'employee-detail' && !('employeeDetailTab' in params)) params = { ...params, employeeDetailTab: 'fiche' };
+  if ((view === 'employee-detail' || view === 'ma-fiche') && !('employeeDetailTab' in params)) params = { ...params, employeeDetailTab: 'fiche' };
   Object.assign(state, params);
   renderSidebar();
   syncNotifications();
@@ -6379,6 +6405,15 @@ function renderInner() {
       bindBoussoleEvents();
       break;
     case 'employee-detail':
+      root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
+      bindEmployeeDetailEvents();
+      break;
+    // §retour Betty du 21/09/2026 (relecture par rôle, point 1) : résout l'id À CHAQUE rendu (jamais
+    // figé dans un navParams statique de NAV_ITEMS, qui serait évalué une seule fois au chargement du
+    // module, avant qu'aucun utilisateur ne soit connecté) — réutilise ensuite exactement le même
+    // rendu/binding que la fiche détaillée classique, donc les mêmes onglets/mêmes garde-fous.
+    case 'ma-fiche':
+      state.currentEmployeeId = authRepository.getCurrentUser().id;
       root.innerHTML = renderEmployeeDetail(state.currentEmployeeId);
       bindEmployeeDetailEvents();
       break;
@@ -8086,7 +8121,7 @@ function renderEmployeesList() {
             </tr>
           </thead>
           <tbody>
-            ${pageItems.map(renderEmployeeRow).join('')}
+            ${pageItems.map(e => renderEmployeeRow(e, user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES))).join('')}
           </tbody>
         </table>
         ${renderPaginationControls(page, totalPages, pageStart, pageItems.length, visible.length)}
@@ -8431,7 +8466,12 @@ function exportTableauCompteursExcel() {
   auditLogRepository.logAudit('Export', 'Tableau des compteurs', `${rows.length} salarié${rows.length > 1 ? 's' : ''}`);
 }
 
-function renderEmployeeRow(e) {
+/** §retour Betty du 21/09/2026 (relecture par rôle, point 3, "fuite de cloisonnement sur le type de
+ * contrat") : un manager sans VOIR_INFOS_CONTRACTUELLES ne doit plus voir le type de contrat dans
+ * cette colonne, alors qu'il est déjà masqué (convention collective/dates de fin) dans la fiche
+ * détaillée — même garde-fou (canSeeContractuel) que renderEmployeeDetail/openEmployeePrintModal,
+ * jamais un simple `true` par défaut, sinon la colonne contredirait la fiche qu'elle résume. */
+function renderEmployeeRow(e, canSeeContractuel) {
   return `
     <tr class="table-row" data-id="${e.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(e)}">
       <td class="row-title" data-label="Salarié">
@@ -8445,7 +8485,7 @@ function renderEmployeeRow(e) {
       </td>
       <td data-label="Poste">${escapeHtml(getPosteAccorde(e, settingsRepository.getSettings()) || '—')}</td>
       <td data-label="Service">${escapeHtml(e.service || '—')}</td>
-      <td data-label="Contrat">${renderContratBadge(e.typeContrat)}</td>
+      <td data-label="Contrat">${canSeeContractuel ? renderContratBadge(e.typeContrat) : ''}</td>
       <td data-label="Ancienneté">${calculateAnciennete(e.dateEmbauche)}</td>
       <td data-label="Statut">${renderStatutBadge(e.statut)}</td>
     </tr>
@@ -9844,18 +9884,44 @@ function openDocumentModal(employeeId) {
 
 // ---- Vue : Mes documents (libre-service Salarié, lecture + téléchargement uniquement) ----
 
+/** §retour Betty du 21/09/2026 (relecture par rôle, point 5) : recherche par nom/catégorie, puis
+ * regroupement par catégorie (le "classement" demandé) — chaque groupe trié par date d'ajout la plus
+ * récente d'abord, les groupes eux-mêmes triés alphabétiquement. Ouvert à tous les rôles désormais
+ * (voir NAV_ITEMS 'mes-documents', point 2 de la même relecture) : documentRepository.getForEmployee
+ * était déjà générique (n'importe quel employeeId), seule l'entrée de menu restreignait à 'salarie'. */
 function renderMesDocuments() {
   const user = authRepository.getCurrentUser();
-  const documents = documentRepository.getForEmployee(user.id);
+  let documents = documentRepository.getForEmployee(user.id);
+
+  const term = normalizeForSearch(state.mesDocumentsSearch.trim());
+  if (term) {
+    documents = documents.filter(d => normalizeForSearch(`${d.nom} ${d.categorie}`).includes(term));
+  }
+
+  const groupes = new Map();
+  documents.slice().sort((a, b) => (b.dateCreation || '').localeCompare(a.dateCreation || '')).forEach(d => {
+    const cle = d.categorie || 'Sans catégorie';
+    if (!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(d);
+  });
+  const categoriesTriees = [...groupes.keys()].sort((a, b) => a.localeCompare(b));
 
   return `
     <div class="view-header">
       <h1>Mes documents</h1>
       <p class="view-subtitle">${documents.length} document${documents.length > 1 ? 's' : ''}</p>
     </div>
+    <div class="toolbar card">
+      <input type="text" id="mes-documents-search" class="input" placeholder="Rechercher un document..." value="${escapeHtml(state.mesDocumentsSearch)}">
+    </div>
     <div class="card">
       <div id="mes-documents-list">
-        ${documents.length === 0 ? '<p class="text-muted">Aucun document pour le moment.</p>' : documents.map(d => renderDocumentRow(d, false)).join('')}
+        ${documents.length === 0
+          ? renderListEmptyState(state.mesDocumentsSearch ? 'Aucun document ne correspond à cette recherche.' : 'Aucun document pour le moment.', 'folder')
+          : categoriesTriees.map(cle => `
+              <div class="search-section-label" style="padding-left:0; margin-top:12px;">${escapeHtml(cle)}</div>
+              ${groupes.get(cle).map(d => renderDocumentRow(d, false)).join('')}
+            `).join('')}
       </div>
     </div>
   `;
@@ -9863,6 +9929,14 @@ function renderMesDocuments() {
 
 function bindMesDocumentsEvents() {
   bindDocumentRowEvents('#mes-documents-list');
+  const searchInput = document.getElementById('mes-documents-search');
+  if (searchInput) searchInput.addEventListener('input', (e) => {
+    state.mesDocumentsSearch = e.target.value;
+    render();
+    const input = document.getElementById('mes-documents-search');
+    input.focus();
+    input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -9998,7 +10072,7 @@ function openSupportTicketModal() {
       pieceJointe: state.pendingAttachment
     });
     closeModal();
-    showToast('Ticket envoyé. Vous pouvez suivre sa réponse dans « Mes tickets ».');
+    showToast('Ticket envoyé. Vous pouvez suivre sa réponse dans « Aide et support ».');
     if (state.view === 'mes-tickets') render();
   });
 }
@@ -10027,7 +10101,7 @@ function renderMesTickets() {
   return `
     <div class="view-header view-header-row">
       <div>
-        <h1>Mes tickets</h1>
+        <h1>Aide et support</h1>
         <p class="view-subtitle">${tickets.length} ticket${tickets.length > 1 ? 's' : ''}</p>
       </div>
       <div class="detail-header-actions">
@@ -11843,8 +11917,15 @@ function renderEmployeeDetail(id) {
   // sa propre fiche — sinon le bouton "Modifier" fait déjà tout, pas besoin d'un second bouton.
   const canEditCoordonnees = !canEdit && user.id === e.id && hasPermission(user, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES);
   // § VOIR_INFOS_CONTRACTUELLES : scope restreint à convention collective/statut pro/dates de fin
-  // de contrat et de période d'essai — PAS type de contrat/date d'embauche/ancienneté, que
+  // de contrat et de période d'essai/type de contrat — PAS date d'embauche/ancienneté, que
   // exportEmployeesExcel (cf. son commentaire) déclare déjà explicitement non confidentiels.
+  //
+  // §retour Betty du 21/09/2026 (relecture par rôle, point 3, "fuite de cloisonnement sur le type de
+  // contrat") : le type de contrat rejoint désormais ce même périmètre — jusqu'ici affiché sans
+  // condition à 4 endroits (la pastille et la carte "Contrat & poste" ci-dessous, la colonne de la
+  // liste des salariés, la fiche imprimable) alors que le reste des informations contractuelles y
+  // était déjà masqué pour qui n'a pas cette permission. exportEmployeesExcel n'a PAS été aligné ici
+  // (hors périmètre de cette demande, jamais mentionné) : à revisiter si Betty le signale un jour.
   const canSeeContractuel = user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_CONTRACTUELLES);
 
   // §retour Betty du 18/09/2026 (point 6) : 16 cartes empilées sur un seul écran, remplacées par 6
@@ -11863,10 +11944,17 @@ function renderEmployeeDetail(id) {
   };
   const visibleTabs = EMPLOYEE_DETAIL_TABS.filter(t => (tabContents[t.key] || '').trim() !== '');
   const activeTab = visibleTabs.some(t => t.key === state.employeeDetailTab) ? state.employeeDetailTab : (visibleTabs[0] ? visibleTabs[0].key : 'fiche');
+  // §retour Betty du 21/09/2026 (relecture par rôle, point 1, "Ma fiche") : un salarié qui consulte
+  // sa propre fiche via "Ma fiche" n'a accès à AUCUNE liste de salariés (NAV_ITEMS 'employees',
+  // manager/RH/Propriétaire uniquement) — un fil d'Ariane "Salariés" y renverrait silencieusement à
+  // l'accueil (voir navigateTo, allowedKeys), un lien qui ment sur ce qu'il fait.
+  const hasEmployeesListAccess = navItemsForRole(user).some(i => i.key === 'employees');
 
   return `
-    ${renderBreadcrumb([{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }])}
-    ${renderEmployeeDetailPrevNext(e)}
+    ${renderBreadcrumb(hasEmployeesListAccess
+      ? [{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }]
+      : [{ label: 'Accueil', nav: 'dashboard' }, { label: `${e.prenom} ${e.nom}` }])}
+    ${hasEmployeesListAccess ? renderEmployeeDetailPrevNext(e) : ''}
 
     <div class="detail-header card">
       ${renderAvatar(e)}
@@ -11874,7 +11962,7 @@ function renderEmployeeDetail(id) {
         <h1>${personNameHtml(e)}</h1>
         <p class="view-subtitle">${escapeHtml(getPosteAccorde(e, settings) || '—')} · ${escapeHtml(e.service || '—')}</p>
         <div class="badge-row">
-          ${renderContratBadge(e.typeContrat)}
+          ${canSeeContractuel ? renderContratBadge(e.typeContrat) : ''}
           ${renderStatutBadge(e.statut)}
           ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
           ${e.anonymise ? '<span class="badge badge-muted" title="Données personnelles retirées automatiquement après le départ (durée de conservation, voir Paramètres > Listes)">Anonymisé</span>' : ''}
@@ -11960,7 +12048,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         ${infoRow('Manager(s)', managerNames(e.managerIds))}
         ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
         ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
-        ${infoRow('Type de contrat', e.typeContrat)}
+        ${canSeeContractuel ? infoRow('Type de contrat', e.typeContrat) : ''}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
         ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
@@ -12714,11 +12802,27 @@ function bindMenusAutorisesCardEvents(employeeId) {
 
 /** Salaire : donnée sensible, réservée au Propriétaire, et seulement si l'entreprise a activé le
  * suivi correspondant. Sexe/civilité (§retour Betty du 18/09/2026, point 5) ne sont plus considérés
- * "confidentiels" ici (obligatoires/toujours visibles, affichés sur la carte Identité elle-même). */
+ * "confidentiels" ici (obligatoires/toujours visibles, affichés sur la carte Identité elle-même).
+ *
+ * §retour Betty du 21/09/2026 (relecture par rôle, point 1, "à décider ensemble... son salaire
+ * contractuel, qu'il connaît déjà par son bulletin") : le salarié lui-même voit désormais son salaire
+ * brut mensuel ACTUEL, même sans VOIR_INFOS_FINANCIERES — mais jamais le coût employeur complet
+ * (une estimation de gestion interne, qui ne figure sur aucun bulletin) ni l'historique/ses motifs
+ * (un motif de révision peut contenir une appréciation RH interne, ex. le motif d'un refus
+ * d'augmentation) : ces deux-là restent réservés à qui a la permission. */
 function renderConfidentialEmployeeCard(e, user) {
-  if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
   const settings = settingsRepository.getSettings();
   if (!settings.masseSalarialeActivee) return '';
+  const isSelf = user.id === e.id;
+  if (!hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) {
+    if (!isSelf || !e.salaireBrutMensuel) return '';
+    return `
+      <div class="card">
+        <h2>Rémunération</h2>
+        ${infoRow('Salaire brut mensuel', formatCurrencyFR(e.salaireBrutMensuel))}
+      </div>
+    `;
+  }
   // §retour Betty du 14/09/2026 (Rémunération point 1, "historique des salaires") : les 5 derniers
   // changements, les plus récents en premier — alimenté automatiquement par updateEmployee, jamais
   // saisi à la main ici (voir DB.updateEmployee, data.js).
@@ -12929,7 +13033,7 @@ function openEmployeePrintModal(id) {
           ${infoRow('Manager(s)', managerNames(e.managerIds))}
           ${canSeeContractuel ? infoRow('Convention collective', e.conventionCollective) : ''}
           ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
-          ${infoRow('Type de contrat', e.typeContrat)}
+          ${canSeeContractuel ? infoRow('Type de contrat', e.typeContrat) : ''}
           ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
           ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
 
@@ -20789,6 +20893,7 @@ function getPlanningPostesEmployees(f, weekStartStr, weekEndStr) {
   let employees = employeeRepository.getAll().filter(e => !e.archive);
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
   if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
+  if (f.service) employees = employees.filter(e => e.service === f.service);
   if (f.search.trim()) {
     const q = f.search.trim().toLowerCase();
     employees = employees.filter(e => `${e.prenom} ${e.nom}`.toLowerCase().includes(q));
@@ -20970,7 +21075,23 @@ function renderPlanningPostes() {
   // telle que dessinée dans la référence (en-tête triable, bandeaux de groupe avec "⋯", cartes de
   // quart, total). Les réglages qu'affichait le panneau retiré gardent leurs valeurs par défaut
   // (state.planningPostesFilters), simplement plus modifiables depuis cet écran.
+  // §retour Betty du 21/09/2026 (relecture par rôle, point 5, "un manager de vingt personnes ne peut
+  // pas isoler un service") : seul le filtre service revient dans l'interface, en vue équipe
+  // uniquement (même principe que le filtre service du Calendrier — sans objet en vue "Moi", qui ne
+  // montre déjà que le salarié courant). Le regroupement visuel par service (bandeaux ci-dessus)
+  // aide à s'y repérer, mais ne remplace pas pouvoir RÉDUIRE la liste à un seul service sur une
+  // équipe de vingt personnes.
+  const filtreServiceHtml = state.planningVue === 'equipe' ? `
+    <div class="toolbar card">
+      <select id="planning-postes-filter-service" class="input">
+        <option value="">Tous les services</option>
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${f.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+      </select>
+    </div>
+  ` : '';
+
   return `
+    ${filtreServiceHtml}
     <div class="card table-card planning-scroll-card poste-grid-card">
       ${canManage ? `
         <div class="view-header-row" style="padding: 14px 20px 0;">
@@ -21132,6 +21253,12 @@ function bindPlanningPostesEvents() {
   const sortBtn = document.getElementById('btn-poste-sort-name');
   if (sortBtn) sortBtn.addEventListener('click', () => {
     state.planningPostesSortDir = state.planningPostesSortDir === 'desc' ? 'asc' : 'desc';
+    render();
+  });
+
+  const serviceFilter = document.getElementById('planning-postes-filter-service');
+  if (serviceFilter) serviceFilter.addEventListener('change', (e) => {
+    state.planningPostesFilters.service = e.target.value;
     render();
   });
 

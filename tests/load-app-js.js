@@ -92,6 +92,7 @@ globalThis.__shiftRepository = shiftRepository;
 globalThis.__shiftSwapRepository = shiftSwapRepository;
 globalThis.__weekTemplateRepository = weekTemplateRepository;
 globalThis.__documentTemplateRepository = documentTemplateRepository;
+globalThis.__hasPermission = hasPermission;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
 globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
@@ -211,6 +212,8 @@ globalThis.__refuseRequest = refuseRequest;
 globalThis.__expenseRepository = expenseRepository;
 globalThis.__renderFrais = renderFrais;
 globalThis.__renderParametresModelesDocuments = renderParametresModelesDocuments;
+globalThis.__renderMesTickets = renderMesTickets;
+globalThis.__renderMesDocuments = renderMesDocuments;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
 globalThis.__teleworkRepository = teleworkRepository;
 globalThis.__leaveRepository = leaveRepository;
@@ -432,6 +435,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     shiftSwapRepository: sandbox.__shiftSwapRepository,
     weekTemplateRepository: sandbox.__weekTemplateRepository,
     documentTemplateRepository: sandbox.__documentTemplateRepository,
+    hasPermission: sandbox.__hasPermission,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,
@@ -532,6 +536,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     expenseRepository: sandbox.__expenseRepository,
     renderFrais: sandbox.__renderFrais,
     renderParametresModelesDocuments: sandbox.__renderParametresModelesDocuments,
+    renderMesTickets: sandbox.__renderMesTickets,
+    renderMesDocuments: sandbox.__renderMesDocuments,
     renderAbsencesHub: sandbox.__renderAbsencesHub,
     teleworkRepository: sandbox.__teleworkRepository,
     leaveRepository: sandbox.__leaveRepository,
