@@ -2298,6 +2298,21 @@ const DB = {
       // — data.onboardingChecklist n'est jamais fourni par le formulaire de création, sauf import.
       onboardingChecklist: data.onboardingChecklist || (settings.onboardingChecklistTemplate || []).map(label => ({ label, fait: false, dateFait: '' }))
     });
+    // §retour Betty du 22/09/2026 (défaut 1.3) : sans ce contrat n°1, une fiche neuve restait avec
+    // contrats: [] jusqu'à la prochaine connexion (voir ensureContratsBackfilled, qui reconstruit
+    // depuis les champs à plat) — un court instant où la fiche et l'onglet Contrat auraient déjà pu
+    // diverger, exactement le défaut corrigé par ailleurs ici. Créé directement depuis les mêmes
+    // champs à plat que le formulaire de création vient de soumettre, jamais depuis un contrat déjà
+    // fourni (une création n'en a jamais un).
+    if (!employee.contrats || !employee.contrats.length) {
+      employee.contrats = [Object.assign(makeEmptyContrat(), {
+        id: generateId('contrat'),
+        dateDebut: employee.dateEmbauche || '', dateFin: employee.dateFinContrat || '', typeContrat: employee.typeContrat || '',
+        tempsTravail: employee.tempsTravail || 'Temps plein', pourcentageActivite: employee.pourcentageActivite != null ? employee.pourcentageActivite : 100,
+        horairesHebdo: employee.horairesHebdo != null ? employee.horairesHebdo : 35, forfait: employee.forfait || 'Aucun',
+        salaireBrutMensuel: employee.salaireBrutMensuel || 0, dateCreation: now
+      })];
+    }
     // Passe par saveEmployees (pas un push direct sur company.employees) pour que la nouvelle
     // fiche soit bien envoyée à Supabase — un ajout direct au tableau contourne le diff qui
     // détermine quoi synchroniser.
@@ -2361,6 +2376,39 @@ const DB = {
     }, `Nouveau contrat (${contrat.typeContrat}) à compter du ${formatDate(contrat.dateDebut)}`);
     this.logAudit('Création', 'Contrat', `${employee.prenom} ${employee.nom}`, `${contrat.typeContrat} à compter du ${formatDate(contrat.dateDebut)}`);
     return contrat;
+  },
+
+  /** §retour Betty du 22/09/2026 (défaut 1.3, "il faut pouvoir corriger un contrat existant, pas
+   * seulement créer le suivant : aujourd'hui une faute de frappe oblige à créer un contrat de
+   * plus") : modifie EN PLACE un contrat déjà existant (par id), sans jamais pousser/décaler les
+   * contrats voisins (contrairement à addContrat, qui clôture le précédent à la création du
+   * suivant — une correction ne doit jamais avoir cet effet de bord). Ne mirore sur les champs à
+   * plat de l'employé (source de vérité pour le reste de l'application, voir addContrat) QUE si le
+   * contrat corrigé est bien le plus récent : corriger un contrat déjà clos et remplacé depuis ne
+   * doit jamais faire régresser la situation actuelle affichée partout ailleurs. */
+  corrigerContrat(employeeId, contratId, data) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return null;
+    const contrats = (employee.contrats || []).map(c => ({ ...c }));
+    const index = contrats.findIndex(c => c.id === contratId);
+    if (index === -1) return null;
+    const contratCorrige = Object.assign({}, contrats[index], data);
+    contrats[index] = contratCorrige;
+
+    const plusRecent = contrats.slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''))[0];
+    const estLeContratActuel = plusRecent && plusRecent.id === contratId;
+    const motif = `Correction du contrat du ${formatDate(contratCorrige.dateDebut)}`;
+    const patch = estLeContratActuel
+      ? {
+          contrats,
+          typeContrat: contratCorrige.typeContrat, dateFinContrat: contratCorrige.dateFin,
+          tempsTravail: contratCorrige.tempsTravail, pourcentageActivite: contratCorrige.pourcentageActivite,
+          horairesHebdo: contratCorrige.horairesHebdo, forfait: contratCorrige.forfait, salaireBrutMensuel: contratCorrige.salaireBrutMensuel
+        }
+      : { contrats };
+    this.updateEmployee(employeeId, patch, estLeContratActuel ? motif : '');
+    this.logAudit('Modification', 'Contrat', `${employee.prenom} ${employee.nom}`, motif);
+    return contratCorrige;
   },
 
   /** §retour Betty du 19/09/2026 (point 1.3) : reprend le mécanisme historique de l'avenant (texte
@@ -5181,6 +5229,7 @@ const employeeRepository = {
   create: (data) => DB.addEmployee(data),
   update: (id, patch) => DB.updateEmployee(id, patch),
   ajouterContrat: (employeeId, data) => DB.addContrat(employeeId, data),
+  corrigerContrat: (employeeId, contratId, data) => DB.corrigerContrat(employeeId, contratId, data),
   ajouterAvenant: (employeeId, data) => DB.addAvenant(employeeId, data),
   archive: (id, archived = true) => DB.setArchived(id, archived),
   delete: (id) => DB.deleteEmployee(id),

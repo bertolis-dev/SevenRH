@@ -327,6 +327,7 @@ globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 globalThis.__renderEmployeeDetail = renderEmployeeDetail;
 globalThis.__openAjouterAvenantModal = openAjouterAvenantModal;
 globalThis.__openNouveauContratModal = openNouveauContratModal;
+globalThis.__openCorrigerContratModal = openCorrigerContratModal;
 globalThis.__renderEmployeeContratTab = renderEmployeeContratTab;
 globalThis.__computeNextVisiteMedicale = computeNextVisiteMedicale;
 globalThis.__getLatestVisiteMedicale = getLatestVisiteMedicale;
@@ -646,6 +647,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderEmployeeDetail: sandbox.__renderEmployeeDetail,
     openAjouterAvenantModal: sandbox.__openAjouterAvenantModal,
     openNouveauContratModal: sandbox.__openNouveauContratModal,
+    openCorrigerContratModal: sandbox.__openCorrigerContratModal,
     renderEmployeeContratTab: sandbox.__renderEmployeeContratTab,
     computeNextVisiteMedicale: sandbox.__computeNextVisiteMedicale,
     getLatestVisiteMedicale: sandbox.__getLatestVisiteMedicale,

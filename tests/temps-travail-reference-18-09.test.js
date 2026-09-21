@@ -85,7 +85,10 @@ async function runFicheInitialeRefleteLeBonEtatDesLeRendu() {
   openEmployeeModal(salarie.id);
   const html = sandbox.document.getElementById('modal-root').innerHTML;
   assert.ok(html.includes('id="field-nombre-jours-forfait" >') || html.includes('id="field-nombre-jours-forfait">'), '"Nombre de jours par an" doit être visible dès le rendu initial pour un salarié déjà en Forfait jours');
-  assert.ok(html.includes('id="field-horaires-hebdo" hidden>'), 'les heures hebdomadaires doivent être masquées dès le rendu initial pour ce même salarié');
+  // §retour Betty du 22/09/2026 (défaut 1.3) : "Modifier le salarié" n'a plus jamais le champ heures
+  // hebdomadaires du tout EN ÉDITION (contractuel, déplacé vers l'onglet Contrat) — jamais seulement
+  // masqué comme avant ce correctif.
+  assert.ok(!html.includes('id="field-horaires-hebdo"'), 'les heures hebdomadaires ne doivent plus exister du tout dans ce formulaire en édition, déplacées vers l\'onglet Contrat');
   assert.ok(html.includes('value="210"'), 'la valeur déjà enregistrée du nombre de jours doit être reprise, pas réinitialisée à 218');
   assert.ok(html.includes('L3121-64'), 'les rappels légaux du forfait jours doivent être visibles dès le rendu initial');
 

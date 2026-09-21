@@ -11487,7 +11487,10 @@ function renderEmployeeContratTab(e, canEdit) {
                   ${escapeHtml(c.typeContrat || '—')} · ${escapeHtml(c.tempsTravail || '—')}${c.forfait && c.forfait !== 'Aucun' ? ' · ' + escapeHtml(c.forfait) : ''}
                   ${c.salaireBrutMensuel ? `<br><span class="text-muted">${formatCurrencyFR(c.salaireBrutMensuel)} brut/mois</span>` : ''}
                 </span>
-                <span class="text-muted" style="text-align: right; white-space: nowrap;">${formatDate(c.dateDebut)} → ${c.dateFin ? formatDate(c.dateFin) : 'en cours'}</span>
+                <span style="text-align: right; white-space: nowrap;">
+                  <span class="text-muted">${formatDate(c.dateDebut)} → ${c.dateFin ? formatDate(c.dateFin) : 'en cours'}</span>
+                  ${canEdit ? `<br><button type="button" class="btn-link" data-corriger-contrat="${c.id}">Corriger</button>` : ''}
+                </span>
               </div>
             `).join('')}
           </div>
@@ -11600,6 +11603,106 @@ function openNouveauContratModal(employeeId) {
     });
     closeModal();
     showToast('Nouveau contrat créé.');
+    render();
+  });
+}
+
+/** §retour Betty du 22/09/2026 (défaut 1.3, "il faut pouvoir corriger un contrat existant, pas
+ * seulement créer le suivant : aujourd'hui une faute de frappe oblige à créer un contrat de
+ * plus") : modifie CE contrat en place (DB.corrigerContrat), jamais un nouveau contrat de plus —
+ * mêmes champs que "Nouveau contrat" ci-dessus (pas plus : pourcentage d'activité/heures
+ * hebdomadaires restent hors formulaire, comme là-bas, un chantier séparé). Distinct d'un avenant
+ * (openAjouterAvenantModal) : une correction ne crée ni ligne d'historique "Avenant" ni nouvelle
+ * entrée d'audit "Création" — elle répare une saisie fausse sur le contrat qui existe déjà. */
+function openCorrigerContratModal(employeeId, contratId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee || !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
+  const contrats = (employee.contrats || []).slice().sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''));
+  const index = contrats.findIndex(c => c.id === contratId);
+  if (index === -1) { showToast('Ce contrat n\'est plus disponible.', 'error'); return; }
+  const contrat = contrats[index];
+  const precedent = contrats[index - 1] || null;
+  const suivant = contrats[index + 1] || null;
+  const settings = settingsRepository.getSettings();
+
+  const html = `
+    <div class="modal modal-medium">
+      <div class="modal-header">
+        <h2>Corriger le contrat</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="corriger-contrat-form">
+        <div class="modal-body">
+          <p class="text-muted">Modifie ce contrat directement, sans en créer un nouveau. Réservé aux corrections de saisie : un vrai changement (nouveau salaire, nouveau poste...) reste un nouveau contrat ou un avenant.</p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="f-contrat-date-debut">Date de début *</label>
+              <input class="input" type="date" id="f-contrat-date-debut" value="${escapeHtml(contrat.dateDebut || '')}" required>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-type">Type de contrat</label>
+              <select class="input" id="f-contrat-type">
+                ${(settings.typesContrat || []).map(t => `<option value="${escapeHtml(t)}" ${contrat.typeContrat === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-temps-travail">Temps de travail</label>
+              <select class="input" id="f-contrat-temps-travail">
+                ${['Temps plein', 'Temps partiel'].map(t => `<option value="${t}" ${contrat.tempsTravail === t ? 'selected' : ''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-forfait">Forfait</label>
+              <select class="input" id="f-contrat-forfait">
+                ${(settings.forfaits || []).map(f => `<option value="${escapeHtml(f)}" ${contrat.forfait === f ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
+              <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(contrat.salaireBrutMensuel || 0)}" step="any">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer la correction</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('corriger-contrat-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const dateDebut = document.getElementById('f-contrat-date-debut').value;
+    if (!dateDebut) return;
+    if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
+      showToast('La date de début ne peut pas être avant la date d\'embauche.', 'error');
+      return;
+    }
+    // Une correction ne doit jamais inverser l'ordre des contrats entre eux — contrairement à
+    // "Nouveau contrat", il n'y a ici ni contrat précédent à clôturer ni contrat suivant à décaler :
+    // la date corrigée doit simplement rester à sa place dans la suite déjà existante.
+    if (precedent && dateDebut <= (precedent.dateFin || precedent.dateDebut)) {
+      showToast('La date de début ne peut pas précéder la fin du contrat précédent.', 'error');
+      return;
+    }
+    if (suivant && dateDebut >= suivant.dateDebut) {
+      showToast('La date de début ne peut pas dépasser le début du contrat suivant.', 'error');
+      return;
+    }
+    employeeRepository.corrigerContrat(employeeId, contratId, {
+      dateDebut,
+      typeContrat: document.getElementById('f-contrat-type').value,
+      tempsTravail: document.getElementById('f-contrat-temps-travail').value,
+      forfait: document.getElementById('f-contrat-forfait').value,
+      salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0
+    });
+    closeModal();
+    showToast('Contrat corrigé.');
     render();
   });
 }
@@ -13499,6 +13602,9 @@ function bindEmployeeDetailEvents() {
   if (avenantBtn) avenantBtn.addEventListener('click', () => openAjouterAvenantModal(state.currentEmployeeId));
   const nouveauContratBtn = document.getElementById('btn-nouveau-contrat');
   if (nouveauContratBtn) nouveauContratBtn.addEventListener('click', () => openNouveauContratModal(state.currentEmployeeId));
+  document.querySelectorAll('[data-corriger-contrat]').forEach(btn => {
+    btn.addEventListener('click', () => openCorrigerContratModal(state.currentEmployeeId, btn.dataset.corrigerContrat));
+  });
 
   const editCoordonneesBtn = document.getElementById('btn-edit-coordonnees');
   if (editCoordonneesBtn) editCoordonneesBtn.addEventListener('click', () => openCoordonneesModal(state.currentEmployeeId));
@@ -25463,7 +25569,12 @@ function updateEquipeOptionsForSelectedService() {
 /** §retour Betty du 18/09/2026 (point 5) : le genre n'est plus ici (déplacé vers un vrai champ
  * "Sexe (état civil)" obligatoire, onglet Identité, jamais optionnel/confidentiel) — cette section
  * ne porte plus que le salaire. */
-function renderConfidentialEmployeeFieldset(employee, settings) {
+/** §retour Betty du 22/09/2026 (défaut 1.3) : le salaire est contractuel — plus jamais modifiable
+ * ici en édition (`isEdit`), seulement depuis l'onglet Contrat (nouveau contrat ou correction du
+ * contrat en cours), qui reste la SEULE source du salaire mirroré sur employee.salaireBrutMensuel.
+ * Toujours affiché à la CRÉATION d'un salarié (aucun contrat n'existe encore à ce moment-là). */
+function renderConfidentialEmployeeFieldset(employee, settings, isEdit) {
+  if (isEdit) return '';
   const user = authRepository.getCurrentUser();
   if (!user || user.role !== ROLES.PROPRIETAIRE) return '';
   if (!settings.masseSalarialeActivee) return '';
@@ -26327,7 +26438,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
       <form id="employee-form">
         <div class="modal-body">
           ${candidatureId && cvUrl ? `<p class="text-muted" style="margin-top:0;">Créé depuis une candidature, <button type="button" class="btn-link" onclick="window.open('${cvUrl}', '_blank', 'noopener')">voir le CV</button> pendant la saisie.</p>` : ''}
-          ${renderEmployeeFormTabs(renderConfidentialEmployeeFieldset(employee, settings) !== '')}
+          ${renderEmployeeFormTabs(renderConfidentialEmployeeFieldset(employee, settings, isEdit) !== '')}
           <fieldset class="form-section" id="employee-form-section-identite" data-employee-tab-panel="identite">
             <legend>Identité</legend>
             <div class="form-grid">
@@ -26384,7 +26495,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })), undefined, undefined, 'categoriesSalarie')}
-              ${selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat, null, undefined, 'typesContrat')}
+              ${!isEdit ? selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat, null, undefined, 'typesContrat') : ''}
               <div class="form-field">
                 <label for="f-dateEmbauche">Date d'embauche *</label>
                 <input class="input" type="date" id="f-dateEmbauche" name="dateEmbauche" value="${escapeHtml(employee.dateEmbauche || '')}" required data-live-anciennete="true">
@@ -26394,17 +26505,24 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${textField('dateDernierEntretienProfessionnel', 'Dernier entretien professionnel', employee.dateDernierEntretienProfessionnel, false, 'date')}
               ${selectField('suiviMedicalType', 'Type de suivi médical', null, employee.suiviMedicalType || 'simple', Object.entries(SUIVI_MEDICAL_RULES).map(([key, r]) => ({ value: key, label: r.label })))}
             </div>
+            <!-- §retour Betty du 22/09/2026 (défaut 1.3, "le contrat est modifiable à deux endroits,
+                 et les deux divergent") : le type de contrat/temps de travail/forfait/salaire ne se
+                 modifient plus que depuis l'onglet Contrat de la fiche (nouveau contrat ou
+                 correction du contrat en cours) — jamais plus ici, où la fiche et le contrat
+                 pouvaient jusqu'ici afficher deux valeurs différentes pour la même chose. -->
+            ${isEdit ? `<p class="form-hint">Type de contrat : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche (bouton "Corriger" sur le contrat en cours, ou "+ Nouveau contrat").</p>` : ''}
           </fieldset>
 
           <fieldset class="form-section" id="employee-form-section-temps" data-employee-tab-panel="temps" hidden>
             <legend>Temps de travail</legend>
             <div class="form-grid">
-              ${selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail)}
-              <div class="form-field" id="field-pourcentage-activite" ${tempsTravailAffichage.pourcentageVisible ? '' : 'hidden'}>
+              ${!isEdit ? selectField('tempsTravail', 'Temps de travail', ['Temps plein', 'Temps partiel'], employee.tempsTravail) : ''}
+              <div class="form-field" id="field-pourcentage-activite" ${!isEdit && tempsTravailAffichage.pourcentageVisible ? '' : 'hidden'}>
                 <label for="f-pourcentageActivite">Pourcentage d'activité</label>
                 <input class="input" type="number" id="f-pourcentageActivite" name="pourcentageActivite" value="${escapeHtml(tempsTravailAffichage.pourcentage)}" readonly>
                 <p class="form-hint">Calculé automatiquement à partir des heures hebdomadaires ci-contre et de la durée de référence de l'entreprise (Paramètres &gt; Listes &gt; Salariés).</p>
               </div>
+              ${!isEdit ? `
               <div class="form-field" id="field-horaires-hebdo" ${tempsTravailAffichage.horairesVisible ? '' : 'hidden'}>
                 <!-- §retour QA du 27/08/2026 ("pouvoir mettre un chiffre à virgule") : un <input
                      type="number"> refuse la virgule décimale française au clavier (même avec
@@ -26418,12 +26536,14 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                 <input class="input" type="text" inputmode="decimal" id="f-horairesHebdo" name="horairesHebdo" value="${escapeHtml(employee.horairesHebdo != null ? String(employee.horairesHebdo).replace('.', ',') : '')}" placeholder="35 ou 35,5">
                 <p class="field-warning ${tempsTravailAffichage.avertissementL3123 ? 'visible' : ''}" id="temps-partiel-l3123-warning">${icon(ICONS.warningTriangle, 13)} Moins de 24h/semaine : la durée minimale légale d'un temps partiel est de 24h/semaine (L3123-7), sauf dérogation (étudiant, demande du salarié, accord de branche...).</p>
               </div>
+              ` : ''}
               <div class="form-field" id="field-nombre-jours-forfait" ${tempsTravailAffichage.joursForfaitVisible ? '' : 'hidden'}>
                 <label for="f-nombreJoursForfait">Nombre de jours par an (forfait jours)</label>
                 <input class="input" type="number" id="f-nombreJoursForfait" name="nombreJoursForfait" min="1" max="218" value="${escapeHtml(employee.nombreJoursForfait || 218)}">
                 <p class="form-hint">218 jours = plafond légal par défaut (L3121-64), sauf accord collectif fixant un plafond différent.</p>
               </div>
-              ${selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.', 'forfaits')}
+              ${!isEdit ? selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.', 'forfaits') : ''}
+              ${isEdit ? `<p class="form-hint">Temps de travail, forfait, heures hebdomadaires : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche.</p>` : ''}
               ${selectField('regimeRTT', 'Régime RTT', null, employee.regimeRTT || 'aucun', REGIME_RTT_OPTIONS, 'Jours de repos accordés en compensation d\'un temps de travail au-delà de la durée de référence. "Acquisition au réel" utilise le compteur RTT standard (Paramètres &gt; Types de congés) ; les deux autres options sont propres à ce salarié.')}
               <div class="form-field" id="field-nombre-jours-rtt-annuel" ${employee.regimeRTT === 'forfait_annuel' ? '' : 'hidden'}>
                 <label for="f-nombreJoursRTTAnnuel">Nombre de jours RTT par an</label>
@@ -26483,7 +26603,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
             <p class="text-muted" id="indemnite-compensatrice-hint" style="margin-top: 8px;"></p>
           </fieldset>
 
-          ${renderConfidentialEmployeeFieldset(employee, settings)}
+          ${renderConfidentialEmployeeFieldset(employee, settings, isEdit)}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
@@ -26504,7 +26624,10 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
 
-  bindTempsTravailFields(settings);
+  // §retour Betty du 22/09/2026 (défaut 1.3) : tempsTravail/horairesHebdo/forfait n'existent plus
+  // dans ce formulaire EN ÉDITION (voir openEmployeeModal ci-dessus) — plus rien à lier, et
+  // getElementById planterait sur des champs absents du DOM. Toujours actif à la création.
+  if (!isEdit) bindTempsTravailFields(settings);
   bindRegimeRTTFields();
   bindSexeCiviliteDefault();
 
@@ -26923,22 +27046,32 @@ function submitEmployeeForm(evt, id, candidatureId) {
     if (categorie) patch.statutPro = categorie.nom;
   }
 
-  // §correctif audit du 31/08/2026 : `Number(patch.pourcentageActivite) || 100` coerce un '0' saisi
-  // explicitement (Number('0') === 0, falsy) en 100 AVANT même que la validation ci-dessous ne
-  // s'exécute — son branchement "<= 0" devenait donc inatteignable, et une saisie invalide (0, ou du
-  // texte non numérique) était silencieusement remplacée par 100 au lieu d'être rejetée. Seul un champ
-  // réellement vide (non renseigné, cas normal puisque le champ est optionnel) doit retomber sur 100.
-  const pourcentageActiviteRaw = patch.pourcentageActivite;
-  const pourcentageActivite = (pourcentageActiviteRaw === '' || pourcentageActiviteRaw == null) ? 100 : Number(pourcentageActiviteRaw);
-  if (Number.isNaN(pourcentageActivite) || pourcentageActivite <= 0 || pourcentageActivite > 100) {
-    showToast('Le pourcentage d\'activité doit être compris entre 1 et 100.', 'error');
-    return;
+  // §retour Betty du 22/09/2026 (défaut 1.3) : pourcentageActivite/horairesHebdo/tempsTravail/
+  // forfait/typeContrat/salaireBrutMensuel ne sont plus dans ce formulaire EN ÉDITION (voir
+  // openEmployeeModal, isEdit) — 'in patch' garde ce bloc inerte dans ce cas, jamais un repli
+  // silencieux qui écraserait la valeur réelle (mirorée depuis le contrat en cours) par la valeur
+  // par défaut de l'entreprise à chaque enregistrement de la fiche. Toujours actif à la création,
+  // où ces champs existent encore (aucun contrat n'existe avant la création elle-même).
+  if ('pourcentageActivite' in patch) {
+    // §correctif audit du 31/08/2026 : `Number(patch.pourcentageActivite) || 100` coerce un '0' saisi
+    // explicitement (Number('0') === 0, falsy) en 100 AVANT même que la validation ci-dessous ne
+    // s'exécute — son branchement "<= 0" devenait donc inatteignable, et une saisie invalide (0, ou du
+    // texte non numérique) était silencieusement remplacée par 100 au lieu d'être rejetée. Seul un champ
+    // réellement vide (non renseigné, cas normal puisque le champ est optionnel) doit retomber sur 100.
+    const pourcentageActiviteRaw = patch.pourcentageActivite;
+    const pourcentageActivite = (pourcentageActiviteRaw === '' || pourcentageActiviteRaw == null) ? 100 : Number(pourcentageActiviteRaw);
+    if (Number.isNaN(pourcentageActivite) || pourcentageActivite <= 0 || pourcentageActivite > 100) {
+      showToast('Le pourcentage d\'activité doit être compris entre 1 et 100.', 'error');
+      return;
+    }
+    patch.pourcentageActivite = pourcentageActivite;
   }
-  patch.pourcentageActivite = pourcentageActivite;
-  // §retour QA du 27/08/2026 : champ texte (voir openEmployeeModal), pas un <input type="number">
-  // qui refusait la virgule décimale française — normalise avant conversion, un point saisi
-  // directement (ou collé depuis ailleurs) reste accepté tel quel.
-  patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || settingsRepository.getSettings().dureeHebdomadaireReferenceHeures;
+  if ('horairesHebdo' in patch) {
+    // §retour QA du 27/08/2026 : champ texte (voir openEmployeeModal), pas un <input type="number">
+    // qui refusait la virgule décimale française — normalise avant conversion, un point saisi
+    // directement (ou collé depuis ailleurs) reste accepté tel quel.
+    patch.horairesHebdo = Number(String(patch.horairesHebdo || '').replace(',', '.')) || settingsRepository.getSettings().dureeHebdomadaireReferenceHeures;
+  }
   if ('nombreJoursForfait' in patch) patch.nombreJoursForfait = Number(patch.nombreJoursForfait) || 218;
   if ('nombreJoursRTTAnnuel' in patch) patch.nombreJoursRTTAnnuel = patch.nombreJoursRTTAnnuel === '' ? null : Number(patch.nombreJoursRTTAnnuel) || 0;
   patch.managerIds = formData.getAll('managerIds');
