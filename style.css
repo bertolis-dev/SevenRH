@@ -928,6 +928,14 @@ p { margin: 0; line-height: 1.5; }
 
 .table { width: 100%; border-collapse: collapse; }
 
+/* §retour Betty du 22/09/2026 ("fais moins de hauteur dans la ligne... on voit très peu de lignes
+   parce qu'il y a beaucoup d'espace vide... il ne faut pas que ce soit tassé non plus") : 16px de
+   marge en haut ET en bas donnaient des lignes de ~53px, soit une dizaine de lignes par écran sur
+   les jours fériés, les salariés ou la préparation de paie. 10px ramène la ligne à ~41px, un quart
+   de lignes visibles en plus, sans coller le texte aux bordures. Valeur volontairement commune à
+   TOUTES les tables (.table) plutôt qu'à un seul écran : elle demandait que ce soit valable
+   partout. Les listes de référence restent un cran plus serrées (.table-settings-list, 8px) : un
+   libellé court et une action, jamais le contenu dense d'un tableau de salariés. */
 .table th {
   text-align: left;
   font-size: 12px;
@@ -935,7 +943,7 @@ p { margin: 0; line-height: 1.5; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-muted);
-  padding: 16px 22px;
+  padding: 9px 22px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -947,7 +955,7 @@ p { margin: 0; line-height: 1.5; }
 .table th[data-sort] { cursor: pointer; user-select: none; }
 
 .table td {
-  padding: 16px 22px;
+  padding: 10px 22px;
   border-bottom: 1px solid var(--color-border);
   font-size: 14px;
 }
