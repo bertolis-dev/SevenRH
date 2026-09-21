@@ -7272,6 +7272,12 @@ function getDataQualityIssues() {
   const sansService = employees.filter(e => !e.service);
   if (sansService.length) issues.push({ severity: 'warning', label: 'Sans service', employees: sansService });
 
+  // §retour Betty du 22/09/2026 (point 2.5, organigramme) : un poste manquant s'y voyait déjà, mais
+  // seulement en le regardant — remonté ici aussi, comme les autres champs structurants (établissement,
+  // service), pour apparaître dans le contrôle des dossiers sans avoir à parcourir tout l'organigramme.
+  const sansPoste = employees.filter(e => !e.poste);
+  if (sansPoste.length) issues.push({ severity: 'warning', label: 'Sans poste', employees: sansPoste });
+
   const sansNaissance = employees.filter(e => !e.dateNaissance);
   if (sansNaissance.length) issues.push({ severity: 'info', label: 'Sans date de naissance', employees: sansNaissance });
 
@@ -9556,9 +9562,20 @@ function renderOrganigramme() {
   const equipesDisponibles = equipeOptionsForServiceFilter(f.service);
 
   return `
-    <div class="view-header">
-      <h1>Organigramme</h1>
-      <p class="view-subtitle">${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}</p>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Organigramme</h1>
+        <p class="view-subtitle">${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}</p>
+      </div>
+      <!-- §retour Betty du 22/09/2026 (point 2.5) : impression/PDF en priorité (Imprimer/Export PDF
+           natif du navigateur, même mécanique que le reste de l'application, voir openEmployeePrintModal)
+           + export Excel nominatif — jamais un export PowerPoint, aucune dépendance fiable pour ça
+           dans ce projet 100% vanilla JS (même réserve déjà actée pour le .docx, voir le commentaire
+           historique du 19/09/2026 sur les documents RH). -->
+      <div class="detail-header-actions">
+        <button class="btn btn-secondary" id="btn-print-organigramme">${icon(ICONS.printer, 14)} Imprimer / Export PDF</button>
+        <button class="btn btn-secondary" id="btn-export-organigramme-excel">Exporter en Excel</button>
+      </div>
     </div>
     ${renderFilterToggleBar('org-filters', [f.search, f.etablissementId, f.service, f.equipe].filter(Boolean).length, 'organigramme')}
     <div class="toolbar card toolbar-collapsible" id="org-filters">
@@ -9586,18 +9603,27 @@ function renderOrganigramme() {
   `;
 }
 
+/** §retour Betty du 22/09/2026 (point 2.5, "l'organigramme n'a rien à faire du rôle applicatif") :
+ * "RH"/"Manager"/"Salarié" est un rôle DANS L'APPLICATION (droits d'accès), sans rapport avec la
+ * place de la personne dans la hiérarchie réelle de l'entreprise — un salarié peut très bien
+ * manager une équipe (poste "Responsable d'équipe") sans avoir le rôle applicatif "manager", et
+ * inversement. Seul le poste a un sens ici ; à défaut d'un poste renseigné, un repère de qualité de
+ * données (au lieu d'un simple tiret muet) pointe vers la correction à faire, cohérent avec le
+ * reste de l'application (voir getDataQualityIssues). */
 function renderOrgNode(employee, childrenOf) {
   const children = childrenOf.get(employee.id) || [];
   const hasChildren = children.length > 0;
   const isCollapsed = state.orgCollapsedIds.has(employee.id);
+  const poste = getPosteAccorde(employee, settingsRepository.getSettings());
   return `
     <li>
       <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(employee)}">
         ${hasChildren ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
         ${renderAvatar(employee)}
         <div class="org-node-name">${personNameHtml(employee)}</div>
-        <div class="org-node-poste">${escapeHtml(getPosteAccorde(employee, settingsRepository.getSettings()) || '—')}</div>
-        <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[employee.role] || employee.role)}</span>
+        ${poste
+          ? `<div class="org-node-poste">${escapeHtml(poste)}</div>`
+          : `<div class="org-node-poste org-node-poste-manquant" title="Aucun poste renseigné sur la fiche de ce salarié">${icon(ICONS.warningTriangle, 12)} Poste manquant</div>`}
       </div>
       ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
     </li>
@@ -9643,6 +9669,77 @@ function bindOrganigrammeEvents() {
     state.organigrammeFilters.equipe = e.target.value;
     render();
   });
+
+  document.getElementById('btn-print-organigramme').addEventListener('click', () => openOrganigrammePrintModal());
+  document.getElementById('btn-export-organigramme-excel').addEventListener('click', () => exportOrganigrammeExcel());
+}
+
+/** §retour Betty du 22/09/2026 (point 2.5) : même mécanique qu'openEmployeePrintModal (.print-area +
+ * window.print(), voir le commentaire historique sur pourquoi jamais de .docx/.pptx généré dans ce
+ * projet 100% vanilla JS) — reprend exactement les filtres actifs à l'écran (organigramme complet
+ * ou service/équipe filtré), avec l'en-tête commun (logo, raison sociale, adresse, date) complété
+ * de l'effectif imprimé. */
+function openOrganigrammePrintModal() {
+  const f = state.organigrammeFilters;
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const term = normalizeForSearch(f.search.trim());
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
+  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
+  if (f.service) employees = employees.filter(e => e.service === f.service);
+  if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+  const { roots, childrenOf } = buildOrgTree(employees);
+
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Organigramme</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="print-area print-document">
+          ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
+          <ul class="org-tree">
+            ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-organigramme-confirm">Imprimer / Export PDF</button>
+      </div>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-print-organigramme-confirm').addEventListener('click', () => window.print());
+}
+
+/** §retour Betty du 22/09/2026 (point 2.5, "un export Excel avec un vrai tableau nominatif, jamais
+ * un PowerPoint") : buildExcelXmlWorkbook/downloadExcelXmlFile, même générateur que les autres
+ * exports Excel de l'application (voir exportEmployeesExcel) — un tableau, pas une image de
+ * l'arbre : reprend les mêmes filtres actifs à l'écran, une ligne par salarié avec son rattachement
+ * hiérarchique (manager(s)) plutôt qu'une simple liste à plat sans structure. */
+function exportOrganigrammeExcel() {
+  const f = state.organigrammeFilters;
+  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+  const term = normalizeForSearch(f.search.trim());
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
+  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
+  if (f.service) employees = employees.filter(e => e.service === f.service);
+  if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+
+  const settings = settingsRepository.getSettings();
+  const headers = ['Nom', 'Prénom', 'Poste', 'Manager(s)', 'Service', 'Équipe', 'Établissement'];
+  const rows = employees.map(e => [
+    e.nom, e.prenom, getPosteAccorde(e, settings) || '', managerNames(e.managerIds), e.service, e.equipe,
+    (etablissementRepository.getAll().find(et => et.id === e.etablissementId) || {}).nom || ''
+  ]);
+  const xml = buildExcelXmlWorkbook(headers, rows, 'Organigramme', { zebra: true });
+  downloadExcelXmlFile(xml, 'organigramme.xls');
+  auditLogRepository.logAudit('Export', 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''}`);
 }
 
 // ---------------------------------------------------------------------------

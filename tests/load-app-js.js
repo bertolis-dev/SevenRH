@@ -298,6 +298,10 @@ globalThis.__groupEmployeesByServiceAndEquipe = groupEmployeesByServiceAndEquipe
 globalThis.__personNameWithPosteHtml = personNameWithPosteHtml;
 globalThis.__renderEmployeesList = renderEmployeesList;
 globalThis.__renderOrganigramme = renderOrganigramme;
+globalThis.__bindOrganigrammeEvents = bindOrganigrammeEvents;
+globalThis.__openOrganigrammePrintModal = openOrganigrammePrintModal;
+globalThis.__exportOrganigrammeExcel = exportOrganigrammeExcel;
+globalThis.__getDataQualityIssues = getDataQualityIssues;
 globalThis.__openEmployeeModal = openEmployeeModal;
 globalThis.__renderNotifPanel = renderNotifPanel;
 globalThis.__getNotifDayGroupLabel = getNotifDayGroupLabel;
@@ -644,6 +648,10 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     personNameWithPosteHtml: sandbox.__personNameWithPosteHtml,
     renderEmployeesList: sandbox.__renderEmployeesList,
     renderOrganigramme: sandbox.__renderOrganigramme,
+    bindOrganigrammeEvents: sandbox.__bindOrganigrammeEvents,
+    openOrganigrammePrintModal: sandbox.__openOrganigrammePrintModal,
+    exportOrganigrammeExcel: sandbox.__exportOrganigrammeExcel,
+    getDataQualityIssues: sandbox.__getDataQualityIssues,
     openEmployeeModal: sandbox.__openEmployeeModal,
     renderNotifPanel: sandbox.__renderNotifPanel,
     getNotifDayGroupLabel: sandbox.__getNotifDayGroupLabel,
