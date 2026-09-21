@@ -508,7 +508,7 @@ async function insertRows(tableName, rows, toRowFn, companyId) {
     const first = errors[0];
     throw errors.length === 1
       ? first
-      : Object.assign(new Error(`${errors.length} lignes refusées sur ${rows.length} (${tableName}) — première erreur : ${first.message}`), { cause: first });
+      : Object.assign(new Error(`${errors.length} lignes refusées sur ${rows.length} (${tableName}), première erreur : ${first.message}`), { cause: first });
   }
 }
 
@@ -925,7 +925,7 @@ async function fetchFullCompanyExportData(companyId) {
     ['audit_log', auditLogRes], ['settings', settingsRes], ['subscriptions', subscriptionRes],
     ['subscription_modules', subscriptionModulesRes]
   ].filter(([, res]) => res && res.error);
-  if (failed.length) throw new Error('Échec de lecture (' + failed.map(([t]) => t).join(', ') + ') — export incomplet, réessayez.');
+  if (failed.length) throw new Error('Échec de lecture (' + failed.map(([t]) => t).join(', ') + '), export incomplet, réessayez.');
 
   return {
     exporteLe: new Date().toISOString(),

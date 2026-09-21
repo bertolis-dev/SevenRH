@@ -19,7 +19,18 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const EM_DASH_MID_SENTENCE = /[\p{L}\p{N}] ?— ?[\p{L}\p{N}]/u;
+/* §retour Betty du 19/09/2026 ("retire les tirets IA, refais le tour de l'application") : la règle
+ * d'origine (un tiret ENTRE DEUX MOTS) laissait passer tous les tiraits collés à du balisage, très
+ * fréquents dans ce dépôt où le texte affiché est construit en gabarits — ex.
+ * `<strong>${nom}</strong> — ${message}` sur l'écran Préparation de paie, qu'elle a vu en
+ * production alors que la chaîne d'intégration était au vert. La règle est désormais l'inverse :
+ * TOUT tiret cadratin est refusé, SAUF le seul emploi légitime, le tiret employé seul comme valeur
+ * vide ('—', ">—<", `<option value="">—</option>`...). Plus de zone grise : pour séparer deux idées,
+ * une virgule, un deux-points, un point ou une parenthèse font le même travail sans la signature. */
+const VALEUR_VIDE = /(['"`])\s*—\s*\1|>\s*—\s*<(?=\/)|«\s*—\s*»/g;
+function contientTiretCadratin(texte) {
+  return texte.replace(VALEUR_VIDE, '').includes('—');
+}
 
 function findViolationsInJs(filePath) {
   const lines = fs.readFileSync(filePath, 'utf8').split('\n');
@@ -39,10 +50,10 @@ function findViolationsInJs(filePath) {
     const idx = code.indexOf('//');
     if (idx > -1) {
       const before = code.slice(0, idx);
-      if (!EM_DASH_MID_SENTENCE.test(before)) return; // le tiret n'existe que dans la partie commentaire
+      if (!contientTiretCadratin(before)) return; // le tiret n'existe que dans la partie commentaire
       code = before;
     }
-    if (EM_DASH_MID_SENTENCE.test(code)) violations.push({ line: i + 1, text: trimmed.slice(0, 160) });
+    if (contientTiretCadratin(code)) violations.push({ line: i + 1, text: trimmed.slice(0, 160) });
   });
   return violations;
 }
@@ -51,7 +62,7 @@ function findViolationsInHtml(filePath) {
   const content = fs.readFileSync(filePath, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
   const violations = [];
   content.split('\n').forEach((raw, i) => {
-    if (EM_DASH_MID_SENTENCE.test(raw)) violations.push({ line: i + 1, text: raw.trim().slice(0, 160) });
+    if (contientTiretCadratin(raw)) violations.push({ line: i + 1, text: raw.trim().slice(0, 160) });
   });
   return violations;
 }
@@ -73,7 +84,7 @@ targets.forEach(({ file, check }) => {
 });
 
 if (total > 0) {
-  console.error(`\nÉCHEC — check-em-dash.js (${total} occurrence${total > 1 ? 's' : ''} à corriger : remplacez par une virgule, un deux-points, un point ou une parenthèse — jamais un tiret cadratin mi-phrase dans une chaîne affichée).`);
+  console.error(`\nÉCHEC — check-em-dash.js (${total} occurrence${total > 1 ? 's' : ''} à corriger : remplacez par une virgule, un deux-points, un point ou une parenthèse, jamais un tiret cadratin dans une chaîne affichée).`);
   process.exitCode = 1;
 } else {
   console.log('OK — check-em-dash.js (aucun tiret cadratin mi-phrase dans app.js/data.js/index.html)');
