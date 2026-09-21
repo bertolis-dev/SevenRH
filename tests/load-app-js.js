@@ -93,6 +93,8 @@ globalThis.__shiftSwapRepository = shiftSwapRepository;
 globalThis.__weekTemplateRepository = weekTemplateRepository;
 globalThis.__documentTemplateRepository = documentTemplateRepository;
 globalThis.__hasPermission = hasPermission;
+globalThis.__calculateTicketsRestaurant = calculateTicketsRestaurant;
+globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
 globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
@@ -436,6 +438,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     weekTemplateRepository: sandbox.__weekTemplateRepository,
     documentTemplateRepository: sandbox.__documentTemplateRepository,
     hasPermission: sandbox.__hasPermission,
+    calculateTicketsRestaurant: sandbox.__calculateTicketsRestaurant,
+    calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,

@@ -95,6 +95,7 @@ globalThis.__calculerCoutShifts = calculerCoutShifts;
 globalThis.__shiftChevaucheIndisponibilite = shiftChevaucheIndisponibilite;
 globalThis.__JOURS_SEMAINE_PLANNING = JOURS_SEMAINE_PLANNING;
 globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
+globalThis.__calculateTicketsRestaurant = calculateTicketsRestaurant;
 globalThis.__ticketsMonthKey = ticketsMonthKey;
 globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
 `;
@@ -160,6 +161,7 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
     shiftChevaucheIndisponibilite: sandbox.__shiftChevaucheIndisponibilite,
     JOURS_SEMAINE_PLANNING: sandbox.__JOURS_SEMAINE_PLANNING,
     calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
+    calculateTicketsRestaurant: sandbox.__calculateTicketsRestaurant,
     ticketsMonthKey: sandbox.__ticketsMonthKey,
     calculerEcartsPointageJour: sandbox.__calculerEcartsPointageJour,
   };

@@ -519,6 +519,12 @@ const DEFAULT_SETTINGS = {
   ticketsValeurFaciale: 9,
   ticketsPartEmployeurPct: 60,
   ticketsInclureTeletravail: true,
+  // §retour Betty du 22/09/2026 (Tickets restaurant, défaut 1.1, "un réglage d'entreprise,
+  // distribution en début ou en fin de mois") : n'affecte jamais le calcul lui-même (toujours le
+  // mois COMPLET, voir calculateTicketsRestaurant) — seulement le mois proposé par défaut à
+  // l'ouverture de l'écran (voir renderTicketsHub) : 'debut' propose le mois SUIVANT (on commande
+  // d'avance), 'fin' propose le mois EN COURS (on attend qu'il soit presque écoulé).
+  ticketsDistribution: 'fin', // 'debut' | 'fin'
   // Chaînes de validation par défaut (voir advanceWorkflow) : modifiables dans Paramètres.
   // workflowCongesDefault sert de modèle pré-rempli à la création d'un nouveau type de congé.
   workflowCongesDefault: ['manager', 'rh'],
@@ -6469,11 +6475,26 @@ function ticketsMonthKey(year, month) {
   return `${year}-${String(month + 1).padStart(2, '0')}`;
 }
 
+/** §retour Betty du 22/09/2026 (défaut 1.1, "les tickets restaurant ne peuvent pas être commandés") :
+ * la version précédente arrêtait la boucle au jour courant (`if (dateStr > today) continue`), ce qui
+ * n'a jamais calculé qu'un compteur de jours déjà travaillés, jamais un nombre de titres à commander
+ * — juste un jour par mois (le dernier) donnait le bon chiffre, et un mois entièrement futur (le cas
+ * réel d'une commande passée d'avance) donnait systématiquement zéro pour tout le monde. Le calcul
+ * porte désormais TOUJOURS sur le mois complet, quelle que soit la date du jour — le réglage
+ * ticketsDistribution ne change jamais cette formule, seulement le mois par défaut à l'écran (voir
+ * son propre commentaire, DEFAULT_SETTINGS ci-dessus).
+ *
+ * Détail retourné pour que le chiffre soit vérifiable (demande explicite) : joursOuvres (jours du
+ * mois qui correspondent au motif travaillé du salarié, dans les bornes embauche/départ) moins
+ * joursFeriesFermetures moins joursAbsences (congé validé, ou télétravail si non inclus) = theorique
+ * — auquel s'ajoute la régularisation du mois précédent (voir ci-dessous) et l'éventuelle correction
+ * manuelle, pour obtenir nbTickets. */
 function calculateTicketsRestaurant(employee, year, month, leaveRequests, teleworkRequests, settings) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = toISODate(new Date());
   const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-  let nbTickets = 0;
+  let joursOuvres = 0;
+  let joursFeriesFermetures = 0;
+  let joursAbsences = 0;
 
   // Filtré une seule fois par salarié plutôt que de rescanner tous les congés/télétravail de l'entreprise à chaque jour du mois
   // (mesuré : ~35 000 comparaisons/salarié/mois sur toute l'entreprise -> quelques-unes seulement sur les demandes de CE salarié).
@@ -6484,34 +6505,50 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
     const date = new Date(year, month, day);
     const dateStr = toISODate(date);
 
-    if (dateStr > today) continue; // jour pas encore travaillé
     if (employee.dateEmbauche && dateStr < employee.dateEmbauche) continue;
     if (employee.dateDepart && dateStr > employee.dateDepart) continue;
     if (!(employee.joursTravailles || []).includes(dayLabels[date.getDay()])) continue;
-    if (!isJourTravaillePourSalarie(dateStr, employee, settings)) continue;
+    joursOuvres += 1;
+
+    if (!isJourTravaillePourSalarie(dateStr, employee, settings)) { joursFeriesFermetures += 1; continue; }
 
     // Une demi-journée (matin OU après-midi, sur une date isolée) ne prive pas du ticket restaurant
     // du jour — seule une absence sur la journée entière compte comme "non travaillé" ici.
     const onLeave = employeeLeaves.some(r =>
       dateStr >= r.dateDebut && dateStr <= r.dateFin && !(r.demiJournee && r.dateDebut === r.dateFin));
-    if (onLeave) continue;
+    if (onLeave) { joursAbsences += 1; continue; }
 
     const remote = employeeTelework.some(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    if (remote && !settings.ticketsInclureTeletravail) continue;
-
-    nbTickets += 1;
+    if (remote && !settings.ticketsInclureTeletravail) { joursAbsences += 1; continue; }
   }
+
+  const theorique = joursOuvres - joursFeriesFermetures - joursAbsences;
+
+  // §retour Betty du 22/09/2026 : "l'écart doit apparaître sur la ligne du mois suivant... et être
+  // intégré au total commandé" — jusqu'ici, calculerEcartRegularisationTickets ne servait qu'à
+  // proposer un bouton "Régulariser" sur la ligne du mois DÉJÀ commandé ; l'écart du mois précédent
+  // est désormais replié automatiquement dans le calcul de CE mois, visible dans le détail, sans
+  // action manuelle requise. Un seul mois en arrière (pas de chaîne remontée explicitement) : si M-1
+  // a lui-même intégré la régularisation de M-2, cette valeur est déjà comprise dans son propre
+  // nbTickets, donc dans l'écart recalculé ici — rien à répéter.
+  const moisPrecedent = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
+  const regularisationMoisPrecedent = calculerEcartRegularisationTickets(
+    employee, moisPrecedent.year, moisPrecedent.month, leaveRequests, teleworkRequests, settings
+  );
 
   // Correction manuelle (§ CORRIGER_TICKETS_RESTAURANT) : ex. jour férié local non reconnu par le
   // calcul standard, déplacement professionnel sans droit à ticket... Remplace, n'ajoute pas, une
   // éventuelle correction précédente pour ce même mois — voir DB.ajusterTicketsRestaurant().
   const ajustement = (employee.ticketsAjustements && employee.ticketsAjustements[ticketsMonthKey(year, month)]) || 0;
-  nbTickets = Math.max(0, nbTickets + ajustement);
+  const nbTickets = Math.max(0, theorique + (regularisationMoisPrecedent ? regularisationMoisPrecedent.ecart : 0) + ajustement);
 
   const montantTotal = round2(nbTickets * settings.ticketsValeurFaciale);
   const partEmployeur = round2(montantTotal * settings.ticketsPartEmployeurPct / 100);
   const partSalarie = round2(montantTotal - partEmployeur);
-  return { nbTickets, montantTotal, partEmployeur, partSalarie, ajustement };
+  return {
+    nbTickets, montantTotal, partEmployeur, partSalarie, ajustement,
+    joursOuvres, joursFeriesFermetures, joursAbsences, theorique, regularisationMoisPrecedent
+  };
 }
 
 /** §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois

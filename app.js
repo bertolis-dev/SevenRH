@@ -18670,7 +18670,19 @@ function renderParametresListes() {
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
         </div>
+        <div class="form-field">
+          <label for="f-tickets-distribution">Distribution des titres</label>
+          <select class="input" id="f-tickets-distribution">
+            <option value="fin" ${settings.ticketsDistribution === 'fin' ? 'selected' : ''}>En fin de mois</option>
+            <option value="debut" ${settings.ticketsDistribution === 'debut' ? 'selected' : ''}>En début de mois</option>
+          </select>
+        </div>
       </div>
+      <!-- §retour Betty du 22/09/2026 (défaut 1.1) : le calcul reste toujours celui du mois complet
+           dans les deux cas — ce réglage documente juste la pratique de l'entreprise, pour que la
+           régularisation automatique (voir calculateTicketsRestaurant) ait un sens visible à la
+           lecture de l'écran mensuel, jamais un calcul distinct selon la valeur choisie ici. -->
+      <p class="text-muted" style="margin-top: 10px;">En fin de mois, la commande attend que le mois soit presque écoulé (peu de régularisation à prévoir). En début de mois, la commande part d'avance sur le mois entier avec les absences déjà connues, et la régularisation du mois suivant absorbe l'écart.</p>
       <!-- §tour de bugs du 07/09/2026 : le plafond d'exonération URSSAF n'était vérifié QUE dans le
            simulateur public de la page d'accueil (valeurs de démonstration), jamais avec les vrais
            réglages de l'entreprise qui alimentent calculateTicketsRestaurant (data.js) — une
@@ -18858,6 +18870,13 @@ function bindParametresListesEvents() {
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
+  const ticketsDistributionField = document.getElementById('f-tickets-distribution');
+  if (ticketsDistributionField) ticketsDistributionField.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.ticketsDistribution = e.target.value;
+    settingsRepository.saveSettings(settings);
+    showToast('Réglage mis à jour.');
+  });
   // §tour de bugs du 07/09/2026 : avertissement (jamais un blocage, même principe que les plafonds
   // par catégorie de Notes de frais) si les VRAIS réglages dépassent le plafond d'exonération URSSAF.
   const ticketsValeurEl = document.getElementById('f-tickets-valeur');
@@ -24065,7 +24084,7 @@ function renderMesTicketsRestaurant() {
     </div>
 
     <div class="kpi-grid">
-      ${kpiCard('Jours éligibles', result.nbTickets, ICONS.calendar)}
+      ${kpiCard('Jours éligibles', result.theorique, ICONS.calendar)}
       ${kpiCard('Tickets attribués', result.nbTickets, ICONS.utensils)}
       ${kpiCard('Valeur unitaire', formatCurrencyFR(settings.ticketsValeurFaciale), ICONS.coin)}
       ${kpiCard('Montant total', formatCurrencyFR(result.montantTotal), ICONS.coin)}
@@ -24073,9 +24092,20 @@ function renderMesTicketsRestaurant() {
       ${kpiCard('Part salarié', formatCurrencyFR(result.partSalarie), ICONS.person)}
     </div>
 
+    <details class="collapsible-panel" style="margin-top: 12px;">
+      <summary class="text-muted">Détail du calcul</summary>
+      <p class="text-muted" style="margin: 6px 0 0;">${renderTicketsDetailText(result, year, month)}</p>
+    </details>
+
+    ${result.regularisationMoisPrecedent ? `
+      <div class="card" style="margin-top: 12px;">
+        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation automatique de ${MONTH_NAMES[month === 0 ? 11 : month - 1]} : <strong>${result.regularisationMoisPrecedent.ecart >= 0 ? '+' : ''}${result.regularisationMoisPrecedent.ecart} ticket${Math.abs(result.regularisationMoisPrecedent.ecart) > 1 ? 's' : ''}</strong> (${result.regularisationMoisPrecedent.commande} commandés ce mois-là, ${result.regularisationMoisPrecedent.actuel} calculés depuis).</p>
+      </div>
+    ` : ''}
+
     ${result.ajustement ? `
       <div class="card" style="margin-top: 12px;">
-        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation appliquée ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? `, ${escapeHtml(regularisation)}` : ''}</p>
+        <p style="margin: 0;">${icon(ICONS.scale, 14)} Correction manuelle ce mois : <strong>${result.ajustement >= 0 ? '+' : ''}${result.ajustement} ticket${Math.abs(result.ajustement) > 1 ? 's' : ''}</strong>${regularisation ? `, ${escapeHtml(regularisation)}` : ''}</p>
       </div>
     ` : ''}
 
@@ -24192,7 +24222,7 @@ function renderTicketsEquipe() {
     <div class="view-header view-header-row">
       <div>
         <h1>Tickets restaurant</h1>
-        <p class="view-subtitle">${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur)</p>
+        <p class="view-subtitle">${MONTH_NAMES[state.ticketsMonth]} ${state.ticketsYear} · valeur faciale ${formatCurrencyFR(settings.ticketsValeurFaciale)} (${formatPercentFR(settings.ticketsPartEmployeurPct)} employeur) · distribution en ${settings.ticketsDistribution === 'debut' ? 'début' : 'fin'} de mois</p>
       </div>
       <div class="detail-header-actions">
         <button class="btn btn-secondary btn-sm" id="btn-tickets-prev">← Précédent</button>
@@ -24218,16 +24248,22 @@ function renderTicketsEquipe() {
 
     <div class="card table-card">
       <table class="table mobile-cards">
-        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th><th></th>${canCorriger ? '<th></th>' : ''}</tr></thead>
+        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
               <td class="row-title" data-label="Salarié">${personNameHtml(r.employee)}${r.entreeDansLeMois ? ` <span class="badge badge-info">Entrée ${formatDate(r.entreeDansLeMois)}</span>` : ''}${r.sortieDansLeMois ? ` <span class="badge badge-muted">Sortie ${formatDate(r.sortieDansLeMois)}</span>` : ''}</td>
-              <td class="cell-numeric" data-label="Tickets">${r.result.nbTickets}${r.result.ajustement ? ` <span class="text-muted">(correction ${r.result.ajustement >= 0 ? '+' : ''}${r.result.ajustement})</span>` : ''}</td>
+              <td class="cell-numeric" data-label="Tickets">
+                ${r.result.nbTickets}
+                <details class="collapsible-panel" style="margin-top: 4px;">
+                  <summary class="text-muted" style="font-size: 12px;">Détail</summary>
+                  <p class="text-muted" style="font-size: 12px; margin: 4px 0 0; text-align: left;">${renderTicketsDetailText(r.result, state.ticketsYear, state.ticketsMonth)}</p>
+                </details>
+                ${r.ecartRegularisation ? `<div class="text-muted" style="font-size: 12px;" title="${r.ecartRegularisation.commande} commandés, ${r.ecartRegularisation.actuel} calculés maintenant.">${icon(ICONS.warningTriangle, 11)} ${r.ecartRegularisation.ecart >= 0 ? '+' : ''}${r.ecartRegularisation.ecart} depuis la commande, sera repris le mois suivant</div>` : ''}
+              </td>
               <td class="cell-numeric" data-label="Montant total">${formatCurrencyFR(r.result.montantTotal)}</td>
               <td class="cell-numeric" data-label="Part employeur">${formatCurrencyFR(r.result.partEmployeur)}</td>
               <td class="cell-numeric" data-label="Part salarié">${formatCurrencyFR(r.result.partSalarie)}</td>
-              <td>${r.ecartRegularisation && canCorriger ? `<button class="btn-link" data-regulariser-auto-tickets="${r.employee.id}" data-ecart="${r.ecartRegularisation.ecart}" title="Une absence déclarée après la commande change le calcul : ${r.ecartRegularisation.commande} commandés, ${r.ecartRegularisation.actuel} calculés maintenant.">${icon(ICONS.warningTriangle, 12)} Régulariser (${r.ecartRegularisation.ecart >= 0 ? '+' : ''}${r.ecartRegularisation.ecart})</button>` : ''}</td>
               ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
@@ -24237,17 +24273,36 @@ function renderTicketsEquipe() {
   `;
 }
 
+/** §retour Betty du 22/09/2026 (défaut 1.1, "pour que le chiffre soit vérifiable") : même texte de
+ * détail réutilisé par la vue équipe (renderTicketsEquipe) et la vue personnelle
+ * (renderMesTicketsRestaurant) — jamais deux formulations différentes pour la même formule. */
+function renderTicketsDetailText(result, year, month) {
+  const moisPrecedentIndex = month === 0 ? 11 : month - 1;
+  const parts = [
+    `${result.joursOuvres} jour${result.joursOuvres > 1 ? 's' : ''} ouvré${result.joursOuvres > 1 ? 's' : ''}`,
+    `− ${result.joursFeriesFermetures} férié${result.joursFeriesFermetures > 1 ? 's' : ''}/fermeture${result.joursFeriesFermetures > 1 ? 's' : ''}`,
+    `− ${result.joursAbsences} congé${result.joursAbsences > 1 ? 's' : ''}`
+  ];
+  if (result.regularisationMoisPrecedent) {
+    parts.push(`${result.regularisationMoisPrecedent.ecart >= 0 ? '+' : ''}${result.regularisationMoisPrecedent.ecart} (régularisation ${MONTH_NAMES[moisPrecedentIndex]})`);
+  }
+  if (result.ajustement) {
+    parts.push(`${result.ajustement >= 0 ? '+' : ''}${result.ajustement} (correction manuelle)`);
+  }
+  return `${parts.join(' ')} = ${result.nbTickets} titre${result.nbTickets > 1 ? 's' : ''}`;
+}
+
 /** `deltaSuggere` (§retour Betty du 14/09/2026, point 3, "régularisation automatique... proposée")
  * : pré-remplit le champ avec l'écart détecté par calculerEcartRegularisationTickets plutôt que la
  * correction actuelle — RH garde la main (motif toujours obligatoire, formulaire inchangé), jamais
  * une écriture silencieuse. Sans ce paramètre, comportement identique à avant ce correctif. */
-function openCorrigerTicketsModal(employeeId, deltaSuggere) {
+function openCorrigerTicketsModal(employeeId) {
   const employee = employeeRepository.getById(employeeId);
   if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
   const year = state.ticketsYear;
   const month = state.ticketsMonth;
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const current = deltaSuggere != null ? deltaSuggere : ((employee.ticketsAjustements && employee.ticketsAjustements[monthKey]) || 0);
+  const current = (employee.ticketsAjustements && employee.ticketsAjustements[monthKey]) || 0;
 
   const html = `
     <div class="modal modal-small">
@@ -24257,7 +24312,7 @@ function openCorrigerTicketsModal(employeeId, deltaSuggere) {
       </div>
       <form id="corriger-tickets-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} : cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois. Elle remplace la correction précédente pour ce même mois.${deltaSuggere != null ? ' Valeur pré-remplie suggérée automatiquement (absence déclarée après la génération du fichier de commande) : vérifiez avant de valider.' : ''}</p>
+          <p class="text-muted">${personNameHtml(employee)} : cette correction s'ajoute (ou se retranche, si négative) au calcul automatique pour ce mois, en plus de la régularisation déjà reprise automatiquement du mois précédent (voir le détail sur la ligne). Elle remplace la correction précédente pour ce même mois.</p>
           <div class="form-field">
             <label for="f-delta">Correction (tickets, nombre entier, + ou -) *</label>
             <input class="input" type="number" id="f-delta" name="delta" step="1" value="${current}" required>
@@ -24313,9 +24368,6 @@ function bindTicketsEquipeEvents() {
 
   document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
     btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.corrigerTickets));
-  });
-  document.querySelectorAll('[data-regulariser-auto-tickets]').forEach(btn => {
-    btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.regulariserAutoTickets, Number(btn.dataset.ecart)));
   });
 }
 

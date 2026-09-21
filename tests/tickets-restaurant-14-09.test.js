@@ -3,6 +3,15 @@
  * commande mensuel (point 1), suivi des bénéficiaires entrée/sortie (point 2), régularisation
  * automatique proposée si une absence est déclarée après la commande (point 3), et rappel du
  * plafond d'exonération URSSAF déjà existant, désormais visible sur l'écran mensuel (point 4).
+ *
+ * §retour Betty du 22/09/2026 (défaut 1.1, "les tickets restaurant ne peuvent pas être commandés") :
+ * calculateTicketsRestaurant s'arrêtait au jour courant ("jour pas encore travaillé") — un compteur
+ * de jours déjà écoulés, jamais un nombre de titres à commander pour le mois entier. Un mois
+ * entièrement futur (le cas réel d'une commande passée d'avance) rendait systématiquement zéro. Le
+ * calcul porte désormais toujours sur le mois complet ; la régularisation du mois précédent (point 3
+ * ci-dessus) est désormais repliée AUTOMATIQUEMENT dans le calcul du mois suivant (jamais une
+ * suggestion à valider manuellement) — remplace le test "valeur suggérée pré-remplie" ci-dessous,
+ * devenu sans objet puisque openCorrigerTicketsModal ne reçoit plus de delta suggéré.
  */
 const assert = require('assert');
 const { loadDataJs } = require('./load-data-js');
@@ -53,10 +62,10 @@ async function runPures() {
     assert.strictEqual(ecartApres, null, 'une fois le calcul aligné sur ce qui a été commandé, la suggestion doit disparaître');
   }
 
-  // ---- La valeur suggérée est bien celle transmise à la modale de correction (RH garde la main,
-  // jamais une écriture automatique silencieuse) ----
+  // ---- La modale de correction manuelle reste disponible, sans aucun delta suggéré (désormais
+  // repris automatiquement par le calcul du mois suivant, voir plus bas) ----
   {
-    const { DB, sandbox, openCorrigerTicketsModal, employeeRepository, state } = loadAppJs();
+    const { DB, sandbox, openCorrigerTicketsModal, state } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -64,13 +73,76 @@ async function runPures() {
     const salarie = DB.getEmployees().find(e => e.role === 'salarie');
     state.ticketsYear = 2026;
     state.ticketsMonth = 2;
-    openCorrigerTicketsModal(salarie.id, -7);
+    openCorrigerTicketsModal(salarie.id);
     const html = sandbox.document.getElementById('modal-root').innerHTML;
-    assert.ok(html.includes('value="-7"'), 'la valeur suggérée doit pré-remplir le champ de correction, jamais s\'appliquer toute seule');
-    assert.ok(html.includes('pré-remplie suggérée automatiquement'), 'un message doit expliquer que RH doit vérifier avant de valider');
+    assert.ok(html.includes('id="f-delta"'), 'le champ de correction manuelle doit toujours exister');
+    assert.ok(!html.includes('pré-remplie suggérée automatiquement'), 'plus de pré-remplissage automatique : la régularisation se fait désormais sur le mois suivant, sans validation manuelle');
   }
 
-  console.log('OK — tickets-restaurant-14-09.test.js (régularisation automatique : détectée si absence tardive, disparaît une fois corrigée)');
+  console.log('OK — tickets-restaurant-14-09.test.js (régularisation détectée si absence tardive, disparaît une fois corrigée, modale de correction manuelle toujours disponible)');
+}
+
+async function runCalculPorteToujoursSurLeMoisComplet() {
+  const { calculateTicketsRestaurant } = loadDataJs();
+  const employee = {
+    id: 'e1', joursTravailles: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'], dateEmbauche: '2020-01-01',
+    ticketsCommandesEnregistrees: {}, ticketsAjustements: {}
+  };
+  const settings = { ticketsValeurFaciale: 9, ticketsPartEmployeurPct: 60, ticketsInclureTeletravail: true };
+
+  // §défaut 1.1 : un mois ENTIÈREMENT futur (2030, forcément après "aujourd'hui" au moment où ce
+  // test tourne) doit donner le vrai compte de jours ouvrés du mois, jamais zéro — c'est exactement
+  // le cas réel signalé ("le fichier de commande sort vide" pour le mois à venir).
+  const octobre2030 = calculateTicketsRestaurant(employee, 2030, 9, [], [], settings); // octobre : 23 jours ouvrés (Lun-Ven)
+  assert.strictEqual(octobre2030.nbTickets, 23, 'un mois entièrement futur doit compter tous ses jours ouvrés, jamais zéro');
+  assert.strictEqual(octobre2030.joursOuvres, 23);
+  assert.strictEqual(octobre2030.joursFeriesFermetures, 0);
+  assert.strictEqual(octobre2030.joursAbsences, 0);
+  assert.strictEqual(octobre2030.theorique, 23);
+
+  // Un congé validé sur un mois futur doit bien réduire le compte (le calcul futur n'ignore pas les
+  // données déjà connues à la date de commande, il ignore seulement la date du jour).
+  const congeOctobre2030 = [{ employeeId: 'e1', statut: 'Validé', dateDebut: '2030-10-07', dateFin: '2030-10-11', demiJournee: null }]; // une semaine complète, Lun-Ven
+  const octobreAvecConge = calculateTicketsRestaurant(employee, 2030, 9, congeOctobre2030, [], settings);
+  assert.strictEqual(octobreAvecConge.joursAbsences, 5);
+  assert.strictEqual(octobreAvecConge.nbTickets, 18, '23 jours ouvrés moins 5 jours de congé validé sur le mois');
+
+  console.log('OK — tickets-restaurant-14-09.test.js (le calcul porte toujours sur le mois complet, jamais seulement les jours déjà écoulés)');
+}
+
+async function runRegularisationRepliesAutomatiquementDansLeMoisSuivant() {
+  const { DB, sandbox, employeeRepository, leaveTypeRepository, genererFichierCommandeTickets, leaveRepository, calculateTicketsRestaurant, state } = loadAppJs();
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+  const rh = DB.getEmployees().find(e => e.role === 'rh');
+  DB._currentEmployeeId = rh.id;
+  const salarie = DB.getEmployees().find(e => e.role === 'salarie');
+  sandbox.exportRowsToCSV = () => {};
+
+  // Commande passée pour septembre 2030 (aucune absence connue à cet instant) : snapshot enregistré.
+  state.ticketsYear = 2030;
+  state.ticketsMonth = 8; // septembre
+  genererFichierCommandeTickets();
+  const employeeApresCommande = employeeRepository.getById(salarie.id);
+  const commandeSeptembre = employeeApresCommande.ticketsCommandesEnregistrees['2030-09'];
+  assert.ok(commandeSeptembre > 0, 'la commande de septembre doit avoir été enregistrée');
+
+  // Une absence est déclarée APRÈS la commande, sur septembre — le calcul réel de septembre baisse.
+  await leaveRepository.create({ employeeId: salarie.id, typeId: leaveTypeRepository.getLeaveTypes()[0].id, dateDebut: '2030-09-02', dateFin: '2030-09-06', nbJours: 5 });
+
+  // §retour Betty du 22/09/2026 : l'écart doit apparaître SUR LA LIGNE DU MOIS SUIVANT (octobre),
+  // intégré au total commandé — jamais seulement un bouton à cliquer sur la ligne de septembre.
+  const resultatOctobre = calculateTicketsRestaurant(employeeRepository.getById(salarie.id), 2030, 9, leaveRepository.getAll(), [], DB.getSettings());
+  assert.ok(resultatOctobre.regularisationMoisPrecedent, 'octobre doit porter la régularisation de septembre, automatiquement');
+  assert.strictEqual(resultatOctobre.regularisationMoisPrecedent.commande, commandeSeptembre);
+  assert.ok(resultatOctobre.regularisationMoisPrecedent.ecart < 0, 'une absence en plus sur septembre doit produire un écart négatif');
+  assert.strictEqual(
+    resultatOctobre.nbTickets,
+    resultatOctobre.theorique + resultatOctobre.regularisationMoisPrecedent.ecart,
+    'la régularisation doit être intégrée au total commandé d\'octobre, sans action manuelle'
+  );
+
+  console.log('OK — tickets-restaurant-14-09.test.js (la régularisation du mois précédent se replie automatiquement dans le mois suivant, sans validation manuelle)');
 }
 
 async function runUi() {
@@ -131,8 +203,12 @@ async function runUi() {
   console.log('OK — tickets-restaurant-14-09.test.js (bénéficiaires entrée/sortie, fichier de commande avec snapshot, rappel du plafond sur l\'écran mensuel)');
 }
 
-runPures().then(runUi).catch((err) => {
-  console.error('ÉCHEC — tickets-restaurant-14-09.test.js');
-  console.error(err.stack || err.message);
-  process.exitCode = 1;
-});
+runPures()
+  .then(runUi)
+  .then(runCalculPorteToujoursSurLeMoisComplet)
+  .then(runRegularisationRepliesAutomatiquementDansLeMoisSuivant)
+  .catch((err) => {
+    console.error('ÉCHEC — tickets-restaurant-14-09.test.js');
+    console.error(err.stack || err.message);
+    process.exitCode = 1;
+  });
