@@ -26655,39 +26655,26 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
           ${renderEmployeeFormTabs(renderConfidentialEmployeeFieldset(employee, settings, isEdit) !== '')}
           <fieldset class="form-section" id="employee-form-section-identite" data-employee-tab-panel="identite">
             <legend>Identité</legend>
+            <!-- §retour Betty du 22/09/2026 (point 2.4) : "Identité" mélangeait état civil et
+                 coordonnées dans une seule liste de champs, sans distinction visuelle — deux
+                 sous-sections plutôt qu'un nouvel onglet (même panneau/même validation de tab,
+                 aucun champ ne change de portée). -->
+            <p class="form-subsection-title">État civil</p>
             <div class="form-grid">
               <div class="form-field">
-                <label for="f-sexe">Sexe (état civil) *</label>
+                <label for="f-sexe">Sexe (état civil) *${fieldHelpIcon('Obligatoire : alimente le registre unique du personnel, la DSN et l\'index de l\'égalité professionnelle.')}</label>
                 <select class="input" id="f-sexe" name="sexe" required>
                   <option value="" ${!employee.sexe ? 'selected' : ''}>—</option>
                   <option value="Homme" ${employee.sexe === 'Homme' ? 'selected' : ''}>Homme</option>
                   <option value="Femme" ${employee.sexe === 'Femme' ? 'selected' : ''}>Femme</option>
                 </select>
-                <p class="form-hint">Obligatoire : alimente le registre unique du personnel, la DSN et l'index de l'égalité professionnelle.</p>
               </div>
               ${selectField('civilite', 'Civilité d\'usage', null, employee.civilite, [{ value: 'Madame', label: 'Madame' }, { value: 'Monsieur', label: 'Monsieur' }, { value: 'ne_pas_accorder', label: 'Ne pas accorder' }], 'Optionnelle : accorde l\'affichage et les documents (attestations, certificat de travail...). Sans choix, déduite du sexe à l\'état civil ci-contre.')}
               ${textField('prenom', 'Prénom', employee.prenom, true)}
-              ${textField('nom', 'Nom', employee.nom, true)}
-              ${textField('nomUsage', 'Nom d\'usage', employee.nomUsage, false, 'text', 'any', 'Nom sous lequel le salarié souhaite être identifié au quotidien (mariage, usage personnel...), distinct du nom légal ci-dessus. Jamais utilisé sur un document officiel (registre, paie, DSN).')}
-              <div class="form-field">
-                <label for="f-email">Email *</label>
-                <input class="input" type="email" id="f-email" name="email" value="${escapeHtml(employee.email || '')}" required
-                  data-check-duplicate-email="true" data-exclude-id="${escapeHtml(employee.id || '')}">
-                <span class="field-warning" id="f-email-duplicate-warning">${icon(ICONS.warningTriangle, 13)} Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
+              <div class="form-field-pair">
+                ${textField('nom', 'Nom de naissance', employee.nom, true)}
+                ${textField('nomUsage', 'Nom d\'usage', employee.nomUsage, false, 'text', 'any', 'Nom sous lequel le salarié souhaite être identifié au quotidien (mariage, usage personnel...), distinct du nom de naissance ci-contre. Jamais utilisé sur un document officiel (registre, paie, DSN).')}
               </div>
-              ${!isEdit && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS) ? `
-                <div class="form-field">
-                  <label for="f-role">Rôle *</label>
-                  <select class="input" id="f-role" name="role" required>
-                    ${Object.values(ROLES).filter(r => r !== ROLES.PROPRIETAIRE).map(r => `<option value="${r}" ${r === 'salarie' ? 'selected' : ''}>${escapeHtml(ROLE_LABELS[r])}</option>`).join('')}
-                  </select>
-                  <p class="form-hint">Détermine ses droits dans l'application ("Poste" ci-dessous n'est qu'un intitulé, sans effet sur les accès). Modifiable ensuite depuis sa fiche, carte "Compte".</p>
-                </div>
-              ` : ''}
-              ${textField('telephone', 'Téléphone', employee.telephone)}
-              ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
-              ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
-              ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
               <div class="form-field">
                 <label for="f-dateNaissance">Date de naissance</label>
                 <input class="input" type="date" id="f-dateNaissance" name="dateNaissance" value="${escapeHtml(employee.dateNaissance || '')}" data-live-age="true">
@@ -26696,6 +26683,30 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${textField('lieuNaissance', 'Lieu de naissance', employee.lieuNaissance)}
               ${textField('nationalite', 'Nationalité', employee.nationalite)}
               ${textField('numeroSecu', 'N° sécurité sociale', employee.numeroSecu)}
+            </div>
+
+            <p class="form-subsection-title">Adresse et coordonnées</p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="f-email">Email *</label>
+                <input class="input" type="email" id="f-email" name="email" value="${escapeHtml(employee.email || '')}" required
+                  data-check-duplicate-email="true" data-exclude-id="${escapeHtml(employee.id || '')}">
+                <span class="field-warning" id="f-email-duplicate-warning">${icon(ICONS.warningTriangle, 13)} Cet email est déjà utilisé par un autre salarié de l'entreprise.</span>
+              </div>
+              ${textField('telephone', 'Téléphone', employee.telephone)}
+              ${!isEdit && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_UTILISATEURS) ? `
+                <div class="form-field">
+                  <label for="f-role">Rôle *${fieldHelpIcon('Détermine ses droits dans l\'application ("Poste" n\'est qu\'un intitulé, sans effet sur les accès). Modifiable ensuite depuis sa fiche, carte "Compte".')}</label>
+                  <select class="input" id="f-role" name="role" required>
+                    ${Object.values(ROLES).filter(r => r !== ROLES.PROPRIETAIRE).map(r => `<option value="${r}" ${r === 'salarie' ? 'selected' : ''}>${escapeHtml(ROLE_LABELS[r])}</option>`).join('')}
+                  </select>
+                </div>
+              ` : ''}
+              ${addressAutocompleteField('adresse.rue', 'Adresse', employee.adresse.rue, 'adresse.codePostal', 'adresse.ville')}
+              <div class="form-field-pair">
+                ${textField('adresse.codePostal', 'Code postal', employee.adresse.codePostal)}
+                ${textField('adresse.ville', 'Ville', employee.adresse.ville)}
+              </div>
             </div>
           </fieldset>
 

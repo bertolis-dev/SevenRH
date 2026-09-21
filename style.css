@@ -839,6 +839,23 @@ p { margin: 0; line-height: 1.5; }
   gap: 16px;
 }
 
+/* §retour Betty du 22/09/2026 (point 2.4, "Modifier le salarié") : deux champs qui se lisent
+   ensemble (nom de naissance/nom d'usage, code postal/ville) doivent rester visuellement côte à
+   côte, quel que soit le nombre de colonnes que .form-grid retient selon la largeur disponible —
+   un simple ordre de champs consécutifs ne le garantit pas (ils peuvent tomber sur des lignes
+   différentes dès que le nombre de colonnes change). span 2 les regroupe dans le même bloc, plus
+   large qu'un champ isolé mais bien plus étroit qu'une pleine ligne (jamais la largeur démesurée
+   d'un champ "Adresse" pour un simple code postal). */
+.form-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  grid-column: span 2;
+}
+@media (max-width: 480px) {
+  .form-field-pair { grid-column: span 1; grid-template-columns: 1fr; }
+}
+
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--color-text-muted); }
 
