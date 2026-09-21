@@ -2567,7 +2567,14 @@ function renderLandingScreen() {
       <section class="landing-section" id="landing-fonctionnalites">
         <div class="landing-section-head">
           <h2>Tout ce qu'il faut, rien de superflu</h2>
-          <p>Toutes les fonctionnalités sont incluses dans chaque offre, seul le nombre de salariés change.</p>
+          <!-- §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application et le site") :
+               trouvé en parcourant réellement le site vitrine dans le navigateur — ce sous-titre
+               datait de l'ancien modèle d'offres classiques (essentiel/professionnel/premium,
+               "toutes les fonctionnalités incluses, seul l'effectif change") et n'avait jamais été
+               mis à jour au passage à l'à la carte, en contradiction directe avec le reste de CETTE
+               MÊME page (le repère "9 Modules à la carte" juste au-dessus, le simulateur de prix par
+               module plus bas, et le tableau comparatif "Tarification : à la carte"). -->
+          <p>Chaque module se souscrit séparément : n'activez que ce dont votre équipe a besoin, ajoutez ou retirez-en à tout moment.</p>
         </div>
         <div class="landing-features-grid">
           ${LANDING_FEATURES.map((f, i) => `
