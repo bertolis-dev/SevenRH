@@ -12317,6 +12317,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
       </div>
 
       ${renderConfidentialEmployeeCard(e, user)}
+      ${renderEnfantsCard(e, user)}
     </div>
   `;
 }
@@ -13034,6 +13035,119 @@ function bindMenusAutorisesCardEvents(employeeId) {
  * (une estimation de gestion interne, qui ne figure sur aucun bulletin) ni l'historique/ses motifs
  * (un motif de révision peut contenir une appréciation RH interne, ex. le motif d'un refus
  * d'augmentation) : ces deux-là restent réservés à qui a la permission. */
+/** §retour Betty du 22/09/2026 (point 3.2, "bloc Enfants") : prénom + date de naissance
+ * uniquement (minimisation des données, voir makeEmptyEmployee) — alimente aujourd'hui la
+ * bonification automatique du congé "Enfant malade" (getEnfantMaladeBonus, data.js), et prévu pour
+ * de futurs usages (congé de naissance, jours de garde). Même portée d'accès que le Confidentiel
+ * ci-dessous (VOIR_INFOS_FINANCIERES, avec la même exception "soi-même") : des données
+ * personnelles sur des tiers mineurs n'ont pas à être plus exposées que le salaire du salarié
+ * lui-même. */
+function renderEnfantsCard(e, user) {
+  const isSelf = user.id === e.id;
+  if (!isSelf && !hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES)) return '';
+  const canEdit = isSelf || hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
+  const enfants = (e.enfants || []).slice().sort((a, b) => (a.dateNaissance || '').localeCompare(b.dateNaissance || ''));
+  return `
+    <div class="card">
+      <div class="view-header-row">
+        <h2>Enfants</h2>
+        ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-add-enfant">+ Ajouter</button>` : ''}
+      </div>
+      <p class="text-muted" style="margin: 0 0 10px;">Prénom et date de naissance uniquement, utilisés pour la bonification légale du congé "Enfant malade" (recalculée chaque année, jamais figée), et pour de futurs usages (congé de naissance, jours de garde).</p>
+      ${enfants.length === 0 ? '<p class="text-muted">Aucun enfant renseigné.</p>' : `
+        <div class="mini-list">
+          ${enfants.map(enfant => {
+            const age = calculateAge(enfant.dateNaissance);
+            return `
+            <div class="mini-list-item">
+              <span>${escapeHtml(enfant.prenom)} · né(e) le ${formatDate(enfant.dateNaissance)}${age !== null ? ` (${age} an${age > 1 ? 's' : ''})` : ''}</span>
+              ${canEdit ? `
+                <span>
+                  <button type="button" class="btn-link" data-edit-enfant="${escapeHtml(enfant.id)}">Modifier</button>
+                  <button type="button" class="btn-link btn-link-danger" data-delete-enfant="${escapeHtml(enfant.id)}" data-prenom="${escapeHtml(enfant.prenom)}">Supprimer</button>
+                </span>
+              ` : ''}
+            </div>
+          `; }).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function openEnfantModal(employeeId, enfantId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const existing = enfantId ? (employee.enfants || []).find(en => en.id === enfantId) : null;
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${existing ? 'Modifier' : 'Ajouter'} un enfant</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="enfant-form">
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="f-enfant-prenom">Prénom *</label>
+            <input class="input" type="text" id="f-enfant-prenom" value="${escapeHtml(existing ? existing.prenom : '')}" required>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-enfant-date-naissance">Date de naissance *</label>
+            <input class="input" type="date" id="f-enfant-date-naissance" value="${escapeHtml(existing ? existing.dateNaissance : '')}" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Enregistrer' : 'Ajouter'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('enfant-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const prenom = document.getElementById('f-enfant-prenom').value.trim();
+    const dateNaissance = document.getElementById('f-enfant-date-naissance').value;
+    if (!prenom || !dateNaissance) return;
+    const current = employeeRepository.getById(employeeId);
+    if (!current) { showToast('Ce salarié n\'est plus disponible.', 'error'); closeModal(); return; }
+    const enfant = { id: existing ? existing.id : generateId('enfant'), prenom, dateNaissance };
+    const enfants = existing
+      ? (current.enfants || []).map(en => en.id === existing.id ? enfant : en)
+      : [...(current.enfants || []), enfant];
+    employeeRepository.update(employeeId, { enfants });
+    auditLogRepository.logAudit(existing ? 'Modification' : 'Création', 'Enfant', `${current.prenom} ${current.nom}`, prenom);
+    closeModal();
+    showToast(existing ? 'Enfant modifié.' : 'Enfant ajouté.');
+    render();
+  });
+}
+
+function deleteEnfant(employeeId, enfantId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) return;
+  const enfant = (employee.enfants || []).find(en => en.id === enfantId);
+  if (!enfant) return;
+  openConfirm({
+    title: 'Retirer cet enfant ?',
+    message: `${enfant.prenom} sera retiré(e) de la fiche. Peut affecter le calcul de la bonification du congé "Enfant malade".`,
+    confirmLabel: 'Retirer',
+    danger: true,
+    onConfirm: () => {
+      const current = employeeRepository.getById(employeeId);
+      if (!current) return;
+      employeeRepository.update(employeeId, { enfants: (current.enfants || []).filter(en => en.id !== enfantId) });
+      auditLogRepository.logAudit('Suppression', 'Enfant', `${current.prenom} ${current.nom}`, enfant.prenom);
+      showToast('Enfant retiré.');
+      render();
+    }
+  });
+}
+
 function renderConfidentialEmployeeCard(e, user) {
   const settings = settingsRepository.getSettings();
   if (!settings.masseSalarialeActivee) return '';
@@ -13717,6 +13831,15 @@ function bindEmployeeDetailEvents() {
   });
   document.querySelectorAll('[data-delete-visite-medicale]').forEach(btn => {
     btn.addEventListener('click', () => deleteVisiteMedicale(state.currentEmployeeId, btn.dataset.deleteVisiteMedicale));
+  });
+
+  const ajouterEnfantBtn = document.getElementById('btn-add-enfant');
+  if (ajouterEnfantBtn) ajouterEnfantBtn.addEventListener('click', () => openEnfantModal(state.currentEmployeeId));
+  document.querySelectorAll('[data-edit-enfant]').forEach(btn => {
+    btn.addEventListener('click', () => openEnfantModal(state.currentEmployeeId, btn.dataset.editEnfant));
+  });
+  document.querySelectorAll('[data-delete-enfant]').forEach(btn => {
+    btn.addEventListener('click', () => deleteEnfant(state.currentEmployeeId, btn.dataset.deleteEnfant));
   });
 
   const avenantBtn = document.getElementById('btn-ajouter-avenant');

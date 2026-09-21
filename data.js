@@ -5667,6 +5667,14 @@ function makeEmptyEmployee() {
     // [{ id, date, type, conclusion, dateProchaineEcheance, contreVisite, amenagements, commentaire,
     //    pieceJointe, dateCreation, dateModification, auteurId }], le plus récent en premier à l'affichage.
     visitesMedicales: [],
+    // §retour Betty du 22/09/2026 (point 3.2, "bloc Enfants") : [{ id, prenom, dateNaissance }] —
+    // rien d'autre (minimisation des données : prénom + date de naissance suffisent à la seule règle
+    // qui en a besoin aujourd'hui, la bonification "Enfant malade", voir getEnfantMaladeBonus
+    // ci-dessous ; aussi prévu pour un futur congé de naissance/jours de garde, jamais un dossier
+    // enfant complet). Accès aussi restreint que le Confidentiel (VOIR_INFOS_FINANCIERES, voir
+    // renderEnfantsCard, app.js) : ce sont des données personnelles sur des tiers mineurs, pas
+    // seulement sur le salarié lui-même.
+    enfants: [],
     // Checklists d'intégration/de départ (demande du 18/08/2026) : [{ label, fait, dateFait }] —
     // copie du modèle de Paramètres au démarrage, jamais une référence live à ce modèle (voir
     // ensureOnboardingChecklist/startOffboardingChecklist, app.js). onboardingChecklist démarre dès
@@ -7105,6 +7113,33 @@ function getConventionCollectiveCongesAncienneteBonus(employee, leaveType, refDa
   return atteints.length ? atteints[0].joursSupplementaires : 0;
 }
 
+/** §retour Betty du 22/09/2026 (point 3.2, "bloc Enfants") : la bonification légale du congé
+ * "Enfant malade" (3 jours ouvrés, portés à 5 si un enfant a moins d'1 an, OU si le salarié a au
+ * moins 3 enfants de moins de 16 ans à charge — Art. L1225-61) restait documentée comme non
+ * automatisée (voir seedLeaveTypes) faute de données sur les enfants du salarié. employee.enfants
+ * (prénom + date de naissance, voir makeEmptyEmployee) permet désormais ce calcul, avec le même
+ * patron que getConventionCollectiveCongesAncienneteBonus ci-dessus (un bonus ADDITIF, jamais un
+ * remplacement du nombre de jours de base). Recalculé à CHAQUE appel depuis l'âge réel des enfants
+ * à `refDate` — jamais figé une fois attribué : un enfant qui dépasse 1 an ou un salarié dont le 3e
+ * enfant atteint 16 ans reperd la bonification l'année suivante, comme l'exige la loi. */
+function getEnfantMaladeBonus(employee, leaveType, refDate) {
+  if (!leaveTypeNameMatches(leaveType.nom, 'Enfant malade')) return 0;
+  const enfants = employee.enfants || [];
+  if (!enfants.length) return 0;
+  const ages = enfants.map(enfant => {
+    if (!enfant.dateNaissance) return null;
+    const birth = parseISODateLocal(enfant.dateNaissance);
+    if (Number.isNaN(birth.getTime())) return null;
+    let age = refDate.getFullYear() - birth.getFullYear();
+    const monthDiff = refDate.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && refDate.getDate() < birth.getDate())) age -= 1;
+    return age;
+  }).filter(age => age !== null && age >= 0);
+  const unEnfantMoinsDunAn = ages.some(age => age < 1);
+  const troisEnfantsMoinsDe16Ans = ages.filter(age => age < 16).length >= 3;
+  return (unEnfantMoinsDunAn || troisEnfantsMoinsDe16Ans) ? 2 : 0;
+}
+
 /** §correctif retour QA du 27/08/2026 (point 7.16) : nombre de jours calendaires, dans
  * [periodStart, periodEnd], couverts par une demande VALIDÉE d'un type marqué
  * suspendAcquisitionAutresCompteurs (voir makeEmptyLeaveType) — jamais calculé si allRequests/
@@ -7183,7 +7218,7 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride, allR
   // les paliers d'ancienneté génériques de l'entreprise — jamais l'inverse, un salarié sans
   // convention couverte (l'immense majorité) obtient exactement resolveAncienneteAcquisAnnuel comme
   // avant (bonus toujours à 0 dans ce cas).
-  const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now) + getConventionCollectiveCongesAncienneteBonus(employee, leaveType, now);
+  const annualAmount = resolveAncienneteAcquisAnnuel(leaveType, employee, now) + getConventionCollectiveCongesAncienneteBonus(employee, leaveType, now) + getEnfantMaladeBonus(employee, leaveType, now);
 
   // §correctif retour QA du 27/08/2026 (point 7.16, confirmé par l'expert-comptable) : une absence
   // validée d'un type marqué suspendAcquisitionAutresCompteurs réduit le nombre de jours "travaillés"
@@ -8035,12 +8070,10 @@ function seedLeaveTypes() {
       type.description = 'Durée légale par défaut (Art. L3142-4), supplétive. Votre convention collective peut la relever, jamais l\'abaisser. À vérifier avec votre expert-comptable si vous n\'êtes pas certain(e) qu\'elle s\'applique telle quelle à votre situation.';
     }
     if (nom === 'Enfant malade') {
-      // La bonification à 5 jours (enfant de moins d'1 an, ou salarié ayant 3 enfants de moins de
-      // 16 ans) dépend de données sur les ENFANTS du salarié, qu'aucun champ de ce SIRH ne capture
-      // aujourd'hui — l'ajouter serait un nouveau modèle de données, hors périmètre d'un simple jeu
-      // de règles par défaut. Le cas échéant, un RH ajuste manuellement via DB.ajusterCompteurConge
-      // (déjà existant) ; documenté ici plutôt que silencieusement absent.
-      type.description = '3 jours par an, non rémunéré (valeur supplétive légale). Porté à 5 jours si l\'enfant a moins d\'un an ou si le salarié a 3 enfants de moins de 16 ans. Cette bonification n\'est pas automatisée (l\'application ne suit pas les enfants des salariés) : ajustez manuellement le compteur au cas par cas.';
+      // §retour Betty du 22/09/2026 (point 3.2, "bloc Enfants") : la bonification à 5 jours est
+      // désormais automatique, voir getEnfantMaladeBonus (calculée depuis employee.enfants) — ce
+      // type n'a plus besoin d'un ajustement manuel pour ce cas précis.
+      type.description = '3 jours par an, non rémunéré (valeur supplétive légale). Porté automatiquement à 5 jours si un enfant du salarié a moins d\'un an, ou si le salarié a au moins 3 enfants de moins de 16 ans (voir le bloc "Enfants" de la fiche salarié).';
     }
     return type;
   });

@@ -61,6 +61,7 @@ globalThis.__deriveCategoriesSalarieFromStatutPro = deriveCategoriesSalarieFromS
 globalThis.__DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 globalThis.__getDelaiPrevenanceFinEssai = getDelaiPrevenanceFinEssai;
 globalThis.__getConventionCollectiveCongesAncienneteBonus = getConventionCollectiveCongesAncienneteBonus;
+globalThis.__getEnfantMaladeBonus = getEnfantMaladeBonus;
 globalThis.__getConventionCollectiveIdccCode = getConventionCollectiveIdccCode;
 globalThis.__getEffectifActifAt = getEffectifActifAt;
 globalThis.__getSeuilsEffectifStatus = getSeuilsEffectifStatus;
@@ -127,6 +128,7 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
     DEFAULT_SETTINGS: sandbox.__DEFAULT_SETTINGS,
     getDelaiPrevenanceFinEssai: sandbox.__getDelaiPrevenanceFinEssai,
     getConventionCollectiveCongesAncienneteBonus: sandbox.__getConventionCollectiveCongesAncienneteBonus,
+    getEnfantMaladeBonus: sandbox.__getEnfantMaladeBonus,
     getConventionCollectiveIdccCode: sandbox.__getConventionCollectiveIdccCode,
     getEffectifActifAt: sandbox.__getEffectifActifAt,
     getSeuilsEffectifStatus: sandbox.__getSeuilsEffectifStatus,
