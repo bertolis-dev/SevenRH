@@ -19262,9 +19262,10 @@ function renderParametresListes() {
 function renderParametresRH() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Salariés</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-duree-hebdo-reference">Durée hebdomadaire de référence (heures)</label>
           <input class="input" type="number" min="1" step="0.5" id="f-duree-hebdo-reference" value="${escapeHtml(settings.dureeHebdomadaireReferenceHeures)}">
@@ -19323,7 +19324,7 @@ function renderParametresRH() {
     <div class="card">
       <h2>Indicateurs Direction</h2>
       <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Afficher la répartition Hommes / Femmes sur le tableau de bord</label>
           <p class="form-hint">Le sexe (état civil) est désormais un champ obligatoire de la fiche salarié, indépendamment de ce réglage : celui-ci ne contrôle que l'affichage du graphique de répartition sur le tableau de bord Propriétaire.</p>
@@ -19332,6 +19333,7 @@ function renderParametresRH() {
           <label><input type="checkbox" id="f-suivi-age" ${settings.suiviAgeActive ? 'checked' : ''}> Suivre la pyramide des âges</label>
         </div>
       </div>
+    </div>
     </div>
   `;
 }
@@ -19378,10 +19380,11 @@ function bindParametresRHEvents() {
 function renderParametresRemuneration() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Indicateurs Direction</h2>
       <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-masse-salariale" ${settings.masseSalarialeActivee ? 'checked' : ''}> Suivre la masse salariale (salaire brut mensuel par salarié)</label>
         </div>
@@ -19394,7 +19397,7 @@ function renderParametresRemuneration() {
     </div>
     <div class="card">
       <h2>Heures supplémentaires</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
@@ -19405,6 +19408,7 @@ function renderParametresRemuneration() {
           <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
         </div>
       </div>
+    </div>
     </div>
   `;
 }
@@ -19430,9 +19434,10 @@ function bindParametresRemunerationEvents() {
 function renderParametresPlanningTeletravail() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Planning</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
           <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
@@ -19442,13 +19447,14 @@ function renderParametresPlanningTeletravail() {
     </div>
     <div class="card">
       <h2>Télétravail</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-teletravail-quota">Quota de télétravail (jours / semaine)</label>
           <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
         </div>
         ${workflowSelectField('workflow-teletravail', 'Validation requise', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail)}
       </div>
+    </div>
     </div>
   `;
 }
@@ -19470,7 +19476,7 @@ function renderParametresNotesFrais() {
     ${renderCategoriesFraisConfigCard(settings)}
     <div class="card">
       <h2>Validation</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         ${workflowSelectField('workflow-frais', 'Validation requise', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais)}
       </div>
     </div>
@@ -19490,9 +19496,10 @@ function bindParametresNotesFraisEvents() {
 function renderParametresTicketsRestaurant() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Tickets restaurant</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
           <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
@@ -19522,6 +19529,7 @@ function renderParametresTicketsRestaurant() {
            réglages de l'entreprise qui alimentent calculateTicketsRestaurant (data.js) — une
            entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
       <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
+    </div>
     </div>
   `;
 }

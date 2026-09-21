@@ -440,10 +440,19 @@ p { margin: 0; line-height: 1.5; }
 .quality-issue-employees { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .quality-issue-link { font-size: 13px; }
 
+/* §retour Betty du 22/09/2026 ("beaucoup d'espace perdu") et du 19/09/2026 ("là où il y a marqué
+   obligatoire... ça doit être un petit point d'interrogation... l'orange doit rester réservé aux
+   vrais avertissements") : .form-hint portait la couleur d'avertissement alors qu'elle sert, dans
+   ses 53 emplois, à EXPLIQUER un champ, jamais à alerter. Un vrai avertissement a sa propre classe
+   (.field-warning, en gras, masquée tant qu'il n'y a rien à signaler). Ces explications passent
+   donc en gris de texte secondaire, et leur mesure est bornée : elles occupaient jusqu'à quatre
+   lignes pleine largeur sous un seul champ. */
 .form-hint {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
-  color: var(--color-warning);
+  line-height: 1.45;
+  max-width: 70ch;
+  color: var(--color-text-muted);
 }
 .form-hint .btn-link { font-size: 12px; text-decoration: underline; }
 
@@ -692,9 +701,11 @@ p { margin: 0; line-height: 1.5; }
   background: linear-gradient(135deg, var(--color-surface), var(--color-primary-soft) 320%);
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-md);
-  padding: 18px 22px;
+  /* §retour Betty du 22/09/2026 : sur une carte qui ne porte que deux ou trois champs, la marge
+     interne et l'espace sous le titre pesaient plus lourd que le contenu. Resserré sans coller. */
+  padding: 14px 18px;
   box-shadow: var(--shadow-md);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   min-width: 0;
 }
 
@@ -4215,3 +4226,19 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .settings-list-add .input { flex: 1 1 180px; }
 .input-sm { padding: 5px 8px; font-size: 13px; }
+
+/* §retour Betty du 22/09/2026 ("on voit qu'il y a beaucoup d'espace perdu... on ne voit que deux
+   cartouches alors qu'on pourrait facilement en voir plus") : les onglets de Paramètres empilaient
+   leurs cartes d'options sur toute la largeur, une par ligne, alors que chacune ne contient que
+   deux ou trois champs. Sur un écran large, deux cartes remplissaient déjà la hauteur visible.
+   Même grille que .settings-lists-grid : autant de colonnes que la largeur permet, repli naturel
+   en une seule colonne sur écran étroit, sans media query. Une carte qui porte un vrai tableau
+   (jours fériés, fermetures) reste sur toute la largeur via .settings-card-wide. */
+.settings-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.settings-cards-grid > .card { margin-bottom: 0; }
+.settings-card-wide { grid-column: 1 / -1; }
