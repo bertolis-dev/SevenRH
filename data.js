@@ -2463,27 +2463,32 @@ const DB = {
    * suivant — une correction ne doit jamais avoir cet effet de bord). Ne mirore sur les champs à
    * plat de l'employé (source de vérité pour le reste de l'application, voir addContrat) QUE si le
    * contrat corrigé est bien le plus récent : corriger un contrat déjà clos et remplacé depuis ne
-   * doit jamais faire régresser la situation actuelle affichée partout ailleurs. */
+   * doit jamais faire régresser la situation actuelle affichée partout ailleurs.
+   * §correctif revue de bugs du 22/09/2026 : le repli sur les valeurs ACTUELLES de l'employé (voir
+   * plus bas, pour un contrat créé avant le socle enrichi du point 3.1) ne doit jouer que pour CE
+   * MÊME cas — le contrat le plus récent, dont les champs à plat de l'employé proviennent
+   * précisément de lui. Appliqué sans cette garde à un contrat plus ANCIEN (ex. via "Générer un
+   * projet" sur un contrat historique, qui ne soumet que { clauseIds }), il réécrivait
+   * silencieusement le poste/la classification/l'établissement d'un contrat déjà clos avec la
+   * situation ACTUELLE du salarié — falsifiant un historique qui a valeur de registre. */
   corrigerContrat(employeeId, contratId, data) {
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return null;
     const contrats = (employee.contrats || []).map(c => ({ ...c }));
     const index = contrats.findIndex(c => c.id === contratId);
     if (index === -1) return null;
-    // §retour Betty du 22/09/2026 (point 3.1) : un contrat créé AVANT ce socle enrichi n'a pas
-    // poste/classification/statutCadre/etablissementId/dateFinPeriodeEssai — sans repli, une simple
-    // correction de date sur un TEL contrat effacerait silencieusement ces champs de l'employé au
-    // mirorage (voir champsContratAMirorerSurEmploye ci-dessous). Repli sur la valeur ACTUELLE de
-    // l'employé (jamais makeEmptyContrat() seul, qui les remettrait à '' plutôt que les préserver).
-    const contratCorrige = Object.assign(makeEmptyContrat(), {
-      poste: employee.poste, classification: employee.classification, statutCadre: employee.statutCadre,
-      etablissementId: employee.etablissementId, dateFinPeriodeEssai: employee.dateFinPeriodeEssai,
-      motifRecours: employee.motifRecours
-    }, contrats[index], data);
-    contrats[index] = contratCorrige;
 
     const plusRecent = contrats.slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''))[0];
     const estLeContratActuel = plusRecent && plusRecent.id === contratId;
+
+    const repliEmploye = estLeContratActuel ? {
+      poste: employee.poste, classification: employee.classification, statutCadre: employee.statutCadre,
+      etablissementId: employee.etablissementId, dateFinPeriodeEssai: employee.dateFinPeriodeEssai,
+      motifRecours: employee.motifRecours
+    } : {};
+    const contratCorrige = Object.assign(makeEmptyContrat(), repliEmploye, contrats[index], data);
+    contrats[index] = contratCorrige;
+
     const motif = `Correction du contrat du ${formatDate(contratCorrige.dateDebut)}`;
     const patch = estLeContratActuel
       ? { contrats, ...champsContratAMirorerSurEmploye(contratCorrige) }
@@ -6197,15 +6202,22 @@ function calculateAnciennete(dateEmbauche) {
   return parts.join(', ');
 }
 
-function calculateAge(dateNaissance) {
+/** §retour Betty du 22/09/2026 (revue de bugs) : extrait de calculateAge (âge à AUJOURD'HUI,
+ * l'immense majorité des appelants) pour être réutilisable avec une date de référence différente —
+ * getEnfantMaladeBonus réimplémentait le même calcul en double plutôt que de le réutiliser, un
+ * futur correctif (année bissextile, fuseau...) n'aurait alors profité qu'à l'un des deux. */
+function calculateAgeAt(dateNaissance, refDate) {
   if (!dateNaissance) return null;
   const birth = parseISODateLocal(dateNaissance);
-  const now = new Date();
   if (Number.isNaN(birth.getTime())) return null;
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) age -= 1;
+  let age = refDate.getFullYear() - birth.getFullYear();
+  const monthDiff = refDate.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && refDate.getDate() < birth.getDate())) age -= 1;
   return age;
+}
+
+function calculateAge(dateNaissance) {
+  return calculateAgeAt(dateNaissance, new Date());
 }
 
 /** §correctif date/fuseau (bug sweep du 19/08/2026) : appelée à la fois avec des dates pures
@@ -7335,15 +7347,7 @@ function getEnfantMaladeBonus(employee, leaveType, refDate) {
   if (!leaveTypeNameMatches(leaveType.nom, 'Enfant malade')) return 0;
   const enfants = employee.enfants || [];
   if (!enfants.length) return 0;
-  const ages = enfants.map(enfant => {
-    if (!enfant.dateNaissance) return null;
-    const birth = parseISODateLocal(enfant.dateNaissance);
-    if (Number.isNaN(birth.getTime())) return null;
-    let age = refDate.getFullYear() - birth.getFullYear();
-    const monthDiff = refDate.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && refDate.getDate() < birth.getDate())) age -= 1;
-    return age;
-  }).filter(age => age !== null && age >= 0);
+  const ages = enfants.map(enfant => calculateAgeAt(enfant.dateNaissance, refDate)).filter(age => age !== null && age >= 0);
   const unEnfantMoinsDunAn = ages.some(age => age < 1);
   const troisEnfantsMoinsDe16Ans = ages.filter(age => age < 16).length >= 3;
   return (unEnfantMoinsDunAn || troisEnfantsMoinsDe16Ans) ? 2 : 0;

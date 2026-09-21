@@ -303,6 +303,10 @@ globalThis.__renderOrganigramme = renderOrganigramme;
 globalThis.__bindOrganigrammeEvents = bindOrganigrammeEvents;
 globalThis.__openOrganigrammePrintModal = openOrganigrammePrintModal;
 globalThis.__exportOrganigrammeExcel = exportOrganigrammeExcel;
+globalThis.__getFilteredOrganigrammeEmployees = getFilteredOrganigrammeEmployees;
+globalThis.__renderOrgNode = renderOrgNode;
+globalThis.__buildOrgTree = buildOrgTree;
+globalThis.__calculateAgeAt = calculateAgeAt;
 globalThis.__getDataQualityIssues = getDataQualityIssues;
 globalThis.__openEmployeeModal = openEmployeeModal;
 globalThis.__renderNotifPanel = renderNotifPanel;
@@ -667,6 +671,10 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     bindOrganigrammeEvents: sandbox.__bindOrganigrammeEvents,
     openOrganigrammePrintModal: sandbox.__openOrganigrammePrintModal,
     exportOrganigrammeExcel: sandbox.__exportOrganigrammeExcel,
+    getFilteredOrganigrammeEmployees: sandbox.__getFilteredOrganigrammeEmployees,
+    renderOrgNode: sandbox.__renderOrgNode,
+    buildOrgTree: sandbox.__buildOrgTree,
+    calculateAgeAt: sandbox.__calculateAgeAt,
     getDataQualityIssues: sandbox.__getDataQualityIssues,
     openEmployeeModal: sandbox.__openEmployeeModal,
     renderNotifPanel: sandbox.__renderNotifPanel,

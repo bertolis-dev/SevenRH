@@ -5344,7 +5344,12 @@ const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Référentiels', tab: 'listes', keywords: ['postes', 'catégories de salariés', 'conventions collectives', 'listes de référence'] },
   { label: 'Calendrier', tab: 'calendrier', keywords: ['férié', 'jour chômé', 'fermeture', 'pont'] },
   { label: 'RH', tab: 'rh', keywords: ['visite médicale', 'suivi médical', 'matricule', 'durée de conservation', 'indicateurs direction'] },
-  { label: 'Congés et absences', tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés', 'vacances scolaires', 'zone scolaire'] },
+  { label: 'Congés et absences', tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés'] },
+  // §retour Betty du 22/09/2026 (revue de bugs) : "Vacances scolaires" est un sous-onglet de
+  // "Congés et absences" (state.parametresTypesCategorie), pas son propre onglet PARAMETRES_TABS —
+  // sans extraParams, la recherche globale amenait bien sur le bon ONGLET mais jamais sur le bon
+  // sous-onglet (le clic ne fait qu'un Object.assign(state, params), voir navigateTo).
+  { label: 'Vacances scolaires', tab: 'types-absences', extraParams: { parametresTypesCategorie: 'vacances' }, keywords: ['vacances scolaires', 'zone scolaire'] },
   { label: 'Rémunération', tab: 'remuneration', keywords: ['masse salariale', 'charges patronales', 'heures supplémentaires', 'repos compensateur'] },
   { label: 'Planning et télétravail', tab: 'planning-teletravail', keywords: ['budget planning', 'télétravail', 'quota'] },
   { label: 'Notes de frais', tab: 'notes-frais', keywords: ['catégories de frais', 'justificatif', 'plafond', 'tva'] },
@@ -5502,7 +5507,7 @@ function performGlobalSearch(term) {
     PARAMETRES_SEARCH_SECTIONS
       .filter(s => !s.permission || hasPermission(user, s.permission))
       .filter(s => normalizeForSearch(s.label).includes(q) || s.keywords.some(k => normalizeForSearch(k).includes(q)))
-      .forEach(s => results.push({ icon: ICONS.gear, label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab } }));
+      .forEach(s => results.push({ icon: ICONS.gear, label: s.label, sublabel: 'Paramètres', nav: 'parametres', params: { parametresTab: s.tab, ...(s.extraParams || {}) } }));
   }
 
   // §correctif retour QA du 27/08/2026 (point 7, tier 1) : "indexer l'aide dans la recherche globale
@@ -7239,7 +7244,7 @@ function getDataQualityIssues() {
     issues.push({ severity: 'error', label: `Email en doublon (${list[0].email})`, employees: list });
   });
 
-  const cddSansFin = employees.filter(e => (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') && !e.dateFinContrat);
+  const cddSansFin = employees.filter(e => estTypeContratATerme(e.typeContrat) && !e.dateFinContrat);
   if (cddSansFin.length) issues.push({ severity: 'error', label: 'CDD/Intérim sans date de fin de contrat', employees: cddSansFin });
 
   // §retour Betty du 19/09/2026 (point 1.1) : filet de sécurité, en plus du report automatique
@@ -9544,7 +9549,11 @@ function buildOrgTree(employees) {
   return { roots, childrenOf };
 }
 
-function renderOrganigramme() {
+/** §retour Betty du 22/09/2026 (revue de bugs) : extrait de renderOrganigramme — repris tel quel
+ * par openOrganigrammePrintModal/exportOrganigrammeExcel (avant ce correctif, les 3 réimplémentaient
+ * la même chaîne de filtres, un vrai risque qu'un futur filtre ajouté à l'écran soit oublié dans
+ * l'impression ou l'export, qui afficheraient alors des salariés différents de ce qui est visible). */
+function getFilteredOrganigrammeEmployees() {
   const f = state.organigrammeFilters;
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
 
@@ -9553,6 +9562,12 @@ function renderOrganigramme() {
   if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
   if (f.service) employees = employees.filter(e => e.service === f.service);
   if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+  return employees;
+}
+
+function renderOrganigramme() {
+  const f = state.organigrammeFilters;
+  const employees = getFilteredOrganigrammeEmployees();
 
   const { roots, childrenOf } = buildOrgTree(employees);
   // Dépend du service filtré (equipeOptionsForServiceFilter) : choisir un service ici doit
@@ -9610,22 +9625,26 @@ function renderOrganigramme() {
  * inversement. Seul le poste a un sens ici ; à défaut d'un poste renseigné, un repère de qualité de
  * données (au lieu d'un simple tiret muet) pointe vers la correction à faire, cohérent avec le
  * reste de l'application (voir getDataQualityIssues). */
-function renderOrgNode(employee, childrenOf) {
+/** §retour Betty du 22/09/2026 (revue de bugs) : `forceExpand` (utilisé par
+ * openOrganigrammePrintModal) ignore state.orgCollapsedIds — un repli de branche est un confort
+ * d'affichage à l'écran, jamais une décision de ce qui doit apparaître sur un document imprimé/PDF :
+ * sans ce paramètre, une branche repliée à l'écran disparaissait silencieusement de l'impression. */
+function renderOrgNode(employee, childrenOf, forceExpand) {
   const children = childrenOf.get(employee.id) || [];
   const hasChildren = children.length > 0;
-  const isCollapsed = state.orgCollapsedIds.has(employee.id);
+  const isCollapsed = !forceExpand && state.orgCollapsedIds.has(employee.id);
   const poste = getPosteAccorde(employee, settingsRepository.getSettings());
   return `
     <li>
       <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(employee)}">
-        ${hasChildren ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
+        ${hasChildren && !forceExpand ? `<button type="button" class="org-node-toggle" data-org-toggle="${employee.id}" aria-label="${isCollapsed ? 'Déplier' : 'Replier'} les subordonnés" title="${isCollapsed ? 'Déplier' : 'Replier'}">${isCollapsed ? '▸' : '▾'}</button>` : ''}
         ${renderAvatar(employee)}
         <div class="org-node-name">${personNameHtml(employee)}</div>
         ${poste
           ? `<div class="org-node-poste">${escapeHtml(poste)}</div>`
           : `<div class="org-node-poste org-node-poste-manquant" title="Aucun poste renseigné sur la fiche de ce salarié">${icon(ICONS.warningTriangle, 12)} Poste manquant</div>`}
       </div>
-      ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf)).join('')}</ul>` : ''}
+      ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf, forceExpand)).join('')}</ul>` : ''}
     </li>
   `;
 }
@@ -9681,12 +9700,7 @@ function bindOrganigrammeEvents() {
  * de l'effectif imprimé. */
 function openOrganigrammePrintModal() {
   const f = state.organigrammeFilters;
-  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
-  const term = normalizeForSearch(f.search.trim());
-  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
-  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
-  if (f.service) employees = employees.filter(e => e.service === f.service);
-  if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+  const employees = getFilteredOrganigrammeEmployees();
   const { roots, childrenOf } = buildOrgTree(employees);
 
   const html = `
@@ -9699,7 +9713,7 @@ function openOrganigrammePrintModal() {
         <div class="print-area print-document">
           ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
           <ul class="org-tree">
-            ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
+            ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf, true)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
           </ul>
         </div>
       </div>
@@ -9723,20 +9737,24 @@ function openOrganigrammePrintModal() {
  * l'arbre : reprend les mêmes filtres actifs à l'écran, une ligne par salarié avec son rattachement
  * hiérarchique (manager(s)) plutôt qu'une simple liste à plat sans structure. */
 function exportOrganigrammeExcel() {
-  const f = state.organigrammeFilters;
-  let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
-  const term = normalizeForSearch(f.search.trim());
-  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
-  if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
-  if (f.service) employees = employees.filter(e => e.service === f.service);
-  if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
+  const employees = getFilteredOrganigrammeEmployees();
 
   const settings = settingsRepository.getSettings();
+  // §retour Betty du 22/09/2026 (revue de bugs) : managerNames()/etablissementRepository.getAll()
+  // ré-analysaient respectivement TOUS les salariés et TOUS les établissements à CHAQUE ligne (un
+  // .find()/.getById() dans une .map()) — négligeable à l'échelle actuelle, mais un scan complet
+  // répété N fois reste un coût inutile qu'une table de correspondance construite une seule fois
+  // évite complètement (même principe que byId dans buildOrgTree, juste au-dessus).
+  const employeesById = new Map(employeeRepository.getAll().map(e => [e.id, e]));
+  const etablissementNomById = new Map(etablissementRepository.getAll().map(et => [et.id, et.nom]));
   const headers = ['Nom', 'Prénom', 'Poste', 'Manager(s)', 'Service', 'Équipe', 'Établissement'];
-  const rows = employees.map(e => [
-    e.nom, e.prenom, getPosteAccorde(e, settings) || '', managerNames(e.managerIds), e.service, e.equipe,
-    (etablissementRepository.getAll().find(et => et.id === e.etablissementId) || {}).nom || ''
-  ]);
+  const rows = employees.map(e => {
+    const managers = (e.managerIds || []).map(id => employeesById.get(id)).filter(Boolean).map(m => `${m.prenom} ${m.nom}`);
+    return [
+      e.nom, e.prenom, getPosteAccorde(e, settings) || '', managers.length ? managers.join(', ') : '—', e.service, e.equipe,
+      etablissementNomById.get(e.etablissementId) || ''
+    ];
+  });
   const xml = buildExcelXmlWorkbook(headers, rows, 'Organigramme', { zebra: true });
   downloadExcelXmlFile(xml, 'organigramme.xls');
   auditLogRepository.logAudit('Export', 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''}`);
@@ -11887,6 +11905,13 @@ function openCorrigerContratModal(employeeId, contratId) {
       showToast('La date de début ne peut pas dépasser le début du contrat suivant.', 'error');
       return;
     }
+    // §retour Betty du 22/09/2026 (revue de bugs) : "Corriger le contrat" expose désormais aussi la
+    // date de fin (absente de ce formulaire avant le socle enrichi, point 3.1) — sans ce garde-fou,
+    // rien n'empêchait de la reporter au-delà du début du contrat suivant, chevauchant deux contrats.
+    if (suivant && values.dateFin && values.dateFin >= suivant.dateDebut) {
+      showToast('La date de fin ne peut pas atteindre ou dépasser le début du contrat suivant.', 'error');
+      return;
+    }
     employeeRepository.corrigerContrat(employeeId, contratId, values);
     closeModal();
     showToast('Contrat corrigé.');
@@ -11900,7 +11925,7 @@ function openCorrigerContratModal(employeeId, contratId) {
  * openApercuProjetContratModal (juste en dessous) construit l'aperçu une fois la sélection validée. */
 function openGenererProjetContratModal(employeeId, contratId) {
   const employee = employeeRepository.getById(employeeId);
-  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  if (!employee || !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   const contrat = (employee.contrats || []).find(c => c.id === contratId);
   if (!contrat) { showToast('Ce contrat n\'est plus disponible.', 'error'); return; }
   const clauses = clauseContratRepository.getAll().slice().sort((a, b) => a.nom.localeCompare(b.nom));
@@ -11958,7 +11983,7 @@ function openGenererProjetContratModal(employeeId, contratId) {
  * en PDF doit porter le même avertissement que ce qui a été vu à l'écran. */
 function openApercuProjetContratModal(employeeId, contratId) {
   const employee = employeeRepository.getById(employeeId);
-  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  if (!employee || !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   const contrat = (employee.contrats || []).find(c => c.id === contratId);
   if (!contrat) { showToast('Ce contrat n\'est plus disponible.', 'error'); return; }
   const company = DB.getCurrentCompany();
@@ -12471,7 +12496,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         ${canSeeContractuel ? infoRow('Statut', e.statutCadre ? 'Cadre' : 'Non-cadre') : ''}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
-        ${canSeeContractuel && (e.typeContrat === 'CDD' || e.typeContrat === 'Intérim') ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
+        ${canSeeContractuel && estTypeContratATerme(e.typeContrat) ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}
         ${canSeeContractuel && e.dateFinPeriodeEssai ? infoRow('Fin de période d\'essai', formatDate(e.dateFinPeriodeEssai)) : ''}
         ${(() => {
           if (!canSeeContractuel || !e.dateFinPeriodeEssai) return '';
@@ -13280,9 +13305,20 @@ function renderEnfantsCard(e, user) {
   `;
 }
 
+/** §retour Betty du 22/09/2026 (revue de bugs) : renderEnfantsCard ne réserve l'affichage des
+ * boutons Ajouter/Modifier/Supprimer qu'à isSelf/MODIFIER_SALARIE (jamais un simple manager, voir
+ * son propre commentaire) — mais ce contrôle vivait UNIQUEMENT côté rendu, jamais revérifié ici,
+ * contrairement à tous les autres modales de sous-fiche (visite médicale, contrat, avenant). Un
+ * appel direct à cette fonction (autre point d'entrée futur) aurait pu modifier des données
+ * personnelles sur des tiers mineurs sans aucune permission. */
+function peutGererEnfants(employee) {
+  const user = authRepository.getCurrentUser();
+  return user.id === employee.id || hasPermission(user, PERMISSIONS.MODIFIER_SALARIE);
+}
+
 function openEnfantModal(employeeId, enfantId) {
   const employee = employeeRepository.getById(employeeId);
-  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  if (!employee || !peutGererEnfants(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   const existing = enfantId ? (employee.enfants || []).find(en => en.id === enfantId) : null;
   const html = `
     <div class="modal modal-small">
@@ -13334,7 +13370,7 @@ function openEnfantModal(employeeId, enfantId) {
 
 function deleteEnfant(employeeId, enfantId) {
   const employee = employeeRepository.getById(employeeId);
-  if (!employee) return;
+  if (!employee || !peutGererEnfants(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   const enfant = (employee.enfants || []).find(en => en.id === enfantId);
   if (!enfant) return;
   openConfirm({
