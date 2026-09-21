@@ -4847,7 +4847,18 @@ const DB = {
     const auteur = user ? `${user.prenom} ${user.nom}` : '';
     const entry = appendAuditLogEntry(company, action, entite, cible, details, auteur);
     this.saveCurrentCompany(company);
-    this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id), { kind: 'auditLogEntry', companyId: company.id, entry });
+    // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : le cas ci-dessus
+    // (company absente) protège la fenêtre d'hydratation, mais pas le cas plus large d'un visiteur
+    // JAMAIS connecté — DB.init() sème toujours une entreprise de démonstration en local, même sur
+    // la page d'accueil publique, donc `company` existe déjà à ce stade même sans la moindre
+    // session Supabase. Pousser vers Supabase SANS utilisateur authentifié était systématiquement
+    // rejeté par la policy RLS de audit_log (code 42501) — un simple souci d'extension/bloqueur de
+    // pub déclenchant reportClientError() sur la page d'accueil publique suffisait à afficher le
+    // bandeau "Échec de synchronisation, ne fermez pas cette page" à un visiteur qui n'avait pourtant
+    // RIEN à synchroniser, jamais connecté. L'entrée reste journalisée localement (utile si l'app est
+    // consultée hors-ligne juste après une vraie connexion) ; seule la tentative réseau, qui n'a de
+    // sens que pour une session authentifiée, est désormais conditionnée à sa présence.
+    if (user) this._pushInBackground(window.SupabaseSync.pushAuditLogEntry(entry, company.id), { kind: 'auditLogEntry', companyId: company.id, entry });
   },
 
   clearAuditLog() {

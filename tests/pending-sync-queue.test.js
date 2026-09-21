@@ -172,6 +172,11 @@ async function run() {
     const { sandbox, DB } = loadDataJs();
     DB.init();
     const company = DB.getCurrentCompany();
+    // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : logAudit ne tente plus
+    // de pousser vers Supabase sans utilisateur authentifié (voir son propre commentaire, data.js) —
+    // ce test vérifie un échec RÉSEAU sur une action réelle, donc une session doit être simulée,
+    // sinon la tentative de push elle-même n'a plus lieu (0 détail, plus 1).
+    DB._currentEmployeeId = DB.getEmployees()[0].id;
     sandbox.window.SupabaseSync = new Proxy({}, {
       get(target, prop) {
         if (prop !== 'pushAuditLogEntry') return async () => ({ success: true });
