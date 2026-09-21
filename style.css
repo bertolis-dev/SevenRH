@@ -4253,3 +4253,21 @@ textarea.input { resize: vertical; font-family: inherit; }
   margin-top: 8px;
   flex-wrap: wrap;
 }
+
+/* §retour Betty du 22/09/2026 ("de préférence en général je pense plus en paysage") : l'application
+   n'avait aucune règle @page, donc tout s'imprimait au format par défaut du navigateur, A4 portrait.
+   Un organigramme est large par nature : il y était coupé à droite dès le deuxième niveau.
+   Les pages nommées permettent de choisir l'orientation document par document, au lieu d'imposer le
+   paysage à une attestation ou à un certificat, qui sont des colonnes de texte. Prise en charge à
+   partir de Chrome et Edge 85 et de Firefox 110 ; un navigateur plus ancien retombe simplement sur
+   le portrait, et la mise à l'échelle (isolatePrintAreaForPrinting, app.js) évite malgré tout que
+   l'arbre soit coupé. */
+@page {
+  size: A4 portrait;
+  margin: 14mm;
+}
+@page paysage {
+  size: A4 landscape;
+  margin: 10mm;
+}
+.print-landscape { page: paysage; }

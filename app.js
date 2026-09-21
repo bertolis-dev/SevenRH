@@ -5304,6 +5304,14 @@ function bindGlobalEvents() {
  * intention que la règle @media print déjà existante (style.css), mais garantie ici en JS pur, sans
  * dépendre du support d'une fonctionnalité CSS particulière par le navigateur. */
 let printIsolationRestore = null;
+/** Largeur utile d'une feuille A4 en pixels CSS (96 ppp), marges d'impression déduites : 210 mm
+ * portrait et 297 mm paysage, moins les marges déclarées dans @page (style.css). Approximation
+ * assumée : le navigateur ne donne aucun moyen de lire la largeur imprimable réelle, qui dépend
+ * aussi du format choisi dans la fenêtre d'impression. Une valeur un peu basse est sans danger
+ * (l'arbre est simplement réduit un peu plus que nécessaire), une valeur trop haute couperait. */
+const LARGEUR_IMPRIMABLE_PORTRAIT_PX = 700;
+const LARGEUR_IMPRIMABLE_PAYSAGE_PX = 1030;
+
 function isolatePrintAreaForPrinting() {
   const printArea = document.querySelector('.print-area');
   if (!printArea) return;
@@ -5327,6 +5335,29 @@ function isolatePrintAreaForPrinting() {
     ancestor.style.padding = '0';
     ancestor = ancestor.parentElement;
   }
+
+  // §retour Betty du 22/09/2026 ("il faut qu'il s'adapte à la largeur de la page... là il y a une
+  // grosse marge blanche sur le côté, du coup on ne voit pas tous les salariés") : l'organigramme
+  // imprimé était coupé à droite dès qu'un niveau dépassait la largeur de la feuille. Plutôt que de
+  // réduire l'arbre à la main, la zone imprimable est mise à l'échelle au moment d'imprimer, quand
+  // et seulement quand elle est plus large que la feuille. La hauteur de la boîte est ramenée à la
+  // hauteur RÉELLEMENT dessinée : une transformation ne change pas la mise en page, donc sans ça le
+  // navigateur réserverait la hauteur d'origine et ajouterait une page blanche.
+  const largeurFeuille = printArea.classList.contains('print-landscape')
+    ? LARGEUR_IMPRIMABLE_PAYSAGE_PX
+    : LARGEUR_IMPRIMABLE_PORTRAIT_PX;
+  const largeurContenu = printArea.scrollWidth;
+  if (largeurContenu > largeurFeuille) {
+    const ratio = largeurFeuille / largeurContenu;
+    ['transform', 'transformOrigin', 'width', 'height'].forEach(prop => {
+      restores.push({ el: printArea, prop, value: printArea.style[prop] });
+    });
+    printArea.style.transformOrigin = 'top left';
+    printArea.style.transform = `scale(${ratio})`;
+    printArea.style.width = `${largeurContenu}px`;
+    printArea.style.height = `${printArea.scrollHeight * ratio}px`;
+  }
+
   printIsolationRestore = restores;
 }
 
@@ -9717,7 +9748,7 @@ function openOrganigrammePrintModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <div class="print-area print-document">
+        <div class="print-area print-document print-landscape">
           ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
           <ul class="org-tree">
             ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf, true)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
