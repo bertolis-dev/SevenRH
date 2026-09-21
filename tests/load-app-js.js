@@ -325,6 +325,7 @@ globalThis.__reportClientError = reportClientError;
 globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
 globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 globalThis.__renderEmployeeDetail = renderEmployeeDetail;
+globalThis.__renderDetailGridCards = renderDetailGridCards;
 globalThis.__openAjouterAvenantModal = openAjouterAvenantModal;
 globalThis.__openNouveauContratModal = openNouveauContratModal;
 globalThis.__openCorrigerContratModal = openCorrigerContratModal;
@@ -661,6 +662,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
     ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
     renderEmployeeDetail: sandbox.__renderEmployeeDetail,
+    renderDetailGridCards: sandbox.__renderDetailGridCards,
     openAjouterAvenantModal: sandbox.__openAjouterAvenantModal,
     openNouveauContratModal: sandbox.__openNouveauContratModal,
     openCorrigerContratModal: sandbox.__openCorrigerContratModal,

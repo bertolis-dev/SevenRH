@@ -12080,13 +12080,10 @@ function renderEmployeeDetail(id) {
       <div class="detail-header-actions">
         <button class="btn btn-secondary" id="btn-toggle-favorite">${favoriteRepository.isFavoriteEmployee(e.id) ? `<span style="color: var(--color-gold);">${icon(ICONS.starFilled, 13)}</span> Favori` : icon(ICONS.star, 13) + ' Favori'}</button>
         <button class="btn btn-secondary" id="btn-print-employee-fiche">${icon(ICONS.printer, 14)} Fiche PDF</button>
-        <!-- §retour Betty du 18/09/2026 (point 7) : les deux boutons s'excluaient jamais l'un
-             l'autre jusqu'ici, laissant générer un certificat de travail (qui certifie une période
-             d'emploi ACHEVÉE) pour un salarié toujours en poste. dateDepart (jamais dateFinContrat,
-             propre aux seuls CDD/intérim) tranche : departure effective -> certificat de travail,
-             encore en poste -> attestation employeur. -->
-        ${canEdit && !e.dateDepart ? '<button class="btn btn-secondary" id="btn-print-attestation">Attestation employeur</button>' : ''}
-        ${canEdit && e.dateDepart ? '<button class="btn btn-secondary" id="btn-print-certificat-travail">Certificat de travail</button>' : ''}
+        <!-- §retour Betty du 22/09/2026 (point 2.2) : "Attestation employeur"/"Certificat de
+             travail" vivaient ici, en tête de fiche, alors que ce sont des documents — déplacés
+             dans l'onglet "Documents" (voir renderDocumentsOfficielsCard), avec le reste des
+             documents de ce salarié plutôt que mélangés aux actions de la fiche elle-même. -->
         ${canEditCoordonnees ? '<button class="btn btn-secondary" id="btn-edit-coordonnees">Modifier mes coordonnées</button>' : ''}
         ${canEdit ? '<button class="btn btn-secondary" id="btn-edit-employee">Modifier</button>' : ''}
         ${canArchiveEmployeeRecord(e) ? `<button class="btn btn-secondary" id="btn-archive-employee">${e.archive ? 'Réactiver' : 'Archiver'}</button>` : ''}
@@ -12130,6 +12127,20 @@ function renderEmployeeDetailPrevNext(e) {
       <button type="button" class="btn-icon" id="btn-employee-next" data-employee-id="${next ? next.id : ''}" ${next ? '' : 'disabled'} title="${next ? escapeHtml(`${next.prenom} ${next.nom}`) : 'Dernier de la liste'}" aria-label="Salarié suivant">›</button>
     </div>
   `;
+}
+
+/** §retour Betty du 22/09/2026 (point 2.3, "un onglet vide reste affiché") : chaque onglet de la
+ * fiche salarié est censé disparaître de lui-même quand il n'a rien à montrer (module non
+ * souscrit, permission absente... voir le commentaire au-dessus de renderEmployeeDetail) — mais un
+ * onglet qui enveloppait systématiquement ses cartes dans un <div class="detail-grid-cards">
+ * restait "non vide" au sens de ce mécanisme même quand CHAQUE carte à l'intérieur retournait '' :
+ * la chaîne contenait encore le conteneur lui-même. Neutralisait la règle sur 4 des 7 onglets
+ * (Congés et absences, Accès et droits, Documents, Parcours). Ce conteneur n'est désormais rendu
+ * que si au moins une carte a réellement quelque chose à montrer. */
+function renderDetailGridCards(...cards) {
+  const content = cards.filter(Boolean).join('');
+  if (!content.trim()) return '';
+  return `<div class="detail-grid-cards">${content}</div>`;
 }
 
 function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEdit) {
@@ -12214,9 +12225,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
 }
 
 function renderEmployeeCongesTab(e, user) {
-  return `
-    <div class="detail-grid-cards">
-      ${hasModule('conges') ? `
+  const compteursCard = hasModule('conges') ? `
       <div class="card">
         <!-- §retour QA du 27/08/2026 ("fais un panneau déroulant pour compteurs de congés") : cette
              carte peut afficher un très grand nombre de types (chacun avec son détail acquis/pris/
@@ -12241,45 +12250,56 @@ function renderEmployeeCongesTab(e, user) {
             : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
         </details>
       </div>
-      ` : ''}
+  ` : '';
 
-      ${renderTypesAbsenceCard(e, user)}
-    </div>
-  `;
+  return renderDetailGridCards(compteursCard, renderTypesAbsenceCard(e, user));
 }
 
 function renderEmployeeAccesTab(e, user) {
+  return renderDetailGridCards(renderCompteCard(e, user), renderPermissionsCard(e, user), renderMenusAutorisesCard(e, user));
+}
+
+/** §retour Betty du 22/09/2026 (point 2.2, "les boutons Attestation employeur/Certificat de
+ * travail n'ont rien à faire en haut de la fiche") : extrait de detail-header-actions, où ils
+ * vivaient mélangés aux actions de la fiche (Favori, Modifier, Archiver...) alors qu'il s'agit de
+ * documents — rejoint l'onglet "Documents", avec le même choix mutuellement exclusif qu'avant
+ * (dateDepart tranche entre attestation employeur et certificat de travail, voir le commentaire
+ * historique du 18/09/2026 plus bas sur ce même critère). */
+function renderDocumentsOfficielsCard(e, canEdit) {
+  // Même périmètre que les autres cartes de cet onglet (renderEmployeeDocumentsCard,
+  // renderGenererDocumentCard) : "documents" fait partie du module RH (voir LANDING_ALACARTE_
+  // MODULES), pas un module à part — ces deux documents officiels n'ont pas à rester accessibles
+  // à une entreprise qui n'a pas souscrit ce module.
+  if (!canEdit || !hasModule('rh')) return '';
   return `
-    <div class="detail-grid-cards">
-      ${renderCompteCard(e, user)}
-      ${renderPermissionsCard(e, user)}
-      ${renderMenusAutorisesCard(e, user)}
+    <div class="card">
+      <h2>Documents officiels</h2>
+      <div class="badge-row" style="gap: 10px;">
+        <!-- §retour Betty du 18/09/2026 (point 7) : les deux boutons s'excluaient jamais l'un
+             l'autre jusqu'ici, laissant générer un certificat de travail (qui certifie une période
+             d'emploi ACHEVÉE) pour un salarié toujours en poste. dateDepart (jamais dateFinContrat,
+             propre aux seuls CDD/intérim) tranche : départ effectif -> certificat de travail,
+             encore en poste -> attestation employeur. -->
+        ${!e.dateDepart ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-print-attestation">${icon(ICONS.document, 13)} Attestation employeur</button>` : ''}
+        ${e.dateDepart ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-print-certificat-travail">${icon(ICONS.document, 13)} Certificat de travail</button>` : ''}
+      </div>
     </div>
   `;
 }
 
 function renderEmployeeDocumentsTab(e, canEdit) {
-  return `
-    <div class="detail-grid-cards">
-      ${renderEmployeeDocumentsCard(e)}
-      ${renderGenererDocumentCard(e, canEdit)}
-    </div>
-  `;
+  return renderDetailGridCards(renderDocumentsOfficielsCard(e, canEdit), renderEmployeeDocumentsCard(e), renderGenererDocumentCard(e, canEdit));
 }
 
 function renderEmployeeParcoursTab(e, user, canEdit) {
-  return `
-    <div class="detail-grid-cards">
-      ${canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : ''}
-
-      ${canEdit ? (e.offboardingChecklist && e.offboardingChecklist.length
-        ? renderChecklistCard('Checklist de départ', 'offboardingChecklist', e.offboardingChecklist)
-        : `<div class="card"><h2>Checklist de départ</h2><p class="text-muted" style="margin-bottom: 10px;">À démarrer quand ce salarié quitte l'entreprise (récupération du matériel, désactivation des accès, solde de tout compte...).</p><button type="button" class="btn btn-secondary btn-sm" id="btn-demarrer-offboarding">Démarrer le offboarding</button></div>`
-      ) : ''}
-
-      ${hasPermission(user, PERMISSIONS.VOIR_JOURNAL_AUDIT) ? renderEmployeeActivityCard(e) : ''}
-    </div>
-  `;
+  return renderDetailGridCards(
+    canEdit ? renderChecklistCard('Checklist d\'intégration', 'onboardingChecklist', ensureOnboardingChecklist(e)) : '',
+    canEdit ? (e.offboardingChecklist && e.offboardingChecklist.length
+      ? renderChecklistCard('Checklist de départ', 'offboardingChecklist', e.offboardingChecklist)
+      : `<div class="card"><h2>Checklist de départ</h2><p class="text-muted" style="margin-bottom: 10px;">À démarrer quand ce salarié quitte l'entreprise (récupération du matériel, désactivation des accès, solde de tout compte...).</p><button type="button" class="btn btn-secondary btn-sm" id="btn-demarrer-offboarding">Démarrer le offboarding</button></div>`
+    ) : '',
+    hasPermission(user, PERMISSIONS.VOIR_JOURNAL_AUDIT) ? renderEmployeeActivityCard(e) : ''
+  );
 }
 
 /** §demande Betty du 04/09/2026 : la fiche salarié affichait déjà "Compteurs de congés" mais rien sur

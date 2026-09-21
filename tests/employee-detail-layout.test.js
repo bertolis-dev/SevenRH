@@ -1,8 +1,11 @@
 /**
  * Seven RH — "les cases quand on clique sur un salarié il y a des gros trou blanc" puis "fais un
  * panneau déroulant pour compteurs de congés" (retour QA du 27/08/2026). Deux correctifs :
- * - .detail-grid-cards (colonnes CSS façon Pinterest) remplace .detail-grid (grille à lignes de
- *   hauteur fixe) pour les grilles de VRAIES cartes .card, jamais pour une grille de champs.
+ * - .detail-grid-cards remplace .detail-grid (grille à lignes de hauteur fixe) pour les grilles de
+ *   VRAIES cartes .card, jamais pour une grille de champs. Passée en colonnes CSS le 27/08/2026,
+ *   puis revenue à une vraie grille CSS le 22/09/2026 (retour Betty, point 2.1 : les colonnes CSS
+ *   laissaient une colonne entière vide sur un écran large dès qu'il y avait moins de cartes que de
+ *   colonnes — voir style.css) : seul le nom de la classe reste inchangé, testé ici.
  * - "Compteurs de congés" (potentiellement très long) est replié par défaut dans un <details>.
  */
 const assert = require('assert');

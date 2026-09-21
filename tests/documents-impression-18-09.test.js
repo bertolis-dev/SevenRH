@@ -62,8 +62,11 @@ async function runAttestationEmployeurAucuneRepetition() {
 }
 
 async function runCertificatTravailSeulementSurDepartEffectif() {
-  const { sandbox, DB, renderEmployeeDetail, employeeRepository, openCertificatTravailModal } = setup();
+  const { sandbox, DB, state, renderEmployeeDetail, employeeRepository, openCertificatTravailModal } = setup();
   const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
+  // §retour Betty du 22/09/2026 (point 2.2) : ces boutons ont quitté le haut de la fiche pour
+  // l'onglet "Documents" (voir renderDocumentsOfficielsCard) — il faut désormais s'y placer.
+  state.employeeDetailTab = 'documents';
 
   // CDD en cours, dateFinContrat renseignée (terme normal du contrat), mais AUCUN départ effectif
   // (dateDepart vide) : ne doit proposer QUE l'attestation employeur, jamais le certificat.

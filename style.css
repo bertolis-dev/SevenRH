@@ -1106,25 +1106,21 @@ p { margin: 0; line-height: 1.5; }
   align-items: start;
 }
 
-/* §retour QA du 27/08/2026 (suite) : align-items:start évite qu'une carte courte s'étire pour rien,
-   mais une grille CSS reste organisée en LIGNES de hauteur fixe (celle de la carte la plus haute de
-   la ligne) — la ligne suivante ne peut jamais "remonter" dans le vide laissé sous une carte courte
-   de la ligne précédente, ce n'est pas une vraie mise en page façon Pinterest. .detail-grid-cards
-   (uniquement pour une grille de VRAIES cartes .card, jamais pour une grille de champs infoRow/
-   form-field — celle-ci reste .detail-grid, une grille de lignes reste la bonne présentation pour
-   des champs alignés) passe en colonnes CSS : chaque carte s'empile dans la colonne la moins
-   remplie, sans jamais laisser de trou. break-inside:avoid empêche une carte d'être coupée en deux
-   entre deux colonnes. */
+/* §retour Betty du 22/09/2026 (point 2.1, "la grille ne profite pas de la largeur d'écran") : la
+   mise en colonnes CSS du 27/08/2026 (voir git blame) évitait bien le "trou blanc" sous une carte
+   courte, mais au prix d'un défaut plus visible sur un écran large — avec 2-3 cartes seulement
+   (ex. onglet Congés) et column-count:3, la ou les colonnes excédentaires restent VIDES plutôt que
+   redistribuer la largeur disponible aux cartes réellement présentes : jusqu'à un tiers de l'écran
+   perdu. Retour à une vraie grille CSS (comme .detail-grid) : chaque carte utilise toute la largeur
+   disponible de sa colonne, quel que soit le nombre de cartes. align-items:start évite qu'une carte
+   courte s'étire pour rien ; la contrepartie assumée est qu'une ligne suivante ne peut pas "remonter"
+   dans le vide sous une carte courte de la ligne précédente (mise en page en lignes, pas en
+   colonnes façon Pinterest) — un compromis jugé préférable à des colonnes vides sur grand écran. */
 .detail-grid-cards {
-  display: block;
-  column-count: 1;
-  column-gap: 16px;
-}
-@media (min-width: 720px) {
-  .detail-grid-cards { column-count: 2; }
-}
-@media (min-width: 1200px) {
-  .detail-grid-cards { column-count: 3; }
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: start;
 }
 /* §retour QA du 27/08/2026 : panneau déroulant natif (Compteurs de congés, potentiellement très
    long) — repose sur <details>/<summary> (accessible, sans JS) plutôt qu'un composant maison. */
@@ -1142,13 +1138,6 @@ p { margin: 0; line-height: 1.5; }
 .collapsible-panel > summary:hover { text-decoration: underline; }
 .collapsible-panel .balance-grid { margin-top: 12px; }
 
-.detail-grid-cards > .card {
-  break-inside: avoid;
-  -webkit-column-break-inside: avoid;
-  display: inline-block;
-  width: 100%;
-  vertical-align: top;
-}
 
 .about-modal-grid {
   display: grid;
@@ -3945,6 +3934,7 @@ textarea.input { resize: vertical; font-family: inherit; }
      colonnes plutôt qu'une seule pleine largeur — voir sa propre règle plus haut. */
   .dashboard-grid,
   .detail-grid,
+  .detail-grid-cards,
   .settings-lists-grid {
     grid-template-columns: 1fr;
   }
