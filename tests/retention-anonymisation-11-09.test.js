@@ -13,7 +13,7 @@ const { loadAppJs } = require('./load-app-js');
 function run() {
   // ---- Réglage de durée : valeur par défaut (5 ans), rendue dans Paramètres > Listes ----
   {
-    const { DB, sandbox, renderParametresListes } = loadAppJs();
+    const { DB, sandbox, renderParametresRH } = loadAppJs();
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -23,7 +23,7 @@ function run() {
     company.abonnement.modules = [{ key: 'rh' }];
     DB.saveCurrentCompany(company);
 
-    const html = renderParametresListes();
+    const html = renderParametresRH();
     assert.ok(html.includes('f-duree-conservation'), 'le champ de durée de conservation doit être rendu');
     assert.ok(html.includes('value="5"'), 'la valeur par défaut (5 ans) doit être pré-remplie');
     assert.ok(html.includes('juriste'), 'le champ doit rappeler qu\'il s\'agit d\'une valeur par défaut à faire confirmer, pas une certitude juridique');

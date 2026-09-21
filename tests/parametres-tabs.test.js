@@ -43,7 +43,10 @@ async function run() {
   // Balayage complet : pour chaque combinaison réaliste de modules, visiter CHAQUE onglet de
   // PARAMETRES_TABS (y compris ceux censés être masqués) ne doit jamais planter, et un onglet masqué
   // doit toujours retomber sur un onglet réellement visible.
-  const moduleCombos = [null, [], ['conges'], ['planning'], ['frais'], ['conges', 'planning', 'frais']];
+  // §point 9 du 22/09/2026 : combinaisons étendues à rh/remuneration/tickets, désormais chacun son
+  // propre onglet (voir renderParametresRH/Remuneration/TicketsRestaurant) — sans ça, un onglet
+  // dont le hasModule() dépend d'un de ces 3 modules n'était jamais réellement testé en isolation.
+  const moduleCombos = [null, [], ['conges'], ['planning'], ['frais'], ['rh'], ['remuneration'], ['tickets'], ['conges', 'planning', 'frais'], ['rh', 'remuneration', 'planning', 'frais', 'tickets', 'conges']];
   for (const combo of moduleCombos) {
     setModules(DB, combo);
     for (const tab of PARAMETRES_TABS) {

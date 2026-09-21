@@ -5341,10 +5341,14 @@ const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Entreprise', tab: 'entreprise', keywords: ['société', 'raison sociale', 'siret'] },
   { label: 'Établissements', tab: 'etablissements', keywords: ['site', 'agence', 'adresse'] },
   { label: 'Services & équipes', tab: 'services', keywords: ['service', 'équipe', 'organisation'] },
-  { label: "Types d'absences", tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés'] },
-  { label: 'Référentiels', tab: 'listes', keywords: ['catégories de frais', 'postes', 'catégories de salariés', 'conventions collectives', 'listes de référence'] },
-  { label: 'Vacances scolaires', tab: 'vacances', keywords: ['zone', 'scolaire'] },
-  { label: 'Jours fériés', tab: 'feries', keywords: ['férié', 'jour chômé'] },
+  { label: 'Référentiels', tab: 'listes', keywords: ['postes', 'catégories de salariés', 'conventions collectives', 'listes de référence'] },
+  { label: 'Calendrier', tab: 'calendrier', keywords: ['férié', 'jour chômé', 'fermeture', 'pont'] },
+  { label: 'RH', tab: 'rh', keywords: ['visite médicale', 'suivi médical', 'matricule', 'durée de conservation', 'indicateurs direction'] },
+  { label: 'Congés et absences', tab: 'types-absences', keywords: ['types de congés', 'rtt', 'justificatif', 'comptabilisé dans les congés', 'vacances scolaires', 'zone scolaire'] },
+  { label: 'Rémunération', tab: 'remuneration', keywords: ['masse salariale', 'charges patronales', 'heures supplémentaires', 'repos compensateur'] },
+  { label: 'Planning et télétravail', tab: 'planning-teletravail', keywords: ['budget planning', 'télétravail', 'quota'] },
+  { label: 'Notes de frais', tab: 'notes-frais', keywords: ['catégories de frais', 'justificatif', 'plafond', 'tva'] },
+  { label: 'Tickets restaurant', tab: 'tickets-restaurant', keywords: ['ticket restaurant', 'valeur faciale', 'urssaf'] },
   // §correctif audit du 23/08/2026 (§6.4) : Qualité des données + Journal d'audit fusionnés en un
   // seul onglet "Audit" (2 sous-onglets, voir renderParametresAuditHub) — pas de `permission` ici,
   // "Contrôle des dossiers" reste ouvert sans VOIR_JOURNAL_AUDIT ; le hub gère lui-même l'accès au
@@ -16803,6 +16807,75 @@ const SETTINGS_LIST_USAGE_CHECK = {
   categoriesDocuments: (value) => documentRepository.getAll().some(d => d.categorie === value)
 };
 
+function arraysEqualUnordered(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return [...a].sort().join(',') === [...b].sort().join(',');
+}
+
+/** §point 9 du 22/09/2026 (retour Betty : "un indicateur d'avancement par onglet, ex. Congés,
+ * 3 réglages sur 5 renseignés") : première mouture volontairement modeste — quelques réglages
+ * représentatifs par module, comparés à leur valeur d'usine (DEFAULT_SETTINGS, data.js). Un
+ * réglage resté à sa valeur par défaut n'est pas forcément "à faire" (35h ou 9€ de ticket peuvent
+ * être le bon réglage réel), donc ce compteur reste indicatif, jamais un blocage ni une alerte —
+ * à affiner avec Betty une fois vu à l'usage. */
+const PARAMETRES_TABS_COMPLETION = {
+  rh: () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      s.visiteMedicaleSimpleMois !== 60,
+      s.visiteMedicaleAdapteMois !== 36,
+      s.dureeConservationSalariesPartisAnnees !== 5,
+      s.delaiPrevenanceDocumentsJours !== 30,
+      s.suiviGenreActive || s.suiviAgeActive
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  'types-absences': () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      !arraysEqualUnordered(s.workflowCongesDefault, ['manager', 'rh']),
+      s.schoolZone !== 'C',
+      (schoolHolidayRepository.getSchoolHolidays().periodes || []).length > 0
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  remuneration: () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      s.masseSalarialeActivee,
+      s.tauxChargesPatronalesEstime !== 0.42,
+      s.tauxReposCompensateur !== 25
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  'planning-teletravail': () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      s.budgetHebdomadairePlanningEuros !== 0,
+      s.teletravailQuotaSemaine !== 2,
+      !arraysEqualUnordered(s.workflowTeletravail, ['manager'])
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  'notes-frais': () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      Object.keys(s.categoriesFraisConfig || {}).length > 0,
+      !arraysEqualUnordered(s.workflowFrais, ['manager', 'comptabilite'])
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  'tickets-restaurant': () => {
+    const s = settingsRepository.getSettings();
+    const checks = [
+      s.ticketsValeurFaciale !== 9,
+      s.ticketsPartEmployeurPct !== 60,
+      s.ticketsDistribution !== 'fin'
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  }
+};
+
 /** §refonte QA du 26/08/2026 (point E.2, pilote) : un onglet de Paramètres avait sa condition de
  * module dupliquée à 4 endroits (bouton desktop, option mobile, content-switch, bindParametresEvents)
  * — exactement pourquoi le point A.2 a d'abord laissé passer une fuite, puis (une fois le rendu
@@ -16820,16 +16893,31 @@ const SETTINGS_LIST_USAGE_CHECK = {
 // bouton pour les modifier, resteraient une fuite d'information).
 const canManageParametres = () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_PARAMETRES);
 
+// §point 9 du 22/09/2026 (retour Betty, "réorganiser les paramètres par module plutôt que par
+// thème technique") : socle commun (Entreprise, Établissements, Services & équipes, Référentiels,
+// Calendrier, Intégrations, Modèles de documents, Audit, Mon compte, Abonnement — toujours
+// visibles) + un onglet par module réellement souscrit (RH, Congés et absences, Rémunération,
+// Planning et télétravail, Notes de frais, Tickets restaurant, Registre du personnel). Entretiens,
+// Embauche et Pointeuse n'ont aujourd'hui aucun réglage propre : pas d'onglet vide créé pour eux
+// (à revoir le jour où un premier réglage de ces modules apparaît). "Jours fériés" et "Fermetures"
+// fusionnent en un seul onglet "Calendrier", qui rejoint le socle : le calcul des tickets
+// restaurant dépend du calendrier (jours fériés + fermetures) tout autant que les congés — le
+// caser dans un onglet dépendant du seul module congés masquait cette dépendance transverse.
+// "Vacances scolaires" rejoint "Congés et absences" (renommé depuis "Types d'absences") comme un
+// sous-onglet de plus, avec la chaîne de validation par défaut des congés.
 const PARAMETRES_TABS = [
   { key: 'entreprise', label: 'Entreprise', isVisible: canManageParametres, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
   { key: 'abonnement', label: 'Abonnement', isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
   { key: 'etablissements', label: 'Établissements', isVisible: canManageParametres, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
   { key: 'services', label: 'Services &amp; équipes', isVisible: canManageParametres, render: renderParametresServices, bind: bindParametresServicesEvents },
-  { key: 'types-absences', label: "Types d'absences", isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
   { key: 'listes', label: 'Référentiels', isVisible: canManageParametres, render: renderParametresListes, bind: bindParametresListesEvents },
-  { key: 'vacances', label: 'Vacances scolaires', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresVacances, bind: bindParametresVacancesEvents },
-  { key: 'feries', label: 'Jours fériés', isVisible: canManageParametres, render: renderParametresFeries, bind: bindParametresFeriesEvents },
-  { key: 'fermetures', label: 'Fermetures', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresFermetures, bind: bindParametresFermeturesEvents },
+  { key: 'calendrier', label: 'Calendrier', isVisible: canManageParametres, render: renderParametresCalendrier, bind: bindParametresCalendrierEvents },
+  { key: 'rh', label: 'RH', isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRH, bind: bindParametresRHEvents },
+  { key: 'types-absences', label: 'Congés et absences', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
+  { key: 'remuneration', label: 'Rémunération', isVisible: () => canManageParametres() && hasModule('remuneration'), render: renderParametresRemuneration, bind: bindParametresRemunerationEvents },
+  { key: 'planning-teletravail', label: 'Planning et télétravail', isVisible: () => canManageParametres() && hasModule('planning'), render: renderParametresPlanningTeletravail, bind: bindParametresPlanningTeletravailEvents },
+  { key: 'notes-frais', label: 'Notes de frais', isVisible: () => canManageParametres() && hasModule('frais'), render: renderParametresNotesFrais, bind: bindParametresNotesFraisEvents },
+  { key: 'tickets-restaurant', label: 'Tickets restaurant', isVisible: () => canManageParametres() && hasModule('tickets'), render: renderParametresTicketsRestaurant, bind: bindParametresTicketsRestaurantEvents },
   { key: 'integrations', label: 'Intégrations', isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
   { key: 'modeles-documents', label: 'Modèles de documents', isVisible: canManageParametres, render: renderParametresModelesDocuments, bind: bindParametresModelesDocumentsEvents },
   { key: 'registre-personnel', label: 'Registre du personnel', isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRegistrePersonnel, bind: bindParametresRegistrePersonnelEvents },
@@ -16838,6 +16926,15 @@ const PARAMETRES_TABS = [
   // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé.
   { key: 'mon-compte', label: 'Mon compte', isVisible: () => true, render: renderParametresMonCompte, bind: bindParametresMonCompteEvents },
 ];
+
+/** `plain` : un `<option>` de `<select>` n'accepte pas de balise HTML dans son texte (voir le
+ * sélecteur mobile ci-dessous) — même indicateur, en texte brut " (x/y)" plutôt qu'un badge stylé. */
+function parametresTabCompletionBadge(key, plain) {
+  const completionFn = PARAMETRES_TABS_COMPLETION[key];
+  if (!completionFn) return '';
+  const { done, total } = completionFn();
+  return plain ? ` (${done}/${total})` : ` <span class="badge badge-muted" style="margin-left: 4px;">${done}/${total}</span>`;
+}
 
 function renderParametres() {
   // §correctif audit du 23/08/2026 (§6.3) : l'onglet "Catégories de salariés" est retiré, replié
@@ -16852,6 +16949,10 @@ function renderParametres() {
   // gestion se fait depuis la fiche du salarié (carte "Compte"), avec un repère dans le Centre
   // d'action du tableau de bord à la place (voir renderDashboardActionCenter).
   if (state.parametresTab === 'comptes') state.parametresTab = 'listes';
+  // §point 9 du 22/09/2026 : "Jours fériés" et "Fermetures" fusionnent dans "Calendrier" ; "Vacances
+  // scolaires" rejoint "Congés et absences" comme un sous-onglet (state.parametresTypesCategorie).
+  if (state.parametresTab === 'feries' || state.parametresTab === 'fermetures') state.parametresTab = 'calendrier';
+  if (state.parametresTab === 'vacances') { state.parametresTab = 'types-absences'; state.parametresTypesCategorie = 'vacances'; }
   // §correctif QA du 26/08/2026 (point A.2, complément) : remplace les anciennes vérifications au
   // cas par cas (abonnement, puis 4 onglets liés aux modules) par UNE seule règle générique, valable
   // pour tout onglet présent dans PARAMETRES_TABS — un lien profond ou un changement de modules en
@@ -16870,16 +16971,16 @@ function renderParametres() {
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
-      <p class="view-subtitle">${canManageParametres() ? "Entreprise, types d'absences, référentiels, vacances scolaires, jours fériés et journal d'audit" : 'Vos réglages personnels'}</p>
+      <p class="view-subtitle">${canManageParametres() ? "Entreprise, référentiels, calendrier et un onglet par module souscrit" : 'Vos réglages personnels'}</p>
     </div>
     <div class="tabs parametres-tabs-desktop">
-      ${visibleTabs.map(t => `<button class="tab ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">${t.label}</button>`).join('')}
+      ${visibleTabs.map(t => `<button class="tab ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">${t.label}${parametresTabCompletionBadge(t.key)}</button>`).join('')}
     </div>
     <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
          mobile ("un tas de bouton au même endroit") — un menu déroulant remplace la rangée
          d'onglets uniquement sous 860px (voir style.css), même sélection (state.parametresTab). -->
     <select class="input parametres-tab-select" id="parametres-tab-select">
-      ${visibleTabs.map(t => `<option value="${t.key}" ${state.parametresTab === t.key ? 'selected' : ''}>${t.label}</option>`).join('')}
+      ${visibleTabs.map(t => `<option value="${t.key}" ${state.parametresTab === t.key ? 'selected' : ''}>${t.label}${parametresTabCompletionBadge(t.key, true)}</option>`).join('')}
     </select>
     <div id="parametres-tab-content">
       ${activeTab.render()}
@@ -17283,15 +17384,29 @@ function openPhotoCropModal(file, onConfirm) {
  * réutilisant TEL QUEL renderCongesTypes()/bindCongesTypesEvents() (déjà génériques par catégorie)
  * comme nouveau point d'entrée sous Paramètres, sans dupliquer cette logique ni retirer les onglets
  * "Types" existants (qui restent un raccourci valide depuis l'écran Congés/Autres absences). */
+/** §retour Betty du 22/09/2026 (point 9, "Congés et absences avec ses types, ses quotas et sa
+ * chaîne de validation") : réunit ici ce qui vivait jusqu'ici éparpillé entre cet onglet, l'ancien
+ * onglet "Vacances scolaires" (retiré, devenu un sous-onglet de plus) et la carte "Chaînes de
+ * validation" de "Référentiels" (dont seule la ligne Congés concernait ce module) — un seul endroit
+ * pour tout ce qui concerne Congés et absences. */
 function renderParametresTypesAbsences() {
   const categorie = state.parametresTypesCategorie || 'conge';
+  const settings = settingsRepository.getSettings();
   return `
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Chaîne de validation par défaut</h2>
+      <p class="text-muted">Modèle proposé à la création d'un nouveau type de congé (chaque type garde ensuite sa propre chaîne, modifiable ci-dessous).</p>
+      <div class="form-grid" style="max-width: 400px;">
+        ${workflowSelectField('workflow-conges-default', 'Congés (modèle par défaut)', WORKFLOW_PRESETS_CONGES, settings.workflowCongesDefault)}
+      </div>
+    </div>
     <div class="tabs" style="margin-bottom: 14px;">
       <button class="tab ${categorie === 'conge' ? 'active' : ''}" data-parametres-types-categorie="conge">Congés payés / RTT</button>
       <button class="tab ${categorie === 'autre' ? 'active' : ''}" data-parametres-types-categorie="autre">Autres absences</button>
       <button class="tab ${categorie === 'quotas' ? 'active' : ''}" data-parametres-types-categorie="quotas">Quotas simultanés</button>
+      <button class="tab ${categorie === 'vacances' ? 'active' : ''}" data-parametres-types-categorie="vacances">Vacances scolaires</button>
     </div>
-    ${categorie === 'quotas' ? renderParametresQuotasSimultanes() : renderCongesTypes(categorie)}
+    ${categorie === 'quotas' ? renderParametresQuotasSimultanes() : categorie === 'vacances' ? renderParametresVacances() : renderCongesTypes(categorie)}
   `;
 }
 
@@ -17300,7 +17415,9 @@ function bindParametresTypesAbsencesEvents() {
   document.querySelectorAll('[data-parametres-types-categorie]').forEach(btn => {
     btn.addEventListener('click', () => { state.parametresTypesCategorie = btn.dataset.parametresTypesCategorie; render(); });
   });
+  bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
   if (categorie === 'quotas') bindParametresQuotasSimultanesEvents();
+  else if (categorie === 'vacances') bindParametresVacancesEvents();
   else bindCongesTypesEvents(categorie);
 }
 
@@ -18600,24 +18717,60 @@ function openEquipeManagersModal(serviceId, equipeId) {
 // ---- Sous-vue : Référentiels (renommée depuis "Listes de référence", §correctif audit du
 // 23/08/2026 §6.3) ----
 
-/** §6.3 : "un regroupement par thème, l'affichage des seuls blocs correspondant aux modules
- * souscrits, et l'intégration des catégories de salariés dans ce même écran. L'onglet actuel
- * mélange les réglages d'au moins cinq modules." Chaque thème ci-dessous ne s'affiche que si son
- * module est souscrit (hasModule) — pour un abonnement classique (essai/essentiel/professionnel/
- * premium), hasModule() renvoie toujours vrai, donc tout reste visible comme avant ; seule une
- * offre à la carte voit vraiment ces blocs disparaître selon ce qui est souscrit. */
+/** §point 9 du 22/09/2026 (retour Betty, "le sujet le plus structurant") : "Référentiels" reste le
+ * socle commun de la fiche salarié — postes, catégories de salariés, conventions collectives,
+ * types de contrat, forfaits, catégories de documents, checklists — désormais TOUJOURS visible
+ * (canManageParametres, sans condition de module), plutôt que masqué faute de module RH souscrit.
+ * Les réglages propres à un seul module (RH, Rémunération, Planning et télétravail, Notes de frais,
+ * Tickets restaurant) ont chacun rejoint leur propre onglet (voir PARAMETRES_TABS) : cet écran ne
+ * mélange plus les réglages d'au moins cinq modules avec ces listes de référence. */
 function renderParametresListes() {
   const settings = settingsRepository.getSettings();
   const categories = categorieSalarieRepository.getAll();
-  const anyWorkflowModule = hasModule('conges') || hasModule('planning') || hasModule('frais');
 
   return `
     <!-- §correctif retour QA du 27/08/2026 (point 5) : "j'ai cherché un onglet 'Catégories de
          salariés', il n'existe plus" — regroupé ici depuis le sprint §6.3, mais sans aucun indice
          pour qui cherche encore par l'ancien nom. Rappel visible en tête d'onglet, en plus de
          l'indexation déjà correcte dans la recherche globale (voir PARAMETRES_SEARCH_SECTIONS). -->
-    <p class="text-muted" style="margin: -8px 0 16px;">Postes, catégories de frais, <strong>catégories de salariés</strong>, conventions collectives et autres listes de référence.</p>
-    ${hasModule('rh') ? `
+    <p class="text-muted" style="margin: -8px 0 16px;">Postes, <strong>catégories de salariés</strong>, conventions collectives et autres listes de référence de la fiche salarié.</p>
+    <div class="card table-card">
+      <div class="view-header-row" style="padding: 20px 20px 0;">
+        <div>
+          <h2>Catégories de salariés</h2>
+          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise, utilisable dans les règles de congés, jours fériés et fermetures.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
+      </div>
+      <table class="table">
+        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
+        <tbody>
+          ${categories.map(c => `
+            <tr>
+              <td>${escapeHtml(c.nom)}</td>
+              <td>${escapeHtml(c.description || '—')}</td>
+              <td>
+                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
+                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="settings-lists-grid">
+      ${renderPostesCard(settings.postes)}
+      ${SETTINGS_LISTS_RH.map(l => renderSettingsListCard(l, settings[l.key] || [],
+        l.key === 'conventionsCollectives' ? new Set(['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)]) : null)).join('')}
+    </div>
+  `;
+}
+
+/** §point 9 du 22/09/2026 : extrait de l'ex-onglet "Référentiels" — réglages propres au module RH
+ * (salariés, paie, documents, organigramme) : suivi médical, matricules, délais de conservation. */
+function renderParametresRH() {
+  const settings = settingsRepository.getSettings();
+  return `
     <div class="card">
       <h2>Salariés</h2>
       <div class="form-grid" style="max-width: 700px;">
@@ -18652,15 +18805,6 @@ function renderParametresListes() {
           <p class="form-hint">Une maladie professionnelle déclenche toujours le rappel, quelle que soit sa durée. Seuil indicatif pour les autres arrêts, à faire confirmer par votre médecine du travail/juriste.</p>
         </div>
         <div class="form-field">
-          <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
-          <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
-        </div>
-        <div class="form-field">
-          <label for="f-taux-repos-compensateur">Taux de majoration, repos compensateur (%)</label>
-          <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
-          <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
-        </div>
-        <div class="form-field">
           <label for="f-duree-conservation">Durée de conservation après départ (années)</label>
           <input class="input" type="number" min="1" step="1" id="f-duree-conservation" value="${escapeHtml(settings.dureeConservationSalariesPartisAnnees)}">
           <p class="form-hint">Passé ce délai après son départ, la fiche d'un salarié est anonymisée automatiquement (jamais supprimée : les compteurs/historiques restent exploitables pour vos rapports, seules les données personnelles identifiantes sont retirées). Valeur par défaut indicative, à faire confirmer par votre juriste/DPO.</p>
@@ -18674,11 +18818,6 @@ function renderParametresListes() {
           <label for="f-delai-prevenance-documents">Alerte de renouvellement des documents (jours avant échéance)</label>
           <input class="input" type="number" min="1" step="1" id="f-delai-prevenance-documents" value="${escapeHtml(settings.delaiPrevenanceDocumentsJours)}">
           <p class="form-hint">S'applique à tout document ayant une date d'expiration (permis, habilitation, autorisation de conduite, visite médicale, titre de séjour...).</p>
-        </div>
-        <div class="form-field">
-          <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
-          <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
-          <p class="form-hint">0 = pas de budget fixé (le coût de la semaine s'affiche sans comparaison, voir Planning). N'a d'effet que si le suivi de la masse salariale est activé (carte "Indicateurs Direction" ci-dessous).</p>
         </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
           <label><input type="checkbox" id="f-matricule-tiret" ${settings.matriculeAvecTiret !== false ? 'checked' : ''}> Séparer année et numéro par un tiret dans les matricules (ex. 2026-0001)</label>
@@ -18695,14 +18834,6 @@ function renderParametresListes() {
       <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
       <div class="form-grid" style="max-width: 700px;">
         <div class="form-field form-field-checkbox">
-          <label><input type="checkbox" id="f-masse-salariale" ${settings.masseSalarialeActivee ? 'checked' : ''}> Suivre la masse salariale (salaire brut mensuel par salarié)</label>
-        </div>
-        <div class="form-field">
-          <label for="f-taux-charges-patronales">Taux de charges patronales estimé (%)</label>
-          <input class="input" type="number" min="0" max="100" step="0.1" id="f-taux-charges-patronales" value="${escapeHtml(Math.round(settings.tauxChargesPatronalesEstime * 1000) / 10)}">
-          <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...), à faire valider par votre gestionnaire de paie.</p>
-        </div>
-        <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Afficher la répartition Hommes / Femmes sur le tableau de bord</label>
           <p class="form-hint">Le sexe (état civil) est désormais un champ obligatoire de la fiche salarié, indépendamment de ce réglage : celui-ci ne contrôle que l'affichage du graphique de répartition sur le tableau de bord Propriétaire.</p>
         </div>
@@ -18711,45 +18842,113 @@ function renderParametresListes() {
         </div>
       </div>
     </div>
-    <div class="card table-card">
-      <div class="view-header-row" style="padding: 20px 20px 0;">
-        <div>
-          <h2>Catégories de salariés</h2>
-          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise, utilisable dans les règles de congés, jours fériés et fermetures.</p>
+  `;
+}
+
+function bindParametresRHEvents() {
+  bindNumberField('f-duree-hebdo-reference', 'dureeHebdomadaireReferenceHeures', 35, 'Durée de référence mise à jour.');
+  bindNumberField('f-visite-medicale-simple', 'visiteMedicaleSimpleMois', 60, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-adapte', 'visiteMedicaleAdapteMois', 36, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-renforce', 'visiteMedicaleRenforceMois', 48, 'Périodicité mise à jour.');
+  bindNumberField('f-visite-medicale-renforce-intermediaire', 'visiteMedicaleRenforceIntermediaireMois', 24, 'Périodicité mise à jour.');
+  bindNumberField('f-seuil-visite-reprise', 'seuilVisiteRepriseJours', 30, 'Seuil mis à jour.');
+  bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
+  bindNumberField('f-duree-conservation-candidatures', 'dureeConservationCandidaturesAnnees', 2, 'Durée de conservation mise à jour.');
+  bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
+  bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
+  bindCheckboxField('f-suivi-genre', 'suiviGenreActive', 'Réglage mis à jour.');
+  bindCheckboxField('f-suivi-age', 'suiviAgeActive', 'Réglage mis à jour.');
+  const renumeroterMatriculesBtn = document.getElementById('btn-renumeroter-matricules');
+  if (renumeroterMatriculesBtn) renumeroterMatriculesBtn.addEventListener('click', () => {
+    openConfirm({
+      title: 'Renuméroter tous les matricules ?',
+      message: 'Chaque salarié de l\'entreprise recevra un nouveau matricule, réattribué par ordre chronologique d\'embauche. Les matricules figurent déjà sur des documents émis (bulletins de paie, attestations, exports comptables) : ceux déjà transmis garderont l\'ancien numéro imprimé, créant un écart assumé avec la fiche à jour. Chaque changement est journalisé, mais cette action ne peut pas être annulée automatiquement.',
+      confirmLabel: 'Renuméroter',
+      danger: true,
+      onConfirm: async () => {
+        renumeroterMatriculesBtn.disabled = true;
+        renumeroterMatriculesBtn.textContent = 'Renumérotation...';
+        try {
+          const result = await employeeRepository.renumberMatricules();
+          showToast(result.changed
+            ? `${result.changed} matricule(s) renuméroté(s) sur ${result.count} salarié(s).`
+            : 'Les matricules étaient déjà dans le bon ordre : rien à changer.');
+        } catch (err) {
+          showToast(`Renumérotation impossible (${(err && err.message) || err}). Aucun matricule n'a été modifié.`, 'error');
+        }
+        render();
+      }
+    });
+  });
+}
+
+/** §point 9 du 22/09/2026 : extrait de l'ex-onglet "Référentiels" — réglages propres au module
+ * Rémunération : masse salariale, charges patronales, heures supplémentaires. */
+function renderParametresRemuneration() {
+  const settings = settingsRepository.getSettings();
+  return `
+    <div class="card">
+      <h2>Indicateurs Direction</h2>
+      <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
+      <div class="form-grid" style="max-width: 700px;">
+        <div class="form-field form-field-checkbox">
+          <label><input type="checkbox" id="f-masse-salariale" ${settings.masseSalarialeActivee ? 'checked' : ''}> Suivre la masse salariale (salaire brut mensuel par salarié)</label>
         </div>
-        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
+        <div class="form-field">
+          <label for="f-taux-charges-patronales">Taux de charges patronales estimé (%)</label>
+          <input class="input" type="number" min="0" max="100" step="0.1" id="f-taux-charges-patronales" value="${escapeHtml(Math.round(settings.tauxChargesPatronalesEstime * 1000) / 10)}">
+          <p class="form-hint">Utilisé pour estimer le coût employeur complet (Rémunération) : un ordre de grandeur, pas un calcul de cotisations réel (varie selon convention collective, effectifs, exonérations...), à faire valider par votre gestionnaire de paie.</p>
+        </div>
       </div>
-      <table class="table">
-        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
-        <tbody>
-          ${categories.map(c => `
-            <tr>
-              <td>${escapeHtml(c.nom)}</td>
-              <td>${escapeHtml(c.description || '—')}</td>
-              <td>
-                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
-                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
     </div>
-    <div class="settings-lists-grid">
-      ${renderPostesCard(settings.postes)}
-      ${SETTINGS_LISTS_RH.map(l => renderSettingsListCard(l, settings[l.key] || [],
-        l.key === 'conventionsCollectives' ? new Set(['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)]) : null)).join('')}
+    <div class="card">
+      <h2>Heures supplémentaires</h2>
+      <div class="form-grid" style="max-width: 700px;">
+        <div class="form-field">
+          <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
+          <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
+        </div>
+        <div class="form-field">
+          <label for="f-taux-repos-compensateur">Taux de majoration, repos compensateur (%)</label>
+          <input class="input" type="number" min="0" step="1" id="f-taux-repos-compensateur" value="${escapeHtml(settings.tauxReposCompensateur)}">
+          <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
+        </div>
+      </div>
     </div>
-    ` : ''}
+  `;
+}
 
-    ${hasModule('frais') ? `
-    <div class="settings-lists-grid">
-      ${renderSettingsListCard({ key: 'categoriesFrais', label: 'Catégories de notes de frais' }, settings.categoriesFrais || [])}
-    </div>
-    ${renderCategoriesFraisConfigCard(settings)}
-    ` : ''}
+function bindParametresRemunerationEvents() {
+  bindCheckboxField('f-masse-salariale', 'masseSalarialeActivee', 'Réglage mis à jour.');
+  const tauxChargesEl = document.getElementById('f-taux-charges-patronales');
+  if (tauxChargesEl) {
+    tauxChargesEl.addEventListener('change', (evt) => {
+      // Champ saisi en pourcentage (ex. 42), stocké en fraction (0,42) — voir DEFAULT_SETTINGS.tauxChargesPatronalesEstime.
+      const settings = settingsRepository.getSettings();
+      settings.tauxChargesPatronalesEstime = (Number(evt.target.value) || 0) / 100;
+      settingsRepository.saveSettings(settings);
+      showToast('Taux mis à jour.');
+    });
+  }
+  bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
+  bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
+}
 
-    ${hasModule('planning') ? `
+/** §point 9 du 22/09/2026 : extrait de l'ex-onglet "Référentiels" — réglages propres au module
+ * Planning, télétravail (budget planning, quota et chaîne de validation télétravail). */
+function renderParametresPlanningTeletravail() {
+  const settings = settingsRepository.getSettings();
+  return `
+    <div class="card">
+      <h2>Planning</h2>
+      <div class="form-grid" style="max-width: 700px;">
+        <div class="form-field">
+          <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
+          <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
+          <p class="form-hint">0 = pas de budget fixé (le coût de la semaine s'affiche sans comparaison, voir Planning). N'a d'effet que si le suivi de la masse salariale est activé (Paramètres → Rémunération).</p>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <h2>Télétravail</h2>
       <div class="form-grid" style="max-width: 700px;">
@@ -18757,11 +18956,49 @@ function renderParametresListes() {
           <label for="f-teletravail-quota">Quota de télétravail (jours / semaine)</label>
           <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
         </div>
+        ${workflowSelectField('workflow-teletravail', 'Validation requise', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail)}
       </div>
     </div>
-    ` : ''}
+  `;
+}
 
-    ${hasModule('tickets') ? `
+function bindParametresPlanningTeletravailEvents() {
+  bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
+  bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
+  bindWorkflowField('f-workflow-teletravail', 'workflowTeletravail', 'Chaîne de validation du télétravail mise à jour.');
+}
+
+/** §point 9 du 22/09/2026 : extrait de l'ex-onglet "Référentiels" — réglages propres au module
+ * Notes de frais (catégories, justificatif/plafond/TVA par catégorie, chaîne de validation). */
+function renderParametresNotesFrais() {
+  const settings = settingsRepository.getSettings();
+  return `
+    <div class="settings-lists-grid">
+      ${renderSettingsListCard({ key: 'categoriesFrais', label: 'Catégories de notes de frais' }, settings.categoriesFrais || [])}
+    </div>
+    ${renderCategoriesFraisConfigCard(settings)}
+    <div class="card">
+      <h2>Validation</h2>
+      <div class="form-grid" style="max-width: 700px;">
+        ${workflowSelectField('workflow-frais', 'Validation requise', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais)}
+      </div>
+    </div>
+  `;
+}
+
+function bindParametresNotesFraisEvents() {
+  // bindChipListEvents() porte aussi les réglages par catégorie (justificatif/plafond/TVA/forfait,
+  // voir data-cat-* dans renderCategoriesFraisConfigCard) — même fonction générique qu'avant
+  // l'éclatement de l'ex-onglet "Référentiels" par module, rien à réécrire ici.
+  bindChipListEvents();
+  bindWorkflowField('f-workflow-frais', 'workflowFrais', 'Chaîne de validation des notes de frais mise à jour.');
+}
+
+/** §point 9 du 22/09/2026 : extrait tel quel de l'ex-onglet "Référentiels" — réglages du module
+ * Tickets restaurant (valeur faciale, part employeur, télétravail, distribution). */
+function renderParametresTicketsRestaurant() {
+  const settings = settingsRepository.getSettings();
+  return `
     <div class="card">
       <h2>Tickets restaurant</h2>
       <div class="form-grid" style="max-width: 700px;">
@@ -18795,20 +19032,38 @@ function renderParametresListes() {
            entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
       <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
     </div>
-    ` : ''}
-
-    ${anyWorkflowModule ? `
-    <div class="card">
-      <h2>Chaînes de validation</h2>
-      <p class="text-muted">Modèle par défaut pour un nouveau type de congé (chaque type garde ensuite sa propre chaîne, modifiable dans Congés → Types), et chaîne appliquée au télétravail et aux notes de frais.</p>
-      <div class="form-grid" style="max-width: 700px;">
-        ${hasModule('conges') ? workflowSelectField('workflow-conges-default', 'Congés (modèle par défaut)', WORKFLOW_PRESETS_CONGES, settings.workflowCongesDefault) : ''}
-        ${hasModule('planning') ? workflowSelectField('workflow-teletravail', 'Télétravail', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail) : ''}
-        ${hasModule('frais') ? workflowSelectField('workflow-frais', 'Notes de frais', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais) : ''}
-      </div>
-    </div>
-    ` : ''}
   `;
+}
+
+function bindParametresTicketsRestaurantEvents() {
+  bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
+  bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
+  bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
+  const ticketsDistributionField = document.getElementById('f-tickets-distribution');
+  if (ticketsDistributionField) ticketsDistributionField.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.ticketsDistribution = e.target.value;
+    settingsRepository.saveSettings(settings);
+    showToast('Réglage mis à jour.');
+  });
+  // §tour de bugs du 07/09/2026 : avertissement (jamais un blocage, même principe que les plafonds
+  // par catégorie de Notes de frais) si les VRAIS réglages dépassent le plafond d'exonération URSSAF.
+  const ticketsValeurEl = document.getElementById('f-tickets-valeur');
+  const ticketsPartEl = document.getElementById('f-tickets-part');
+  if (ticketsValeurEl && ticketsPartEl) {
+    const updateTicketsUrssafNote = () => {
+      const note = document.getElementById('tickets-urssaf-note');
+      const valeurFaciale = Number(ticketsValeurEl.value) || 0;
+      const partEmployeurPct = Number(ticketsPartEl.value) || 0;
+      const partEmployeurParTicket = round2(valeurFaciale * partEmployeurPct / 100);
+      note.innerHTML = partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026
+        ? `${icon(ICONS.warningTriangle, 14)} Avec ces réglages, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre, au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`
+        : `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre, dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}).`;
+    };
+    ticketsValeurEl.addEventListener('input', updateTicketsUrssafNote);
+    ticketsPartEl.addEventListener('input', updateTicketsUrssafNote);
+    updateTicketsUrssafNote();
+  }
 }
 
 /** §correctif audit du 23/08/2026 (§6.2) : "Elles [les conventions collectives] figurent à la
@@ -18900,124 +19155,46 @@ function renderSettingsListCard(listDef, items, readOnlyValues) {
 // DOM (module non souscrit = bloc non rendu, voir renderParametresListes) — chaque binding est
 // désormais gardé par `if (el)`, jamais un getElementById direct qui lancerait une exception sur
 // un salarié dont l'entreprise n'a pas souscrit ce module.
-function bindParametresListesEvents() {
-  const bindNumberField = (id, settingKey, fallback, toastMsg) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('change', (e) => {
-      const settings = settingsRepository.getSettings();
-      // §correctif audit du 16/09/2026 : `Number(e.target.value) || fallback` remplaçait
-      // silencieusement un 0 saisi intentionnellement (ex. délai de prévenance à 0 jour) par le
-      // défaut du champ, 0 étant falsy en JS — le repli ne doit jouer que sur une saisie réellement
-      // vide ou invalide, jamais sur un 0 explicite.
-      const parsed = Number(e.target.value);
-      settings[settingKey] = e.target.value !== '' && Number.isFinite(parsed) ? parsed : fallback;
-      settingsRepository.saveSettings(settings);
-      showToast(toastMsg);
-    });
-  };
-  const bindCheckboxField = (id, settingKey, toastMsg) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('change', (e) => {
-      const settings = settingsRepository.getSettings();
-      settings[settingKey] = e.target.checked;
-      settingsRepository.saveSettings(settings);
-      showToast(toastMsg);
-    });
-  };
-  const bindWorkflowField = (id, settingKey, toastMsg) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('change', (e) => {
-      const settings = settingsRepository.getSettings();
-      settings[settingKey] = JSON.parse(e.target.value);
-      settingsRepository.saveSettings(settings);
-      showToast(toastMsg);
-    });
-  };
-
-  bindNumberField('f-duree-hebdo-reference', 'dureeHebdomadaireReferenceHeures', 35, 'Durée de référence mise à jour.');
-  bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
-  bindNumberField('f-visite-medicale-simple', 'visiteMedicaleSimpleMois', 60, 'Périodicité mise à jour.');
-  bindNumberField('f-visite-medicale-adapte', 'visiteMedicaleAdapteMois', 36, 'Périodicité mise à jour.');
-  bindNumberField('f-visite-medicale-renforce', 'visiteMedicaleRenforceMois', 48, 'Périodicité mise à jour.');
-  bindNumberField('f-visite-medicale-renforce-intermediaire', 'visiteMedicaleRenforceIntermediaireMois', 24, 'Périodicité mise à jour.');
-  bindNumberField('f-seuil-visite-reprise', 'seuilVisiteRepriseJours', 30, 'Seuil mis à jour.');
-  bindNumberField('f-contingent-heures-sup', 'contingentAnnuelHeuresSup', 220, 'Contingent mis à jour.');
-  bindNumberField('f-taux-repos-compensateur', 'tauxReposCompensateur', 25, 'Taux mis à jour.');
-  bindNumberField('f-duree-conservation', 'dureeConservationSalariesPartisAnnees', 5, 'Durée de conservation mise à jour.');
-  bindNumberField('f-duree-conservation-candidatures', 'dureeConservationCandidaturesAnnees', 2, 'Durée de conservation mise à jour.');
-  bindNumberField('f-delai-prevenance-documents', 'delaiPrevenanceDocumentsJours', 30, 'Délai mis à jour.');
-  bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
-  bindCheckboxField('f-matricule-tiret', 'matriculeAvecTiret', 'Format mis à jour.');
-  const renumeroterMatriculesBtn = document.getElementById('btn-renumeroter-matricules');
-  if (renumeroterMatriculesBtn) renumeroterMatriculesBtn.addEventListener('click', () => {
-    openConfirm({
-      title: 'Renuméroter tous les matricules ?',
-      message: 'Chaque salarié de l\'entreprise recevra un nouveau matricule, réattribué par ordre chronologique d\'embauche. Les matricules figurent déjà sur des documents émis (bulletins de paie, attestations, exports comptables) : ceux déjà transmis garderont l\'ancien numéro imprimé, créant un écart assumé avec la fiche à jour. Chaque changement est journalisé, mais cette action ne peut pas être annulée automatiquement.',
-      confirmLabel: 'Renuméroter',
-      danger: true,
-      onConfirm: async () => {
-        renumeroterMatriculesBtn.disabled = true;
-        renumeroterMatriculesBtn.textContent = 'Renumérotation...';
-        try {
-          const result = await employeeRepository.renumberMatricules();
-          showToast(result.changed
-            ? `${result.changed} matricule(s) renuméroté(s) sur ${result.count} salarié(s).`
-            : 'Les matricules étaient déjà dans le bon ordre : rien à changer.');
-        } catch (err) {
-          showToast(`Renumérotation impossible (${(err && err.message) || err}). Aucun matricule n'a été modifié.`, 'error');
-        }
-        render();
-      }
-    });
-  });
-  bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
-  bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
-  bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
-  const ticketsDistributionField = document.getElementById('f-tickets-distribution');
-  if (ticketsDistributionField) ticketsDistributionField.addEventListener('change', (e) => {
+// §point 9 du 22/09/2026 : remontées au niveau du fichier (ex-fermetures locales à
+// bindParametresListesEvents) pour être réutilisées par les nouveaux onglets de Paramètres répartis
+// par module (RH, Rémunération, Planning, Notes de frais, Tickets restaurant, Congés et absences...).
+const bindNumberField = (id, settingKey, fallback, toastMsg) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', (e) => {
     const settings = settingsRepository.getSettings();
-    settings.ticketsDistribution = e.target.value;
+    // §correctif audit du 16/09/2026 : `Number(e.target.value) || fallback` remplaçait
+    // silencieusement un 0 saisi intentionnellement (ex. délai de prévenance à 0 jour) par le
+    // défaut du champ, 0 étant falsy en JS — le repli ne doit jouer que sur une saisie réellement
+    // vide ou invalide, jamais sur un 0 explicite.
+    const parsed = Number(e.target.value);
+    settings[settingKey] = e.target.value !== '' && Number.isFinite(parsed) ? parsed : fallback;
     settingsRepository.saveSettings(settings);
-    showToast('Réglage mis à jour.');
+    showToast(toastMsg);
   });
-  // §tour de bugs du 07/09/2026 : avertissement (jamais un blocage, même principe que les plafonds
-  // par catégorie de Notes de frais) si les VRAIS réglages dépassent le plafond d'exonération URSSAF.
-  const ticketsValeurEl = document.getElementById('f-tickets-valeur');
-  const ticketsPartEl = document.getElementById('f-tickets-part');
-  if (ticketsValeurEl && ticketsPartEl) {
-    const updateTicketsUrssafNote = () => {
-      const note = document.getElementById('tickets-urssaf-note');
-      const valeurFaciale = Number(ticketsValeurEl.value) || 0;
-      const partEmployeurPct = Number(ticketsPartEl.value) || 0;
-      const partEmployeurParTicket = round2(valeurFaciale * partEmployeurPct / 100);
-      note.innerHTML = partEmployeurParTicket > PLAFOND_EXONERATION_URSSAF_2026
-        ? `${icon(ICONS.warningTriangle, 14)} Avec ces réglages, la part employeur atteint ${formatCurrencyFR(partEmployeurParTicket)} par titre, au-delà du plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}). Le dépassement est soumis à cotisations sociales.`
-        : `Part employeur de ${formatCurrencyFR(partEmployeurParTicket)} par titre, dans le plafond d'exonération URSSAF 2026 (${formatCurrencyFR(PLAFOND_EXONERATION_URSSAF_2026)}).`;
-    };
-    ticketsValeurEl.addEventListener('input', updateTicketsUrssafNote);
-    ticketsPartEl.addEventListener('input', updateTicketsUrssafNote);
-    updateTicketsUrssafNote();
-  }
-  bindCheckboxField('f-masse-salariale', 'masseSalarialeActivee', 'Réglage mis à jour.');
-  const tauxChargesEl = document.getElementById('f-taux-charges-patronales');
-  if (tauxChargesEl) {
-    tauxChargesEl.addEventListener('change', (evt) => {
-      // Champ saisi en pourcentage (ex. 42), stocké en fraction (0,42) — voir DEFAULT_SETTINGS.tauxChargesPatronalesEstime.
-      const settings = settingsRepository.getSettings();
-      settings.tauxChargesPatronalesEstime = (Number(evt.target.value) || 0) / 100;
-      settingsRepository.saveSettings(settings);
-      showToast('Taux mis à jour.');
-    });
-  }
-  bindCheckboxField('f-suivi-genre', 'suiviGenreActive', 'Réglage mis à jour.');
-  bindCheckboxField('f-suivi-age', 'suiviAgeActive', 'Réglage mis à jour.');
-  bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
-  bindWorkflowField('f-workflow-teletravail', 'workflowTeletravail', 'Chaîne de validation du télétravail mise à jour.');
-  bindWorkflowField('f-workflow-frais', 'workflowFrais', 'Chaîne de validation des notes de frais mise à jour.');
+};
+const bindCheckboxField = (id, settingKey, toastMsg) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings[settingKey] = e.target.checked;
+    settingsRepository.saveSettings(settings);
+    showToast(toastMsg);
+  });
+};
+const bindWorkflowField = (id, settingKey, toastMsg) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings[settingKey] = JSON.parse(e.target.value);
+    settingsRepository.saveSettings(settings);
+    showToast(toastMsg);
+  });
+};
 
+function bindParametresListesEvents() {
   // §6.3 : Catégories de salariés, repliée dans ce même écran (plus de tab séparé).
   const btnAddCategorie = document.getElementById('btn-add-categorie-salarie');
   if (btnAddCategorie) {
@@ -19762,6 +19939,23 @@ function bindParametresFermeturesEvents() {
       });
     });
   });
+}
+
+/** §point 9 du 22/09/2026 : "le calcul des tickets restaurant dépend du calendrier (jours fériés +
+ * fermetures) au même titre que les congés, or Fermetures était rangé dans l'onglet des congés" —
+ * jours fériés et fermetures rejoignent un seul onglet "Calendrier", désormais dans le socle commun
+ * (visible quels que soient les modules souscrits), au lieu de vivre pour l'un dans un onglet
+ * toujours visible et pour l'autre dans un onglet gated hasModule('conges') alors que
+ * isJourTravaillePourSalarie (data.js), consulté par calculateTicketsRestaurant, lit
+ * settings.fermetures sans jamais vérifier ce module. Simple assemblage des deux écrans existants,
+ * chacun inchangé (rendu et binding), pour ne rien risquer sur leur logique propre. */
+function renderParametresCalendrier() {
+  return renderParametresFeries() + renderParametresFermetures();
+}
+
+function bindParametresCalendrierEvents() {
+  bindParametresFeriesEvents();
+  bindParametresFermeturesEvents();
 }
 
 function openFermetureModal(existing) {

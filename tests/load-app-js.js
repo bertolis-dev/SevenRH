@@ -337,6 +337,22 @@ globalThis.__openVisiteMedicaleModal = openVisiteMedicaleModal;
 globalThis.__deleteVisiteMedicale = deleteVisiteMedicale;
 globalThis.__visiteMedicaleConclusionBadgeClass = visiteMedicaleConclusionBadgeClass;
 globalThis.__renderParametresListes = renderParametresListes;
+// §point 9 du 22/09/2026 : ex-onglet "Référentiels" éclaté par module (RH, Rémunération, Planning
+// et télétravail, Notes de frais, Tickets restaurant) + fusion Jours fériés/Fermetures (Calendrier).
+globalThis.__renderParametresRH = renderParametresRH;
+globalThis.__bindParametresRHEvents = bindParametresRHEvents;
+globalThis.__renderParametresRemuneration = renderParametresRemuneration;
+globalThis.__bindParametresRemunerationEvents = bindParametresRemunerationEvents;
+globalThis.__renderParametresPlanningTeletravail = renderParametresPlanningTeletravail;
+globalThis.__bindParametresPlanningTeletravailEvents = bindParametresPlanningTeletravailEvents;
+globalThis.__renderParametresNotesFrais = renderParametresNotesFrais;
+globalThis.__bindParametresNotesFraisEvents = bindParametresNotesFraisEvents;
+globalThis.__renderParametresTicketsRestaurant = renderParametresTicketsRestaurant;
+globalThis.__bindParametresTicketsRestaurantEvents = bindParametresTicketsRestaurantEvents;
+globalThis.__renderParametresCalendrier = renderParametresCalendrier;
+globalThis.__bindParametresCalendrierEvents = bindParametresCalendrierEvents;
+globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
+globalThis.__PARAMETRES_TABS_COMPLETION = PARAMETRES_TABS_COMPLETION;
 globalThis.__renderParametresEntreprise = renderParametresEntreprise;
 globalThis.__bindParametresEntrepriseEvents = bindParametresEntrepriseEvents;
 globalThis.__handleExportToutesDonnees = handleExportToutesDonnees;
@@ -657,6 +673,20 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     deleteVisiteMedicale: sandbox.__deleteVisiteMedicale,
     visiteMedicaleConclusionBadgeClass: sandbox.__visiteMedicaleConclusionBadgeClass,
     renderParametresListes: sandbox.__renderParametresListes,
+    renderParametresRH: sandbox.__renderParametresRH,
+    bindParametresRHEvents: sandbox.__bindParametresRHEvents,
+    renderParametresRemuneration: sandbox.__renderParametresRemuneration,
+    bindParametresRemunerationEvents: sandbox.__bindParametresRemunerationEvents,
+    renderParametresPlanningTeletravail: sandbox.__renderParametresPlanningTeletravail,
+    bindParametresPlanningTeletravailEvents: sandbox.__bindParametresPlanningTeletravailEvents,
+    renderParametresNotesFrais: sandbox.__renderParametresNotesFrais,
+    bindParametresNotesFraisEvents: sandbox.__bindParametresNotesFraisEvents,
+    renderParametresTicketsRestaurant: sandbox.__renderParametresTicketsRestaurant,
+    bindParametresTicketsRestaurantEvents: sandbox.__bindParametresTicketsRestaurantEvents,
+    renderParametresCalendrier: sandbox.__renderParametresCalendrier,
+    bindParametresCalendrierEvents: sandbox.__bindParametresCalendrierEvents,
+    PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
+    PARAMETRES_TABS_COMPLETION: sandbox.__PARAMETRES_TABS_COMPLETION,
     renderParametresEntreprise: sandbox.__renderParametresEntreprise,
     bindParametresEntrepriseEvents: sandbox.__bindParametresEntrepriseEvents,
     handleExportToutesDonnees: sandbox.__handleExportToutesDonnees,

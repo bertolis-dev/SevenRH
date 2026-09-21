@@ -124,12 +124,14 @@ function runEcranAvertitAvantExecution() {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
   const btnStart = appSource.indexOf('btn-renumeroter-matricules');
-  assert.ok(btnStart !== -1, 'le bouton doit exister dans le rendu de l\'onglet Référentiels (renderParametresListes)');
+  // §point 9 du 22/09/2026 : "Salariés" (et son bouton de renumérotation) a quitté l'onglet
+  // "Référentiels" pour rejoindre le nouvel onglet "RH" (Paramètres réorganisés par module).
+  assert.ok(btnStart !== -1, 'le bouton doit exister dans le rendu de l\'onglet RH (renderParametresRH)');
 
-  const bindStart = appSource.indexOf('function bindParametresListesEvents(');
-  const bindEnd = appSource.indexOf('function bindChipListEvents(');
+  const bindStart = appSource.indexOf('function bindParametresRHEvents(');
+  const bindEnd = appSource.indexOf('function renderParametresRemuneration(');
   const bindBody = appSource.slice(bindStart, bindEnd);
-  assert.ok(bindBody.includes('renumeroterMatriculesBtn'), 'le clic doit être lié depuis bindParametresListesEvents');
+  assert.ok(bindBody.includes('renumeroterMatriculesBtn'), 'le clic doit être lié depuis bindParametresRHEvents');
   assert.ok(bindBody.includes('openConfirm('), 'une confirmation explicite doit être demandée avant toute renumérotation');
 
   const confirmStart = bindBody.indexOf('openConfirm({');
