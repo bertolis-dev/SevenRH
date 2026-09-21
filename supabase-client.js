@@ -1091,6 +1091,28 @@ async function setCandidatureStatut(id, statut, employeeId) {
   if (error) throw error;
 }
 
+/** §retour Betty du 22/09/2026 ("je ne peux pas les supprimer, ce serait bien de pouvoir supprimer
+ * les candidatures reçues") : la ligne part par delete_candidature (0063), qui rend les chemins des
+ * fichiers déposés ; ceux-ci sont ensuite retirés du stockage avec la session de l'appelant, plutôt
+ * que de donner à la fonction serveur un accès en écriture au stockage qu'elle n'a aucune autre
+ * raison d'avoir. Un échec sur les fichiers ne remet jamais la candidature en cause : la ligne est
+ * déjà partie, et un fichier orphelin dans un bucket privé, sans ligne pour le désigner, n'est
+ * accessible par personne. */
+async function supprimerCandidature(id) {
+  const { data, error } = await supabase.rpc('delete_candidature', { p_id: id });
+  if (error) throw error;
+  const chemins = (data || [])
+    .flatMap(ligne => [ligne.cv_path, ligne.lettre_path])
+    .filter(Boolean);
+  if (chemins.length) {
+    try {
+      await supabase.storage.from('candidatures-files').remove(chemins);
+    } catch (err) {
+      console.error('supprimerCandidature : fichiers non retirés du stockage.', err);
+    }
+  }
+}
+
 /** §retour Betty du 14/09/2026 ("embauche tu peux augmenté") : porte d'écriture unique pour les
  * créneaux d'entretien et les évaluations (voir 0056_candidature_creneaux_evaluations.sql) — même
  * raison que setCandidatureStatut, jamais un .update() direct sur candidatures. */
@@ -1515,7 +1537,7 @@ window.SupabaseSync = {
   pushIdees, toggleIdeeVote, setIdeeStatut,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
-  submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature,
+  submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature, supprimerCandidature,
   getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow

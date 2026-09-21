@@ -5653,6 +5653,10 @@ const candidatureRepository = {
   /** "Pas intéressé" (demande du 17/08/2026) : envoie le message par email au candidat PUIS
    * archive — jamais un archivage silencieux (voir candidature-reject, Edge Function/Resend). */
   reject: (id, message) => window.SupabaseSync.rejectCandidature(id, message),
+  /** §retour Betty du 22/09/2026 ("on a fait des tests... je ne peux pas les supprimer") : retire
+   * définitivement la candidature ET les fichiers déposés. Distinct d'archiver, qui ne fait que
+   * déplacer la carte dans une autre colonne. Voir 0063_supprimer_candidature.sql. */
+  supprimer: (id) => window.SupabaseSync.supprimerCandidature(id),
   // §retour Betty du 14/09/2026 ("embauche tu peux augmenté") : voir 0056_candidature_creneaux_evaluations.sql.
   // Remplace toujours la liste ENTIÈRE des créneaux proposés (jamais un simple ajout) — proposer de
   // nouveaux créneaux annule forcément la confirmation précédente, donc creneauChoisiId repart à null.

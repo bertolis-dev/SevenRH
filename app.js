@@ -26697,7 +26697,12 @@ function renderCandidatureCard(c) {
       <div class="idee-card-meta">
         <span class="text-muted">${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '—'} · ${formatDate(c.dateSoumission)}</span>
       </div>
-      ${nextStatut ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" data-avancer-candidature="${escapeHtml(c.id)}" data-next-statut="${nextStatut}">→ ${escapeHtml(CANDIDATURE_STATUT_LABELS[nextStatut])}</button>` : ''}
+      <div class="candidature-card-actions">
+        ${nextStatut ? `<button type="button" class="btn btn-secondary btn-sm" data-avancer-candidature="${escapeHtml(c.id)}" data-next-statut="${nextStatut}">→ ${escapeHtml(CANDIDATURE_STATUT_LABELS[nextStatut])}</button>` : ''}
+        <!-- §retour Betty du 22/09/2026 ("on a fait des tests... je ne peux pas les supprimer") :
+             distinct d'"Archivée", qui ne fait que déplacer la carte dans une autre colonne. -->
+        <button type="button" class="btn-link btn-link-danger" data-supprimer-candidature="${escapeHtml(c.id)}">Supprimer</button>
+      </div>
     </div>
   `;
 }
@@ -26733,7 +26738,30 @@ async function refreshEmbaucheCandidaturesList() {
     document.querySelectorAll('[data-open-candidature]').forEach(card => {
       card.addEventListener('click', (evt) => {
         if (evt.target.closest('[data-avancer-candidature]')) return;
+        if (evt.target.closest('[data-supprimer-candidature]')) return;
         navigateTo('candidature-detail', { currentCandidatureId: card.dataset.openCandidature });
+      });
+    });
+    document.querySelectorAll('[data-supprimer-candidature]').forEach(btn => {
+      btn.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        const carte = btn.closest('[data-open-candidature]');
+        const nom = carte ? carte.querySelector('.idee-card-title').textContent.trim() : 'cette candidature';
+        openConfirm({
+          title: 'Supprimer cette candidature ?',
+          message: `La candidature de ${nom} sera retirée définitivement, ainsi que le CV et la lettre déposés. Cette action ne peut pas être annulée. Pour conserver la trace d'un candidat non retenu, utilisez plutôt "Archivée".`,
+          confirmLabel: 'Supprimer',
+          danger: true,
+          onConfirm: async () => {
+            try {
+              await candidatureRepository.supprimer(btn.dataset.supprimerCandidature);
+              showToast('Candidature supprimée.');
+              refreshEmbaucheCandidaturesList();
+            } catch (err) {
+              showToast(err.message || 'Suppression impossible.', 'error');
+            }
+          }
+        });
       });
     });
     document.querySelectorAll('[data-avancer-candidature]').forEach(btn => {

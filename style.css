@@ -4242,3 +4242,14 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .settings-cards-grid > .card { margin-bottom: 0; }
 .settings-card-wide { grid-column: 1 / -1; }
+
+/* §retour Betty du 22/09/2026 : la carte de candidature porte désormais deux actions (avancer d'une
+   étape, supprimer) au lieu d'une seule. */
+.candidature-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
