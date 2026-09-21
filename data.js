@@ -3188,6 +3188,26 @@ const DB = {
       if (changed) this.saveLeaveTypes(types); // persiste + pousse vers Supabase (couvre aussi le marqueur, même objet company)
       else this.saveCurrentCompany(company); // rien à recolorer : seul le marqueur doit être persisté, en local (jamais de push réseau ici)
     }
+    // §retour Betty du 22/09/2026 (défaut 1.2) : natureAcquisition (makeEmptyLeaveType) n'existait pas
+    // avant ce correctif — les types déjà créés chez une entreprise existante n'ont donc jamais
+    // 'ouverte' dessus (Object.assign(makeEmptyLeaveType(), ...) n'a joué qu'à LEUR création, jamais
+    // rejoué depuis), même s'ils portent l'un des 9 noms concernés. Même patron idempotent que la
+    // recoloration ci-dessus (marqueur dédié, jamais réappliqué si l'entreprise a depuis changé ce
+    // champ elle-même via Paramètres).
+    if (company && !company.natureAcquisitionEvenementsFamiliauxAppliquee) {
+      const types = company.leaveTypes || [];
+      const nomsOuverts = ['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Formation', 'Naissance / adoption', 'Exceptionnel'];
+      let changedNature = false;
+      types.forEach(t => {
+        if (nomsOuverts.some(nom => leaveTypeNameMatches(t.nom, nom)) && t.natureAcquisition !== 'ouverte') {
+          t.natureAcquisition = 'ouverte';
+          changedNature = true;
+        }
+      });
+      company.natureAcquisitionEvenementsFamiliauxAppliquee = true;
+      if (changedNature) this.saveLeaveTypes(types);
+      else this.saveCurrentCompany(company);
+    }
     return company.leaveTypes.slice().sort((a, b) => a.ordre - b.ordre);
   },
 
@@ -6095,7 +6115,17 @@ function makeEmptyLeaveType() {
     // PAS donné de liste "ceci suspend, cela non" (maternité = travail effectif, sabbatique = non,
     // mais rien de plus précis) — deviner un défaut par type serait aussi risqué que ce qu'on corrige.
     // Coché à la main, type par type, par l'entreprise.
-    suspendAcquisitionAutresCompteurs: false
+    suspendAcquisitionAutresCompteurs: false,
+    // §retour Betty du 22/09/2026 (défaut 1.2, "les droits annuels sont affichés au prorata du temps
+    // écoulé") : jusqu'ici calculateAcquisition appliquait le MÊME prorata temps-écoulé à tout type
+    // en acquisition 'Annuelle', qu'il s'agisse de congés payés/ancienneté (qui s'acquièrent
+    // réellement avec le temps de travail) ou d'événements familiaux/enfant malade/formation (des
+    // droits légalement OUVERTS EN TOTALITÉ dès le premier jour de la période, jamais accumulés).
+    // 'progressive' (défaut, comportement historique, correct pour CP/RTT/ancienneté) applique le
+    // prorata temps écoulé ; 'ouverte' (événements familiaux, voir seedLeaveTypes) le désactive —
+    // seul l'écoulement du temps change, jamais le prorata temps partiel (proratisationTempsPartiel
+    // ci-dessus) ni la suspension (suspendAcquisitionAutresCompteurs), deux questions distinctes.
+    natureAcquisition: 'progressive' // 'progressive' | 'ouverte'
   };
 }
 
@@ -7119,7 +7149,20 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride, allR
     return round2(monthsElapsed * (annualAmount / 12) * activityRatio * suspensionRatio);
   }
 
-  // Acquisition annuelle : prorata du nombre de jours travaillés sur l'année.
+  // §retour Betty du 22/09/2026 (défaut 1.2, "les droits annuels sont affichés au prorata du temps
+  // écoulé") : un droit natureAcquisition === 'ouverte' (événements familiaux, enfant malade,
+  // formation — voir seedLeaveTypes et le commentaire de natureAcquisition, makeEmptyLeaveType) est
+  // légalement disponible en INTÉGRALITÉ dès le premier jour de la période (periodStart <= periodEnd
+  // ci-dessus suffit déjà à établir que le salarié était bien présent à un moment de l'année) —
+  // jamais accumulé au fil du temps écoulé, contrairement aux congés payés/RTT/ancienneté
+  // ('progressive', comportement historique juste en dessous). activityRatio/suspensionRatio
+  // restent appliqués tels quels : cette distinction ne porte que sur le temps ÉCOULÉ dans l'année,
+  // une question différente du temps de travail ou d'une suspension d'acquisition.
+  if (leaveType.natureAcquisition === 'ouverte') {
+    return round2(annualAmount * activityRatio * suspensionRatio);
+  }
+
+  // Acquisition annuelle progressive : prorata du nombre de jours travaillés sur l'année.
   const daysInYear = daysBetween(yearStart, yearEnd) + 1;
   const daysWorked = totalDaysInPeriod;
   const prorata = Math.min(Math.max(daysWorked / daysInYear, 0), 1);
@@ -7911,6 +7954,14 @@ function seedLeaveTypes() {
         { ancienneteMin: 20, jours: 4 }
       ];
       type.description = 'Barème standard, supplétif : +1 jour à 5 ans d\'ancienneté, +2 à 10 ans, +3 à 15 ans, +4 à 20 ans (non cumulatif). Votre convention collective peut le relever, jamais l\'abaisser.';
+    }
+    // §retour Betty du 22/09/2026 (défaut 1.2, "les droits annuels sont affichés au prorata du temps
+    // écoulé") : les 9 types d'événements familiaux/enfant malade/formation/exceptionnel ci-dessous
+    // sont des droits légalement OUVERTS EN TOTALITÉ dès le premier jour de la période, jamais
+    // accumulés au fil du temps — contrairement à Congés payés/RTT/Ancienneté au-dessus, qui restent
+    // 'progressive' (valeur par défaut de makeEmptyLeaveType, jamais écrite ici).
+    if (['Mariage / PACS', 'Mariage d\'un enfant', 'Décès', 'Décès d\'un enfant', 'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Formation', 'Naissance / adoption', 'Exceptionnel'].includes(nom)) {
+      type.natureAcquisition = 'ouverte';
     }
     if (nom === 'Décès') {
       // §correctif retour QA du 27/08/2026 (points 2.4/7.1, confirmé par l'expert-comptable :

@@ -95,6 +95,8 @@ globalThis.__documentTemplateRepository = documentTemplateRepository;
 globalThis.__hasPermission = hasPermission;
 globalThis.__calculateTicketsRestaurant = calculateTicketsRestaurant;
 globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
+globalThis.__getLeaveBalance = getLeaveBalance;
+globalThis.__calculateAcquisition = calculateAcquisition;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
 globalThis.__employeeRepository = employeeRepository;
 globalThis.__computeShiftHeures = computeShiftHeures;
@@ -440,6 +442,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     hasPermission: sandbox.__hasPermission,
     calculateTicketsRestaurant: sandbox.__calculateTicketsRestaurant,
     calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
+    getLeaveBalance: sandbox.__getLeaveBalance,
+    calculateAcquisition: sandbox.__calculateAcquisition,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     openModeleDocumentModal: sandbox.__openModeleDocumentModal,
     openGenererDocumentModal: sandbox.__openGenererDocumentModal,

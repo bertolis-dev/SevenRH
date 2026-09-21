@@ -34,7 +34,26 @@ function run() {
   // valeur pour les deux masquerait une vraie différence légale (exactement le bug corrigé ici).
   assert.notStrictEqual(byName('Décès').id, byName('Décès d\'un enfant').id);
 
-  console.log('OK — evenements-familiaux-seed.test.js (minimum légal L3142-4, Décès/Décès d\'un enfant bien distincts)');
+  // §retour Betty du 22/09/2026 (défaut 1.2, "les droits annuels sont affichés au prorata du temps
+  // écoulé") : ces droits sont légalement ouverts en totalité dès le premier jour de la période,
+  // jamais accumulés — natureAcquisition doit valoir 'ouverte' pour chacun (voir calculateAcquisition),
+  // y compris Enfant malade et Formation, absents de la liste "attendus" ci-dessus (durées non issues
+  // de l'Art. L3142-4) mais concernés par la même nature de droit.
+  ['Mariage / PACS', 'Mariage d\'un enfant', 'Naissance / adoption', 'Décès', 'Décès d\'un enfant',
+    'Annonce de handicap ou maladie grave d\'un enfant', 'Enfant malade', 'Formation', 'Exceptionnel'
+  ].forEach(nom => {
+    const type = byName(nom);
+    assert.ok(type, `le type "${nom}" doit exister`);
+    assert.strictEqual(type.natureAcquisition, 'ouverte', `"${nom}" doit être un droit ouvert d'emblée, jamais accumulé au prorata du temps écoulé`);
+  });
+
+  // Congés payés/RTT/Ancienneté restent 'progressive' (comportement historique, correct pour eux) :
+  // ce correctif ne doit jamais s'étendre au-delà des 9 types concernés ci-dessus.
+  ['Congés payés', 'RTT', 'Ancienneté'].forEach(nom => {
+    assert.strictEqual(byName(nom).natureAcquisition, 'progressive', `"${nom}" doit rester à accumulation progressive`);
+  });
+
+  console.log('OK — evenements-familiaux-seed.test.js (minimum légal L3142-4, Décès/Décès d\'un enfant bien distincts, droits ouverts vs progressifs correctement répartis)');
 }
 
 try {
