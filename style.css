@@ -4164,3 +4164,46 @@ textarea.input { resize: vertical; font-family: inherit; }
   .card { background: white; box-shadow: none; }
 }
 
+
+/* §retour Betty du 22/09/2026 ("je préfère cette présentation dans les catégories de salariés...
+   fais la même chose pour les postes, les conventions, les types de contrats, les forfaits, les
+   catégories de documents, les checklists... des lignes moins hautes... l'ascenseur quand on peut
+   afficher 7 lignes") : présentation commune à toutes les listes de référence, en remplacement des
+   pastilles qui déroulaient la liste entière sans hauteur maîtrisée (183 conventions collectives
+   occupaient plusieurs écrans à elles seules). Voir renderSettingsListCard/renderPostesCard. */
+.settings-list-card { display: flex; flex-direction: column; }
+.settings-list-header { padding: 16px 16px 0; align-items: flex-start; gap: 12px; }
+.settings-list-header h2 { margin-bottom: 2px; }
+.settings-list-header .text-muted { font-size: 12px; margin: 0; }
+
+/* 7 lignes visibles, l'ascenseur prend le relais au-delà : chaque carte garde la même hauteur quel
+   que soit le nombre d'éléments, une liste de 4 forfaits comme une liste de 183 conventions. */
+.settings-list-scroll {
+  max-height: calc(7 * 37px);
+  overflow-y: auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Lignes volontairement plus courtes que .table standard : ces listes n'ont qu'un libellé et une
+   action, jamais le contenu dense d'un tableau de salariés. */
+.table-settings-list td, .table-settings-list th { padding: 8px 16px; font-size: 13px; }
+.table-settings-list thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+.settings-list-valeur { width: 100%; }
+.settings-list-action { text-align: right; white-space: nowrap; }
+.settings-list-vide { padding: 14px 16px 16px; margin: 0; }
+.settings-list-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 16px 0;
+  margin: 0;
+}
+.settings-list-add .input { flex: 1 1 180px; }
+.input-sm { padding: 5px 8px; font-size: 13px; }

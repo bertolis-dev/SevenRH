@@ -19611,33 +19611,51 @@ function renderCategoriesFraisConfigCard(settings) {
 // collectives passe ce paramètre — les autres listes (Postes, Statuts pro, ...), bien plus courtes,
 // restent affichées normalement. Le formulaire d'ajout reste TOUJOURS visible, hors du panneau
 // repliable, pour ajouter une convention manquante sans avoir à tout déplier.
+/** §retour Betty du 22/09/2026 : "je préfère cette présentation dans les catégories de salariés...
+ * je voudrais que tu fasses la même chose pour les postes, les conventions, les types de contrats,
+ * les forfaits, les catégories de documents, les checklists" — les pastilles (.chip) affichaient la
+ * liste entière d'un bloc, sans hauteur maîtrisée : la liste officielle des conventions (183
+ * entrées) occupait à elle seule plusieurs écrans. Même patron que "Catégories de salariés"
+ * désormais : un bouton "Ajouter" en en-tête, une liste de lignes courtes en dessous, et un
+ * ascenseur au-delà de 7 lignes (voir .settings-list-scroll, style.css) pour que chaque carte garde
+ * la même hauteur quel que soit le nombre d'éléments.
+ *
+ * Les crochets d'événements ne changent pas (data-list-key sur le bouton de retrait et sur le
+ * formulaire d'ajout, voir bindChipListEvents) : seule la présentation est refaite. Le formulaire
+ * d'ajout reste replié tant qu'on n'a pas cliqué sur "Ajouter", plutôt qu'un champ toujours visible
+ * en bas de chaque carte. */
 function renderSettingsListCard(listDef, items, readOnlyValues) {
-  const chipList = `
-    <div class="chip-list">
-      ${items.map((item, i) => {
-        const readOnly = readOnlyValues && readOnlyValues.has(item);
-        return `
-        <span class="chip">
-          ${escapeHtml(item)}
-          ${readOnly ? '' : `<button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>`}
-        </span>
-      `; }).join('')}
-    </div>
-  `;
+  const lignes = items.map((item, i) => {
+    const readOnly = readOnlyValues && readOnlyValues.has(item);
+    return `
+      <tr>
+        <td class="settings-list-valeur">${escapeHtml(item)}</td>
+        <td class="settings-list-action">
+          ${readOnly
+            ? '<span class="text-muted" title="Entrée de la liste officielle, non modifiable ici">Officielle</span>'
+            : `<button type="button" class="btn-link btn-link-danger chip-remove" data-list-key="${listDef.key}" data-index="${i}">Supprimer</button>`}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
   return `
-    <div class="card">
-      <h2>${escapeHtml(listDef.label)}</h2>
-      ${readOnlyValues ? `
-        <p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici : ajoutez seulement une convention qui en serait absente.</p>
-        <details class="collapsible-panel">
-          <summary>Voir la liste (${items.length})</summary>
-          ${chipList}
-        </details>
-      ` : chipList}
-      <form class="chip-add-form" data-list-key="${listDef.key}">
-        <input type="text" class="input" placeholder="${readOnlyValues ? 'Ajouter une convention absente de la liste...' : 'Ajouter un élément...'}" required>
+    <div class="card table-card settings-list-card">
+      <div class="view-header-row settings-list-header">
+        <div>
+          <h2>${escapeHtml(listDef.label)}</h2>
+          <p class="text-muted">${items.length} élément${items.length > 1 ? 's' : ''}${readOnlyValues ? ' · la liste officielle n\'est pas modifiable ici, ajoutez seulement une convention qui en serait absente' : ''}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="${listDef.key}">+ Ajouter</button>
+      </div>
+      <form class="chip-add-form settings-list-add" data-list-key="${listDef.key}" hidden>
+        <input type="text" class="input" placeholder="${readOnlyValues ? 'Convention absente de la liste officielle...' : 'Nouvel élément...'}" required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+        <button type="button" class="btn-link" data-cancel-add-list="${listDef.key}">Annuler</button>
       </form>
+      ${items.length
+        ? `<div class="settings-list-scroll"><table class="table table-settings-list"><tbody>${lignes}</tbody></table></div>`
+        : '<p class="text-muted settings-list-vide">Aucun élément pour l\'instant.</p>'}
     </div>
   `;
 }
@@ -19718,6 +19736,26 @@ function bindParametresListesEvents() {
  * par bindEmbaucheEvents pour "postesOuverts", rendu dans un tout autre écran (Embauche, pas
  * Paramètres) avec renderSettingsListCard mais sans le reste des champs propres à Paramètres. */
 function bindChipListEvents() {
+  // §retour Betty du 22/09/2026 : le formulaire d'ajout reste replié tant qu'on n'a pas cliqué sur
+  // "Ajouter", pour que chaque carte se limite à sa liste. Délégation par data-toggle-add-list
+  // plutôt qu'un identifiant par carte : une nouvelle liste de référence en hérite sans code.
+  document.querySelectorAll('[data-toggle-add-list]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = document.querySelector(`.settings-list-add[data-list-key="${btn.dataset.toggleAddList}"]`);
+      if (!form) return;
+      form.hidden = !form.hidden;
+      if (!form.hidden) form.querySelector('input').focus();
+    });
+  });
+  document.querySelectorAll('[data-cancel-add-list]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = document.querySelector(`.settings-list-add[data-list-key="${btn.dataset.cancelAddList}"]`);
+      if (!form) return;
+      form.querySelector('input').value = '';
+      form.hidden = true;
+    });
+  });
+
   document.querySelectorAll('.chip-remove[data-list-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
@@ -26463,30 +26501,37 @@ function renderPostesOuvertsCard(postesOuverts) {
  * composant partagé). La forme neutre reste la seule valeur stockée sur un salarié (employee.poste,
  * jamais changée) : masculin/féminin ne servent qu'à l'affichage (getPosteAccorde, data.js). */
 function renderPostesCard(postes) {
+  const lignes = (postes || []).map((poste, i) => `
+    <tr>
+      <td class="settings-list-valeur">${escapeHtml(poste.neutre)}</td>
+      <td><input type="text" class="input input-sm poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}" aria-label="Forme masculine de ${escapeHtml(poste.neutre)}"></td>
+      <td><input type="text" class="input input-sm poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}" aria-label="Forme féminine de ${escapeHtml(poste.neutre)}"></td>
+      <td class="settings-list-action">
+        <button type="button" class="btn-link btn-link-danger" data-delete-poste="${i}" data-index="${i}">Supprimer</button>
+      </td>
+    </tr>
+  `).join('');
+
   return `
-    <div class="card">
-      <h2>Postes</h2>
-      <p class="text-muted" style="font-size:12px; margin-top:-6px;">Les formes masculine/féminine sont proposées automatiquement à partir de l'intitulé neutre (meilleur effort, jamais une grammaire française parfaite) : corrigez-les si besoin, ci-dessous.</p>
-      <div class="chip-list" style="flex-direction: column; align-items: stretch;">
-        ${(postes || []).map((poste, i) => `
-          <div class="poste-genre-row">
-            <span class="poste-genre-neutre">${escapeHtml(poste.neutre)}</span>
-            <label class="poste-genre-field">
-              <span class="text-muted" style="font-size: 11px;">Masculin</span>
-              <input type="text" class="input poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}">
-            </label>
-            <label class="poste-genre-field">
-              <span class="text-muted" style="font-size: 11px;">Féminin</span>
-              <input type="text" class="input poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}">
-            </label>
-            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
-          </div>
-        `).join('')}
+    <div class="card table-card settings-list-card">
+      <div class="view-header-row settings-list-header">
+        <div>
+          <h2>Postes</h2>
+          <p class="text-muted">${(postes || []).length} poste${(postes || []).length > 1 ? 's' : ''} · les formes masculine et féminine sont proposées à partir de l'intitulé neutre, corrigez-les si besoin.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="poste">+ Ajouter</button>
       </div>
-      <form class="chip-add-form" id="form-add-poste">
+      <form class="chip-add-form settings-list-add" id="form-add-poste" data-list-key="poste" hidden>
         <input type="text" class="input" id="input-poste-neutre" placeholder="Intitulé neutre (ex. Commercial·e)..." required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+        <button type="button" class="btn-link" data-cancel-add-list="poste">Annuler</button>
       </form>
+      ${lignes
+        ? `<div class="settings-list-scroll"><table class="table table-settings-list">
+            <thead><tr><th>Intitulé neutre</th><th>Masculin</th><th>Féminin</th><th></th></tr></thead>
+            <tbody>${lignes}</tbody>
+          </table></div>`
+        : '<p class="text-muted settings-list-vide">Aucun poste pour l\'instant.</p>'}
     </div>
   `;
 }
@@ -26503,7 +26548,7 @@ function bindPostesCardEvents() {
     });
   });
 
-  document.querySelectorAll('.poste-genre-row .chip-remove').forEach(btn => {
+  document.querySelectorAll('[data-delete-poste]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
       const postes = settings.postes || [];
