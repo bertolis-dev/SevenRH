@@ -37,7 +37,13 @@ async function run() {
     const { computeDureeTravailleeMinutes } = loadAppJs();
     assert.strictEqual(computeDureeTravailleeMinutes({ heureArrivee: '09:00', heureDepart: '17:00' }), 480);
     assert.strictEqual(computeDureeTravailleeMinutes({ heureArrivee: '09:00', heureDepart: null }), 0, 'un pointage encore ouvert (pas de départ) ne compte aucune durée');
-    assert.strictEqual(computeDureeTravailleeMinutes({ heureArrivee: '17:00', heureDepart: '09:00' }), 0, 'jamais négatif');
+    // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : cette assertion supposait
+    // à tort qu'un départ antérieur à l'arrivée (même patron horaire) était forcément une saisie
+    // invalide à clamper à 0 — en réalité c'est le signe normal d'un quart à cheval sur minuit (ex.
+    // arrivée 17:00, départ 09:00 le LENDEMAIN, 16h), exactement le même report que computeShiftHeures
+    // (Planning) applique déjà. Clamper à 0 ici faisait disparaître tout quart de nuit du réalisé,
+    // voir le correctif sur computeDureeTravailleeMinutes (data.js) et enregistrerPointage.
+    assert.strictEqual(computeDureeTravailleeMinutes({ heureArrivee: '17:00', heureDepart: '09:00' }), 960, 'départ le lendemain (quart de nuit) : 16h, jamais 0');
   }
 
   // ---- LANDING_ALACARTE_MODULES / NAV_ITEMS : le module existe et est ouvert à TOUT rôle ----

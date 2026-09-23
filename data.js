@@ -1632,7 +1632,16 @@ function computeDureeTravailleeMinutes(pointage) {
   if (!pointage.heureArrivee || !pointage.heureDepart) return 0;
   const [ah, am] = pointage.heureArrivee.split(':').map(Number);
   const [dh, dm] = pointage.heureDepart.split(':').map(Number);
-  return Math.max(0, (dh * 60 + dm) - (ah * 60 + am));
+  const arrivee = ah * 60 + am;
+  let depart = dh * 60 + dm;
+  // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : même correctif que
+  // computeShiftHeures (§correctif audit du 16/09/2026, ci-dessus) — jamais reporté ici. Un pointage
+  // à cheval sur minuit (ex. arrivée 22:00, départ 06:00 le lendemain, saisi via régularisation
+  // manuelle) donnait une durée de 0 minute sans ce report, faussant le rapport mensuel et la
+  // comparaison Prévu/Réalisé (planifieMinutes, lui, passe déjà par computeShiftHeures, donc correct
+  // — seul le RÉALISÉ, calculé ici, restait à 0, faisant croire à une absence totale).
+  if (depart < arrivee) depart += 24 * 60;
+  return Math.max(0, depart - arrivee);
 }
 
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
@@ -3259,13 +3268,30 @@ const DB = {
     const heure = now.toTimeString().slice(0, 5);
     const list = this.getPointages();
     const todaysList = list.filter(p => p.employeeId === employeeId && p.date === date);
-    const ouvert = todaysList.find(p => p.heureArrivee && !p.heureDepart);
+    // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : un pointage ouvert la
+    // veille (arrivée juste avant minuit, ex. 23:50, jamais clôturé) n'était cherché QUE dans la
+    // liste du jour — le scan de départ, une fois minuit passé, ne le trouvait donc jamais et créait
+    // à tort une NOUVELLE arrivée à la place de clôturer la vraie. Cette arrivée fantôme restait
+    // ensuite ouverte jusqu'au scan suivant (parfois le soir même), qui la clôturait en fusionnant
+    // deux quarts sans rapport en un seul bloc de ~15h — l'horaire de nuit réel disparaissait des
+    // totaux pendant qu'un bloc fabriqué apparaissait à sa place. Recherche élargie à hier : un
+    // pointage plus ancien encore ouvert reste un vrai oubli, volontairement PAS récupéré
+    // silencieusement ici (voir regulariserPointage/ajouterPointageOublie, la correction manuelle
+    // reste le seul chemin au-delà d'un jour).
+    const hier = toISODate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const ouvert = list
+      .filter(p => p.employeeId === employeeId && (p.date === date || p.date === hier) && p.heureArrivee && !p.heureDepart)
+      .sort((a, b) => `${b.date} ${b.heureArrivee}`.localeCompare(`${a.date} ${a.heureArrivee}`))[0];
 
     if (ouvert) {
       ouvert.heureDepart = heure;
       this.savePointages(list);
       this.logAudit('Modification', 'Pointage', `${employee.prenom} ${employee.nom} · départ ${heure}`);
-      const dureeMinutes = todaysList.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0);
+      // Inclut le pointage tout juste clôturé (peut dater d'hier pour un quart de nuit) + les autres
+      // pointages déjà clos aujourd'hui (ex. pause déjeuner) — jamais compté deux fois si `ouvert`
+      // appartenait déjà à la liste du jour (cas normal, non nocturne).
+      const autresAujourdhui = todaysList.filter(p => p.id !== ouvert.id);
+      const dureeMinutes = computeDureeTravailleeMinutes(ouvert) + autresAujourdhui.reduce((sum, p) => sum + computeDureeTravailleeMinutes(p), 0);
       return { success: true, type: 'depart', heure, dureeMinutes };
     }
 
