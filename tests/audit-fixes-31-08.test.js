@@ -127,14 +127,20 @@ async function run() {
     assert.ok(appSource.includes('calendarFiltersOutsideCloseBound'), 'le listener de fermeture du panneau filtres doit être posé derrière une garde "une seule fois"');
   }
 
-  // ---- supabase-client.js : leaveRequestFromRow/employeeFromRow ne perdent plus de champs au rechargement ----
+  // ---- supabase-client.js : employeeFromRow/leaveRequestFromRow ne perdent plus de champs au
+  // rechargement. §retour Betty du 23/09/2026 : la vérification par motif de champ précis ci-dessus
+  // (avant ce correctif) reproduisait exactement le défaut qu'elle signale dans sa lettre du
+  // 23/09/2026 — une liste de champs à maintenir à la main, jamais synchronisée avec la réalité (le
+  // même bug D2 avait déjà dû être re-corrigé deux fois pour employeeFromRow, astreintes/
+  // reposCompensateurPris). Les deux fonctions reconstruisent désormais la fiche par fusion générique
+  // (makeEmptyXxx() + ...data + colonnes dédiées, voir leur commentaire dans supabase-client.js),
+  // vérifiée pour de vrai par EXÉCUTION dans supabase-client-round-trip-23-09.test.js plutôt que par
+  // une assertion de motif sur le texte source ici.
   {
     const scSource = fs.readFileSync(path.join(__dirname, '..', 'supabase-client.js'), 'utf8');
-    ['demiJourneeDebut', 'demiJourneeFin', 'workflowValidatorOverrides', 'fermetureId'].forEach(field => {
-      assert.ok(new RegExp(`${field}:\\s*d\\.${field}`).test(scSource), `leaveRequestFromRow doit relire ${field}`);
-    });
-    ['astreintes', 'reposCompensateurPris'].forEach(field => {
-      assert.ok(new RegExp(`${field}:\\s*d\\.${field}`).test(scSource), `employeeFromRow doit relire ${field}`);
+    ['employeeFromRow', 'leaveRequestFromRow'].forEach(fnName => {
+      const re = new RegExp(`function ${fnName}[\\s\\S]{0,260}\\.\\.\\.window\\.makeEmpty[A-Za-z]+\\(\\)[\\s\\S]{0,40}\\.\\.\\.d[,\\s]`);
+      assert.ok(re.test(scSource), `${fnName} doit reprendre tout le contenu de data par fusion générique (makeEmptyXxx() + ...data), sans liste de champs à maintenir à la main`);
     });
   }
 

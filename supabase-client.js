@@ -31,83 +31,46 @@ function currentSiteBase() {
 // Row -> objet JS (même forme que les makeEmptyXxx() de data.js)
 // ---------------------------------------------------------------------------
 
+/** §retour Betty du 23/09/2026 (revue "quinze champs enregistrés mais jamais relus") : cette
+ * fonction énumérait ses champs un par un depuis le début (D2, audit du 19/08/2026, puis re-cassée
+ * deux fois de plus par des champs ajoutés après coup et jamais rajoutés à la liste — voir
+ * l'historique git). employeeToRow (ci-dessous) écrit TOUT le reste de la fiche génériquement dans
+ * `data` (spread `...rest`) ; cette liste manuelle n'avait donc aucune chance de rester synchronisée
+ * avec elle au fil des fonctionnalités. Reconstruit désormais la fiche par fusion, dans cet ordre :
+ * 1) makeEmptyEmployee() (data.js, MÊME source de vérité que la création d'un salarié) pour une
+ *    valeur par défaut à tout champ absent de `data` (fiche jamais réenregistrée depuis l'ajout de ce
+ *    champ) ; 2) tout le contenu réel de `data`, sans liste à maintenir à la main ; 3) les colonnes
+ *    dédiées ci-dessous (jamais dans `data`, voir employeeToRow), qui font autorité en dernier —
+ *    matricule/nom/prénom/etc. Un champ qui ne doit PAS revenir de `data` (aucun cas aujourd'hui)
+ *    devrait être explicitement retiré ici plutôt qu'oublié par omission dans une liste séparée.
+ * makeEmptyEmployee est un global classique de data.js (chargé en <script> non-module AVANT ce module
+ * différé, voir le commentaire en tête de fichier) — accessible ici sans import, vérifié en direct. */
 function employeeFromRow(row) {
   const d = row.data || {};
   return {
+    ...window.makeEmptyEmployee(),
+    ...d,
     id: row.id,
     matricule: row.matricule || '',
-    photo: d.photo ?? null,
-    civilite: d.civilite ?? 'M.',
     nom: row.nom,
     prenom: row.prenom,
     email: row.email,
-    telephone: d.telephone ?? '',
-    adresse: d.adresse ?? { rue: '', codePostal: '', ville: '' },
-    dateNaissance: d.dateNaissance ?? '',
-    lieuNaissance: d.lieuNaissance ?? '',
-    nationalite: d.nationalite ?? 'Française',
-    numeroSecu: d.numeroSecu ?? '',
-    dateEmbauche: d.dateEmbauche ?? '',
     etablissementId: row.etablissement_id ?? '',
     service: row.service ?? '',
     equipe: row.equipe ?? '',
-    poste: d.poste ?? '',
     managerIds: row.manager_ids ?? [],
-    conventionCollective: d.conventionCollective ?? '',
-    statutPro: d.statutPro ?? 'Non cadre',
-    typeContrat: d.typeContrat ?? 'CDI',
-    dateFinContrat: d.dateFinContrat ?? '',
-    dateFinPeriodeEssai: d.dateFinPeriodeEssai ?? '',
-    dateDernierEntretienProfessionnel: d.dateDernierEntretienProfessionnel ?? '',
-    tempsTravail: d.tempsTravail ?? 'Temps plein',
-    pourcentageActivite: d.pourcentageActivite ?? 100,
-    horairesHebdo: d.horairesHebdo ?? 35,
-    forfait: d.forfait ?? 'Aucun',
-    regimeRTT: d.regimeRTT ?? '',
-    joursTravailles: d.joursTravailles ?? ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'],
-    horaireMatinDebut: d.horaireMatinDebut ?? '09:00',
-    horaireMatinFin: d.horaireMatinFin ?? '12:00',
-    horaireApresMidiDebut: d.horaireApresMidiDebut ?? '13:00',
-    horaireApresMidiFin: d.horaireApresMidiFin ?? '17:00',
-    statut: d.statut ?? 'Actif',
-    dateDepart: d.dateDepart ?? '',
     archive: row.archive ?? false,
-    anonymise: d.anonymise ?? false,
-    dateAnonymisation: d.dateAnonymisation ?? null,
-    salaireBrutMensuel: d.salaireBrutMensuel ?? 0,
-    genre: d.genre ?? '',
-    compteurs: d.compteurs ?? {},
-    ticketsAjustements: d.ticketsAjustements ?? {},
-    variablesPaie: d.variablesPaie ?? {},
-    typesAbsenceDesactives: d.typesAbsenceDesactives ?? [],
-    menusDesactives: d.menusDesactives ?? [],
+    permissionsOverrides: row.permissions_overrides ?? {},
     dateCreation: row.created_at,
     dateModification: row.updated_at,
     role: row.role,
+    authUserId: row.auth_user_id ?? null,
     // Auth réelle désormais gérée par Supabase Auth — ces champs restent pour la forme (code
-    // existant qui les lit encore) mais ne sont plus la source de vérité.
+    // existant qui les lit encore) mais ne sont plus la source de vérité, jamais dans `data`.
     motDePasse: '',
     tentativesEchouees: 0,
     verrouille: false,
-    resetToken: null,
-    authUserId: row.auth_user_id ?? null,
-    mustChangePassword: d.mustChangePassword ?? false,
-    permissionsOverrides: row.permissions_overrides ?? {},
-    // D2 (audit fiabilité du 19/08/2026) : ces 6 champs étaient bien poussés vers Supabase
-    // (employeeToRow ne les exclut pas, ils atterrissent dans `data`) mais jamais relus ici —
-    // écrits une fois, puis silencieusement perdus à la prochaine connexion/rechargement.
-    categorieSalarieId: d.categorieSalarieId ?? null,
-    dateDerniereVisiteMedicale: d.dateDerniereVisiteMedicale ?? '',
-    onboardingChecklist: d.onboardingChecklist ?? [],
-    offboardingChecklist: d.offboardingChecklist ?? [],
-    avenants: d.avenants ?? [],
-    heuresSupplementaires: d.heuresSupplementaires ?? {},
-    // §correctif audit du 31/08/2026 : même bug D2 ci-dessus, réintroduit par 2 champs ajoutés après
-    // ce correctif (§7.21, astreintes le 23/08/2026 et reposCompensateurPris le 26/08/2026) et jamais
-    // ajoutés à cette liste — employeeToRow les pousse (spread `...rest`), mais ils revenaient
-    // undefined à la relecture, faisant disparaître astreintes/repos compensateur pris au rechargement.
-    astreintes: d.astreintes ?? [],
-    reposCompensateurPris: d.reposCompensateurPris ?? {}
+    resetToken: null
   };
 }
 
@@ -130,13 +93,14 @@ function abonnementFromRow(row) {
   };
 }
 
+// §retour Betty du 23/09/2026 : même correctif générique qu'employeeFromRow ci-dessous — rien ne
+// manquait ici aujourd'hui (vérifié), converti par cohérence/prévention.
 function etablissementFromRow(row) {
   const d = row.data || {};
   return {
-    id: row.id, nom: row.nom, codeInterne: d.codeInterne ?? '',
-    adresse: d.adresse ?? '', codePostal: d.codePostal ?? '', ville: d.ville ?? '',
-    pays: d.pays ?? 'France', email: d.email ?? '', telephone: d.telephone ?? '',
-    responsableId: d.responsableId ?? null, principal: row.principal, actif: row.actif
+    ...window.makeEmptyEtablissement(),
+    ...d,
+    id: row.id, nom: row.nom, principal: row.principal, actif: row.actif
   };
 }
 
@@ -153,50 +117,38 @@ function serviceFromRow(row) {
  * intacte), mais jamais relus après une reconnexion/un changement d'appareil — ils réapparaissaient
  * à leur valeur par défaut dans l'interface alors que la vraie donnée dormait toujours côté serveur.
  * Complété ici pour lister exactement les mêmes champs que makeEmptyLeaveType (data.js). */
+/** §retour Betty du 23/09/2026 : même correctif générique qu'employeeFromRow ci-dessous (voir son
+ * commentaire) — cette fonction énumérait déjà ses champs un par un malgré un correctif dédié du
+ * 27/08/2026 pour ce même défaut (voir l'historique git), et natureAcquisition (ajouté depuis) en
+ * manquait encore à la relecture. */
 function leaveTypeFromRow(row) {
   const d = row.data || {};
   return {
+    ...window.makeEmptyLeaveType(),
+    ...d,
     id: row.id, ordre: row.ordre, actif: row.actif, categorie: row.categorie, nom: row.nom,
-    icone: d.icone ?? '🏖️', couleur: d.couleur ?? '#4f46e5', description: d.description ?? '',
-    nombreAnnuel: d.nombreAnnuel ?? 0, illimite: d.illimite ?? false, acquisition: d.acquisition ?? 'Annuelle',
-    paye: d.paye ?? true, justificatifObligatoire: d.justificatifObligatoire ?? false,
-    workflow: d.workflow ?? ['manager'], workflowValidatorOverrides: d.workflowValidatorOverrides ?? {},
-    saisiParSalarie: d.saisiParSalarie ?? true,
-    visibleSalarie: d.visibleSalarie ?? true, visibleRH: d.visibleRH ?? true,
-    autoriserDemiJournee: d.autoriserDemiJournee ?? true, autoriserPlusieursDemandes: d.autoriserPlusieursDemandes ?? true,
-    deduireCompteur: d.deduireCompteur ?? true, deduireRTT: d.deduireRTT ?? false, deduireCP: d.deduireCP ?? false,
-    compteurPartageAvecId: d.compteurPartageAvecId ?? null, regles: d.regles ?? [],
-    dateClotureCompteur: d.dateClotureCompteur ?? null, reportCompteur: d.reportCompteur ?? 'aucun',
-    reportLimiteJours: d.reportLimiteJours ?? null, dateLimiteReportMMJJ: d.dateLimiteReportMMJJ ?? null,
-    delaiPrevenanceJours: d.delaiPrevenanceJours ?? null, delaiPrevenanceMode: d.delaiPrevenanceMode ?? 'alerte',
-    uniteDecompte: d.uniteDecompte ?? 'ouvres', paliersAnciennete: d.paliersAnciennete ?? [],
-    fractionnementActif: d.fractionnementActif ?? false,
-    // Jamais de "?? 'proportionnelle'" ici (contrairement aux autres champs ci-dessus) : un type
-    // existant en base SANS cette clé doit rester `undefined` pour que resolveProratisationTempsPartiel
-    // (data.js) applique son inférence par nom ("Congés payés" -> aucune, "RTT" -> exclu) — un
-    // défaut appliqué ici l'empêcherait de jamais se déclencher pour les types déjà en production.
-    proratisationTempsPartiel: d.proratisationTempsPartiel,
-    suspendAcquisitionAutresCompteurs: d.suspendAcquisitionAutresCompteurs ?? false,
-    exportPaie: d.exportPaie ?? true
+    // Exception délibérée (voir makeEmptyLeaveType, data.js) : un type existant en base SANS cette
+    // clé doit rester `undefined` (jamais le défaut 'proportionnelle' d'un type NOUVELLEMENT créé)
+    // pour que resolveProratisationTempsPartiel (data.js) applique son inférence par nom ("Congés
+    // payés" -> aucune, "RTT" -> exclu) — un défaut appliqué ici l'empêcherait de jamais se
+    // déclencher pour un type déjà en production.
+    proratisationTempsPartiel: d.proratisationTempsPartiel
   };
 }
 
+/** §retour Betty du 23/09/2026 : même correctif générique qu'employeeFromRow ci-dessous — le
+ * correctif dédié du 31/08/2026 (4 champs alors manquants, voir historique git) souffrait du même
+ * défaut structurel : une liste à maintenir à la main. arretTravail/visiteRepriseDate (ajoutés depuis)
+ * en manquaient encore à la relecture (arrêt de travail et date de visite de reprise perdus au
+ * rechargement). */
 function leaveRequestFromRow(row) {
   const d = row.data || {};
   return {
+    ...window.makeEmptyLeaveRequest(),
+    ...d,
     id: row.id, employeeId: row.employee_id, typeId: row.type_id,
     dateDebut: row.date_debut, dateFin: row.date_fin,
-    demiJournee: d.demiJournee ?? null,
-    // §correctif audit du 31/08/2026 : leaveRequestToRow() pousse déjà ces 4 champs via son spread
-    // `...rest` — absents ici, ils revenaient toujours undefined après un rechargement (demi-journée
-    // de début/fin perdue à l'affichage, validateurs nommés perdus au profit d'une résolution par
-    // rôle, lien vers la fermeture d'origine perdu).
-    demiJourneeDebut: d.demiJourneeDebut ?? null, demiJourneeFin: d.demiJourneeFin ?? null,
-    workflowValidatorOverrides: d.workflowValidatorOverrides ?? {}, fermetureId: d.fermetureId ?? null,
-    nbJours: d.nbJours ?? 0,
-    commentaire: d.commentaire ?? '', justificatif: d.justificatif ?? null,
-    statut: row.statut, workflow: d.workflow ?? [], etapeIndex: row.etape_index,
-    historique: d.historique ?? [], prolongations: d.prolongations ?? [], regularisations: d.regularisations ?? [],
+    statut: row.statut, etapeIndex: row.etape_index,
     dateCreation: row.created_at, dateModification: row.updated_at
   };
 }
@@ -216,12 +168,16 @@ function leaveRequestFromCalendarRow(row) {
   };
 }
 
+// §retour Betty du 23/09/2026 : même correctif générique qu'employeeFromRow ci-dessous — rien ne
+// manquait ici aujourd'hui (vérifié), converti par cohérence/prévention pour ne pas reproduire le
+// même défaut au prochain champ ajouté à une demande de télétravail.
 function teleworkRequestFromRow(row) {
   const d = row.data || {};
   return {
+    ...window.makeEmptyTeleworkRequest(),
+    ...d,
     id: row.id, employeeId: row.employee_id, dateDebut: row.date_debut, dateFin: row.date_fin,
-    nbJours: d.nbJours ?? 0, commentaire: d.commentaire ?? '', statut: row.statut,
-    workflow: d.workflow ?? [], etapeIndex: row.etape_index, historique: d.historique ?? [],
+    statut: row.statut, etapeIndex: row.etape_index,
     dateCreation: row.created_at, dateModification: row.updated_at
   };
 }
@@ -234,13 +190,16 @@ function teleworkRequestFromCalendarRow(row) {
   };
 }
 
+/** §retour Betty du 23/09/2026 : même correctif générique qu'employeeFromRow ci-dessous —
+ * dossierId/datePaiement (regroupement en dossier de remboursement, date de paiement effective)
+ * manquaient à la relecture, silencieusement perdus au rechargement. */
 function expenseFromRow(row) {
   const d = row.data || {};
   return {
-    id: row.id, employeeId: row.employee_id, categorie: d.categorie ?? '', date: d.date ?? '',
-    libelle: d.libelle ?? '', montantTTC: Number(row.montant_ttc) || 0, tauxTVA: d.tauxTVA ?? 20,
-    kilometrage: d.kilometrage ?? null, justificatif: d.justificatif ?? null, commentaire: d.commentaire ?? '',
-    statut: row.statut, workflow: d.workflow ?? [], etapeIndex: row.etape_index, historique: d.historique ?? [],
+    ...window.makeEmptyExpense(),
+    ...d,
+    id: row.id, employeeId: row.employee_id, montantTTC: Number(row.montant_ttc) || 0,
+    statut: row.statut, etapeIndex: row.etape_index,
     dateCreation: row.created_at, dateModification: row.updated_at
   };
 }
