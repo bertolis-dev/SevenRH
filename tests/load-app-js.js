@@ -255,6 +255,7 @@ globalThis.__resolvePopulationEmployeeIds = resolvePopulationEmployeeIds;
 globalThis.__openValiderEntretienModal = openValiderEntretienModal;
 globalThis.__getObjectifsReconduits = getObjectifsReconduits;
 globalThis.__openDocumentModal = openDocumentModal;
+globalThis.__openDiffuserDocumentModal = openDiffuserDocumentModal;
 globalThis.__canSelfManagePendingExpense = canSelfManagePendingExpense;
 globalThis.__handleEditExpense = handleEditExpense;
 globalThis.__handleSelfCancelExpense = handleSelfCancelExpense;
@@ -626,6 +627,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     openValiderEntretienModal: sandbox.__openValiderEntretienModal,
     getObjectifsReconduits: sandbox.__getObjectifsReconduits,
     openDocumentModal: sandbox.__openDocumentModal,
+    openDiffuserDocumentModal: sandbox.__openDiffuserDocumentModal,
     canSelfManagePendingExpense: sandbox.__canSelfManagePendingExpense,
     handleEditExpense: sandbox.__handleEditExpense,
     handleSelfCancelExpense: sandbox.__handleSelfCancelExpense,

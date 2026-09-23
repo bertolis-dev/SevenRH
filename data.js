@@ -4360,6 +4360,45 @@ const DB = {
     return document_;
   },
 
+  /** §retour Betty du 23/09/2026 ("Documents, avec une diffusion") : quels salariés un périmètre de
+   * diffusion désigne, au moment du dépôt (une photo, jamais recalculée après coup — un salarié qui
+   * rejoint le service ensuite ne reçoit pas rétroactivement les documents déjà diffusés, exactement
+   * comme une distribution papier n'atteindrait pas quelqu'un pas encore arrivé). Toujours limité aux
+   * salariés actifs, jamais un salarié déjà parti. */
+  resolveEmployeesForDiffusionScope(scope) {
+    const employees = this.getEmployees().filter(e => !e.archive && e.statut === 'Actif');
+    if (!scope || !scope.type || scope.type === 'tous') return employees;
+    if (scope.type === 'etablissement') return employees.filter(e => e.etablissementId === scope.value);
+    if (scope.type === 'service') return employees.filter(e => e.service === scope.value);
+    if (scope.type === 'categorieSalarie') {
+      const categories = this.getSettings().categoriesSalarie || [];
+      return employees.filter(e => getEffectiveCategorieSalarieId(e, categories) === scope.value);
+    }
+    return employees;
+  },
+
+  /** Dépose UN document pour tout un périmètre plutôt qu'un salarié ressaisi/reposté autant de fois
+   * qu'il y a de destinataires (retour Betty du 23/09/2026) — une ligne document PAR salarié ciblé
+   * (même table, mêmes policies RLS, même mécanisme d'accusé de lecture PAR salarié qu'un document
+   * individuel, voir confirmerAccuseLectureDocument, app.js — chacun confirme pour lui-même, jamais
+   * un accusé global), reliées entre elles par un diffusionId commun pour le suivi ("qui a lu",
+   * voir getDocumentsDiffusion). Aucun destinataire trouvé (périmètre vide) : lève une erreur plutôt
+   * que de déposer un diffusionId sans aucun document, qui ne pointerait jamais vers rien. */
+  diffuserDocument(data) {
+    const { scope, ...champsCommuns } = data;
+    const cibles = this.resolveEmployeesForDiffusionScope(scope);
+    if (!cibles.length) throw new Error('Aucun salarié ne correspond à ce périmètre.');
+    const diffusionId = generateId('diffusion');
+    const documents = cibles.map(employee => this.addDocument({ ...champsCommuns, employeeId: employee.id, diffusionId }));
+    return { diffusionId, documents };
+  },
+
+  /** Toutes les copies d'une même diffusion, pour un suivi agrégé ("qui a lu") plutôt que de devoir
+   * ouvrir la fiche de chaque destinataire un par un. */
+  getDocumentsDiffusion(diffusionId) {
+    return this.getDocuments().filter(d => d.diffusionId === diffusionId);
+  },
+
   /** D1 (audit fiabilité 19/08/2026) : patche `fichier` avec {nom, path} une fois l'upload Storage
    * terminé (voir uploadJustificatifBestEffort, app.js) — appelé de façon best-effort, jamais dans
    * le flux synchrone de création. */
@@ -5542,7 +5581,10 @@ const documentRepository = {
   getForEmployee: (employeeId) => DB.getDocumentsForEmployee(employeeId),
   create: (data) => DB.addDocument(data),
   update: (id, patch) => DB.updateDocument(id, patch),
-  delete: (id) => DB.deleteDocument(id)
+  delete: (id) => DB.deleteDocument(id),
+  diffuser: (data) => DB.diffuserDocument(data),
+  resolveEmployeesForScope: (scope) => DB.resolveEmployeesForDiffusionScope(scope),
+  getDiffusion: (diffusionId) => DB.getDocumentsDiffusion(diffusionId)
 };
 
 const supportTicketRepository = {
@@ -6636,6 +6678,12 @@ function makeEmptyDocument() {
     accuseLectureRequis: false,
     accuseLectureAt: null,
     accuseLecturePar: null,
+    // §retour Betty du 23/09/2026 ("Documents, avec une diffusion") : identifiant commun à toutes
+    // les copies d'un même document déposé pour tout un périmètre (voir DB.diffuserDocument) — reste
+    // `null` pour un document individuel classique, jamais réutilisé pour autre chose (ex. deux
+    // documents SANS RAPPORT qui porteraient le même nom pour deux salariés différents restent
+    // distincts, diffusionId n'est JAMAIS déduit du nom/catégorie).
+    diffusionId: null,
     dateCreation: null,
     dateModification: null
   };

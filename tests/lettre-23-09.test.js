@@ -238,6 +238,106 @@ function runOngletContratAfficheLeResumeRemunerationAvecLeModule() {
   console.log('OK — lettre-23-09.test.js (point 7 : l\'onglet Contrat affiche enfin un résumé des éléments de rémunération saisis)');
 }
 
+// ---- Point 5 : "Mes documents devrait devenir Documents, avec une diffusion" ----
+
+function runEntreeMenuRenommeeDocuments() {
+  const { NAV_ITEMS } = setup();
+  const item = NAV_ITEMS.find(i => i.key === 'mes-documents');
+  assert.strictEqual(item.label, 'Documents', 'l\'entrée de menu doit être renommée "Documents"');
+
+  console.log('OK — lettre-23-09.test.js (point 5 : entrée de menu renommée "Documents")');
+}
+
+function runDiffuserDocumentCreeUneCopiePourChaqueSalarieDuPerimetre() {
+  const { DB, documentRepository, employeeRepository } = setup();
+  const commercial = employeeRepository.getAll().find(e => e.service === 'Commercial');
+  const it = employeeRepository.getAll().find(e => e.service === 'IT');
+  assert.ok(commercial && it, 'préalable : au moins deux services distincts dans le jeu de données de test');
+
+  const resultat = documentRepository.diffuser({
+    categorie: 'RH', nom: 'Règlement intérieur', dateExpiration: '', accuseLectureRequis: true,
+    fichier: { nom: 'reglement.pdf', dataUrl: 'data:application/pdf;base64,AAAA' },
+    scope: { type: 'service', value: 'Commercial' }
+  });
+
+  assert.strictEqual(resultat.documents.length, 1, 'seul le salarié du service ciblé doit recevoir une copie');
+  assert.strictEqual(resultat.documents[0].employeeId, commercial.id);
+  assert.ok(resultat.documents.every(d => d.diffusionId === resultat.diffusionId), 'toutes les copies doivent partager le même diffusionId');
+  assert.strictEqual(documentRepository.getForEmployee(it.id).length, 0, 'un salarié hors du périmètre ne doit recevoir aucune copie');
+
+  const copieRecue = documentRepository.getForEmployee(commercial.id)[0];
+  assert.strictEqual(copieRecue.nom, 'Règlement intérieur');
+  assert.strictEqual(copieRecue.accuseLectureRequis, true);
+  assert.strictEqual(copieRecue.accuseLectureAt, null, 'chaque copie attend sa PROPRE confirmation, jamais pré-confirmée');
+
+  console.log('OK — lettre-23-09.test.js (point 5 : diffuser un document crée une copie par salarié du périmètre, jamais hors périmètre)');
+}
+
+function runDiffuserDocumentPourTousCibleTousLesActifs() {
+  const { DB, documentRepository, employeeRepository } = setup();
+  const actifs = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
+
+  const resultat = documentRepository.diffuser({
+    categorie: 'RH', nom: 'Note de service', dateExpiration: '', accuseLectureRequis: false,
+    fichier: { nom: 'note.pdf', dataUrl: 'data:application/pdf;base64,AAAA' },
+    scope: { type: 'tous' }
+  });
+
+  assert.strictEqual(resultat.documents.length, actifs.length, 'un périmètre "tous" doit cibler tous les salariés actifs, ni plus ni moins');
+
+  console.log('OK — lettre-23-09.test.js (point 5 : diffuser "à tous" cible bien tous les salariés actifs)');
+}
+
+function runAccuseDeLectureFonctionneIdentiquementSurUneCopieDiffusee() {
+  const { DB, documentRepository, employeeRepository, confirmerAccuseLectureDocument } = setup();
+  const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
+  const resultat = documentRepository.diffuser({
+    categorie: 'RH', nom: 'Règlement intérieur', dateExpiration: '', accuseLectureRequis: true,
+    fichier: { nom: 'r.pdf', dataUrl: 'data:application/pdf;base64,AAAA' },
+    scope: { type: 'tous' }
+  });
+  const copieDuSalarie = resultat.documents.find(d => d.employeeId === salarie.id);
+  assert.ok(copieDuSalarie, 'préalable : ce salarié doit avoir reçu une copie');
+
+  // Même mécanisme qu'un document individuel : seul LE SALARIÉ CONCERNÉ peut confirmer sa propre copie.
+  DB._currentEmployeeId = salarie.id;
+  confirmerAccuseLectureDocument(copieDuSalarie.id);
+
+  const copieMiseAJour = documentRepository.getById(copieDuSalarie.id);
+  assert.ok(copieMiseAJour.accuseLectureAt, 'la confirmation doit fonctionner exactement comme sur un document individuel');
+  assert.strictEqual(copieMiseAJour.accuseLecturePar, salarie.id);
+
+  // Les copies des AUTRES salariés ne doivent jamais être affectées par la confirmation de celui-ci.
+  const autreCopie = resultat.documents.find(d => d.employeeId !== salarie.id);
+  assert.strictEqual(documentRepository.getById(autreCopie.id).accuseLectureAt, null, 'la confirmation d\'un salarié ne doit jamais affecter la copie d\'un autre');
+
+  console.log('OK — lettre-23-09.test.js (point 5 : l\'accusé de lecture fonctionne identiquement, salarié par salarié, sur un document diffusé)');
+}
+
+function runDocumentsAfficheLeBoutonDiffuserEtLeSuiviSeulementPourQuiGereLesDocuments() {
+  const api2 = setup();
+  api2.documentRepository.diffuser({
+    categorie: 'RH', nom: 'Règlement intérieur', dateExpiration: '', accuseLectureRequis: true,
+    fichier: { nom: 'r.pdf', dataUrl: 'data:application/pdf;base64,AAAA' },
+    scope: { type: 'tous' }
+  });
+
+  api2.navigateTo('mes-documents');
+  const htmlRh = api2.sandbox.document.getElementById('view-root').innerHTML;
+  assert.ok(htmlRh.includes('id="btn-diffuser-document"'), 'RH (GERER_UTILISATEURS) doit voir le bouton "Diffuser un document"');
+  assert.ok(htmlRh.includes('Diffusions') && htmlRh.includes('ont pris connaissance'), 'RH doit voir le suivi des diffusions en cours');
+
+  const salarieCtx = setup();
+  const salarie = salarieCtx.employeeRepository.getAll().find(e => e.role === 'salarie');
+  salarieCtx.DB._currentEmployeeId = salarie.id;
+  salarieCtx.navigateTo('mes-documents');
+  const htmlSalarie = salarieCtx.sandbox.document.getElementById('view-root').innerHTML;
+  assert.ok(!htmlSalarie.includes('id="btn-diffuser-document"'), 'un simple salarié ne doit jamais voir le bouton "Diffuser un document"');
+  assert.ok(!htmlSalarie.includes('ont pris connaissance'), 'un simple salarié ne doit jamais voir le suivi des diffusions (portée sur toute l\'entreprise)');
+
+  console.log('OK — lettre-23-09.test.js (point 5 : le bouton "Diffuser" et le suivi des diffusions restent réservés à qui gère les documents)');
+}
+
 function run() {
   runMaFicheJamaisDeFilDArianeNiDeFlechesMemeAvecAccesALaListe();
   runFicheOuverteDepuisLaListeGardeLeFilDArianeEtLesFleches();
@@ -251,6 +351,11 @@ function run() {
   runFormulaireContratMasqueLesElementsAvancesSansLeModuleRemuneration();
   runCorrigerUnContratSansLeModuleNeffacePasLesElementsDejaSaisis();
   runOngletContratAfficheLeResumeRemunerationAvecLeModule();
+  runEntreeMenuRenommeeDocuments();
+  runDiffuserDocumentCreeUneCopiePourChaqueSalarieDuPerimetre();
+  runDiffuserDocumentPourTousCibleTousLesActifs();
+  runAccuseDeLectureFonctionneIdentiquementSurUneCopieDiffusee();
+  runDocumentsAfficheLeBoutonDiffuserEtLeSuiviSeulementPourQuiGereLesDocuments();
 }
 
 try {

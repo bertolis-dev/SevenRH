@@ -495,7 +495,12 @@ const NAV_ITEMS = [
   // rôles, donc la fiche s'affiche automatiquement en lecture seule pour qui n'a pas le droit de
   // modifier sa propre fiche (canEdit = canEditEmployeeRecord(e), déjà faux pour un salarié).
   { key: 'ma-fiche', label: 'Ma fiche', icon: ICONS.idCard, permissions: [PERMISSIONS.VOIR_PROPRE_FICHE], group: 'personnel' },
-  { key: 'mes-documents', label: 'Mes documents', icon: ICONS.folder, roles: Object.values(ROLES), group: 'personnel', module: 'rh' },
+  // §retour Betty du 23/09/2026 ("Mes documents devrait devenir Documents, avec une diffusion") :
+  // renommé — l'écran reste personnel (chacun y voit ses PROPRES documents), mais qui peut gérer les
+  // documents (GERER_UTILISATEURS, voir canManageDocumentsFor) y trouve désormais aussi de quoi
+  // diffuser un document à tout un périmètre, plus une vue d'ensemble "qui a lu" des diffusions en
+  // cours — jamais un second écran séparé pour ça.
+  { key: 'mes-documents', label: 'Documents', icon: ICONS.folder, roles: Object.values(ROLES), group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
   // §retour Betty du 21/09/2026 (relecture par rôle, point 4) : renommé "Aide et support" — "Mes
@@ -4779,8 +4784,8 @@ const HELP_CONTENT = {
     bonnesPratiques: ['Joignez toujours le justificatif dès la création de la note : une note validée sans justificatif ressort comme anomalie avant l\'export de paie.']
   },
   'mes-documents': {
-    title: 'Mes documents',
-    body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service.</p>`,
+    title: 'Documents',
+    body: `<p>Vos documents personnels déposés par RH (contrat, avenants, attestations...) et l'export RGPD de vos données personnelles, en libre-service. Qui gère les documents peut aussi y diffuser un document à tout un périmètre (établissement, service, catégorie de salarié) en une seule fois, plutôt que de le déposer salarié par salarié.</p>`,
     faq: [{ q: 'Un document semble manquant ?', r: 'Seuls les documents que RH a explicitement partagés avec vous apparaissent ici. Contactez RH s\'il en manque un.' }]
   },
   tickets: {
@@ -10107,7 +10112,187 @@ function openDocumentModal(employeeId) {
   });
 }
 
+/** §retour Betty du 23/09/2026 ("Documents, avec une diffusion") : dépose UN document pour tout un
+ * périmètre plutôt que salarié par salarié (voir DB.diffuserDocument) — même formulaire
+ * qu'openDocumentModal ci-dessus (catégorie/nom/date d'expiration/accusé de lecture/fichier), avec un
+ * périmètre à la place du salarié unique. Réservé à qui gère les documents (canManageDocumentsFor),
+ * revérifié ici en défense en profondeur comme les autres modales de gestion. */
+function openDiffuserDocumentModal() {
+  if (!canManageDocumentsFor()) { showToast('Vous n\'avez pas le droit de diffuser un document.', 'error'); return; }
+  const settings = settingsRepository.getSettings();
+  state.pendingAttachment = null;
+
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Diffuser un document</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="diffuser-document-form">
+        <div class="modal-body">
+          <p class="text-muted" style="margin-top: 0;">Déposé une seule fois, ce document apparaîtra dans l'espace "Documents" de chaque salarié concerné par le périmètre choisi ci-dessous.</p>
+          <div class="form-grid">
+            ${selectField('categorie', 'Catégorie', settings.categoriesDocuments, settings.categoriesDocuments[0], null, undefined, 'categoriesDocuments')}
+            ${textField('nom', 'Nom du document', '', true)}
+            ${textField('dateExpiration', 'Date d\'expiration (optionnel)', '', false, 'date')}
+          </div>
+          <div class="form-field" style="margin-top: 14px;">
+            <label for="f-fichier">Fichier</label>
+            <input class="input" type="file" id="f-fichier" required>
+          </div>
+          <div class="form-field" style="margin-top: 14px;">
+            <label><input type="checkbox" id="f-accuse-lecture-requis"> Nécessite un accusé de lecture de chaque salarié</label>
+          </div>
+          <p class="form-subsection-title">Périmètre</p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="f-diffusion-scope-type">Destinataires</label>
+              <select class="input" id="f-diffusion-scope-type">
+                <option value="tous">Tous les salariés</option>
+                <option value="etablissement">Un établissement</option>
+                <option value="service">Un service</option>
+                <option value="categorieSalarie">Une catégorie de salarié</option>
+              </select>
+            </div>
+            <div class="form-field" id="field-diffusion-scope-value" style="display: none;">
+              <label for="f-diffusion-scope-value">&nbsp;</label>
+              <select class="input" id="f-diffusion-scope-value"></select>
+            </div>
+          </div>
+          <p class="text-muted" id="diffusion-scope-count" style="margin: 8px 0 0;"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Diffuser</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('f-fichier').addEventListener('change', handleAttachmentChange);
+
+  const scopeOptionsByType = () => ({
+    etablissement: etablissementRepository.getAll().filter(e => e.actif).map(e => ({ value: e.id, label: e.nom })),
+    service: serviceRepository.getAll().map(s => ({ value: s.nom, label: s.nom })),
+    categorieSalarie: (settings.categoriesSalarie || []).map(c => ({ value: c.id, label: c.nom }))
+  });
+
+  const updateScopeCount = () => {
+    const type = document.getElementById('f-diffusion-scope-type').value;
+    const value = document.getElementById('f-diffusion-scope-value').value;
+    const scope = type === 'tous' ? { type: 'tous' } : { type, value };
+    const cibles = documentRepository.resolveEmployeesForScope(scope);
+    const countEl = document.getElementById('diffusion-scope-count');
+    if (countEl) countEl.textContent = `${cibles.length} salarié${cibles.length > 1 ? 's' : ''} concerné${cibles.length > 1 ? 's' : ''}.`;
+  };
+
+  const scopeTypeSelect = document.getElementById('f-diffusion-scope-type');
+  const scopeValueField = document.getElementById('field-diffusion-scope-value');
+  const scopeValueSelect = document.getElementById('f-diffusion-scope-value');
+  scopeTypeSelect.addEventListener('change', () => {
+    const type = scopeTypeSelect.value;
+    if (type === 'tous') {
+      scopeValueField.style.display = 'none';
+      scopeValueSelect.innerHTML = '';
+    } else {
+      scopeValueField.style.display = '';
+      const options = scopeOptionsByType()[type] || [];
+      scopeValueSelect.innerHTML = options.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('');
+    }
+    updateScopeCount();
+  });
+  scopeValueSelect.addEventListener('change', updateScopeCount);
+  updateScopeCount();
+
+  document.getElementById('diffuser-document-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    if (!state.pendingAttachment) {
+      showToast('Sélectionnez un fichier.', 'error');
+      return;
+    }
+    const formData = new FormData(evt.target);
+    const categorie = formData.get('categorie');
+    const nom = formData.get('nom');
+    const dateExpiration = formData.get('dateExpiration') || '';
+    const accuseLectureRequis = document.getElementById('f-accuse-lecture-requis').checked;
+    const scopeType = scopeTypeSelect.value;
+    const scope = scopeType === 'tous' ? { type: 'tous' } : { type: scopeType, value: scopeValueSelect.value };
+    if (scopeType !== 'tous' && !scopeValueSelect.value) {
+      showToast('Choisissez une valeur pour ce périmètre.', 'error');
+      return;
+    }
+
+    let resultat;
+    try {
+      resultat = documentRepository.diffuser({
+        categorie, nom, dateExpiration, accuseLectureRequis,
+        fichier: state.pendingAttachment,
+        scope
+      });
+    } catch (err) {
+      showToast(err.message || 'Diffusion impossible.', 'error');
+      return;
+    }
+    // Même fichier pour chaque copie (le salarié n'a déposé qu'un seul document, pas un par
+    // destinataire) — un upload best-effort par copie, chacun vers le dossier Storage DE CE
+    // salarié (mêmes policies RLS qu'un document individuel, voir uploadEmployeeDocumentFile).
+    resultat.documents.forEach(doc => {
+      uploadJustificatifBestEffort({
+        uploader: window.SupabaseSync.uploadEmployeeDocumentFile,
+        employeeId: doc.employeeId, recordId: doc.id, file: state.pendingAttachmentFile,
+        patcher: (fichier) => documentRepository.update(doc.id, { fichier })
+      });
+    });
+    closeModal();
+    showToast(`Document diffusé à ${resultat.documents.length} salarié${resultat.documents.length > 1 ? 's' : ''}.`);
+    render();
+  });
+}
+
 // ---- Vue : Mes documents (libre-service Salarié, lecture + téléchargement uniquement) ----
+
+/** §retour Betty du 23/09/2026 ("Documents, avec une diffusion") : une diffusion crée une ligne
+ * document PAR salarié ciblé (voir DB.diffuserDocument), chacune avec son propre accusé de lecture —
+ * ce résumé regroupe les copies d'un même diffusionId pour montrer en un coup d'œil qui a confirmé,
+ * plutôt que d'ouvrir la fiche de chaque destinataire une par une ("sinon on ne saura pas qui a pris
+ * connaissance du règlement intérieur"). N'affiche que les diffusions dont AU MOINS une copie exige
+ * un accusé de lecture : une diffusion sans accusé de lecture requis n'a rien à faire suivre ici. */
+function renderDiffusionsDocumentsCard() {
+  const toutes = documentRepository.getAll().filter(d => d.diffusionId);
+  const parDiffusion = new Map();
+  toutes.forEach(d => {
+    if (!parDiffusion.has(d.diffusionId)) parDiffusion.set(d.diffusionId, []);
+    parDiffusion.get(d.diffusionId).push(d);
+  });
+  const diffusions = [...parDiffusion.entries()]
+    .filter(([, copies]) => copies.some(c => c.accuseLectureRequis))
+    .map(([diffusionId, copies]) => ({
+      diffusionId, copies,
+      nom: copies[0].nom, categorie: copies[0].categorie,
+      confirmees: copies.filter(c => c.accuseLectureAt).length
+    }))
+    .sort((a, b) => (b.copies[0].dateCreation || '').localeCompare(a.copies[0].dateCreation || ''));
+  if (!diffusions.length) return '';
+  return `
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Diffusions</h2>
+      <div class="mini-list">
+        ${diffusions.map(d => `
+          <div class="mini-list-item">
+            <span>${escapeHtml(d.categorie)} · ${escapeHtml(d.nom)}</span>
+            <span class="text-muted">${d.confirmees}/${d.copies.length} ont pris connaissance</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
 /** §retour Betty du 21/09/2026 (relecture par rôle, point 5) : recherche par nom/catégorie, puis
  * regroupement par catégorie (le "classement" demandé) — chaque groupe trié par date d'ajout la plus
@@ -10116,6 +10301,7 @@ function openDocumentModal(employeeId) {
  * était déjà générique (n'importe quel employeeId), seule l'entrée de menu restreignait à 'salarie'. */
 function renderMesDocuments() {
   const user = authRepository.getCurrentUser();
+  const canManage = canManageDocumentsFor();
   let documents = documentRepository.getForEmployee(user.id);
 
   const term = normalizeForSearch(state.mesDocumentsSearch.trim());
@@ -10132,10 +10318,14 @@ function renderMesDocuments() {
   const categoriesTriees = [...groupes.keys()].sort((a, b) => a.localeCompare(b));
 
   return `
-    <div class="view-header">
-      <h1>Mes documents</h1>
-      <p class="view-subtitle">${documents.length} document${documents.length > 1 ? 's' : ''}</p>
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Documents</h1>
+        <p class="view-subtitle">${documents.length} document${documents.length > 1 ? 's' : ''}</p>
+      </div>
+      ${canManage ? `<div class="detail-header-actions"><button class="btn btn-secondary" id="btn-diffuser-document">${icon(ICONS.folder, 13)} Diffuser un document</button></div>` : ''}
     </div>
+    ${canManage ? renderDiffusionsDocumentsCard() : ''}
     <div class="toolbar card">
       <input type="text" id="mes-documents-search" class="input" placeholder="Rechercher un document..." value="${escapeHtml(state.mesDocumentsSearch)}">
     </div>
@@ -10162,6 +10352,8 @@ function bindMesDocumentsEvents() {
     input.focus();
     input.setSelectionRange(e.target.selectionStart, e.target.selectionStart);
   });
+  const diffuserBtn = document.getElementById('btn-diffuser-document');
+  if (diffuserBtn) diffuserBtn.addEventListener('click', openDiffuserDocumentModal);
 }
 
 // ---------------------------------------------------------------------------
