@@ -440,10 +440,19 @@ p { margin: 0; line-height: 1.5; }
 .quality-issue-employees { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .quality-issue-link { font-size: 13px; }
 
+/* §retour Betty du 22/09/2026 ("beaucoup d'espace perdu") et du 19/09/2026 ("là où il y a marqué
+   obligatoire... ça doit être un petit point d'interrogation... l'orange doit rester réservé aux
+   vrais avertissements") : .form-hint portait la couleur d'avertissement alors qu'elle sert, dans
+   ses 53 emplois, à EXPLIQUER un champ, jamais à alerter. Un vrai avertissement a sa propre classe
+   (.field-warning, en gras, masquée tant qu'il n'y a rien à signaler). Ces explications passent
+   donc en gris de texte secondaire, et leur mesure est bornée : elles occupaient jusqu'à quatre
+   lignes pleine largeur sous un seul champ. */
 .form-hint {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
-  color: var(--color-warning);
+  line-height: 1.45;
+  max-width: 70ch;
+  color: var(--color-text-muted);
 }
 .form-hint .btn-link { font-size: 12px; text-decoration: underline; }
 
@@ -692,9 +701,11 @@ p { margin: 0; line-height: 1.5; }
   background: linear-gradient(135deg, var(--color-surface), var(--color-primary-soft) 320%);
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-md);
-  padding: 18px 22px;
+  /* §retour Betty du 22/09/2026 : sur une carte qui ne porte que deux ou trois champs, la marge
+     interne et l'espace sous le titre pesaient plus lourd que le contenu. Resserré sans coller. */
+  padding: 14px 18px;
   box-shadow: var(--shadow-md);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   min-width: 0;
 }
 
@@ -928,6 +939,14 @@ p { margin: 0; line-height: 1.5; }
 
 .table { width: 100%; border-collapse: collapse; }
 
+/* §retour Betty du 22/09/2026 ("fais moins de hauteur dans la ligne... on voit très peu de lignes
+   parce qu'il y a beaucoup d'espace vide... il ne faut pas que ce soit tassé non plus") : 16px de
+   marge en haut ET en bas donnaient des lignes de ~53px, soit une dizaine de lignes par écran sur
+   les jours fériés, les salariés ou la préparation de paie. 10px ramène la ligne à ~41px, un quart
+   de lignes visibles en plus, sans coller le texte aux bordures. Valeur volontairement commune à
+   TOUTES les tables (.table) plutôt qu'à un seul écran : elle demandait que ce soit valable
+   partout. Les listes de référence restent un cran plus serrées (.table-settings-list, 8px) : un
+   libellé court et une action, jamais le contenu dense d'un tableau de salariés. */
 .table th {
   text-align: left;
   font-size: 12px;
@@ -935,7 +954,7 @@ p { margin: 0; line-height: 1.5; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-muted);
-  padding: 16px 22px;
+  padding: 9px 22px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -947,7 +966,7 @@ p { margin: 0; line-height: 1.5; }
 .table th[data-sort] { cursor: pointer; user-select: none; }
 
 .table td {
-  padding: 16px 22px;
+  padding: 10px 22px;
   border-bottom: 1px solid var(--color-border);
   font-size: 14px;
 }
@@ -4164,3 +4183,91 @@ textarea.input { resize: vertical; font-family: inherit; }
   .card { background: white; box-shadow: none; }
 }
 
+
+/* §retour Betty du 22/09/2026 ("je préfère cette présentation dans les catégories de salariés...
+   fais la même chose pour les postes, les conventions, les types de contrats, les forfaits, les
+   catégories de documents, les checklists... des lignes moins hautes... l'ascenseur quand on peut
+   afficher 7 lignes") : présentation commune à toutes les listes de référence, en remplacement des
+   pastilles qui déroulaient la liste entière sans hauteur maîtrisée (183 conventions collectives
+   occupaient plusieurs écrans à elles seules). Voir renderSettingsListCard/renderPostesCard. */
+.settings-list-card { display: flex; flex-direction: column; }
+.settings-list-header { padding: 16px 16px 0; align-items: flex-start; gap: 12px; }
+.settings-list-header h2 { margin-bottom: 2px; }
+.settings-list-header .text-muted { font-size: 12px; margin: 0; }
+
+/* 7 lignes visibles, l'ascenseur prend le relais au-delà : chaque carte garde la même hauteur quel
+   que soit le nombre d'éléments, une liste de 4 forfaits comme une liste de 183 conventions. */
+.settings-list-scroll {
+  max-height: calc(7 * 37px);
+  overflow-y: auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Lignes volontairement plus courtes que .table standard : ces listes n'ont qu'un libellé et une
+   action, jamais le contenu dense d'un tableau de salariés. */
+.table-settings-list td, .table-settings-list th { padding: 8px 16px; font-size: 13px; }
+.table-settings-list thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+.settings-list-valeur { width: 100%; }
+.settings-list-action { text-align: right; white-space: nowrap; }
+.settings-list-vide { padding: 14px 16px 16px; margin: 0; }
+.settings-list-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 16px 0;
+  margin: 0;
+}
+.settings-list-add .input { flex: 1 1 180px; }
+.input-sm { padding: 5px 8px; font-size: 13px; }
+
+/* §retour Betty du 22/09/2026 ("on voit qu'il y a beaucoup d'espace perdu... on ne voit que deux
+   cartouches alors qu'on pourrait facilement en voir plus") : les onglets de Paramètres empilaient
+   leurs cartes d'options sur toute la largeur, une par ligne, alors que chacune ne contient que
+   deux ou trois champs. Sur un écran large, deux cartes remplissaient déjà la hauteur visible.
+   Même grille que .settings-lists-grid : autant de colonnes que la largeur permet, repli naturel
+   en une seule colonne sur écran étroit, sans media query. Une carte qui porte un vrai tableau
+   (jours fériés, fermetures) reste sur toute la largeur via .settings-card-wide. */
+.settings-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.settings-cards-grid > .card { margin-bottom: 0; }
+.settings-card-wide { grid-column: 1 / -1; }
+
+/* §retour Betty du 22/09/2026 : la carte de candidature porte désormais deux actions (avancer d'une
+   étape, supprimer) au lieu d'une seule. */
+.candidature-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* §retour Betty du 22/09/2026 ("de préférence en général je pense plus en paysage") : l'application
+   n'avait aucune règle @page, donc tout s'imprimait au format par défaut du navigateur, A4 portrait.
+   Un organigramme est large par nature : il y était coupé à droite dès le deuxième niveau.
+   Les pages nommées permettent de choisir l'orientation document par document, au lieu d'imposer le
+   paysage à une attestation ou à un certificat, qui sont des colonnes de texte. Prise en charge à
+   partir de Chrome et Edge 85 et de Firefox 110 ; un navigateur plus ancien retombe simplement sur
+   le portrait, et la mise à l'échelle (isolatePrintAreaForPrinting, app.js) évite malgré tout que
+   l'arbre soit coupé. */
+@page {
+  size: A4 portrait;
+  margin: 14mm;
+}
+@page paysage {
+  size: A4 landscape;
+  margin: 10mm;
+}
+.print-landscape { page: paysage; }

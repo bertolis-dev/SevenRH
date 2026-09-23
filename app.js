@@ -5320,6 +5320,14 @@ function bindGlobalEvents() {
  * intention que la règle @media print déjà existante (style.css), mais garantie ici en JS pur, sans
  * dépendre du support d'une fonctionnalité CSS particulière par le navigateur. */
 let printIsolationRestore = null;
+/** Largeur utile d'une feuille A4 en pixels CSS (96 ppp), marges d'impression déduites : 210 mm
+ * portrait et 297 mm paysage, moins les marges déclarées dans @page (style.css). Approximation
+ * assumée : le navigateur ne donne aucun moyen de lire la largeur imprimable réelle, qui dépend
+ * aussi du format choisi dans la fenêtre d'impression. Une valeur un peu basse est sans danger
+ * (l'arbre est simplement réduit un peu plus que nécessaire), une valeur trop haute couperait. */
+const LARGEUR_IMPRIMABLE_PORTRAIT_PX = 700;
+const LARGEUR_IMPRIMABLE_PAYSAGE_PX = 1030;
+
 function isolatePrintAreaForPrinting() {
   const printArea = document.querySelector('.print-area');
   if (!printArea) return;
@@ -5343,6 +5351,29 @@ function isolatePrintAreaForPrinting() {
     ancestor.style.padding = '0';
     ancestor = ancestor.parentElement;
   }
+
+  // §retour Betty du 22/09/2026 ("il faut qu'il s'adapte à la largeur de la page... là il y a une
+  // grosse marge blanche sur le côté, du coup on ne voit pas tous les salariés") : l'organigramme
+  // imprimé était coupé à droite dès qu'un niveau dépassait la largeur de la feuille. Plutôt que de
+  // réduire l'arbre à la main, la zone imprimable est mise à l'échelle au moment d'imprimer, quand
+  // et seulement quand elle est plus large que la feuille. La hauteur de la boîte est ramenée à la
+  // hauteur RÉELLEMENT dessinée : une transformation ne change pas la mise en page, donc sans ça le
+  // navigateur réserverait la hauteur d'origine et ajouterait une page blanche.
+  const largeurFeuille = printArea.classList.contains('print-landscape')
+    ? LARGEUR_IMPRIMABLE_PAYSAGE_PX
+    : LARGEUR_IMPRIMABLE_PORTRAIT_PX;
+  const largeurContenu = printArea.scrollWidth;
+  if (largeurContenu > largeurFeuille) {
+    const ratio = largeurFeuille / largeurContenu;
+    ['transform', 'transformOrigin', 'width', 'height'].forEach(prop => {
+      restores.push({ el: printArea, prop, value: printArea.style[prop] });
+    });
+    printArea.style.transformOrigin = 'top left';
+    printArea.style.transform = `scale(${ratio})`;
+    printArea.style.width = `${largeurContenu}px`;
+    printArea.style.height = `${printArea.scrollHeight * ratio}px`;
+  }
+
   printIsolationRestore = restores;
 }
 
@@ -9733,7 +9764,7 @@ function openOrganigrammePrintModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <div class="print-area print-document">
+        <div class="print-area print-document print-landscape">
           ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
           <ul class="org-tree">
             ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf, true)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
@@ -19278,9 +19309,10 @@ function renderParametresListes() {
 function renderParametresRH() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Salariés</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-duree-hebdo-reference">Durée hebdomadaire de référence (heures)</label>
           <input class="input" type="number" min="1" step="0.5" id="f-duree-hebdo-reference" value="${escapeHtml(settings.dureeHebdomadaireReferenceHeures)}">
@@ -19339,7 +19371,7 @@ function renderParametresRH() {
     <div class="card">
       <h2>Indicateurs Direction</h2>
       <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-suivi-genre" ${settings.suiviGenreActive ? 'checked' : ''}> Afficher la répartition Hommes / Femmes sur le tableau de bord</label>
           <p class="form-hint">Le sexe (état civil) est désormais un champ obligatoire de la fiche salarié, indépendamment de ce réglage : celui-ci ne contrôle que l'affichage du graphique de répartition sur le tableau de bord Propriétaire.</p>
@@ -19348,6 +19380,7 @@ function renderParametresRH() {
           <label><input type="checkbox" id="f-suivi-age" ${settings.suiviAgeActive ? 'checked' : ''}> Suivre la pyramide des âges</label>
         </div>
       </div>
+    </div>
     </div>
   `;
 }
@@ -19394,10 +19427,11 @@ function bindParametresRHEvents() {
 function renderParametresRemuneration() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Indicateurs Direction</h2>
       <p class="text-muted">Ces indicateurs reposent sur des données sensibles ; ils restent désactivés tant que l'entreprise ne choisit pas explicitement de les suivre.</p>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field form-field-checkbox">
           <label><input type="checkbox" id="f-masse-salariale" ${settings.masseSalarialeActivee ? 'checked' : ''}> Suivre la masse salariale (salaire brut mensuel par salarié)</label>
         </div>
@@ -19410,7 +19444,7 @@ function renderParametresRemuneration() {
     </div>
     <div class="card">
       <h2>Heures supplémentaires</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-contingent-heures-sup">Contingent annuel d'heures supplémentaires (h)</label>
           <input class="input" type="number" min="1" id="f-contingent-heures-sup" value="${escapeHtml(settings.contingentAnnuelHeuresSup)}">
@@ -19421,6 +19455,7 @@ function renderParametresRemuneration() {
           <p class="form-hint">25 = 1h supplémentaire donne 1h15 de repos. Dépend de votre effectif et d'un éventuel accord de branche/entreprise. À vérifier avec votre gestionnaire de paie avant de vous y fier.</p>
         </div>
       </div>
+    </div>
     </div>
   `;
 }
@@ -19446,9 +19481,10 @@ function bindParametresRemunerationEvents() {
 function renderParametresPlanningTeletravail() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Planning</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
           <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
@@ -19458,13 +19494,14 @@ function renderParametresPlanningTeletravail() {
     </div>
     <div class="card">
       <h2>Télétravail</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-teletravail-quota">Quota de télétravail (jours / semaine)</label>
           <input class="input" type="number" min="0" max="7" id="f-teletravail-quota" value="${escapeHtml(settings.teletravailQuotaSemaine)}">
         </div>
         ${workflowSelectField('workflow-teletravail', 'Validation requise', WORKFLOW_PRESETS_CONGES, settings.workflowTeletravail)}
       </div>
+    </div>
     </div>
   `;
 }
@@ -19486,7 +19523,7 @@ function renderParametresNotesFrais() {
     ${renderCategoriesFraisConfigCard(settings)}
     <div class="card">
       <h2>Validation</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         ${workflowSelectField('workflow-frais', 'Validation requise', WORKFLOW_PRESETS_FRAIS, settings.workflowFrais)}
       </div>
     </div>
@@ -19506,9 +19543,10 @@ function bindParametresNotesFraisEvents() {
 function renderParametresTicketsRestaurant() {
   const settings = settingsRepository.getSettings();
   return `
+    <div class="settings-cards-grid">
     <div class="card">
       <h2>Tickets restaurant</h2>
-      <div class="form-grid" style="max-width: 700px;">
+      <div class="form-grid">
         <div class="form-field">
           <label for="f-tickets-valeur">Valeur faciale du ticket restaurant (€)</label>
           <input class="input" type="number" min="0" step="0.01" id="f-tickets-valeur" value="${escapeHtml(settings.ticketsValeurFaciale)}">
@@ -19538,6 +19576,7 @@ function renderParametresTicketsRestaurant() {
            réglages de l'entreprise qui alimentent calculateTicketsRestaurant (data.js) — une
            entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
       <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
+    </div>
     </div>
   `;
 }
@@ -19627,33 +19666,51 @@ function renderCategoriesFraisConfigCard(settings) {
 // collectives passe ce paramètre — les autres listes (Postes, Statuts pro, ...), bien plus courtes,
 // restent affichées normalement. Le formulaire d'ajout reste TOUJOURS visible, hors du panneau
 // repliable, pour ajouter une convention manquante sans avoir à tout déplier.
+/** §retour Betty du 22/09/2026 : "je préfère cette présentation dans les catégories de salariés...
+ * je voudrais que tu fasses la même chose pour les postes, les conventions, les types de contrats,
+ * les forfaits, les catégories de documents, les checklists" — les pastilles (.chip) affichaient la
+ * liste entière d'un bloc, sans hauteur maîtrisée : la liste officielle des conventions (183
+ * entrées) occupait à elle seule plusieurs écrans. Même patron que "Catégories de salariés"
+ * désormais : un bouton "Ajouter" en en-tête, une liste de lignes courtes en dessous, et un
+ * ascenseur au-delà de 7 lignes (voir .settings-list-scroll, style.css) pour que chaque carte garde
+ * la même hauteur quel que soit le nombre d'éléments.
+ *
+ * Les crochets d'événements ne changent pas (data-list-key sur le bouton de retrait et sur le
+ * formulaire d'ajout, voir bindChipListEvents) : seule la présentation est refaite. Le formulaire
+ * d'ajout reste replié tant qu'on n'a pas cliqué sur "Ajouter", plutôt qu'un champ toujours visible
+ * en bas de chaque carte. */
 function renderSettingsListCard(listDef, items, readOnlyValues) {
-  const chipList = `
-    <div class="chip-list">
-      ${items.map((item, i) => {
-        const readOnly = readOnlyValues && readOnlyValues.has(item);
-        return `
-        <span class="chip">
-          ${escapeHtml(item)}
-          ${readOnly ? '' : `<button type="button" class="chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>`}
-        </span>
-      `; }).join('')}
-    </div>
-  `;
+  const lignes = items.map((item, i) => {
+    const readOnly = readOnlyValues && readOnlyValues.has(item);
+    return `
+      <tr>
+        <td class="settings-list-valeur">${escapeHtml(item)}</td>
+        <td class="settings-list-action">
+          ${readOnly
+            ? '<span class="text-muted" title="Entrée de la liste officielle, non modifiable ici">Officielle</span>'
+            : `<button type="button" class="btn-link btn-link-danger chip-remove" data-list-key="${listDef.key}" data-index="${i}">Supprimer</button>`}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
   return `
-    <div class="card">
-      <h2>${escapeHtml(listDef.label)}</h2>
-      ${readOnlyValues ? `
-        <p class="text-muted" style="font-size:12px; margin-top:-6px;">La liste officielle n'est pas modifiable ici : ajoutez seulement une convention qui en serait absente.</p>
-        <details class="collapsible-panel">
-          <summary>Voir la liste (${items.length})</summary>
-          ${chipList}
-        </details>
-      ` : chipList}
-      <form class="chip-add-form" data-list-key="${listDef.key}">
-        <input type="text" class="input" placeholder="${readOnlyValues ? 'Ajouter une convention absente de la liste...' : 'Ajouter un élément...'}" required>
+    <div class="card table-card settings-list-card">
+      <div class="view-header-row settings-list-header">
+        <div>
+          <h2>${escapeHtml(listDef.label)}</h2>
+          <p class="text-muted">${items.length} élément${items.length > 1 ? 's' : ''}${readOnlyValues ? ' · la liste officielle n\'est pas modifiable ici, ajoutez seulement une convention qui en serait absente' : ''}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="${listDef.key}">+ Ajouter</button>
+      </div>
+      <form class="chip-add-form settings-list-add" data-list-key="${listDef.key}" hidden>
+        <input type="text" class="input" placeholder="${readOnlyValues ? 'Convention absente de la liste officielle...' : 'Nouvel élément...'}" required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+        <button type="button" class="btn-link" data-cancel-add-list="${listDef.key}">Annuler</button>
       </form>
+      ${items.length
+        ? `<div class="settings-list-scroll"><table class="table table-settings-list"><tbody>${lignes}</tbody></table></div>`
+        : '<p class="text-muted settings-list-vide">Aucun élément pour l\'instant.</p>'}
     </div>
   `;
 }
@@ -19734,6 +19791,26 @@ function bindParametresListesEvents() {
  * par bindEmbaucheEvents pour "postesOuverts", rendu dans un tout autre écran (Embauche, pas
  * Paramètres) avec renderSettingsListCard mais sans le reste des champs propres à Paramètres. */
 function bindChipListEvents() {
+  // §retour Betty du 22/09/2026 : le formulaire d'ajout reste replié tant qu'on n'a pas cliqué sur
+  // "Ajouter", pour que chaque carte se limite à sa liste. Délégation par data-toggle-add-list
+  // plutôt qu'un identifiant par carte : une nouvelle liste de référence en hérite sans code.
+  document.querySelectorAll('[data-toggle-add-list]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = document.querySelector(`.settings-list-add[data-list-key="${btn.dataset.toggleAddList}"]`);
+      if (!form) return;
+      form.hidden = !form.hidden;
+      if (!form.hidden) form.querySelector('input').focus();
+    });
+  });
+  document.querySelectorAll('[data-cancel-add-list]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = document.querySelector(`.settings-list-add[data-list-key="${btn.dataset.cancelAddList}"]`);
+      if (!form) return;
+      form.querySelector('input').value = '';
+      form.hidden = true;
+    });
+  });
+
   document.querySelectorAll('.chip-remove[data-list-key]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
@@ -26512,30 +26589,37 @@ function renderPostesOuvertsCard(postesOuverts) {
  * composant partagé). La forme neutre reste la seule valeur stockée sur un salarié (employee.poste,
  * jamais changée) : masculin/féminin ne servent qu'à l'affichage (getPosteAccorde, data.js). */
 function renderPostesCard(postes) {
+  const lignes = (postes || []).map((poste, i) => `
+    <tr>
+      <td class="settings-list-valeur">${escapeHtml(poste.neutre)}</td>
+      <td><input type="text" class="input input-sm poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}" aria-label="Forme masculine de ${escapeHtml(poste.neutre)}"></td>
+      <td><input type="text" class="input input-sm poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}" aria-label="Forme féminine de ${escapeHtml(poste.neutre)}"></td>
+      <td class="settings-list-action">
+        <button type="button" class="btn-link btn-link-danger" data-delete-poste="${i}" data-index="${i}">Supprimer</button>
+      </td>
+    </tr>
+  `).join('');
+
   return `
-    <div class="card">
-      <h2>Postes</h2>
-      <p class="text-muted" style="font-size:12px; margin-top:-6px;">Les formes masculine/féminine sont proposées automatiquement à partir de l'intitulé neutre (meilleur effort, jamais une grammaire française parfaite) : corrigez-les si besoin, ci-dessous.</p>
-      <div class="chip-list" style="flex-direction: column; align-items: stretch;">
-        ${(postes || []).map((poste, i) => `
-          <div class="poste-genre-row">
-            <span class="poste-genre-neutre">${escapeHtml(poste.neutre)}</span>
-            <label class="poste-genre-field">
-              <span class="text-muted" style="font-size: 11px;">Masculin</span>
-              <input type="text" class="input poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}">
-            </label>
-            <label class="poste-genre-field">
-              <span class="text-muted" style="font-size: 11px;">Féminin</span>
-              <input type="text" class="input poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}">
-            </label>
-            <button type="button" class="chip-remove" data-index="${i}" title="Retirer">${icon(ICONS.close, 12)}</button>
-          </div>
-        `).join('')}
+    <div class="card table-card settings-list-card">
+      <div class="view-header-row settings-list-header">
+        <div>
+          <h2>Postes</h2>
+          <p class="text-muted">${(postes || []).length} poste${(postes || []).length > 1 ? 's' : ''} · les formes masculine et féminine sont proposées à partir de l'intitulé neutre, corrigez-les si besoin.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="poste">+ Ajouter</button>
       </div>
-      <form class="chip-add-form" id="form-add-poste">
+      <form class="chip-add-form settings-list-add" id="form-add-poste" data-list-key="poste" hidden>
         <input type="text" class="input" id="input-poste-neutre" placeholder="Intitulé neutre (ex. Commercial·e)..." required>
         <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
+        <button type="button" class="btn-link" data-cancel-add-list="poste">Annuler</button>
       </form>
+      ${lignes
+        ? `<div class="settings-list-scroll"><table class="table table-settings-list">
+            <thead><tr><th>Intitulé neutre</th><th>Masculin</th><th>Féminin</th><th></th></tr></thead>
+            <tbody>${lignes}</tbody>
+          </table></div>`
+        : '<p class="text-muted settings-list-vide">Aucun poste pour l\'instant.</p>'}
     </div>
   `;
 }
@@ -26552,7 +26636,7 @@ function bindPostesCardEvents() {
     });
   });
 
-  document.querySelectorAll('.poste-genre-row .chip-remove').forEach(btn => {
+  document.querySelectorAll('[data-delete-poste]').forEach(btn => {
     btn.addEventListener('click', () => {
       const settings = settingsRepository.getSettings();
       const postes = settings.postes || [];
@@ -26693,7 +26777,12 @@ function renderCandidatureCard(c) {
       <div class="idee-card-meta">
         <span class="text-muted">${(c.postes || []).length ? escapeHtml(c.postes.join(', ')) : '—'} · ${formatDate(c.dateSoumission)}</span>
       </div>
-      ${nextStatut ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" data-avancer-candidature="${escapeHtml(c.id)}" data-next-statut="${nextStatut}">→ ${escapeHtml(CANDIDATURE_STATUT_LABELS[nextStatut])}</button>` : ''}
+      <div class="candidature-card-actions">
+        ${nextStatut ? `<button type="button" class="btn btn-secondary btn-sm" data-avancer-candidature="${escapeHtml(c.id)}" data-next-statut="${nextStatut}">→ ${escapeHtml(CANDIDATURE_STATUT_LABELS[nextStatut])}</button>` : ''}
+        <!-- §retour Betty du 22/09/2026 ("on a fait des tests... je ne peux pas les supprimer") :
+             distinct d'"Archivée", qui ne fait que déplacer la carte dans une autre colonne. -->
+        <button type="button" class="btn-link btn-link-danger" data-supprimer-candidature="${escapeHtml(c.id)}">Supprimer</button>
+      </div>
     </div>
   `;
 }
@@ -26729,7 +26818,30 @@ async function refreshEmbaucheCandidaturesList() {
     document.querySelectorAll('[data-open-candidature]').forEach(card => {
       card.addEventListener('click', (evt) => {
         if (evt.target.closest('[data-avancer-candidature]')) return;
+        if (evt.target.closest('[data-supprimer-candidature]')) return;
         navigateTo('candidature-detail', { currentCandidatureId: card.dataset.openCandidature });
+      });
+    });
+    document.querySelectorAll('[data-supprimer-candidature]').forEach(btn => {
+      btn.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        const carte = btn.closest('[data-open-candidature]');
+        const nom = carte ? carte.querySelector('.idee-card-title').textContent.trim() : 'cette candidature';
+        openConfirm({
+          title: 'Supprimer cette candidature ?',
+          message: `La candidature de ${nom} sera retirée définitivement, ainsi que le CV et la lettre déposés. Cette action ne peut pas être annulée. Pour conserver la trace d'un candidat non retenu, utilisez plutôt "Archivée".`,
+          confirmLabel: 'Supprimer',
+          danger: true,
+          onConfirm: async () => {
+            try {
+              await candidatureRepository.supprimer(btn.dataset.supprimerCandidature);
+              showToast('Candidature supprimée.');
+              refreshEmbaucheCandidaturesList();
+            } catch (err) {
+              showToast(err.message || 'Suppression impossible.', 'error');
+            }
+          }
+        });
       });
     });
     document.querySelectorAll('[data-avancer-candidature]').forEach(btn => {
