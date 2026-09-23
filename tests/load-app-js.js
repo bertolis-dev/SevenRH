@@ -137,6 +137,8 @@ globalThis.__ensureContratsBackfilled = ensureContratsBackfilled;
   const exposeAfterApp = `
 ;globalThis.__syncNotifications = syncNotifications;
 globalThis.__hasModule = hasModule;
+globalThis.__hasAnyModule = hasAnyModule;
+globalThis.__isViewBlockedForCurrentUser = isViewBlockedForCurrentUser;
 globalThis.__navigateTo = navigateTo;
 globalThis.__render = render;
 globalThis.__state = state;
@@ -222,6 +224,7 @@ globalThis.__renderMesTickets = renderMesTickets;
 globalThis.__renderMesDocuments = renderMesDocuments;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
 globalThis.__teleworkRepository = teleworkRepository;
+globalThis.__findTeleworkWeekOverQuota = findTeleworkWeekOverQuota;
 globalThis.__leaveRepository = leaveRepository;
 globalThis.__renderDashboardActionCenter = renderDashboardActionCenter;
 globalThis.__renderCalendrierValidationsCard = renderCalendrierValidationsCard;
@@ -503,6 +506,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     computeShiftHeures: sandbox.__computeShiftHeures,
     seedExampleShifts: sandbox.__seedExampleShifts,
     pointageRepository: sandbox.__pointageRepository,
+    hasAnyModule: sandbox.__hasAnyModule,
+    isViewBlockedForCurrentUser: sandbox.__isViewBlockedForCurrentUser,
     etablissementRepository: sandbox.__etablissementRepository,
     serviceRepository: sandbox.__serviceRepository,
     categorieSalarieRepository: sandbox.__categorieSalarieRepository,
@@ -590,6 +595,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderMesDocuments: sandbox.__renderMesDocuments,
     renderAbsencesHub: sandbox.__renderAbsencesHub,
     teleworkRepository: sandbox.__teleworkRepository,
+    findTeleworkWeekOverQuota: sandbox.__findTeleworkWeekOverQuota,
     leaveRepository: sandbox.__leaveRepository,
     renderDashboardActionCenter: sandbox.__renderDashboardActionCenter,
     renderCalendrierValidationsCard: sandbox.__renderCalendrierValidationsCard,

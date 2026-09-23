@@ -483,7 +483,7 @@ const NAV_ITEMS = [
   // attente" (Object.assign(state, {}) ne réinitialise rien) — cette entrée restait donc filtrée sur
   // les demandes en attente au lieu de revenir à la vue personnelle par défaut. Remet explicitement
   // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
-  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'conges', navParams: { congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' } } },
+  { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: ['conges', 'planning'], navParams: { congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' } } },
   { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'frais' },
   // §retour Betty du 21/09/2026 (relecture par rôle, point 1, "le salarié n'a aucun accès à sa
   // propre fiche") : VOIR_PROPRE_FICHE (PERMISSIONS, data.js) existait déjà, accordée par défaut à
@@ -519,7 +519,7 @@ const NAV_ITEMS = [
   // n'a jamais aucun menu "Équipe", donc jamais les étiquettes Personnel/Équipe (voir showGroups,
   // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
   // voir isNavItemActive) plutôt qu'un nouvel écran.
-  { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'conges', navParams: NAVPARAMS_CONGES_A_VALIDER },
+  { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: ['conges', 'planning'], navParams: NAVPARAMS_CONGES_A_VALIDER },
   // §correctif audit du 23/08/2026 (2.1) : PAS de module ici — le registre des salariés (liste,
   // création, fiche de base) est le socle commun de tous les modules, pas une fonctionnalité RH
   // parmi d'autres. Sans ce retrait, une entreprise n'ayant souscrit qu'au module congés ne pouvait
@@ -634,6 +634,21 @@ function hasModule(moduleKey) {
   const abo = company && company.abonnement;
   if (!abo || abo.offre !== 'a_la_carte') return true;
   return (abo.modules || []).some(m => m.key === moduleKey);
+}
+
+/** §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : un item de NAV_ITEMS peut
+ * désormais déclarer `module` comme un TABLEAU de clés alternatives, pas seulement une chaîne unique
+ * — nécessaire pour l'écran "Congés & absences" qui héberge aussi le Télétravail (facturé sous la
+ * clé 'planning', voir LANDING_ALACARTE_MODULES), pas seulement 'conges'. Un abonnement à la carte
+ * qui n'a souscrit QUE 'planning' débloque donc bien l'accès à l'écran (le contenu Congés y reste
+ * lui-même caché si 'conges' manque, cf. l'onglet Télétravail déjà conditionné par hasModule('planning')
+ * à l'intérieur du hub) — sans ce garde élargi, isViewBlockedForCurrentUser renvoyait sur le tableau
+ * de bord AVANT même d'atteindre ce conditionnement interne, rendant le Télétravail totalement
+ * inaccessible malgré son abonnement payé.
+ */
+function hasAnyModule(moduleKeyOrArray) {
+  if (Array.isArray(moduleKeyOrArray)) return moduleKeyOrArray.some(hasModule);
+  return hasModule(moduleKeyOrArray);
 }
 
 /** §correctif audit du 23/08/2026 (§4, brique 2) : hasModule() n'était appelé qu'à 4 endroits avant
@@ -912,7 +927,7 @@ function openReduireLicencesModal(moduleKey, nouvelleQuantite, assigned, resolve
  * base à navItemsForRole ci-dessous et de liste de cases à cocher dans renderMenusAutorisesCard. */
 function baseNavItemsForRole(user) {
   return NAV_ITEMS.filter(item => {
-    if (item.module && !hasModule(item.module)) return false;
+    if (item.module && !hasAnyModule(item.module)) return false;
     if (item.permissions) return item.permissions.some(p => hasPermission(user, p));
     return item.roles.includes(user.role);
   });
@@ -6281,7 +6296,7 @@ function moduleForView(view) {
  * DETAIL_VIEW_NAV_KEY). Utilisé par render() ci-dessous comme garde-fou de dernier recours. */
 function isViewBlockedForCurrentUser(view) {
   const requiredModule = moduleForView(view);
-  if (requiredModule && !hasModule(requiredModule)) return true;
+  if (requiredModule && !hasAnyModule(requiredModule)) return true;
   const user = authRepository.getCurrentUser();
   if (!user) return false;
   const navKey = NAV_ITEMS.some(i => i.key === view) ? view : DETAIL_VIEW_NAV_KEY[view];
@@ -21900,8 +21915,17 @@ function renderPlanningPostes() {
       // sur une indisponibilité déclarée par CE salarié (voir Mon compte > Disponibilités).
       const conflitIndisponibilite = shiftChevaucheIndisponibilite(shift, employee.indisponibilitesRecurrentes);
       const pointageDot = dernierPointage ? `<span class="poste-shift-pointage-dot" title="Pointé : ${escapeHtml(pointageTexte(dernierPointage))}">${icon(ICONS.checkCircle, 10)}</span>` : '';
+      // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : data-edit-shift
+      // rendait CHAQUE carte cliquable (ouvrant openShiftModal, qui permet de modifier/supprimer le
+      // quart) sans jamais vérifier canManage — la seule action de ce module sans ce garde-fou,
+      // alors que le reste de l'écran (bouton "+", modèles de semaine, astreintes) le respecte
+      // scrupuleusement et que la planification elle-même reste réservée à MODIFIER_SALARIE (RH/
+      // Propriétaire, jamais Manager, voir le commentaire des Astreintes). La carte reste VISIBLE
+      // pour tout le monde (voir/consulter le planning reste ouvert), seule l'ouverture en édition
+      // est désormais réservée à qui a le droit de modifier.
+      const shiftCardStyle = [conflitIndisponibilite ? 'border-left-color: var(--color-danger);' : '', canManage ? '' : 'cursor: default;'].filter(Boolean).join(' ');
       return `<td class="planning-cell">
-        <div class="poste-shift-card" data-edit-shift="${shift.id}" ${conflitIndisponibilite ? 'style="border-left-color: var(--color-danger);"' : ''} title="${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée' : ''}">
+        <div class="poste-shift-card" ${canManage ? `data-edit-shift="${shift.id}"` : ''} ${shiftCardStyle ? `style="${shiftCardStyle}"` : ''} title="${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée' : ''}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
           <div class="poste-shift-position">${escapeHtml(employee.service || '')}${pointageDot}</div>
           ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
@@ -22788,7 +22812,13 @@ function updateTeleworkQuotaHint() {
   const weekStart = toISODate(weekDates[0]);
   const weekEnd = toISODate(weekDates[6]);
 
-  const activeRequests = teleworkRepository.getAll().filter(r => r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'));
+  // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : sans exclure la demande en
+  // cours de modification (state.editingTeleworkRequestId), l'indicateur affichait déjà à tort son
+  // propre volume compté deux fois — une fois via activeRequests (ses anciennes dates, toujours
+  // "En attente"), une fois via les dates saisies dans le formulaire — faisant croire au quota
+  // dépassé sur un simple modifier-sans-rien-changer. Même exclusion que findTeleworkWeekOverQuota
+  // (moveTeleworkRequest) et hasActiveRequestOverlap, ci-dessous, appliquent déjà.
+  const activeRequests = teleworkRepository.getAll().filter(r => r.id !== state.editingTeleworkRequestId && r.employeeId === employeeId && (r.statut === 'Validé' || r.statut === 'En attente'));
   let usedThisWeek = 0;
   activeRequests.forEach(r => {
     for (let cursor = parseISODateLocal(r.dateDebut); toISODate(cursor) <= r.dateFin; cursor.setDate(cursor.getDate() + 1)) {
@@ -22968,7 +22998,12 @@ async function submitTeleworkRequestForm(evt) {
   }
 
   const quota = settingsRepository.getSettings().teletravailQuotaSemaine;
-  const overQuota = findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota);
+  // §retour Betty du 22/09/2026 (revue de bugs) : exclusion manquante ici alors que l'appel équivalent
+  // dans moveTeleworkRequest (ci-dessus, §documenté sur findTeleworkWeekOverQuota) et le contrôle de
+  // chevauchement juste en dessous l'appliquent déjà — modifier une demande En attente sans rien
+  // changer à ses dates la faisait compter deux fois contre elle-même, rejetant un simple
+  // modifier-sans-rien-changer pour "quota dépassé".
+  const overQuota = findTeleworkWeekOverQuota(employeeId, dateDebut, dateFin, employee, quota, state.editingTeleworkRequestId);
   if (overQuota) {
     showToast(`Quota de télétravail dépassé pour la semaine du ${formatDate(overQuota.weekStart)} (${formatDurationFR(overQuota.used)}/${formatDurationFR(quota)}).`, 'error');
     return;
@@ -24830,6 +24865,19 @@ async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId) {
       categorie: data.categorie, kilometrage: data.kilometrage, montantTTC: data.montantTTC, tauxTVA: data.tauxTVA,
       date: data.date, libelle: data.libelle, commentaire: data.commentaire, justificatif: data.justificatif, historique
     });
+    // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : le barème kilométrique
+    // est cumulatif sur l'année (le montant de CHAQUE note dépend du kilométrage déjà déclaré par
+    // les AUTRES notes) — refuser/annuler une note kilométrique recalcule déjà les autres pour ne
+    // pas laisser leur montant dépendre d'une note qui ne compte plus, mais MODIFIER une note
+    // (distance, catégorie ou date) restait le seul chemin qui ne redéclenchait jamais ce recalcul :
+    // le nouveau montant de CETTE note était bien recalculé (voir submitExpenseForm), mais les
+    // AUTRES notes de l'année restaient sur leur ancien montant, désormais faux. Recalcule pour
+    // l'année d'origine ET la nouvelle (si la date a changé d'année) dès que l'une des deux
+    // catégories, avant ou après modification, est "Kilométrique" — jamais pour rien sinon.
+    const anneeOrigine = original && (original.date || '').slice(0, 4);
+    const anneeNouvelle = (data.date || '').slice(0, 4);
+    if (original && original.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(data.employeeId, anneeOrigine);
+    if (data.categorie === 'Kilométrique' && anneeNouvelle !== anneeOrigine) expenseRepository.recalculerIndemnitesKilometriques(data.employeeId, anneeNouvelle);
     uploadJustificatifBestEffort({
       uploader: window.SupabaseSync.uploadJustificatifFile,
       employeeId: data.employeeId, recordId: id, file: state.pendingAttachmentFile,
