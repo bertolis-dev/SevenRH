@@ -11709,6 +11709,24 @@ function libelleContrat(c) {
  * contrats (employee.contrats, voir DB.addContrat) au-dessus des avenants qui s'y rattachent
  * désormais réellement (contratId). "Pour deux CDD qui se suivent, le second effaçait le premier" :
  * ici, les deux restent visibles, dans l'ordre. */
+/** §retour Betty du 23/09/2026 ("les éléments de rémunération manquent sur la fiche") : ces champs
+ * (primesRecurrentes/partVariable/avantagesNature/nombreMoisSalaire) étaient saisis depuis le
+ * 22/09/2026 (socle enrichi du contrat) mais n'apparaissaient nulle part une fois enregistrés — ni
+ * ici, ni dans l'aperçu du projet de contrat (voir aussi construireValeursFusionContrat, data.js,
+ * corrigé le même jour). Résumé compact, réservé au module Rémunération comme le reste de ces
+ * éléments (voir renderContratFormFields) — le salaire brut de base, lui, reste toujours affiché
+ * juste au-dessus, inchangé. */
+function resumeRemunerationContrat(c) {
+  const parts = [];
+  if (c.nombreMoisSalaire && c.nombreMoisSalaire !== 12) parts.push(`sur ${c.nombreMoisSalaire} mois`);
+  const primes = (c.primesRecurrentes || []).filter(p => p.libelle);
+  if (primes.length) parts.push(`${primes.length} prime${primes.length > 1 ? 's' : ''} récurrente${primes.length > 1 ? 's' : ''}`);
+  if (c.partVariable) parts.push('part variable');
+  const avantages = (Array.isArray(c.avantagesNature) ? c.avantagesNature : []).filter(a => a.nature);
+  if (avantages.length) parts.push(`${avantages.length} avantage${avantages.length > 1 ? 's' : ''} en nature`);
+  return parts.join(' · ');
+}
+
 function renderEmployeeContratTab(e, canEdit) {
   const contrats = (e.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
   const avenants = (e.avenants || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -11729,6 +11747,7 @@ function renderEmployeeContratTab(e, canEdit) {
                   <span class="badge ${!c.dateFin ? 'badge-success' : 'badge-muted'}">${!c.dateFin ? 'Courant' : 'Terminé'}</span>
                   ${escapeHtml(c.typeContrat || '—')} · ${escapeHtml(c.tempsTravail || '—')}${c.forfait && c.forfait !== 'Aucun' ? ' · ' + escapeHtml(c.forfait) : ''}
                   ${c.salaireBrutMensuel ? `<br><span class="text-muted">${formatCurrencyFR(c.salaireBrutMensuel)} brut/mois</span>` : ''}
+                  ${hasModule('remuneration') && resumeRemunerationContrat(c) ? `<br><span class="text-muted">${escapeHtml(resumeRemunerationContrat(c))}</span>` : ''}
                 </span>
                 <span style="text-align: right; white-space: nowrap;">
                   <span class="text-muted">${formatDate(c.dateDebut)} → ${c.dateFin ? formatDate(c.dateFin) : 'en cours'}</span>
@@ -11832,13 +11851,22 @@ function renderContratFormFields(contrat, employee, settings) {
         <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
         <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(contrat.salaireBrutMensuel || 0)}" step="any">
       </div>
+      ${hasModule('remuneration') ? `
       <div class="form-field">
-        <label for="f-contrat-part-variable">Part variable${fieldHelpIcon('Description libre (conditions, objectifs, plafond...), jamais un montant calculé automatiquement.')}</label>
-        <textarea class="input" id="f-contrat-part-variable" rows="2">${escapeHtml(contrat.partVariable || '')}</textarea>
+        <label for="f-contrat-nombre-mois-salaire">Réparti sur${fieldHelpIcon('Nombre de mois sur lesquels le salaire annuel est versé : 12 en temps normal, 13 ou 14 pour un 13ᵉ/14ᵉ mois. Une façon de RÉPARTIR le même salaire, pas un élément de rémunération en plus.')}</label>
+        <input class="input" type="number" id="f-contrat-nombre-mois-salaire" value="${escapeHtml(contrat.nombreMoisSalaire || 12)}" min="1" max="24" step="1"> mois
       </div>
+      ` : ''}
+    </div>
+    <!-- §retour Betty du 23/09/2026 ("les éléments de rémunération manquent sur la fiche") : primes
+         récurrentes/part variable/avantages en nature ne sont réservés qu'au module Rémunération
+         (préparation de paie) souscrit — le salaire brut de base ci-dessus reste toujours visible,
+         utilisé bien au-delà de la paie (indemnités, effectifs...). -->
+    ${hasModule('remuneration') ? `
+    <div class="form-grid">
       <div class="form-field">
-        <label for="f-contrat-avantages-nature">Avantages en nature${fieldHelpIcon('Ex. véhicule de fonction, logement, téléphone... Description libre.')}</label>
-        <textarea class="input" id="f-contrat-avantages-nature" rows="2">${escapeHtml(contrat.avantagesNature || '')}</textarea>
+        <label for="f-contrat-part-variable">Part variable ou objectifs${fieldHelpIcon('Description libre (conditions, objectifs, plafond...), jamais un montant calculé automatiquement.')}</label>
+        <textarea class="input" id="f-contrat-part-variable" rows="2">${escapeHtml(contrat.partVariable || '')}</textarea>
       </div>
     </div>
     <p class="form-subsection-title">Primes récurrentes${fieldHelpIcon('Une prime EXCEPTIONNELLE/ponctuelle reste un avenant, pas une ligne ici.')}</p>
@@ -11856,6 +11884,18 @@ function renderContratFormFields(contrat, employee, settings) {
         </div>
       `; }).join('')}
     </div>
+    <p class="form-subsection-title">Avantages en nature${fieldHelpIcon('Ex. véhicule de fonction, logement, téléphone... Nature du bien/service ET sa valeur, pas une simple description.')}</p>
+    <div class="form-grid">
+      ${[0, 1, 2].map(i => {
+        const a = (Array.isArray(contrat.avantagesNature) ? contrat.avantagesNature : [])[i] || {};
+        return `
+        <div class="form-field-pair" style="grid-column: span 3; grid-template-columns: 2fr 1fr;">
+          <input class="input" type="text" id="f-contrat-avantage-nature-${i}" value="${escapeHtml(a.nature || '')}" placeholder="Ex. Véhicule de fonction">
+          <input class="input" type="number" id="f-contrat-avantage-valeur-${i}" value="${escapeHtml(a.valeur || '')}" step="any" placeholder="Valeur (€)">
+        </div>
+      `; }).join('')}
+    </div>
+    ` : ''}
 
     <p class="form-subsection-title">Commentaire</p>
     <div class="form-field">
@@ -11871,8 +11911,13 @@ function estTypeContratATerme(typeContrat) {
 
 /** Lit les champs communs posés par renderContratFormFields ci-dessus, applique la validation du
  * socle (défaut 3.1, "dateFin/motif de recours obligatoires pour un CDD/intérim") — retourne `null`
- * (après avoir déjà affiché le message d'erreur) si la saisie doit être bloquée. */
-function readAndValidateContratForm(employee) {
+ * (après avoir déjà affiché le message d'erreur) si la saisie doit être bloquée. `contratDepart`
+ * (le contrat passé à renderContratFormFields : contratVierge à la création, le contrat réel en
+ * correction) sert de repli pour les champs réservés au module Rémunération quand celui-ci n'est
+ * pas souscrit (absents du DOM, voir renderContratFormFields) — jamais `undefined` telle quelle
+ * (Object.assign écraserait quand même la valeur déjà là avec `undefined`, effaçant une donnée
+ * existante que l'utilisateur n'a même pas pu voir). */
+function readAndValidateContratForm(employee, contratDepart) {
   const dateDebut = document.getElementById('f-contrat-date-debut').value;
   if (!dateDebut) return null;
   if (employee.dateEmbauche && dateDebut < employee.dateEmbauche) {
@@ -11887,13 +11932,27 @@ function readAndValidateContratForm(employee) {
     if (!motifRecours) { showToast('Le motif de recours est obligatoire pour un CDD/intérim.', 'error'); return null; }
     if (dateFin < dateDebut) { showToast('La date de fin ne peut pas être avant la date de début.', 'error'); return null; }
   }
-  const primesRecurrentes = [0, 1, 2]
-    .map(i => ({
-      libelle: document.getElementById(`f-contrat-prime-libelle-${i}`).value.trim(),
-      montant: Number(document.getElementById(`f-contrat-prime-montant-${i}`).value) || 0,
-      periodicite: document.getElementById(`f-contrat-prime-periodicite-${i}`).value
-    }))
-    .filter(p => p.libelle);
+  // §retour Betty du 23/09/2026 : primesRecurrentes/partVariable/avantagesNature/nombreMoisSalaire
+  // ne sont dans le DOM que si le module Rémunération est souscrit (voir renderContratFormFields) —
+  // repli sur la valeur déjà présente sur CE contrat plutôt que sur un champ absent, pour ne jamais
+  // effacer silencieusement une donnée existante quand le module est désactivé entre-temps.
+  const remunerationAvancee = hasModule('remuneration');
+  const depart = contratDepart || {};
+  const nombreMoisSalaire = remunerationAvancee ? (Number(document.getElementById('f-contrat-nombre-mois-salaire').value) || 12) : (depart.nombreMoisSalaire || 12);
+  const primesRecurrentes = remunerationAvancee
+    ? [0, 1, 2].map(i => ({
+        libelle: document.getElementById(`f-contrat-prime-libelle-${i}`).value.trim(),
+        montant: Number(document.getElementById(`f-contrat-prime-montant-${i}`).value) || 0,
+        periodicite: document.getElementById(`f-contrat-prime-periodicite-${i}`).value
+      })).filter(p => p.libelle)
+    : (depart.primesRecurrentes || []);
+  const avantagesNature = remunerationAvancee
+    ? [0, 1, 2].map(i => ({
+        nature: document.getElementById(`f-contrat-avantage-nature-${i}`).value.trim(),
+        valeur: Number(document.getElementById(`f-contrat-avantage-valeur-${i}`).value) || 0
+      })).filter(a => a.nature)
+    : (Array.isArray(depart.avantagesNature) ? depart.avantagesNature : []);
+  const partVariable = remunerationAvancee ? document.getElementById('f-contrat-part-variable').value.trim() : (depart.partVariable || '');
   return {
     dateDebut, typeContrat, dateFin, motifRecours,
     poste: document.getElementById('f-contrat-poste').value,
@@ -11905,8 +11964,9 @@ function readAndValidateContratForm(employee) {
     dateFinPeriodeEssai: document.getElementById('f-contrat-fin-periode-essai').value,
     periodeEssaiRenouvelee: document.getElementById('f-contrat-periode-essai-renouvelee').checked,
     salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0,
-    partVariable: document.getElementById('f-contrat-part-variable').value.trim(),
-    avantagesNature: document.getElementById('f-contrat-avantages-nature').value.trim(),
+    nombreMoisSalaire,
+    partVariable,
+    avantagesNature,
     primesRecurrentes,
     commentaire: document.getElementById('f-contrat-commentaire').value.trim()
   };
@@ -11954,7 +12014,7 @@ function openNouveauContratModal(employeeId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('nouveau-contrat-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const values = readAndValidateContratForm(employee);
+    const values = readAndValidateContratForm(employee, contratVierge);
     if (!values) return;
     const contratsExistants = (employee.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
     const contratCourant = contratsExistants.find(c => !c.dateFin) || contratsExistants[0] || null;
@@ -12016,7 +12076,7 @@ function openCorrigerContratModal(employeeId, contratId) {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('corriger-contrat-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const values = readAndValidateContratForm(employee);
+    const values = readAndValidateContratForm(employee, contrat);
     if (!values) return;
     // Une correction ne doit jamais inverser l'ordre des contrats entre eux — contrairement à
     // "Nouveau contrat", il n'y a ici ni contrat précédent à clôturer ni contrat suivant à décaler :
@@ -12122,6 +12182,8 @@ function openApercuProjetContratModal(employeeId, contratId) {
     ['Établissement', valeurs.etablissement], ['Temps de travail', valeurs.tempsTravail],
     ['Début du contrat', valeurs.dateDebutContrat], ['Fin du contrat', valeurs.dateFinContrat],
     ['Salaire brut mensuel', valeurs.salaireBrutMensuel ? formatCurrencyFR(valeurs.salaireBrutMensuel) : ''],
+    ['Réparti sur', valeurs.nombreMoisSalaire ? `${valeurs.nombreMoisSalaire} mois` : ''],
+    ['Primes récurrentes', valeurs.primesRecurrentes],
     ['Part variable', valeurs.partVariable], ['Avantages en nature', valeurs.avantagesNature]
   ].filter(([, value]) => value);
 

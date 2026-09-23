@@ -28,11 +28,18 @@ function remplirFormulaireContrat(sandbox, valeurs) {
     'f-contrat-date-debut': '2030-01-01', 'f-contrat-type': 'CDI', 'f-contrat-date-fin': '',
     'f-contrat-motif-recours': '', 'f-contrat-poste': '', 'f-contrat-classification': '',
     'f-contrat-etablissement': '', 'f-contrat-temps-travail': 'Temps plein', 'f-contrat-forfait': 'Aucun',
-    'f-contrat-fin-periode-essai': '', 'f-contrat-salaire': '0', 'f-contrat-part-variable': '',
-    'f-contrat-avantages-nature': '', 'f-contrat-commentaire': '',
+    'f-contrat-fin-periode-essai': '', 'f-contrat-salaire': '0',
+    // §retour Betty du 23/09/2026 (point 7, "éléments de rémunération") : f-contrat-nombre-mois-
+    // salaire (nouveau) et f-contrat-avantage-nature-N/f-contrat-avantage-valeur-N (remplacent
+    // l'ancien f-contrat-avantages-nature, un texte libre unique devenu une liste nature+valeur) —
+    // voir renderContratFormFields/readAndValidateContratForm, app.js.
+    'f-contrat-nombre-mois-salaire': '12', 'f-contrat-part-variable': '', 'f-contrat-commentaire': '',
     'f-contrat-prime-libelle-0': '', 'f-contrat-prime-montant-0': '', 'f-contrat-prime-periodicite-0': '',
     'f-contrat-prime-libelle-1': '', 'f-contrat-prime-montant-1': '', 'f-contrat-prime-periodicite-1': '',
-    'f-contrat-prime-libelle-2': '', 'f-contrat-prime-montant-2': '', 'f-contrat-prime-periodicite-2': ''
+    'f-contrat-prime-libelle-2': '', 'f-contrat-prime-montant-2': '', 'f-contrat-prime-periodicite-2': '',
+    'f-contrat-avantage-nature-0': '', 'f-contrat-avantage-valeur-0': '',
+    'f-contrat-avantage-nature-1': '', 'f-contrat-avantage-valeur-1': '',
+    'f-contrat-avantage-nature-2': '', 'f-contrat-avantage-valeur-2': ''
   };
   Object.assign(defauts, valeurs);
   Object.entries(defauts).forEach(([id, value]) => { sandbox.document.getElementById(id).value = value; });

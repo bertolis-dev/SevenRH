@@ -1489,8 +1489,16 @@ function construireValeursFusionContrat(employee, contrat, company) {
     classification: c.classification || '',
     statutCadre: c.statutCadre ? 'cadre' : 'non-cadre',
     etablissement: (((company && company.etablissements) || []).find(et => et.id === c.etablissementId) || {}).nom || '',
+    nombreMoisSalaire: settings.masseSalarialeActivee ? (c.nombreMoisSalaire || '') : '',
+    // §retour Betty du 23/09/2026 : primesRecurrentes/avantagesNature (listes) n'avaient jusqu'ici
+    // AUCUNE traduction texte pour un document fusionné — saisies, jamais visibles nulle part une
+    // fois enregistrées (ni dans l'aperçu du projet de contrat, ni dans un document généré). Une
+    // ligne par élément, montant formaté, jamais une valeur "0 €" pour un élément incomplet.
+    primesRecurrentes: (c.primesRecurrentes || []).filter(p => p.libelle)
+      .map(p => `${p.libelle}${p.montant ? ` : ${formatCurrencyFR(p.montant)}` : ''}${p.periodicite ? ` (${p.periodicite})` : ''}`).join(' ; '),
     partVariable: c.partVariable || '',
-    avantagesNature: c.avantagesNature || '',
+    avantagesNature: (Array.isArray(c.avantagesNature) ? c.avantagesNature : []).filter(a => a.nature)
+      .map(a => `${a.nature}${a.valeur ? ` : ${formatCurrencyFR(a.valeur)}` : ''}`).join(' ; '),
     commentaireContrat: c.commentaire || ''
   });
 }
@@ -5826,10 +5834,20 @@ function makeEmptyContrat() {
     dateFinPeriodeEssai: '', periodeEssaiRenouvelee: false,
     tempsTravail: 'Temps plein', pourcentageActivite: 100, horairesHebdo: 35, forfait: 'Aucun',
     salaireBrutMensuel: 0,
+    // §retour Betty du 23/09/2026 ("les éléments de rémunération manquent sur la fiche") : nombre de
+    // mois sur lesquels le salaire annuel est réparti — 12 par défaut, 13/14 pour un 13ᵉ/14ᵉ mois.
+    // Un scalaire volontairement simple (jamais une "prime de 13ᵉ mois" distincte dans
+    // primesRecurrentes ci-dessous) : c'est une façon de RÉPARTIR le même salaire annuel, pas un
+    // élément de rémunération supplémentaire qui s'ajouterait au total.
+    nombreMoisSalaire: 12,
     // [{ id, libelle, montant, periodicite }] — primes récurrentes distinctes d'une prime
     // exceptionnelle (qui resterait un simple avenant ponctuel, pas une clause du contrat).
     primesRecurrentes: [],
-    partVariable: '', avantagesNature: '',
+    partVariable: '',
+    // §retour Betty du 23/09/2026 : restructuré en liste [{ id, nature, valeur }] (comme
+    // primesRecurrentes ci-dessus) — un texte libre unique ne permettait ni de totaliser, ni
+    // d'exporter la valeur des avantages, seulement de la décrire en prose.
+    avantagesNature: [],
     commentaire: '',
     // Ids piochés dans clauseContratRepository au moment de la génération du projet — une COPIE du
     // choix, jamais une référence vivante : supprimer/modifier une clause plus tard ne doit jamais
@@ -5857,6 +5875,7 @@ function champsContratAMirorerSurEmploye(contrat) {
     typeContrat: contrat.typeContrat, dateFinContrat: contrat.dateFin,
     tempsTravail: contrat.tempsTravail, pourcentageActivite: contrat.pourcentageActivite,
     horairesHebdo: contrat.horairesHebdo, forfait: contrat.forfait, salaireBrutMensuel: contrat.salaireBrutMensuel,
+    nombreMoisSalaire: contrat.nombreMoisSalaire,
     poste: contrat.poste, classification: contrat.classification, statutCadre: contrat.statutCadre,
     etablissementId: contrat.etablissementId, dateFinPeriodeEssai: contrat.dateFinPeriodeEssai,
     motifRecours: contrat.motifRecours
@@ -6025,6 +6044,8 @@ function makeEmptyEmployee() {
 
     // Champs sensibles, réservés au Propriétaire, affichés uniquement si le réglage correspondant est activé
     salaireBrutMensuel: 0,
+    // §retour Betty du 23/09/2026 : miroré depuis le contrat courant (voir champsContratAMirorerSurEmploye), même patron que salaireBrutMensuel.
+    nombreMoisSalaire: 12,
     // §retour Betty du 14/09/2026 (Rémunération point 1) : [{ date, ancienMontant, nouveauMontant,
     // motif, auteurId }], alimenté automatiquement par updateEmployee dès que salaireBrutMensuel
     // change — jamais saisi à la main, jamais réécrit une fois consigné.

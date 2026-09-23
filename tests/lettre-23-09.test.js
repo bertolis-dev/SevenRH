@@ -156,6 +156,88 @@ function runOrganigrammeNEncadreJamaisUnSalarieSeulDansSonService() {
   console.log('OK — lettre-23-09.test.js (point 3 : jamais de cadre autour d\'un salarié seul dans son service)');
 }
 
+// ---- Point 7 : "les éléments de rémunération manquent sur la fiche" ----
+
+function runNombreMoisSalaireExistesurLeModeleDeContrat() {
+  const { sandbox } = setup();
+  const c = sandbox.makeEmptyContrat();
+  assert.strictEqual(c.nombreMoisSalaire, 12, 'nombreMoisSalaire doit exister sur le modèle de contrat, 12 par défaut');
+  assert.ok(Array.isArray(c.avantagesNature), 'avantagesNature doit désormais être une liste structurée (nature + valeur), plus un texte libre');
+
+  console.log('OK — lettre-23-09.test.js (point 7 : nombreMoisSalaire et avantagesNature structuré existent sur le modèle de contrat)');
+}
+
+function runFormulaireContratMasqueLesElementsAvancesSansLeModuleRemuneration() {
+  const { DB, renderContratFormFields, employeeRepository, settingsRepository } = setup();
+  const company = DB.getCurrentCompany();
+  company.abonnement.offre = 'a_la_carte';
+  company.abonnement.modules = [{ key: 'rh' }]; // 'remuneration' volontairement absent
+  DB.saveCurrentCompany(company);
+
+  const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
+  const settings = settingsRepository.getSettings();
+  const html = renderContratFormFields(salarie.contrats[0] || {}, salarie, settings);
+
+  assert.ok(html.includes('f-contrat-salaire'), 'le salaire brut de base doit toujours rester visible, avec ou sans le module');
+  assert.ok(!html.includes('f-contrat-nombre-mois-salaire') && !html.includes('f-contrat-part-variable') && !html.includes('f-contrat-prime-libelle-0') && !html.includes('f-contrat-avantage-nature-0'),
+    'primes récurrentes/part variable/avantages en nature/nombre de mois ne doivent apparaître que si le module Rémunération est souscrit');
+
+  console.log('OK — lettre-23-09.test.js (point 7 : les éléments avancés de rémunération restent cachés sans le module, le salaire de base reste visible)');
+}
+
+function runCorrigerUnContratSansLeModuleNeffacePasLesElementsDejaSaisis() {
+  const { DB, employeeRepository } = setup();
+  const salarie = employeeRepository.getAll().find(e => e.role === 'salarie');
+  // Contrat déjà enrichi (saisi quand le module était souscrit).
+  employeeRepository.update(salarie.id, {
+    contrats: [{
+      id: 'c1', dateDebut: '2025-01-01', dateFin: '', typeContrat: 'CDI', tempsTravail: 'Temps plein',
+      salaireBrutMensuel: 3000, nombreMoisSalaire: 13,
+      primesRecurrentes: [{ libelle: 'Prime ancienneté', montant: 50, periodicite: 'Mensuelle' }],
+      avantagesNature: [{ nature: 'Véhicule de fonction', valeur: 300 }], partVariable: 'Sur objectifs'
+    }]
+  });
+
+  // Le module est ensuite désactivé (offre à la carte sans "remuneration") avant une correction sur
+  // un tout autre champ (ex. la classification, faute de frappe) : les éléments avancés déjà saisis
+  // ne doivent jamais disparaître silencieusement de la base.
+  const company = DB.getCurrentCompany();
+  company.abonnement.offre = 'a_la_carte';
+  company.abonnement.modules = [{ key: 'rh' }];
+  DB.saveCurrentCompany(company);
+
+  employeeRepository.corrigerContrat(salarie.id, 'c1', { classification: 'Niveau III' });
+
+  const contratCorrige = employeeRepository.getById(salarie.id).contrats.find(c => c.id === 'c1');
+  assert.strictEqual(contratCorrige.classification, 'Niveau III', 'le champ réellement corrigé doit changer');
+  assert.strictEqual(contratCorrige.nombreMoisSalaire, 13, 'nombreMoisSalaire déjà saisi ne doit jamais être effacé par une correction faite sans le module');
+  assert.strictEqual(contratCorrige.primesRecurrentes.length, 1, 'les primes récurrentes déjà saisies ne doivent jamais être effacées par une correction faite sans le module');
+  assert.strictEqual(contratCorrige.avantagesNature.length, 1, 'les avantages en nature déjà saisis ne doivent jamais être effacés par une correction faite sans le module');
+  assert.strictEqual(contratCorrige.partVariable, 'Sur objectifs');
+
+  console.log('OK — lettre-23-09.test.js (point 7 : corriger un contrat sans le module Rémunération ne fait jamais disparaître les éléments avancés déjà saisis)');
+}
+
+function runOngletContratAfficheLeResumeRemunerationAvecLeModule() {
+  const { DB, navigateTo, sandbox, employeeRepository, rh } = setup();
+  employeeRepository.update(rh.id, {
+    contrats: [{
+      id: 'c1', dateDebut: '2025-01-01', dateFin: '', typeContrat: 'CDI', tempsTravail: 'Temps plein',
+      salaireBrutMensuel: 3000, nombreMoisSalaire: 13,
+      primesRecurrentes: [{ libelle: 'Prime ancienneté', montant: 50, periodicite: 'Mensuelle' }],
+      avantagesNature: [], partVariable: ''
+    }]
+  });
+
+  navigateTo('employee-detail', { currentEmployeeId: rh.id, employeeDetailTab: 'contrat' });
+  const html = sandbox.document.getElementById('view-root').innerHTML;
+
+  assert.ok(html.includes('sur 13 mois'), 'le nombre de mois doit apparaître dans le résumé du contrat sur l\'onglet Contrat');
+  assert.ok(html.includes('1 prime récurrente'), 'les primes récurrentes doivent apparaître dans le résumé du contrat');
+
+  console.log('OK — lettre-23-09.test.js (point 7 : l\'onglet Contrat affiche enfin un résumé des éléments de rémunération saisis)');
+}
+
 function run() {
   runMaFicheJamaisDeFilDArianeNiDeFlechesMemeAvecAccesALaListe();
   runFicheOuverteDepuisLaListeGardeLeFilDArianeEtLesFleches();
@@ -165,6 +247,10 @@ function run() {
   runOrganigrammeAfficheServiceEtEquipeSurChaqueCarte();
   runOrganigrammeEncadreLesFreresDuMemeService();
   runOrganigrammeNEncadreJamaisUnSalarieSeulDansSonService();
+  runNombreMoisSalaireExistesurLeModeleDeContrat();
+  runFormulaireContratMasqueLesElementsAvancesSansLeModuleRemuneration();
+  runCorrigerUnContratSansLeModuleNeffacePasLesElementsDejaSaisis();
+  runOngletContratAfficheLeResumeRemunerationAvecLeModule();
 }
 
 try {
