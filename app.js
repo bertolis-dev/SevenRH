@@ -502,10 +502,17 @@ const NAV_ITEMS = [
   // tickets" se lisait comme un doublon de "Tickets restaurant" juste en dessous dans le même
   // groupe, deux écrans sans aucun rapport (support technique vs titres-restaurant).
   { key: 'mes-tickets', label: 'Aide et support', icon: ICONS.headset, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
-  // Contenu structuré (objectifs/auto-évaluation/retour manager) — remplace l'alerte de date seule
-  // (dateDernierEntretienProfessionnel) par un vrai formulaire. Visible par tous : un salarié voit
-  // les siens, un manager voit aussi son équipe (voir entretienRepository.getVisibleTo).
-  { key: 'entretiens', label: 'Entretiens', icon: ICONS.notepad, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'entretiens' },
+  // §retour Betty du 23/09/2026 ("les entretiens sont rangés dans Personnel") : cet écran unique
+  // mélangeait jusqu'ici la consultation de ses PROPRES entretiens (action personnelle) et le
+  // pilotage de campagne/planification (action de gestion, réservée à GERER_ENTRETIENS/manager) —
+  // rangé côté Personnel pour tout le monde alors que "Planifier un entretien"/"Lancer une campagne"
+  // n'ont rien de personnel. Séparé en deux entrées, même patron que Congés (une entrée Personnel +
+  // une entrée Équipe, voir 'absences' ci-dessous) : "Mes entretiens" (Personnel, tout rôle, jamais
+  // les boutons de gestion — voir renderEntretiens, state.view === 'mes-entretiens' force le mode
+  // lecture seule sur ses propres entretiens uniquement) et "Entretiens" (Équipe, réservé aux rôles
+  // qui gèrent effectivement une équipe/l'ensemble — la vraie restriction fine reste
+  // GERER_ENTRETIENS/isManagerOfEmployee, déjà appliquée par entretienRepository.getVisibleTo).
+  { key: 'mes-entretiens', label: 'Mes entretiens', icon: ICONS.notepad, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'entretiens' },
   // Contrairement aux autres entrées "personnel" (données propres au salarié), la boîte à idées est
   // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
   // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
@@ -520,6 +527,11 @@ const NAV_ITEMS = [
   // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
   // voir isNavItemActive) plutôt qu'un nouvel écran.
   { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: ['conges', 'planning'], navParams: NAVPARAMS_CONGES_A_VALIDER },
+  // §retour Betty du 23/09/2026 : volet gestion de "Entretiens" (planifier/lancer une campagne/voir
+  // l'équipe), voir le commentaire de "Mes entretiens" (Personnel) ci-dessus pour le détail du
+  // découpage. Même clé qu'avant ('entretiens') : aucune autre référence (render(), module-gating,
+  // détail d'entretien) n'a besoin de changer.
+  { key: 'entretiens', label: 'Entretiens', icon: ICONS.notepad, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'entretiens' },
   // §correctif audit du 23/08/2026 (2.1) : PAS de module ici — le registre des salariés (liste,
   // création, fiche de base) est le socle commun de tous les modules, pas une fonctionnalité RH
   // parmi d'autres. Sans ce retrait, une entreprise n'ayant souscrit qu'au module congés ne pouvait
@@ -6436,6 +6448,7 @@ function renderInner() {
       bindMesDocumentsEvents();
       break;
     case 'entretiens':
+    case 'mes-entretiens':
       root.innerHTML = renderEntretiens();
       bindEntretiensEvents();
       break;
@@ -9665,7 +9678,7 @@ function renderOrganigramme() {
     <div class="card org-chart-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.cabinet}</div><p>Aucun salarié ne correspond à ces filtres.</p></div>` : `
         <ul class="org-tree">
-          ${roots.map(r => renderOrgNode(r, childrenOf)).join('')}
+          ${renderOrgSiblings(roots, childrenOf)}
         </ul>
       `}
     </div>
@@ -9683,11 +9696,49 @@ function renderOrganigramme() {
  * openOrganigrammePrintModal) ignore state.orgCollapsedIds — un repli de branche est un confort
  * d'affichage à l'écran, jamais une décision de ce qui doit apparaître sur un document imprimé/PDF :
  * sans ce paramètre, une branche repliée à l'écran disparaissait silencieusement de l'impression. */
+/** §retour Betty du 23/09/2026 ("l'organigramme ne montre ni les services ni les équipes") : l'arbre
+ * n'a jamais montré que le lien hiérarchique (managerIds) — service/équipe ne servaient qu'à filtrer,
+ * invisibles sur le dessin lui-même. Regroupe une fratrie (roots, ou enfants d'un même manager) par
+ * service, en conservant l'ordre de première apparition — un salarié sans service renseigné n'est
+ * jamais encadré (rien à regrouper). Un seul groupe pour toute la fratrie (ex. Sarah et Léa, toutes
+ * deux "Administration des ventes" sous le même manager) reste bien encadré : c'est exactement le
+ * cas que Betty a signalé ("côte à côte sans qu'on voie qu'ils relèvent du même service"), le lien
+ * hiérarchique commun ne rendait déjà rien visible avant ce correctif. */
+function groupOrgSiblingsByService(list) {
+  const order = [];
+  const bySvc = new Map();
+  list.forEach(e => {
+    const key = e.service || '';
+    if (!bySvc.has(key)) { bySvc.set(key, []); order.push(key); }
+    bySvc.get(key).push(e);
+  });
+  return order.map(key => ({ service: key, items: bySvc.get(key) }));
+}
+
+/** Un cadre (jamais une bande de couleur différente par service — voir la règle de palette bleu
+ * marine + or déjà actée avec Betty sur d'autres écrans) reste lisible à l'impression en noir et
+ * blanc, contrairement à une couleur qui disparaîtrait au tri/à la photocopie. Le nom du service
+ * étiquette le cadre ; l'équipe (à l'intérieur du service) reste affichée sur chaque carte, voir
+ * renderOrgNode — un sous-cadre par équipe ajouterait un niveau d'imbrication de plus dans un arbre
+ * déjà construit en CSS pur (lignes de connexion via ::before/::after, sensibles à la structure
+ * exacte li/ul, voir style.css) pour un gain de lisibilité marginal une fois le nom déjà affiché. */
+function renderOrgSiblings(list, childrenOf, forceExpand) {
+  const groups = groupOrgSiblingsByService(list);
+  return groups.map(g => {
+    const inner = g.items.map(e => renderOrgNode(e, childrenOf, forceExpand)).join('');
+    // Un seul salarié dans ce service (parmi cette fratrie) : rien à regrouper, un cadre autour
+    // d'une seule personne n'aurait aucun sens et ajouterait juste du bruit visuel.
+    if (!g.service || g.items.length < 2) return inner;
+    return `<li class="org-service-frame"><div class="org-service-frame-label">${escapeHtml(g.service)}</div><ul>${inner}</ul></li>`;
+  }).join('');
+}
+
 function renderOrgNode(employee, childrenOf, forceExpand) {
   const children = childrenOf.get(employee.id) || [];
   const hasChildren = children.length > 0;
   const isCollapsed = !forceExpand && state.orgCollapsedIds.has(employee.id);
   const poste = getPosteAccorde(employee, settingsRepository.getSettings());
+  const serviceEquipe = [employee.service, employee.equipe].filter(Boolean).join(' · ');
   return `
     <li>
       <div class="org-node" data-org-employee="${employee.id}" tabindex="0" role="button" aria-label="Voir la fiche de ${personNameHtml(employee)}">
@@ -9697,8 +9748,9 @@ function renderOrgNode(employee, childrenOf, forceExpand) {
         ${poste
           ? `<div class="org-node-poste">${escapeHtml(poste)}</div>`
           : `<div class="org-node-poste org-node-poste-manquant" title="Aucun poste renseigné sur la fiche de ce salarié">${icon(ICONS.warningTriangle, 12)} Poste manquant</div>`}
+        ${serviceEquipe ? `<div class="org-node-service">${escapeHtml(serviceEquipe)}</div>` : ''}
       </div>
-      ${hasChildren && !isCollapsed ? `<ul>${children.map(c => renderOrgNode(c, childrenOf, forceExpand)).join('')}</ul>` : ''}
+      ${hasChildren && !isCollapsed ? `<ul>${renderOrgSiblings(children, childrenOf, forceExpand)}</ul>` : ''}
     </li>
   `;
 }
@@ -9767,7 +9819,7 @@ function openOrganigrammePrintModal() {
         <div class="print-area print-document print-landscape">
           ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
           <ul class="org-tree">
-            ${employees.length ? roots.map(r => renderOrgNode(r, childrenOf, true)).join('') : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
+            ${employees.length ? renderOrgSiblings(roots, childrenOf, true) : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
           </ul>
         </div>
       </div>
@@ -10511,12 +10563,21 @@ function renderEntretienRow(e, showEmployee) {
   `;
 }
 
+// §retour Betty du 23/09/2026 : "Mes entretiens" (Personnel) force la vue personnelle en lecture
+// seule quelle que soit la permission réelle de l'utilisateur (un manager/RH consultant SES PROPRES
+// entretiens depuis cette entrée ne doit jamais y voir les boutons de gestion ni la liste de son
+// équipe — ceux-ci vivent désormais uniquement sur l'entrée Équipe "Entretiens", state.view === 'entretiens').
+function isMesEntretiensPerso() {
+  return state.view === 'mes-entretiens';
+}
+
 function renderEntretiens() {
   const user = authRepository.getCurrentUser();
-  const canPlan = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
-  const showEmployee = canPlan || user.role === ROLES.MANAGER;
+  const perso = isMesEntretiensPerso();
+  const canPlan = !perso && hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
+  const showEmployee = !perso && (canPlan || user.role === ROLES.MANAGER);
   const filters = state.entretiensFilters;
-  const filtered = getFilteredEntretiens(showEmployee);
+  const filtered = (perso ? getFilteredEntretiens(false).filter(e => e.employeeId === user.id) : getFilteredEntretiens(showEmployee));
   const { pageItems, totalPages, page, pageStart } = paginate(filtered, 'entretiensPage');
   const aUnFiltreActif = Boolean((showEmployee && state.entretiensSearch) || filters.type || filters.statut || filters.periode);
   const activeCount = [showEmployee && state.entretiensSearch, filters.type, filters.statut, filters.periode].filter(Boolean).length;
@@ -10524,7 +10585,7 @@ function renderEntretiens() {
   return `
     <div class="view-header view-header-row">
       <div>
-        <h1>Entretiens</h1>
+        <h1>${perso ? 'Mes entretiens' : 'Entretiens'}</h1>
         <p class="view-subtitle">${filtered.length} entretien${filtered.length > 1 ? 's' : ''}</p>
       </div>
       ${canPlan ? `<div class="detail-header-actions">
@@ -10582,8 +10643,9 @@ function renderEntretiens() {
  * jamais une couleur par ligne/statut). */
 function exportEntretiensExcel() {
   const user = authRepository.getCurrentUser();
-  const showEmployee = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || user.role === ROLES.MANAGER;
-  const filtered = getFilteredEntretiens(showEmployee);
+  const perso = isMesEntretiensPerso();
+  const showEmployee = !perso && (hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || user.role === ROLES.MANAGER);
+  const filtered = perso ? getFilteredEntretiens(false).filter(e => e.employeeId === user.id) : getFilteredEntretiens(showEmployee);
   const headers = [...(showEmployee ? ['Salarié'] : []), 'Type', 'Statut', 'Date prévue', 'Heure prévue'];
   const rows = filtered.map(e => {
     const employee = showEmployee ? employeeRepository.getById(e.employeeId) : null;
@@ -10774,7 +10836,7 @@ function openPlanEntretienModal() {
       });
       closeModal();
       showToast('Entretien planifié.');
-      if (state.view === 'entretiens') render();
+      if (state.view === 'entretiens' || state.view === 'mes-entretiens') render();
     };
     // §tour de bugs du 07/09/2026 : détection de doublon (même salarié/type/date), en avertissement
     // plutôt qu'un blocage — même principe que la détection déjà ajoutée sur Notes de frais.
@@ -10896,7 +10958,15 @@ function renderEntretienDetail(id) {
 
 function bindEntretienDetailEvents() {
   const backBtn = document.getElementById('btn-back-to-entretiens');
-  if (backBtn) backBtn.addEventListener('click', () => navigateTo('entretiens'));
+  // §retour Betty du 23/09/2026 : "entretiens" (Équipe) est désormais réservé à manager/rh/
+  // proprietaire — un salarié/comptabilite qui revient depuis un détail ouvert via "Mes entretiens"
+  // ne pourrait plus jamais y accéder (navigateTo le renverrait silencieusement au tableau de bord).
+  // Retourne vers l'entrée que CE rôle a réellement, plutôt qu'une clé fixe.
+  if (backBtn) backBtn.addEventListener('click', () => {
+    const user = authRepository.getCurrentUser();
+    const versEquipe = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || user.role === ROLES.MANAGER;
+    navigateTo(versEquipe ? 'entretiens' : 'mes-entretiens');
+  });
   if (!entretienRepository.getById(state.currentEntretienId)) return;
 
   const autoEvalForm = document.getElementById('entretien-auto-eval-form');
@@ -12435,12 +12505,20 @@ function renderEmployeeDetail(id) {
   // manager/RH/Propriétaire uniquement) — un fil d'Ariane "Salariés" y renverrait silencieusement à
   // l'accueil (voir navigateTo, allowedKeys), un lien qui ment sur ce qu'il fait.
   const hasEmployeesListAccess = navItemsForRole(user).some(i => i.key === 'employees');
+  // §retour Betty du 23/09/2026 ("Ma fiche affiche la navigation entre tous les salariés") : le
+  // garde-fou ci-dessus ne couvrait que le salarié SANS accès à la liste — un manager/RH qui ouvre
+  // SA PROPRE fiche via "Ma fiche" (state.view === 'ma-fiche', voir render()) a bien cet accès, donc
+  // voyait quand même le fil d'Ariane "Salariés" et les flèches "1 sur N" pour faire défiler tout
+  // l'effectif, sans aucun sens sur sa propre fiche. Ces deux éléments n'ont leur place QUE quand on
+  // arrive depuis l'écran Salariés (state.view === 'employee-detail') — jamais depuis "Ma fiche",
+  // quel que soit le rôle.
+  const viaListeSalaries = hasEmployeesListAccess && state.view !== 'ma-fiche';
 
   return `
-    ${renderBreadcrumb(hasEmployeesListAccess
+    ${renderBreadcrumb(viaListeSalaries
       ? [{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }]
       : [{ label: 'Accueil', nav: 'dashboard' }, { label: `${e.prenom} ${e.nom}` }])}
-    ${hasEmployeesListAccess ? renderEmployeeDetailPrevNext(e) : ''}
+    ${viaListeSalaries ? renderEmployeeDetailPrevNext(e) : ''}
 
     <div class="detail-header card">
       ${renderAvatar(e)}

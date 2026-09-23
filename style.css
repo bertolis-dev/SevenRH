@@ -2835,6 +2835,48 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .org-node-toggle:hover { background: var(--color-border); }
 
+.org-node-service { font-size: 10px; color: var(--color-primary); font-weight: 600; text-align: center; letter-spacing: 0.02em; }
+
+/* §retour Betty du 23/09/2026 ("l'organigramme ne montre ni les services ni les équipes") : cadre
+   autour d'une fratrie qui partage le même service (voir renderOrgSiblings, app.js) — jamais une
+   couleur différente par service (règle de palette bleu marine + or déjà actée sur les autres
+   écrans, voir KPI/graphiques), et un cadre reste net à l'impression en noir et blanc contrairement
+   à une teinte qui peut disparaître au tri. */
+/* §correctif : .org-tree li a une spécificité plus élevée (classe + type) que .org-service-frame
+   seul (classe) et gagnait sur son padding (0 14px, aucune place réservée pour l'étiquette en haut,
+   qui se retrouvait alors superposée aux cartes) — .org-tree li.org-service-frame égalise. */
+.org-tree li.org-service-frame {
+  border: 1.5px dashed var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 28px 14px 10px;
+  margin-top: 10px;
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+}
+.org-service-frame-label {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: var(--color-surface);
+  padding: 1px 8px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.org-service-frame > ul { padding-top: 10px; }
+/* À l'intérieur d'un cadre, les cartes ne sont pas les enfants d'UN manager précis (le cadre les
+   regroupe par service, pas par hiérarchie) — jamais de trait de connexion individuel vers un point
+   invisible en haut du cadre, seul le trait du cadre lui-même (vers son propre manager) reste. */
+.org-service-frame > ul > li::before,
+.org-service-frame > ul > li:not(:only-child)::after { display: none; }
+
+@media print {
+  .org-service-frame { background: none; border-style: solid; }
+}
+
 /* ---------------------------------------------------------------------
    Notifications (topbar)
    --------------------------------------------------------------------- */
