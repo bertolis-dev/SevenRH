@@ -1,0 +1,9 @@
+# Seven RH — force les fins de ligne LF pour tout le dépôt, quelle que soit la config locale
+# (core.autocrlf) de qui commite. §retour Betty du 23/09/2026 (revue "quinze champs jamais relus") :
+# un simple `git merge` a suffi à réintroduire du CRLF dans app.js malgré un blob LF en base (Windows
+# + core.autocrlf=true convertit à la volée à l'extraction), cassant en silence un test qui compare
+# du texte brut par recherche de sous-chaîne (tests/connexion-conserve-saisie-17-09.test.js) — ce
+# n'était pas la première fois que ce genre de corruption survenait après un merge/rebase/checkout
+# dans cette session, juste la première fois qu'elle avait un effet observable. `eol=lf` empêche Git
+# de convertir ces fichiers vers CRLF à l'extraction, quelle que soit la machine ou la config globale.
+* text=auto eol=lf
