@@ -2059,7 +2059,7 @@ const LANDING_FAQ_ITEMS = [
   }
 ];
 
-const LEGAL_CONTACT_EMAIL = 'b.bertolis@outlook.com';
+const LEGAL_CONTACT_EMAIL = 'contact@bertolis.fr';
 
 /** §retour Betty du 17/09/2026 ("il faut mettre quoi comme obligations légales") : complété avec
  * les mentions manquantes les plus significatives pour un SIRH réel (adresses des hébergeurs, RCS,
@@ -2076,7 +2076,7 @@ const LEGAL_CONTENT = {
     body: `
       <p style="margin-top:0;"><strong>Éditeur du site</strong><br>
       Nexus est édité par la société BERTOLIS, EURL au capital social de 1 000 €.<br>
-      Siège social : 3 Bis Bois Baudry, 77510 Doue<br>
+      Siège social : 3 B Hameau Bois Baudry, 77510 Doué<br>
       SIREN : 100 782 358, RCS Meaux<br>
       Numéro de TVA intracommunautaire : FR26100782358<br>
       Directrice de la publication : Betty Aubert<br>
@@ -2663,6 +2663,7 @@ function renderLandingScreen() {
             <strong id="alacarte-total" class="landing-gradient-number">—</strong>
             <p class="alacarte-discount-note" id="alacarte-discount-note"></p>
             <p class="landing-simulator-note">Estimation : le forfait exact est confirmé à la création de votre compte, résiliable à tout moment.</p>
+            <p class="landing-simulator-note">Tarifs nets, TVA non applicable, art. 293 B du CGI.</p>
             <button type="button" class="btn btn-primary btn-arrow-cta" style="width: 100%; margin-top: 8px;" data-landing-action="signup">Créer mon entreprise <span class="btn-arrow">→</span></button>
           </div>
         </div>
