@@ -57,13 +57,17 @@ async function run() {
     DB.logAudit('Modification', 'Compteur congé', `${fullName} · CP · ajustement +1 j`);
     DB.logAudit('Modification', 'Salarié', 'Quelqu\'un d\'autre entièrement');
 
-    const history = getEmployeeActivityHistory(employee, 8);
+    // §retour Betty du 28/09/2026 ("on ne voit pas tout l'historique") : getEmployeeActivityHistory
+    // renvoie désormais { entries, total } (total sert le lien "Voir tout l'historique" de
+    // renderEmployeeActivityCard) plutôt qu'un simple tableau.
+    const { entries: history } = getEmployeeActivityHistory(employee, 8);
     assert.ok(history.length >= 2, 'doit retrouver les entrées dont la cible mentionne ce salarié');
     assert.ok(history.every(h => h.cible.includes(fullName)), 'ne doit jamais faire remonter une entrée d\'un autre salarié');
     assert.ok(new Date(history[0].date) >= new Date(history[history.length - 1].date), 'doit rester trié du plus récent au plus ancien (ordre de getAuditLog)');
 
-    const limited = getEmployeeActivityHistory(employee, 1);
+    const { entries: limited, total: totalLimited } = getEmployeeActivityHistory(employee, 1);
     assert.strictEqual(limited.length, 1, 'doit respecter la limite demandée');
+    assert.ok(totalLimited >= 2, 'total doit refléter le compte réel, indépendamment de la limite d\'affichage');
   }
 
   // ---- §correctif audit du 01/09/2026 : jamais de fuite vers un autre salarié dont le nom complet
@@ -80,7 +84,7 @@ async function run() {
     // Nom composé qui se TERMINE par le nom de cet employé, mais désigne quelqu'un d'autre.
     DB.logAudit('Prolongation arrêt', 'Maladie', `Jean-${fullName} · Maladie · jusqu'au 20/08/2026`);
 
-    const history = getEmployeeActivityHistory(employee, 8);
+    const { entries: history } = getEmployeeActivityHistory(employee, 8);
     assert.ok(history.some(h => h.cible === fullName), 'doit toujours retrouver la vraie entrée de ce salarié');
     assert.ok(!history.some(h => h.cible.startsWith(`${fullName}-Martin`)), 'un nom composé qui COMMENCE par ce nom (ex. "-Martin") ne doit jamais être confondu avec ce salarié');
     assert.ok(!history.some(h => h.cible.includes(`Jean-${fullName}`)), 'un nom composé qui SE TERMINE par ce nom ne doit jamais être confondu avec ce salarié');

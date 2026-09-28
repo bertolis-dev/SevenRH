@@ -38,6 +38,7 @@ function loadDataJs(options = {}) {
 
   const expose = `
 ;globalThis.__DB = DB;
+globalThis.__dedupeConventionsCollectivesParIdcc = dedupeConventionsCollectivesParIdcc;
 globalThis.__CURRENT_COMPANY_KEY = CURRENT_COMPANY_KEY;
 globalThis.__ROOT_KEY = ROOT_KEY;
 globalThis.__HAS_RUN_BEFORE_KEY = HAS_RUN_BEFORE_KEY;
@@ -108,6 +109,7 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
   return {
     sandbox,
     DB: sandbox.__DB,
+    dedupeConventionsCollectivesParIdcc: sandbox.__dedupeConventionsCollectivesParIdcc,
     CURRENT_COMPANY_KEY: sandbox.__CURRENT_COMPANY_KEY,
     ROOT_KEY: sandbox.__ROOT_KEY,
     HAS_RUN_BEFORE_KEY: sandbox.__HAS_RUN_BEFORE_KEY,

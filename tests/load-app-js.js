@@ -339,6 +339,9 @@ globalThis.__reportClientError = reportClientError;
 globalThis.__renderEmployeeFraisCard = renderEmployeeFraisCard;
 globalThis.__ensureFraisTotalsLoaded = ensureFraisTotalsLoaded;
 globalThis.__renderEmployeeDetail = renderEmployeeDetail;
+globalThis.__ensureOnboardingChecklist = ensureOnboardingChecklist;
+globalThis.__renderChecklistCard = renderChecklistCard;
+globalThis.__bindChecklistEvents = bindChecklistEvents;
 globalThis.__renderDetailGridCards = renderDetailGridCards;
 globalThis.__renderEnfantsCard = renderEnfantsCard;
 globalThis.__openEnfantModal = openEnfantModal;
@@ -702,6 +705,9 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderEmployeeFraisCard: sandbox.__renderEmployeeFraisCard,
     ensureFraisTotalsLoaded: sandbox.__ensureFraisTotalsLoaded,
     renderEmployeeDetail: sandbox.__renderEmployeeDetail,
+    ensureOnboardingChecklist: sandbox.__ensureOnboardingChecklist,
+    renderChecklistCard: sandbox.__renderChecklistCard,
+    bindChecklistEvents: sandbox.__bindChecklistEvents,
     renderDetailGridCards: sandbox.__renderDetailGridCards,
     renderEnfantsCard: sandbox.__renderEnfantsCard,
     openEnfantModal: sandbox.__openEnfantModal,

@@ -5168,7 +5168,18 @@ function bindGlobalEvents() {
             settingsAvecUrl.conventionCollectiveLegifranceUrl = convention.url;
             settingsRepository.saveSettings(settingsAvecUrl);
           }
-          const label = convention.label ? `${convention.label} (IDCC ${convention.idcc})` : null;
+          // §retour Betty du 28/09/2026 ("pourquoi deux Syntec") : construire le libellé UNIQUEMENT
+          // depuis le titre renvoyé par l'API (souvent un intitulé court, ex. "Syntec") produisait un
+          // texte différent du même IDCC déjà présent dans le catalogue sous son intitulé officiel
+          // complet (ex. "Bureaux d'études techniques (Syntec)", voir IDCC_CONVENTIONS) — les deux
+          // représentent la MÊME convention mais ne correspondent jamais en chaîne exacte, donc
+          // jamais dédoublonnés par le simple .includes() plus bas : le catalogue se retrouvait avec
+          // deux entrées pour un seul et même IDCC. Le libellé déjà connu (catalogue ou déjà présent
+          // dans les réglages de l'entreprise) est désormais TOUJOURS préféré à celui de l'API pour
+          // ce même code IDCC ; le titre de l'API ne sert que si ce code est vraiment inédit.
+          const dejaConnu = (IDCC_CONVENTIONS.find(c => c.code === convention.idcc) && formatConventionCollective(IDCC_CONVENTIONS.find(c => c.code === convention.idcc)))
+            || (settingsRepository.getSettings().conventionsCollectives || []).find(c => c.includes(`(IDCC ${convention.idcc})`));
+          const label = dejaConnu || (convention.label ? `${convention.label} (IDCC ${convention.idcc})` : null);
           if (label && conventionField.value !== label) {
             suggestionEl.classList.add('visible');
             suggestionEl.innerHTML = `
@@ -7355,8 +7366,17 @@ function getDataQualityIssues() {
   const sansPoste = employees.filter(e => !e.poste);
   if (sansPoste.length) issues.push({ severity: 'warning', label: 'Sans poste', employees: sansPoste });
 
-  const sansNaissance = employees.filter(e => !e.dateNaissance);
-  if (sansNaissance.length) issues.push({ severity: 'info', label: 'Sans date de naissance', employees: sansNaissance });
+  // §retour Betty du 28/09/2026 ("dans contrat & poste il y a une petite incohérence sur le
+  // statut, catégorie cadre et le statut est à non cadre") : deux champs distincts encodent chacun
+  // un statut cadre — statutPro/categorieSalarieId (catégorie de salarié, modifiable depuis "Modifier
+  // le salarié") et statutCadre (case à cocher du CONTRAT, depuis le socle enrichi du 22/09/2026,
+  // voir renderContratFormFields) — rien ne les synchronise entre eux : choisir la catégorie "Cadre"
+  // ne coche jamais automatiquement le statut du contrat, et réciproquement. Seules les 2 catégories
+  // sans ambiguïté (Cadre/Dirigeant -> cadre, Non cadre/Agent de maîtrise -> non-cadre) sont
+  // comparées : une catégorie personnalisée n'a pas de correspondance fiable, jamais signalée à tort.
+  const categorieImpliqueCadre = { 'Cadre': true, 'Dirigeant': true, 'Non cadre': false, 'Agent de maîtrise': false };
+  const cadreIncoherent = employees.filter(e => (e.statutPro || '') in categorieImpliqueCadre && categorieImpliqueCadre[e.statutPro] !== Boolean(e.statutCadre));
+  if (cadreIncoherent.length) issues.push({ severity: 'warning', label: 'Catégorie de salarié et statut cadre du contrat en désaccord', employees: cadreIncoherent });
 
   // §correctif audit du 23/08/2026 (§6.4) : "le numéro de sécurité sociale n'a pas à être signalé
   // comme manquant chez un client qui n'a que le module Congés" — pertinent seulement pour la
@@ -11784,7 +11804,12 @@ function renderChecklistCard(title, checklistKey, checklist) {
           <label class="checklist-item">
             <input type="checkbox" class="checklist-checkbox" data-checklist-key="${checklistKey}" data-index="${i}" ${item.fait ? 'checked' : ''}>
             <span class="${item.fait ? 'checklist-label-done' : ''}">${escapeHtml(item.label)}</span>
-            ${item.fait && item.dateFait ? `<span class="text-muted" style="font-size: 12px; margin-left: auto;">${formatDate(item.dateFait)}</span>` : ''}
+            <!-- §retour Betty du 28/09/2026 ("pouvoir changer la date des checklists") : posée
+                 automatiquement à aujourd'hui en cochant (bindChecklistEvents), mais reste un simple
+                 champ date modifiable ensuite (ex. l'étape a réellement eu lieu la veille) — jamais
+                 un texte figé. Un clic dessus n'active jamais la case à cocher voisine (input
+                 distinct dans le même <label>, comportement standard). -->
+            ${item.fait ? `<input type="date" class="input checklist-date" data-checklist-key="${checklistKey}" data-index="${i}" value="${escapeHtml(item.dateFait || '')}" style="margin-left: auto; width: auto;">` : ''}
           </label>
         `).join('')}
       </div>
@@ -11803,6 +11828,20 @@ function bindChecklistEvents(employeeId) {
       checklist[index] = { ...checklist[index], fait: cb.checked, dateFait: cb.checked ? toISODate(new Date()) : '' };
       employeeRepository.update(employeeId, { [key]: checklist });
       render();
+    });
+  });
+  // §retour Betty du 28/09/2026 ("pouvoir changer la date des checklists") : posée à aujourd'hui en
+  // cochant (ci-dessus), mais modifiable ensuite depuis ce champ date — ne touche jamais à `fait`.
+  document.querySelectorAll('.checklist-date').forEach(input => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.checklistKey;
+      const index = Number(input.dataset.index);
+      const employee = employeeRepository.getById(employeeId);
+      if (!employee) return;
+      const checklist = (employee[key] || []).slice();
+      if (!checklist[index]) return;
+      checklist[index] = { ...checklist[index], dateFait: input.value };
+      employeeRepository.update(employeeId, { [key]: checklist });
     });
   });
 
@@ -12683,15 +12722,21 @@ function renderBreadcrumb(items) {
  * (arrêts maladie, ajustements de compteurs, notes de frais...). Exige désormais une frontière de mot
  * de part et d'autre du nom (jamais suivi/précédé d'une lettre ou d'un tiret) plutôt qu'une simple
  * sous-chaîne. */
-function getEmployeeActivityHistory(employee, limit = 8) {
+function getEmployeeActivityHistory(employee, limit = 15) {
   const fullName = `${employee.prenom} ${employee.nom}`;
   const escaped = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const boundaryPattern = new RegExp(`(^|[^\\p{L}-])${escaped}([^\\p{L}-]|$)`, 'u');
-  return auditLogRepository.getAuditLog().filter(entry => entry.cible && boundaryPattern.test(entry.cible)).slice(0, limit);
+  const toutes = auditLogRepository.getAuditLog().filter(entry => entry.cible && boundaryPattern.test(entry.cible));
+  return { entries: toutes.slice(0, limit), total: toutes.length };
 }
 
+/** §retour Betty du 28/09/2026 ("on ne voit pas tout l'historique, seulement les 8 derniers") :
+ * relevé une limite d'affichage plus généreuse (voir getEmployeeActivityHistory), et un lien vers le
+ * journal complet (Paramètres > Audit > Journal des actions, déjà filtrable par recherche) quand il
+ * reste des entrées au-delà — plutôt qu'une liste sans fin sur la fiche elle-même, qui n'est pas
+ * l'écran fait pour ça (recherche/filtres par date/action y vivent déjà). */
 function renderEmployeeActivityCard(employee) {
-  const history = getEmployeeActivityHistory(employee);
+  const { entries: history, total } = getEmployeeActivityHistory(employee);
   if (!history.length) return '';
   return `
     <div class="card">
@@ -12704,6 +12749,9 @@ function renderEmployeeActivityCard(employee) {
           </div>
         `).join('')}
       </div>
+      ${total > history.length && hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_JOURNAL_AUDIT)
+        ? `<button type="button" class="btn-link" id="btn-voir-tout-historique-activite" data-employee-fullname="${escapeHtml(`${employee.prenom} ${employee.nom}`)}">Voir tout l'historique (${total})</button>`
+        : ''}
     </div>
   `;
 }
@@ -14438,6 +14486,13 @@ function bindEmployeeDetailEvents() {
   bindMenusAutorisesCardEvents(state.currentEmployeeId);
   bindTypesAbsenceCardEvents(state.currentEmployeeId);
   bindChecklistEvents(state.currentEmployeeId);
+
+  const voirToutHistoriqueBtn = document.getElementById('btn-voir-tout-historique-activite');
+  if (voirToutHistoriqueBtn) voirToutHistoriqueBtn.addEventListener('click', () => {
+    state.auditFilters.search = voirToutHistoriqueBtn.dataset.employeeFullname;
+    state.parametresAuditSousTab = 'journal';
+    navigateTo('parametres', { parametresTab: 'audit' });
+  });
 
   const forcerMdpBtn = document.getElementById('btn-forcer-mot-de-passe');
   if (forcerMdpBtn) forcerMdpBtn.addEventListener('click', () => openForcerMotDePasseModal(state.currentEmployeeId));
@@ -26830,6 +26885,25 @@ function updateEquipeOptionsForSelectedService() {
   equipeSelect.dataset.quickCreatePrevious = previousValue;
 }
 
+/** §retour Betty du 28/09/2026 ("on rentre la civilité donc tu peux mettre des propositions de
+ * postes en fonction du genre") : ne touche que le TEXTE de chaque <option> déjà présente (jamais sa
+ * valeur, ni l'option "valeur actuelle, absente de la liste"/"+ Ajouter un poste" ajoutées par
+ * selectField, qui ne correspondent à aucune entrée du référentiel et restent donc inchangées) —
+ * bien plus sûr qu'une reconstruction complète du <select>, et préserve la sélection en cours. */
+function updatePosteOptionsAccordees() {
+  const posteSelect = document.getElementById('f-poste');
+  if (!posteSelect) return; // absent en édition (voir openEmployeeModal, isEdit)
+  const civiliteEl = document.getElementById('f-civilite');
+  const sexeEl = document.getElementById('f-sexe');
+  const civilite = civiliteEl ? civiliteEl.value : '';
+  const sexe = sexeEl ? sexeEl.value : '';
+  const postes = settingsRepository.getSettings().postes || [];
+  Array.from(posteSelect.options).forEach(opt => {
+    const entree = postes.find(p => p.neutre === opt.value);
+    if (entree) opt.textContent = libellePosteAccordePourCivilite(entree, civilite, sexe);
+  });
+}
+
 /** Salaire/genre : édition réservée au Propriétaire, et seulement si l'entreprise a activé le suivi correspondant dans Paramètres. */
 /** §retour Betty du 18/09/2026 (point 5) : le genre n'est plus ici (déplacé vers un vrai champ
  * "Sexe (état civil)" obligatoire, onglet Identité, jamais optionnel/confidentiel) — cette section
@@ -27706,10 +27780,28 @@ function openAjouterEvaluationModal(candidature) {
  * réellement créé, sans dupliquer la logique de création elle-même. */
 function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   const isEdit = Boolean(id);
+  // §retour Betty du 28/09/2026 ("n'autorises pas la possibilité de création d'un nouveau salarié
+  // si on a pas le droit") : CREER_SALARIE/MODIFIER_SALARIE n'étaient revérifiés qu'au niveau du
+  // BOUTON qui ouvre cette modale (masqué sans le droit, voir renderEmployeesList/renderEmployeeDetail)
+  // — jamais ici, contrairement à toutes les autres modales de mutation de ce module (contrat,
+  // enfants, projet de contrat...). Même défense en profondeur.
+  const user = authRepository.getCurrentUser();
+  if (!isEdit && !hasPermission(user, PERMISSIONS.CREER_SALARIE)) { showToast('Vous n\'avez pas le droit de créer un salarié.', 'error'); return; }
   const employee = isEdit ? employeeRepository.getById(id) : makeEmptyEmployee();
   if (isEdit && !employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  if (isEdit && !canEditEmployeeRecord(employee)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
   if (!isEdit && prefill) Object.assign(employee, prefill);
   const settings = settingsRepository.getSettings();
+  // §retour Betty du 28/09/2026 ("la convention est liée à l'entreprise, pas aux salariés") : la
+  // convention collective de l'entreprise (Paramètres > Entreprise, companyRepository.getProfile())
+  // sert déjà à faire remonter cette même convention en tête des suggestions (voir
+  // bindConventionCollectiveAutocomplete) — mais rien ne préremplissait encore le champ lui-même à
+  // la création. Un salarié VRAIMENT sous une autre convention (rare, ex. mandataire social) reste
+  // libre de la changer avant d'enregistrer : ceci ne fait que poser la valeur par défaut la plus
+  // probable, jamais un champ verrouillé.
+  if (!isEdit && !employee.conventionCollective) {
+    employee.conventionCollective = companyRepository.getProfile().conventionCollective || '';
+  }
   // §retour Betty du 18/09/2026 (point 2.2) : makeEmptyEmployee() (data.js) reste une fonction pure,
   // sans accès aux réglages de l'entreprise — 35h y est un simple repli, jamais la vraie source de
   // vérité. Une NOUVELLE fiche préremplit désormais depuis le réglage réel de l'entreprise, même
@@ -27728,6 +27820,13 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   // avec son vrai nom (pas le fallback générique "valeur actuelle absente de la liste" de selectField,
   // qui échouerait ici à afficher autre chose que l'id brut).
   const etablissementsSelectables = etablissements.filter(e => e.actif || e.id === employee.etablissementId);
+  // §retour Betty du 28/09/2026 ("je ne peux pas modifier mon poste lorsqu'il est déjà créé") :
+  // contrat le plus récent, pour le bouton "Corriger le contrat en cours" ci-dessous (poste/
+  // établissement/fin de période d'essai ne se modifient plus que depuis là, voir le commentaire du
+  // 22/09/2026 sur le fieldset "Contrat & poste").
+  const contratCourantPourEdition = isEdit
+    ? (employee.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''))[0] || null
+    : null;
 
   const html = `
     <div class="modal modal-xlarge">
@@ -27802,7 +27901,13 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               ${!isEdit ? selectField('etablissementId', 'Établissement', null, employee.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements') : ''}
               ${selectField('service', 'Service', serviceRepository.getAll().map(s => s.nom), employee.service, null, undefined, undefined, 'services')}
               ${equipeSelectField(employee.service, employee.equipe)}
-              ${!isEdit ? selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: p.neutre })), 'Intitulé neutre (point médian) : l\'affichage s\'accorde automatiquement selon le sexe du salarié (voir Paramètres &gt; Référentiels &gt; Postes pour ajuster les formes masculine/féminine).', 'postes') : ''}
+              <!-- §retour Betty du 28/09/2026 ("on rentre la civilité donc tu peux mettre des
+                   propositions de postes en fonction du genre") : la valeur stockée reste toujours
+                   la forme neutre (entree.neutre, voir submitEmployeeForm), seul le LIBELLÉ affiché
+                   est accordé (libellePosteAccordePourCivilite, data.js) d'après la civilité/le sexe
+                   déjà saisis dans l'onglet Identité — se recalcule en direct si l'un des deux
+                   change, voir updatePosteOptionsAccordees ci-dessous. -->
+              ${!isEdit ? selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: libellePosteAccordePourCivilite(p, employee.civilite, getSexe(employee)) })), 'Intitulé accordé d\'après la civilité/le sexe déjà saisis ci-dessus ; la valeur enregistrée reste la forme neutre (voir Paramètres &gt; Référentiels &gt; Postes).', 'postes') : ''}
               ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })), undefined, undefined, 'categoriesSalarie')}
@@ -27822,7 +27927,12 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                  désormais au contrat") ne se modifient plus que depuis l'onglet Contrat de la fiche
                  (nouveau contrat ou correction du contrat en cours) — jamais plus ici, où la fiche et
                  le contrat pouvaient jusqu'ici afficher deux valeurs différentes pour la même chose. -->
-            ${isEdit ? `<p class="form-hint">Type de contrat, poste, établissement, fin de période d'essai : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche (bouton "Corriger" sur le contrat en cours, ou "+ Nouveau contrat").</p>` : ''}
+            <!-- §retour Betty du 28/09/2026 ("je ne peux pas modifier mon poste lorsqu'il est déjà
+                 créé") : le renvoi ci-dessus restait un texte passif — "l'onglet Contrat de la
+                 fiche" se confond facilement avec l'onglet "Contrat & poste" DE CE FORMULAIRE (même
+                 mot, deux endroits différents). Un bouton direct ferme cette modale et ouvre
+                 "Corriger le contrat" sur le contrat en cours, sans avoir à le retrouver soi-même. -->
+            ${isEdit ? `<p class="form-hint">Type de contrat, poste, établissement, fin de période d'essai : voir et modifier depuis le contrat en cours.${contratCourantPourEdition ? ' <button type="button" class="btn-link" id="btn-corriger-contrat-depuis-modifier-salarie">Corriger le contrat en cours</button>' : ''}</p>` : ''}
           </fieldset>
 
           <fieldset class="form-section" id="employee-form-section-temps" data-employee-tab-panel="temps" hidden>
@@ -27934,7 +28044,16 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
   bindEmployeeFormTabs();
   bindConventionCollectiveAutocomplete();
   document.getElementById('f-service').addEventListener('change', updateEquipeOptionsForSelectedService);
+  const civiliteEl = document.getElementById('f-civilite');
+  if (civiliteEl) civiliteEl.addEventListener('change', updatePosteOptionsAccordees);
+  const sexeEl = document.getElementById('f-sexe');
+  if (sexeEl) sexeEl.addEventListener('change', updatePosteOptionsAccordees);
   document.getElementById('employee-form').addEventListener('submit', (evt) => submitEmployeeForm(evt, id, candidatureId));
+  const corrigerContratBtn = document.getElementById('btn-corriger-contrat-depuis-modifier-salarie');
+  if (corrigerContratBtn) corrigerContratBtn.addEventListener('click', () => {
+    closeModal();
+    openCorrigerContratModal(id, contratCourantPourEdition.id);
+  });
 
   // §retour Betty du 22/09/2026 (défaut 1.3) : tempsTravail/horairesHebdo/forfait n'existent plus
   // dans ce formulaire EN ÉDITION (voir openEmployeeModal ci-dessus) — plus rien à lier, et
@@ -28337,6 +28456,16 @@ function multiSelectField(name, label, customOptions, selectedValues) {
 
 function submitEmployeeForm(evt, id, candidatureId) {
   evt.preventDefault();
+  // §retour Betty du 28/09/2026 : même défense en profondeur qu'openEmployeeModal ci-dessus, rejouée
+  // ici au cas où ce formulaire serait soumis autrement qu'en passant par cette modale.
+  const user = authRepository.getCurrentUser();
+  if (id) {
+    const employeeExistant = employeeRepository.getById(id);
+    if (!employeeExistant || !canEditEmployeeRecord(employeeExistant)) { showToast('Vous n\'avez pas le droit de modifier cette fiche.', 'error'); return; }
+  } else if (!hasPermission(user, PERMISSIONS.CREER_SALARIE)) {
+    showToast('Vous n\'avez pas le droit de créer un salarié.', 'error');
+    return;
+  }
   const form = evt.target;
   const formData = new FormData(form);
   const patch = { adresse: {} };

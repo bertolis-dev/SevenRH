@@ -1655,11 +1655,30 @@ function computeDureeTravailleeMinutes(pointage) {
 /** Cœur de la journalisation d'audit, partagé par DB.logAudit() (entreprise courante de la
  * session) et toute action qui cible une entreprise précise sans que ce soit "l'entreprise
  * courante" — ex. les actions BERTOLIS (§9.6), qui n'ont pas de notion d'entreprise courante. */
+/** §retour Betty du 28/09/2026 ("si on clique plusieurs fois, l'historique s'incrémente de trop...
+ * incrémenter une fois par ligne et par jour, le jour suivant ça réincrémente") : logAudit()
+ * s'appelle sans garde-fou depuis ~50 endroits (chaque updateEmployee, même pour corriger une
+ * coquille, journalise une nouvelle ligne "Modification · Salarié") — répéter la même action sur la
+ * même cible plusieurs fois dans la même journée noyait le reste de l'historique sous des lignes
+ * quasi identiques (aggravé par la limite d'affichage de 8 lignes sur la fiche salarié, voir
+ * getEmployeeActivityHistory). Cherche une entrée AUJOURD'HUI avec le même (action, entite, cible) et
+ * la RAFRAÎCHIT en place (date + détails + auteur les plus récents) plutôt que d'en empiler une
+ * nouvelle ; une occurrence la veille (ou sur une cible différente) reste une ligne distincte. */
 function appendAuditLogEntry(company, action, entite, cible, details, auteur) {
   const list = company.auditLog || [];
+  const now = new Date();
+  const today = toISODate(now);
+  const dejaAujourdhui = list.slice().reverse().find(e =>
+    e.action === action && e.entite === entite && (e.cible || '') === (cible || '') && toISODate(new Date(e.date)) === today);
+  if (dejaAujourdhui) {
+    dejaAujourdhui.date = now.toISOString();
+    dejaAujourdhui.details = details || '';
+    dejaAujourdhui.auteur = auteur || '';
+    return dejaAujourdhui;
+  }
   const entry = {
     id: generateId('log'),
-    date: new Date().toISOString(),
+    date: now.toISOString(),
     action, entite,
     cible: cible || '',
     details: details || '',
@@ -2683,7 +2702,10 @@ const DB = {
     // §retour Betty du 16/09/2026 : triée à la LECTURE (jamais persistée triée) — reste correcte
     // quel que soit l'ordre déjà enregistré pour une entreprise existante, sans dépendre d'un
     // rattrapage "une seule fois par entreprise" comme les deux corrections ci-dessus.
-    settings.conventionsCollectives = sortConventionsCollectivesParIdcc(settings.conventionsCollectives);
+    // §retour Betty du 28/09/2026 : dédoublonnée par IDCC au même titre (voir
+    // dedupeConventionsCollectivesParIdcc), AVANT le tri pour garder la préférence "catalogue
+    // d'abord" décrite là-bas.
+    settings.conventionsCollectives = sortConventionsCollectivesParIdcc(dedupeConventionsCollectivesParIdcc(settings.conventionsCollectives));
     return settings;
   },
 
@@ -6288,6 +6310,22 @@ function getPosteAccorde(employee, settings) {
   return neutre;
 }
 
+/** §retour Betty du 28/09/2026 ("on rentre la civilité donc tu peux mettre des propositions de
+ * postes en fonction du genre") : même priorité/logique que getPosteAccorde ci-dessus (civilité
+ * d'usage d'abord, "ne pas accorder" -> forme neutre, repli sur le sexe à l'état civil), mais
+ * appliquée à UNE entrée du référentiel plutôt qu'à employee.poste — sert à afficher des libellés de
+ * liste déroulante déjà accordés (ex. "Directrice générale" pour Madame) pendant la saisie du
+ * poste, jamais à changer ce qui est réellement stocké (toujours entree.neutre, voir son usage dans
+ * openEmployeeModal). */
+function libellePosteAccordePourCivilite(entree, civilite, sexe) {
+  if (civilite === 'Monsieur') return entree.masculin || entree.neutre;
+  if (civilite === 'Madame') return entree.feminin || entree.neutre;
+  if (civilite === 'ne_pas_accorder') return entree.neutre;
+  if (sexe === 'Homme') return entree.masculin || entree.neutre;
+  if (sexe === 'Femme') return entree.feminin || entree.neutre;
+  return entree.neutre;
+}
+
 /** Calcule une ancienneté lisible ("3 ans, 2 mois") à partir d'une date d'embauche. */
 function calculateAnciennete(dateEmbauche) {
   if (!dateEmbauche) return '—';
@@ -7418,6 +7456,30 @@ function getConventionCollectiveIdccCode(conventionCollectiveLabel) {
  * DEFAULT_SETTINGS.conventionsCollectives lui-même : une entreprise dont la liste est déjà
  * persistée dans un autre ordre (voir le rattrapage juste après) doit aussi en profiter, pas
  * seulement les nouvelles entreprises. */
+/** §retour Betty du 28/09/2026 ("pourquoi deux Syntec, je pense que le premier suffit") : la
+ * suggestion de convention depuis le SIRET (bindEntrepriseFields, app.js) construisait jusqu'ici son
+ * libellé à partir du titre renvoyé par l'API gouvernementale, qui peut différer de l'intitulé déjà
+ * présent dans le catalogue pour le MÊME code IDCC (ex. "Syntec" côté API contre "Bureaux d'études
+ * techniques (Syntec)" côté catalogue) — deux chaînes distinctes pour la même convention, jamais
+ * dédoublonnées par un simple Set. Ce correctif (voir bindEntrepriseFields) évite toute NOUVELLE
+ * confirmation en double ; ceci nettoie ce qui a déjà pu être ajouté en double AVANT lui, à la
+ * LECTURE seulement (jamais persisté), comme le tri juste en dessous — s'auto-corrige sans
+ * dépendre d'un drapeau de migration "une seule fois", donc sans risque si un doublon d'une autre
+ * origine apparaissait un jour. Garde la première occurrence de chaque IDCC (déjà triée par IDCC
+ * croissant par l'appelant ci-dessous, donc l'entrée du catalogue officiel plutôt qu'un ajout manuel
+ * arrivé après) ; une entrée sans IDCC reconnaissable (convention personnalisée en texte libre)
+ * n'est jamais concernée, jamais retirée. */
+function dedupeConventionsCollectivesParIdcc(list) {
+  const vus = new Set();
+  return list.filter(c => {
+    const code = getConventionCollectiveIdccCode(c);
+    if (!code) return true;
+    if (vus.has(code)) return false;
+    vus.add(code);
+    return true;
+  });
+}
+
 function sortConventionsCollectivesParIdcc(list) {
   return list.slice().sort((a, b) => {
     const codeA = Number(getConventionCollectiveIdccCode(a));

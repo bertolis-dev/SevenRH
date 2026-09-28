@@ -164,8 +164,12 @@ async function runReenregistrementEffaceLeMarqueurADeVerifier() {
   const path = require('path');
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   const fnStart = appSource.indexOf('function submitEmployeeForm(');
-  const ifIdStart = appSource.indexOf('if (id) {', fnStart);
-  const fnBody = appSource.slice(ifIdStart, ifIdStart + 600);
+  const nextFnStart = appSource.indexOf('\nfunction ', fnStart + 1);
+  const fnBody = appSource.slice(fnStart, nextFnStart === -1 ? undefined : nextFnStart);
+  // §retour Betty du 28/09/2026 : submitEmployeeForm porte désormais un AUTRE "if (id) {" avant
+  // celui-ci (garde-fou de permission, voir openEmployeeModal) — cherche directement la ligne
+  // attendue dans TOUTE la fonction plutôt que le premier "if (id) {" venu, sinon un bloc inséré
+  // avant casse ce test sans rapport avec ce qu'il vérifie réellement.
   assert.ok(fnBody.includes('patch.departAutoDeduit = false'),
     'réenregistrer une fiche existante doit toujours effacer le marqueur "à vérifier" (relecture humaine faite, corrigée ou confirmée)');
 
