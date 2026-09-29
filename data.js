@@ -476,6 +476,20 @@ function formatConventionCollective(c) {
   return `${c.nom} (IDCC ${c.code})`;
 }
 
+/** §retour Betty du 29/09/2026 ("la TVA devrait être calculée toute seule") : le numéro de TVA
+ * intracommunautaire français se déduit ENTIÈREMENT du SIREN (les 9 premiers chiffres du SIRET) par
+ * une formule officielle fixe, aucun appel réseau nécessaire (contrairement à la raison sociale/
+ * l'adresse/la convention collective, qui dépendent d'un répertoire externe) :
+ * clé = (12 + 3 × (SIREN mod 97)) mod 97, puis FR + clé (2 chiffres) + SIREN. Retourne null pour un
+ * SIRET dont les 14 chiffres ne sont pas encore tous saisis, jamais une valeur partielle/fausse. */
+function calculerTvaDepuisSiret(siret) {
+  const digits = String(siret || '').replace(/\s/g, '');
+  if (!/^\d{14}$/.test(digits)) return null;
+  const siren = digits.slice(0, 9);
+  const cle = (12 + 3 * (Number(siren) % 97)) % 97;
+  return `FR${String(cle).padStart(2, '0')}${siren}`;
+}
+
 // Listes de référence par défaut (modifiables via DB.settings une fois le
 // module Paramètres construit — elles ne sont donc pas figées dans le code).
 const DEFAULT_SETTINGS = {

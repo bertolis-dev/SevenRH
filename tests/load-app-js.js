@@ -255,6 +255,7 @@ globalThis.__resolvePopulationEmployeeIds = resolvePopulationEmployeeIds;
 globalThis.__openValiderEntretienModal = openValiderEntretienModal;
 globalThis.__getObjectifsReconduits = getObjectifsReconduits;
 globalThis.__openDocumentModal = openDocumentModal;
+globalThis.__bindConventionCollectiveAutocomplete = bindConventionCollectiveAutocomplete;
 globalThis.__openDiffuserDocumentModal = openDiffuserDocumentModal;
 globalThis.__canSelfManagePendingExpense = canSelfManagePendingExpense;
 globalThis.__handleEditExpense = handleEditExpense;
@@ -385,6 +386,7 @@ globalThis.__PARAMETRES_TABS = PARAMETRES_TABS;
 globalThis.__PARAMETRES_TABS_COMPLETION = PARAMETRES_TABS_COMPLETION;
 globalThis.__renderParametresEntreprise = renderParametresEntreprise;
 globalThis.__bindParametresEntrepriseEvents = bindParametresEntrepriseEvents;
+globalThis.__parseAdresseCompletePourEtablissement = parseAdresseCompletePourEtablissement;
 globalThis.__handleExportToutesDonnees = handleExportToutesDonnees;
 globalThis.__renderRequestActions = renderRequestActions;
 globalThis.__openAttestationSalaireModal = openAttestationSalaireModal;
@@ -630,6 +632,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     openValiderEntretienModal: sandbox.__openValiderEntretienModal,
     getObjectifsReconduits: sandbox.__getObjectifsReconduits,
     openDocumentModal: sandbox.__openDocumentModal,
+    bindConventionCollectiveAutocomplete: sandbox.__bindConventionCollectiveAutocomplete,
     openDiffuserDocumentModal: sandbox.__openDiffuserDocumentModal,
     canSelfManagePendingExpense: sandbox.__canSelfManagePendingExpense,
     handleEditExpense: sandbox.__handleEditExpense,
@@ -748,6 +751,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     PARAMETRES_TABS_COMPLETION: sandbox.__PARAMETRES_TABS_COMPLETION,
     renderParametresEntreprise: sandbox.__renderParametresEntreprise,
     bindParametresEntrepriseEvents: sandbox.__bindParametresEntrepriseEvents,
+    parseAdresseCompletePourEtablissement: sandbox.__parseAdresseCompletePourEtablissement,
     handleExportToutesDonnees: sandbox.__handleExportToutesDonnees,
     renderRequestActions: sandbox.__renderRequestActions,
     openAttestationSalaireModal: sandbox.__openAttestationSalaireModal,

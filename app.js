@@ -5130,6 +5130,13 @@ function bindGlobalEvents() {
       if (hint) hint.textContent = '';
       return;
     }
+    // §retour Betty du 29/09/2026 ("la TVA devrait être calculée toute seule") : purement
+    // arithmétique (voir calculerTvaDepuisSiret, data.js), donc posée immédiatement dès que les 14
+    // chiffres sont saisis — jamais besoin d'attendre la recherche réseau ci-dessous, contrairement
+    // à la raison sociale/l'adresse. Jamais écrasée si déjà renseignée à la main (même garde que
+    // raisonField/adresseField plus bas).
+    const tvaField = document.getElementById(input.dataset.fillTva);
+    if (tvaField && !tvaField.value) tvaField.value = calculerTvaDepuisSiret(digits) || '';
     if (hint) hint.textContent = 'Recherche...';
     siretAutocompleteTimer = setTimeout(async () => {
       let data;
@@ -5259,6 +5266,15 @@ function bindGlobalEvents() {
       const adresseField = document.getElementById(input.dataset.fillAdresse);
       if (siretField) siretField.value = company.siege.siret || '';
       if (adresseField) adresseField.value = company.siege.adresse || '';
+      // §retour Betty du 29/09/2026 : poser siretField.value ci-dessus ne déclenche aucun évènement
+      // 'input' (affectation programmatique, pas une vraie frappe) — le calcul automatique de la TVA
+      // câblé sur CET évènement (voir plus haut, data-siret-autocomplete) ne se déclencherait donc
+      // jamais pour un SIRET rempli via CETTE recherche par nom. Reproduit ici la même règle
+      // (jamais si déjà renseigné à la main) pour rester cohérent quel que soit le chemin de saisie.
+      if (siretField) {
+        const tvaField = document.getElementById(siretField.dataset.fillTva);
+        if (tvaField && !tvaField.value) tvaField.value = calculerTvaDepuisSiret(siretField.value) || '';
+      }
     }
     suggestionsEl.style.display = 'none';
     suggestionsEl.innerHTML = '';
@@ -18662,14 +18678,23 @@ function renderParametresEntreprise() {
           <div class="form-field">
             <label for="f-siret">SIRET</label>
             <input class="input" type="text" id="f-siret" name="siret" value="${escapeHtml(profile.siret || '')}"
-              data-siret-autocomplete="true" data-fill-raison="f-raisonSociale" data-fill-adresse="f-adresse">
+              data-siret-autocomplete="true" data-fill-raison="f-raisonSociale" data-fill-adresse="f-adresse" data-fill-tva="f-tva">
             <span class="field-hint-computed" id="f-siret-hint"></span>
           </div>
-          ${textField('tva', 'N° TVA intracommunautaire', profile.tva)}
+          ${textField('tva', 'N° TVA intracommunautaire', profile.tva, false, 'text', 'any', 'Calculé automatiquement depuis le SIRET (formule officielle sur le SIREN) dès que ses 14 chiffres sont saisis ci-dessus ; reste modifiable à la main si besoin.')}
           ${textField('adresse', 'Adresse', profile.adresse)}
           ${textField('telephone', 'Téléphone', profile.telephone)}
           ${textField('email', 'Email', profile.email, true, 'email')}
           ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', profile.conventionCollective)}
+        </div>
+        <!-- §retour Betty du 29/09/2026 ("il devrait y avoir un check box... ça renseignerait tout
+             seul") : nom/adresse/téléphone du siège se ressaisissaient une seconde fois dans
+             Établissements, sans aucun lien entre les deux — un bouton explicite plutôt qu'une case
+             à cocher permanente (rien à "décocher" ensuite, une seule action ponctuelle qui copie
+             CETTE saisie sur l'établissement principal, jamais un lien perpétuel qui surprendrait en
+             écrasant une adresse d'établissement différente délibérément saisie). -->
+        <div class="form-grid" style="margin-top: 4px;">
+          <button type="button" class="btn btn-secondary" id="btn-utiliser-comme-siege">Utiliser cette adresse pour mon établissement principal (siège)</button>
         </div>
         <!-- §retour Betty du 18/09/2026 (point 4) : proposée automatiquement dès qu'un SIRET valide
              est saisi ci-dessus (voir la recherche déjà en place pour la raison sociale/l'adresse),
@@ -19181,6 +19206,28 @@ function bindParametresEntrepriseEvents() {
       conventionCollective: formData.get('conventionCollective')
     });
     showToast('Profil de l\'entreprise mis à jour.');
+    render();
+  });
+
+  // §retour Betty du 29/09/2026 ("il devrait y avoir un check box... ça renseignerait tout seul") :
+  // lit les champs DIRECTEMENT depuis le formulaire (pas companyRepository.getProfile(), qui ne
+  // reflète que la DERNIÈRE version enregistrée) — une saisie pas encore soumise doit pouvoir être
+  // utilisée telle quelle, sans obliger à enregistrer le profil d'abord juste pour ce bouton.
+  const utiliserCommeSiegeBtn = document.getElementById('btn-utiliser-comme-siege');
+  if (utiliserCommeSiegeBtn) utiliserCommeSiegeBtn.addEventListener('click', () => {
+    const raisonSociale = document.getElementById('f-raisonSociale').value.trim();
+    const adresseComplete = document.getElementById('f-adresse').value.trim();
+    const telephone = document.getElementById('f-telephone').value.trim();
+    const email = document.getElementById('f-email').value.trim();
+    const { rue, codePostal, ville } = parseAdresseCompletePourEtablissement(adresseComplete);
+    const etablissements = etablissementRepository.getAll();
+    const principal = etablissements.find(e => e.principal) || etablissements[0] || null;
+    const patch = { nom: raisonSociale || (principal && principal.nom) || 'Siège', adresse: rue, codePostal, ville, telephone, email, principal: true };
+    if (principal) etablissementRepository.update(principal.id, patch);
+    else etablissementRepository.create(patch);
+    showToast(codePostal && ville
+      ? 'Établissement principal mis à jour depuis le profil de l\'entreprise.'
+      : 'Établissement principal mis à jour ; complétez le code postal et la ville (adresse non reconnue automatiquement).');
     render();
   });
 
@@ -28225,6 +28272,19 @@ function bindTempsTravailFields(settings) {
  * un textField() simple là où une adresse française complète est saisie : sélectionner une
  * suggestion remplit aussi automatiquement le code postal et la ville, en évitant les fautes de
  * frappe/incohérences (ex. code postal qui ne correspond pas à la ville tapée à côté). */
+/** §retour Betty du 29/09/2026 ("Utiliser cette adresse pour mon établissement principal") : le
+ * profil de l'entreprise porte l'adresse en UN SEUL champ texte (ex. "1 rue de la Paix, 75000
+ * Paris"), alors qu'un établissement la porte en 3 champs distincts (adresse/codePostal/ville, voir
+ * makeEmptyEtablissement) — reconnaît le motif standard "code postal (5 chiffres) + ville" en fin de
+ * chaîne, qu'il soit précédé d'une virgule ou non. Ne devine jamais au-delà de ce motif fiable :
+ * codePostal/ville restent vides (à compléter à la main) si l'adresse ne s'y conforme pas, plutôt
+ * qu'une coupe approximative qui produirait une fausse ville. */
+function parseAdresseCompletePourEtablissement(adresseComplete) {
+  const m = /^(.*?)[,\s]+(\d{5})\s+(.+)$/.exec((adresseComplete || '').trim());
+  if (!m) return { rue: adresseComplete || '', codePostal: '', ville: '' };
+  return { rue: m[1].trim(), codePostal: m[2], ville: m[3].trim() };
+}
+
 function addressAutocompleteField(name, label, value, codePostalName, villeName) {
   return `
     <div class="form-field address-autocomplete-field">
@@ -28328,14 +28388,26 @@ function bindConventionCollectiveAutocomplete() {
     input.addEventListener('focus', showSuggestions);
   });
 
-  document.addEventListener('click', (e) => {
-    const item = e.target.closest('[data-convention-value]');
-    if (!item) return;
-    const suggestionsEl = item.closest('.address-suggestions');
-    const input = suggestionsEl && document.getElementById(suggestionsEl.id.replace(/-suggestions$/, ''));
-    if (input) input.value = item.dataset.conventionValue;
-    if (suggestionsEl) { suggestionsEl.style.display = 'none'; suggestionsEl.innerHTML = ''; }
-  });
+  // §retour Betty du 29/09/2026 ("en cliquant sur la première ligne ça ne fait rien") : ce
+  // document.addEventListener('click', ...) était réenregistré à CHAQUE ouverture de cette modale
+  // (bindConventionCollectiveAutocomplete rappelée à chaque fois, jamais nettoyée à la fermeture) —
+  // les copies s'accumulaient sur `document` pour toute la session. Un `mousedown` (jamais un
+  // `click`) évite en plus toute course avec un événement `focus` déclenché entre le moment où le
+  // doigt/bouton descend et celui où il se relève sur un autre champ juste avant. Un simple drapeau
+  // sur `document` garantit qu'un seul jeu d'écouteurs existe jamais, quel que soit le nombre
+  // d'ouvertures de cette modale ou d'autres modales portant ce même champ (Paramètres > Entreprise).
+  if (!document.__conventionAutocompleteBound) {
+    document.__conventionAutocompleteBound = true;
+    document.addEventListener('mousedown', (e) => {
+      const item = e.target.closest('[data-convention-value]');
+      if (!item) return;
+      e.preventDefault(); // n'enlève jamais le focus du champ avant que sa valeur ne soit posée
+      const suggestionsEl = item.closest('.address-suggestions');
+      const input = suggestionsEl && document.getElementById(suggestionsEl.id.replace(/-suggestions$/, ''));
+      if (input) input.value = item.dataset.conventionValue;
+      if (suggestionsEl) { suggestionsEl.style.display = 'none'; suggestionsEl.innerHTML = ''; }
+    });
+  }
 }
 
 /** type='number' sans step : le navigateur applique step="1" par défaut et rejette silencieusement
