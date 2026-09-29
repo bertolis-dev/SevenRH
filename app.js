@@ -1280,10 +1280,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // rotation d'un tablette, redimensionnement de fenêtre) — un seul listener posé une fois, jamais
   // par render() lui-même (qui tourne bien trop souvent pour ça).
   MOBILE_NAV_QUERY.addEventListener('change', renderSidebar);
-  // §correctif retour QA du 27/08/2026 (point 4) : re-mesure le débordement des onglets Paramètres
-  // au redimensionnement (rotation d'écran, fenêtre agrandie/réduite) — un seul listener posé une
-  // fois, jamais par render() (voir le commentaire de checkParametresTabsOverflow ci-dessus).
-  window.addEventListener('resize', () => { if (state.view === 'parametres') checkParametresTabsOverflow(); });
 
   // La console BERTOLIS (super-admin multi-entreprise) est un système entièrement séparé, basé sur
   // localStorage, qui n'a besoin d'aucune donnée Supabase — une session BERTOLIS déjà active ne doit
@@ -17846,26 +17842,39 @@ const canManageParametres = () => hasPermission(authRepository.getCurrentUser(),
 // caser dans un onglet dépendant du seul module congés masquait cette dépendance transverse.
 // "Vacances scolaires" rejoint "Congés et absences" (renommé depuis "Types d'absences") comme un
 // sous-onglet de plus, avec la chaîne de validation par défaut des congés.
+// §retour Betty du 29/09/2026 ("je veux que le design des paramètres ressemble à ça, pour pas
+// avoir tout au même endroit") — capture d'écran des Paramètres Windows 11 fournie en référence :
+// une barre latérale de CATÉGORIES plutôt qu'une simple liste plate. `groupe` range chaque onglet
+// sous l'une des trois catégories ci-dessous (voir PARAMETRES_GROUPES) ; `mon-compte` reste SANS
+// groupe (seul onglet ouvert à tout rôle, affiché à part, jamais noyé dans une catégorie réservée à
+// GERER_PARAMETRES). Voir renderParametres pour le rendu de cette barre latérale.
+const PARAMETRES_GROUPES = [
+  { key: 'entreprise', label: 'Entreprise', icon: ICONS.building },
+  { key: 'modules', label: 'Modules', icon: ICONS.puzzle },
+  { key: 'suivi', label: 'Suivi & conformité', icon: ICONS.shield }
+];
+
 const PARAMETRES_TABS = [
-  { key: 'entreprise', label: 'Entreprise', isVisible: canManageParametres, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
-  { key: 'abonnement', label: 'Abonnement', isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
-  { key: 'etablissements', label: 'Établissements', isVisible: canManageParametres, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
-  { key: 'services', label: 'Services &amp; équipes', isVisible: canManageParametres, render: renderParametresServices, bind: bindParametresServicesEvents },
-  { key: 'listes', label: 'Référentiels', isVisible: canManageParametres, render: renderParametresListes, bind: bindParametresListesEvents },
-  { key: 'calendrier', label: 'Calendrier', isVisible: canManageParametres, render: renderParametresCalendrier, bind: bindParametresCalendrierEvents },
-  { key: 'rh', label: 'RH', isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRH, bind: bindParametresRHEvents },
-  { key: 'types-absences', label: 'Congés et absences', isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
-  { key: 'remuneration', label: 'Rémunération', isVisible: () => canManageParametres() && hasModule('remuneration'), render: renderParametresRemuneration, bind: bindParametresRemunerationEvents },
-  { key: 'planning-teletravail', label: 'Planning et télétravail', isVisible: () => canManageParametres() && hasModule('planning'), render: renderParametresPlanningTeletravail, bind: bindParametresPlanningTeletravailEvents },
-  { key: 'notes-frais', label: 'Notes de frais', isVisible: () => canManageParametres() && hasModule('frais'), render: renderParametresNotesFrais, bind: bindParametresNotesFraisEvents },
-  { key: 'tickets-restaurant', label: 'Tickets restaurant', isVisible: () => canManageParametres() && hasModule('tickets'), render: renderParametresTicketsRestaurant, bind: bindParametresTicketsRestaurantEvents },
-  { key: 'integrations', label: 'Intégrations', isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
-  { key: 'modeles-documents', label: 'Modèles de documents', isVisible: canManageParametres, render: renderParametresModelesDocuments, bind: bindParametresModelesDocumentsEvents },
-  { key: 'registre-personnel', label: 'Registre du personnel', isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRegistrePersonnel, bind: bindParametresRegistrePersonnelEvents },
-  { key: 'audit', label: 'Audit', isVisible: canManageParametres, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
+  { key: 'entreprise', label: 'Entreprise', groupe: 'entreprise', icon: ICONS.building, isVisible: canManageParametres, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
+  { key: 'abonnement', label: 'Abonnement', groupe: 'entreprise', icon: ICONS.card, isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
+  { key: 'etablissements', label: 'Établissements', groupe: 'entreprise', icon: ICONS.cabinet, isVisible: canManageParametres, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
+  { key: 'services', label: 'Services &amp; équipes', groupe: 'entreprise', icon: ICONS.people, isVisible: canManageParametres, render: renderParametresServices, bind: bindParametresServicesEvents },
+  { key: 'listes', label: 'Référentiels', groupe: 'entreprise', icon: ICONS.clipboard, isVisible: canManageParametres, render: renderParametresListes, bind: bindParametresListesEvents },
+  { key: 'calendrier', label: 'Calendrier', groupe: 'entreprise', icon: ICONS.calendar, isVisible: canManageParametres, render: renderParametresCalendrier, bind: bindParametresCalendrierEvents },
+  { key: 'rh', label: 'RH', groupe: 'modules', icon: ICONS.folder, isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRH, bind: bindParametresRHEvents },
+  { key: 'types-absences', label: 'Congés et absences', groupe: 'modules', icon: ICONS.sun, isVisible: () => canManageParametres() && hasModule('conges'), render: renderParametresTypesAbsences, bind: bindParametresTypesAbsencesEvents },
+  { key: 'remuneration', label: 'Rémunération', groupe: 'modules', icon: ICONS.coin, isVisible: () => canManageParametres() && hasModule('remuneration'), render: renderParametresRemuneration, bind: bindParametresRemunerationEvents },
+  { key: 'planning-teletravail', label: 'Planning et télétravail', groupe: 'modules', icon: ICONS.schedule, isVisible: () => canManageParametres() && hasModule('planning'), render: renderParametresPlanningTeletravail, bind: bindParametresPlanningTeletravailEvents },
+  { key: 'notes-frais', label: 'Notes de frais', groupe: 'modules', icon: ICONS.receipt, isVisible: () => canManageParametres() && hasModule('frais'), render: renderParametresNotesFrais, bind: bindParametresNotesFraisEvents },
+  { key: 'tickets-restaurant', label: 'Tickets restaurant', groupe: 'modules', icon: ICONS.utensils, isVisible: () => canManageParametres() && hasModule('tickets'), render: renderParametresTicketsRestaurant, bind: bindParametresTicketsRestaurantEvents },
+  { key: 'integrations', label: 'Intégrations', groupe: 'modules', icon: ICONS.link, isVisible: () => canManageParametres() && (hasModule('conges') || hasModule('planning') || hasModule('frais')), render: renderParametresIntegrations, bind: bindParametresIntegrationsEvents },
+  { key: 'modeles-documents', label: 'Modèles de documents', groupe: 'suivi', icon: ICONS.document, isVisible: canManageParametres, render: renderParametresModelesDocuments, bind: bindParametresModelesDocumentsEvents },
+  { key: 'registre-personnel', label: 'Registre du personnel', groupe: 'suivi', icon: ICONS.orgchart, isVisible: () => canManageParametres() && hasModule('rh'), render: renderParametresRegistrePersonnel, bind: bindParametresRegistrePersonnelEvents },
+  { key: 'audit', label: 'Audit', groupe: 'suivi', icon: ICONS.search, isVisible: canManageParametres, render: renderParametresAuditHub, bind: bindParametresAuditHubEvents },
   // Seul onglet accessible à TOUT rôle (voir le commentaire au-dessus) — photo de profil visible
-  // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé.
-  { key: 'mon-compte', label: 'Mon compte', isVisible: () => true, render: renderParametresMonCompte, bind: bindParametresMonCompteEvents },
+  // ensuite dans le Planning et partout ailleurs où renderAvatar() est utilisé. Sans groupe : affiché
+  // à part dans la barre latérale, jamais sous une catégorie réservée à GERER_PARAMETRES.
+  { key: 'mon-compte', label: 'Mon compte', groupe: null, icon: ICONS.idCard, isVisible: () => true, render: renderParametresMonCompte, bind: bindParametresMonCompteEvents },
 ];
 
 /** `plain` : un `<option>` de `<select>` n'accepte pas de balise HTML dans son texte (voir le
@@ -17909,22 +17918,51 @@ function renderParametres() {
   const visibleTabs = PARAMETRES_TABS.filter(t => t.isVisible());
   const activeTab = PARAMETRES_TABS.find(t => t.key === state.parametresTab) || PARAMETRES_TABS.find(t => t.key === 'mon-compte');
 
+  // §retour Betty du 29/09/2026 ("je veux que le design des paramètres ressemble à ça, pour pas
+  // avoir tout au même endroit") — remplace l'ancienne rangée plate de 17 onglets (repli en menu
+  // déroulant dès qu'elle débordait, voir l'historique ci-dessus) par une barre latérale groupée
+  // par catégorie (voir PARAMETRES_GROUPES), sur le modèle des Paramètres Windows. "Mon compte"
+  // (seul onglet sans groupe, ouvert à tout rôle) reste à part, sous son propre repère.
+  const groupesHtml = PARAMETRES_GROUPES.map(g => {
+    const tabsDuGroupe = visibleTabs.filter(t => t.groupe === g.key);
+    if (!tabsDuGroupe.length) return '';
+    return `
+      <div class="nav-section-label">${g.label}</div>
+      ${tabsDuGroupe.map(t => `
+        <button class="nav-item ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">
+          <span class="nav-icon">${icon(t.icon, 16)}</span>
+          <span class="nav-label">${t.label}${parametresTabCompletionBadge(t.key)}</span>
+        </button>
+      `).join('')}
+    `;
+  }).join('');
+  const monCompteTab = visibleTabs.find(t => t.key === 'mon-compte');
+  const monCompteHtml = monCompteTab ? `
+    <div class="nav-section-label">Mon espace</div>
+    <button class="nav-item ${state.parametresTab === 'mon-compte' ? 'active' : ''}" data-parametres-tab="mon-compte">
+      <span class="nav-icon">${icon(monCompteTab.icon, 16)}</span>
+      <span class="nav-label">${monCompteTab.label}</span>
+    </button>
+  ` : '';
+
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
       <p class="view-subtitle">${canManageParametres() ? "Entreprise, référentiels, calendrier et un onglet par module souscrit" : 'Vos réglages personnels'}</p>
     </div>
-    <div class="tabs parametres-tabs-desktop">
-      ${visibleTabs.map(t => `<button class="tab ${state.parametresTab === t.key ? 'active' : ''}" data-parametres-tab="${t.key}">${t.label}${parametresTabCompletionBadge(t.key)}</button>`).join('')}
-    </div>
-    <!-- §demande 18/08/2026 : 11+ onglets qui se repliaient en plusieurs lignes de boutons sur
-         mobile ("un tas de bouton au même endroit") — un menu déroulant remplace la rangée
-         d'onglets uniquement sous 860px (voir style.css), même sélection (state.parametresTab). -->
-    <select class="input parametres-tab-select" id="parametres-tab-select">
-      ${visibleTabs.map(t => `<option value="${t.key}" ${state.parametresTab === t.key ? 'selected' : ''}>${t.label}${parametresTabCompletionBadge(t.key, true)}</option>`).join('')}
-    </select>
-    <div id="parametres-tab-content">
-      ${activeTab.render()}
+    <div class="parametres-layout">
+      <nav class="parametres-sidebar-desktop">
+        ${groupesHtml}
+        ${monCompteHtml}
+      </nav>
+      <!-- §demande 18/08/2026, conservé : sous 860px (voir style.css), un menu déroulant remplace
+           la barre latérale — même sélection (state.parametresTab). -->
+      <select class="input parametres-tab-select" id="parametres-tab-select">
+        ${visibleTabs.map(t => `<option value="${t.key}" ${state.parametresTab === t.key ? 'selected' : ''}>${t.label}${parametresTabCompletionBadge(t.key, true)}</option>`).join('')}
+      </select>
+      <div id="parametres-tab-content" class="parametres-content">
+        ${activeTab.render()}
+      </div>
     </div>
   `;
 }
@@ -18607,32 +18645,7 @@ function bindParametresIntegrationsEvents() {
   });
 }
 
-/** §correctif retour QA du 27/08/2026 (point 4) : la rangée d'onglets Paramètres passait au menu
- * déroulant uniquement sous 860px (voir style.css) — entre 860px et la largeur réellement nécessaire
- * aux 11 onglets, la rangée débordait sans AUCUN moyen de l'atteindre à la souris (la barre de
- * défilement est volontairement masquée, .tabs, pour tout le reste de l'app — voir ce commentaire —
- * et le glissé tactile n'existe pas sur ordinateur). "Le seuil ne devrait pas être une largeur
- * d'écran mais le fait que les onglets tiennent ou non" : mesure réelle (scrollWidth > clientWidth)
- * plutôt qu'un second seuil de largeur à deviner — bascule vers le menu déroulant dès que ça déborde,
- * à N'IMPORTE QUELLE largeur d'écran, y compris desktop large avec beaucoup de modules souscrits. */
-function checkParametresTabsOverflow() {
-  const tabsRow = document.querySelector('.parametres-tabs-desktop');
-  const select = document.getElementById('parametres-tab-select');
-  if (!tabsRow || !select) return;
-  // Mesure avec la rangée forcée visible (elle a pu être masquée par un précédent appel, ce qui
-  // donnerait 0 débordement en boucle) — puis on retranche la largeur déjà prise par le sélecteur
-  // caché (0 ici) : simplement remettre display:flex avant de mesurer.
-  tabsRow.style.display = 'flex';
-  select.style.display = 'none';
-  const overflowing = tabsRow.scrollWidth > tabsRow.clientWidth + 1; // +1 : tolérance d'arrondi sub-pixel
-  if (overflowing) {
-    tabsRow.style.display = 'none';
-    select.style.display = 'block';
-  }
-}
-
 function bindParametresEvents() {
-  checkParametresTabsOverflow();
   const tabSelect = document.getElementById('parametres-tab-select');
   if (tabSelect) tabSelect.addEventListener('change', () => { state.parametresTab = tabSelect.value; render(); renderSidebar(); });
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {

@@ -1495,9 +1495,27 @@ p { margin: 0; line-height: 1.5; }
    onglets seulement, une rangée compacte reste plus rapide qu'un select). */
 .tabs.tabs-sub .tab { padding: 6px 10px; font-size: 12.5px; }
 
-/* Repli mobile pour les écrans à beaucoup d'onglets (Paramètres, 12+) — voir @media 860px. Caché
-   par défaut : le bouton .tab classique reste le contrôle normal sur desktop. */
+/* Repli mobile pour les écrans à beaucoup d'onglets (Paramètres, 17) — voir @media 860px. Caché
+   par défaut : la barre latérale groupée (.parametres-sidebar-desktop ci-dessous) reste le contrôle
+   normal sur desktop. */
 .parametres-tab-select { display: none; margin-bottom: 18px; }
+
+/* §retour Betty du 29/09/2026 ("je veux que le design des paramètres ressemble à ça, pour pas avoir
+   tout au même endroit") — capture d'écran des Paramètres Windows 11 fournie en référence : une barre
+   latérale de catégories plutôt qu'une rangée plate de 17 onglets (voir PARAMETRES_GROUPES, app.js).
+   Réutilise .nav-item/.nav-section-label tels quels (déjà la charte marine/or de la sidebar
+   principale) — pas de nouvelle classe de bouton à maintenir en double. */
+.parametres-layout { display: flex; align-items: flex-start; gap: 28px; }
+.parametres-sidebar-desktop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 240px;
+  flex-shrink: 0;
+  padding-right: 20px;
+  border-right: 1px solid var(--color-border);
+}
+.parametres-content { flex: 1; min-width: 0; }
 
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 
@@ -3997,8 +4015,11 @@ textarea.input { resize: vertical; font-family: inherit; }
   /* §demande 18/08/2026 : Paramètres a 12+ onglets — même en passant à la ligne, ça fait "un tas de
      boutons au même endroit" sur un petit écran. Remplacé par un simple menu déroulant, natif et
      compact, uniquement sous ce seuil (desktop garde la rangée d'onglets habituelle). */
-  .parametres-tabs-desktop { display: none; }
+  .parametres-sidebar-desktop { display: none; }
   .parametres-tab-select { display: block; }
+  /* Sidebar masquée : le menu déroulant et le contenu doivent s'empiler (repli du flex desktop),
+     sinon ils restent côte à côte en tant qu'items flex et écrasent le contenu (mesuré à 375px). */
+  .parametres-layout { flex-direction: column; gap: 0; }
   #toast-root { bottom: calc(env(safe-area-inset-bottom) + 16px); }
   /* right:-8px avec une largeur proche de 100vw dépassait du bord gauche de l'écran dès que la
      cloche n'était pas collée tout au bord droit (ex. iPhone SE : jusqu'à 20px hors écran).
