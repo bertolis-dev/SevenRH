@@ -4202,7 +4202,6 @@ function renderUserMenuPanel() {
     ${canSeeGroupSummary ? `<button type="button" class="user-menu-item" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
     <div class="user-menu-divider"></div>
-    <button type="button" class="user-menu-item" id="btn-user-menu-mon-compte">${icon(ICONS.gear, 14)} Mon compte</button>
     ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
@@ -4266,12 +4265,6 @@ function renderUserMenuPanel() {
       openGroupSummaryModal();
     });
   }
-
-  document.getElementById('btn-user-menu-mon-compte').addEventListener('click', () => {
-    document.getElementById('user-menu-panel').classList.remove('open');
-    state.parametresTab = 'mon-compte';
-    navigateTo('parametres');
-  });
 
   if (canGererParametres) {
     document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
