@@ -4202,7 +4202,7 @@ function renderUserMenuPanel() {
     ${canSeeGroupSummary ? `<button type="button" class="user-menu-item" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
     <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
     <div class="user-menu-divider"></div>
-    ${canGererParametres ? `<button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>` : ''}
+    <button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>
     ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
     ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
     ${hasModule('conges') ? `<button type="button" class="user-menu-item" id="btn-ical-sync">${icon(ICONS.calendar, 14)} Synchroniser mon calendrier</button>` : ''}
@@ -4266,12 +4266,12 @@ function renderUserMenuPanel() {
     });
   }
 
-  if (canGererParametres) {
-    document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
-      document.getElementById('user-menu-panel').classList.remove('open');
-      navigateTo('parametres');
-    });
-  }
+  // Visible pour TOUT rôle : seule porte d'entrée vers Mon compte pour qui n'a pas gererParametres
+  // (renderParametres retombe sur Mon compte, seul onglet visible dans ce cas).
+  document.getElementById('btn-user-menu-parametres').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    navigateTo('parametres');
+  });
   if (canGererAbonnement) {
     document.getElementById('btn-user-menu-abonnement').addEventListener('click', () => {
       document.getElementById('user-menu-panel').classList.remove('open');
@@ -4688,7 +4688,7 @@ function openChangePasswordModal() {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
-  document.getElementById('change-password-form').addEventListener('submit', (evt) => {
+  document.getElementById('change-password-form').addEventListener('submit', async (evt) => {
     evt.preventDefault();
     const current = document.getElementById('f-current-password').value;
     const p1 = document.getElementById('f-new-password').value;
@@ -4700,7 +4700,16 @@ function openChangePasswordModal() {
       errorEl.style.display = 'block';
       return;
     }
-    const result = authRepository.changePassword(authRepository.getCurrentUser().id, current, p1);
+    const submitBtn = evt.target.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    // changePassword est asynchrone (Supabase Auth) : sans await, result.success valait toujours undefined.
+    let result;
+    try {
+      result = await authRepository.changePassword(authRepository.getCurrentUser().id, current, p1);
+    } catch (err) {
+      result = { success: false, error: (err && err.message) || 'Erreur lors du changement de mot de passe.' };
+    }
+    if (submitBtn) submitBtn.disabled = false;
     if (!result.success) {
       errorEl.textContent = result.error;
       errorEl.style.display = 'block';
