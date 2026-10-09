@@ -15360,7 +15360,9 @@ function handleBulkApproveRequests(categorie) {
   let approved = 0, skipped = 0;
   selection.forEach(id => {
     const request = leaveRepository.getById(id);
-    if (!request || !canActOnRequestFor(request)) { skipped++; return; }
+    // Une demande refusée/annulée depuis sa ligne reste cochée dans la sélection : sans ce test elle
+    // repassait en Validé (audit du 09/10/2026).
+    if (!request || request.statut !== 'En attente' || !canActOnRequestFor(request)) { skipped++; return; }
     const patch = advanceWorkflow(request, 'Validé', currentActorRoleLabel());
     leaveRepository.update(id, patch);
     auditLogRepository.logAudit('Validation', 'Demande de congé', auditLabelForEmployee(request.employeeId), auditDetailsForActor());

@@ -7945,9 +7945,15 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   // période continue depuis l'embauche, comme avant ce champ).
   if (!leaveType.dateClotureCompteur) {
     const acquis = calculateAcquisition(employee, leaveType, refDate, undefined, allRequests, types);
-    const requests = requestsFor(null, null);
-    const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
-    const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + r.nbJours, 0);
+    // §tour du 09/10/2026 : calculateAcquisition ne couvre que l'ANNÉE CIVILE de refDate — les jours
+    // pris/en attente doivent se borner à la même année, sinon 3 jours pris en 2026 amputaient le solde
+    // 2027 dès le 1er janvier (et créaient de fausses anomalies de compteur négatif en paie).
+    const refYear = toRefDate(refDate).getFullYear();
+    const anneeDebut = new Date(refYear, 0, 1);
+    const anneeFin = new Date(refYear, 11, 31);
+    const requests = requestsFor(anneeDebut, anneeFin);
+    const pris = requests.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, anneeDebut, anneeFin), 0);
+    const enAttente = requests.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, anneeDebut, anneeFin), 0);
     const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
     return { acquis, pris, enAttente, disponible, ajustement, conventionCollectiveBonus };
   }
