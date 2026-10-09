@@ -40,6 +40,13 @@ async function runIsManagerOfEmployee() {
   console.log('OK — delegation-validation-14-09.test.js (isManagerOfEmployee : délégataire traité comme manager UNIQUEMENT pendant la fenêtre de délégation, jamais en dehors, jamais hors de l\'équipe déléguée)');
 }
 
+// Fenêtre relative à aujourd'hui : une date écrite en dur finit toujours par sortir de la fenêtre au changement de mois.
+function toISODateLocal(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 async function runValidationWorkflow() {
   const { DB, sandbox, employeeRepository, isCurrentWorkflowStepFor } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
@@ -55,7 +62,7 @@ async function runValidationWorkflow() {
   // Avant toute délégation : le remplaçant (pourtant manager d'ailleurs) ne peut pas valider CETTE demande.
   assert.strictEqual(isCurrentWorkflowStepFor(request, remplacant, 'absence'), false);
 
-  employeeRepository.update(manager.id, { delegations: [{ id: 'd1', delegataireId: remplacant.id, dateDebut: '2026-09-01', dateFin: '2026-09-30', dateCreation: new Date().toISOString() }] });
+  employeeRepository.update(manager.id, { delegations: [{ id: 'd1', delegataireId: remplacant.id, dateDebut: toISODateLocal(-5), dateFin: toISODateLocal(25), dateCreation: new Date().toISOString() }] });
   const remplacantAJour = employeeRepository.getById(remplacant.id);
   assert.strictEqual(isCurrentWorkflowStepFor(request, remplacantAJour, 'absence'), true, 'une fois délégué, le remplaçant doit pouvoir valider à l\'étape "manager" de la demande de l\'équipe déléguée');
 
@@ -75,7 +82,7 @@ async function runEcran() {
   assert.ok(htmlVide.includes('Délégation de validation'));
   assert.ok(htmlVide.includes('Aucune délégation en cours'));
 
-  employeeRepository.update(manager.id, { delegations: [{ id: 'd1', delegataireId: salarie.id, dateDebut: '2026-09-01', dateFin: '2026-09-30', dateCreation: new Date().toISOString() }] });
+  employeeRepository.update(manager.id, { delegations: [{ id: 'd1', delegataireId: salarie.id, dateDebut: toISODateLocal(-5), dateFin: toISODateLocal(25), dateCreation: new Date().toISOString() }] });
   const managerAJour = employeeRepository.getById(manager.id);
   const html = renderDelegationCard(managerAJour);
   assert.ok(html.includes(salarie.prenom), 'le nom du délégataire doit apparaître');

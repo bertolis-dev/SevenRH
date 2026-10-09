@@ -131,8 +131,9 @@ async function run() {
 
   // ---- Calendrier entreprise (renderAbsenceCalendarRow) : affiche la demi-journée sur la barre ----
   {
-    const { DB, getHalfDayForDate, computeAbsenceCalendarSegments, renderAbsenceCalendarRow } = loadAppJs();
+    const { DB, state, getHalfDayForDate, computeAbsenceCalendarSegments, renderAbsenceCalendarRow } = loadAppJs();
     DB.init();
+    state.calendarYear = 2026; state.calendarMonth = 8; // renderAbsenceCalendarRow lit le mois affiché, pas le mois réel
     const employee = DB.getEmployees()[0];
     const cp = DB.getLeaveTypes().find(t => /congés payés/i.test(t.nom));
     const leaveTypesById = new Map(DB.getLeaveTypes().map(t => [t.id, t]));
