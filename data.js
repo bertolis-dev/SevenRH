@@ -2484,7 +2484,7 @@ const DB = {
     if (!employee) return null;
     const contrats = (employee.contrats || []).map(c => ({ ...c }));
     if (data.dateDebut) {
-      const veille = toISODate(new Date(parseISODateLocal(data.dateDebut).getTime() - 86400000));
+      const veille = toISODate(addDays(parseISODateLocal(data.dateDebut), -1)); // addDays (setDate) : -86400000 ms donnait l'avant-veille au lendemain du passage à l'heure d'été
       contrats.forEach(c => { if (!c.dateFin) c.dateFin = veille; });
     }
     // §retour Betty du 22/09/2026 (point 3.1) : poste/classification/statutCadre/etablissementId/
@@ -7997,8 +7997,8 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   // donc décalé d'un cran vers l'arrière : il relie désormais "précédente" (devenue LA période
   // disponible) à "encore avant" (previous2), exactement la même mécanique qu'avant ce correctif.
   const current = getCompteurPeriodBounds(leaveType.dateClotureCompteur, refDate);
-  const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, new Date(current.periodStart.getTime() - 86400000));
-  const previous2 = getCompteurPeriodBounds(leaveType.dateClotureCompteur, new Date(previous.periodStart.getTime() - 86400000));
+  const previous = getCompteurPeriodBounds(leaveType.dateClotureCompteur, addDays(current.periodStart, -1));
+  const previous2 = getCompteurPeriodBounds(leaveType.dateClotureCompteur, addDays(previous.periodStart, -1));
 
   // ---- Période EN COURS D'ACQUISITION (current) : purement informatif, jamais consommable avant sa
   //      propre clôture — jamais mélangé au solde disponible ci-dessous. ----
@@ -8240,7 +8240,9 @@ function calculateTurnoverRate(employees, refDate) {
   const depuis = toISODate(addDays(ref, -365));
   const sorties = employees.filter(e => e.dateDepart && e.dateDepart >= depuis && e.dateDepart <= refStr).length;
   const entrees = employees.filter(e => e.dateEmbauche && e.dateEmbauche >= depuis && e.dateEmbauche <= refStr).length;
-  const effectifFin = employees.filter(e => e.statut === 'Actif').length;
+  // Les salariés archivés restent dans la liste reçue (une sortie se traduit presque toujours par un
+  // archivage, voir setArchived) pour être comptés parmi les sorties, mais jamais dans l'effectif actuel.
+  const effectifFin = employees.filter(e => e.statut === 'Actif' && !e.archive).length;
   const effectifDebut = Math.max(0, effectifFin - entrees + sorties);
   const effectifMoyen = (effectifDebut + effectifFin) / 2;
   if (!effectifMoyen) return 0;

@@ -6112,7 +6112,7 @@ function renderNotifPanel() {
     <div class="notif-list">
       ${list.length === 0 ? `<div class="search-empty">Rien à signaler ici.</div>` : itemsHtml}
     </div>
-    ${renderPaginationControls(page, totalPages, pageStart, list.length, filtered.length)}
+    ${renderPaginationControls(page, totalPages, pageStart, list.length, filtered.length, 'notif-page')}
   `;
 
   panel.querySelectorAll('[data-notif-tab]').forEach(btn => {
@@ -6134,9 +6134,9 @@ function renderNotifPanel() {
     });
   }
 
-  const prevBtn = document.getElementById('btn-page-prev');
+  const prevBtn = document.getElementById('notif-page-prev');
   if (prevBtn) prevBtn.addEventListener('click', (e) => { e.stopPropagation(); state.notifPage--; renderNotifPanel(); });
-  const nextBtn = document.getElementById('btn-page-next');
+  const nextBtn = document.getElementById('notif-page-next');
   if (nextBtn) nextBtn.addEventListener('click', (e) => { e.stopPropagation(); state.notifPage++; renderNotifPanel(); });
 
   bindNotifItemEvents();
@@ -6217,7 +6217,15 @@ function navigateTo(view, params = {}) {
   // les appelants qui veulent explicitement cibler un autre onglet (voir syncNotifications
   // ci-dessus) passent employeeDetailTab dans leurs propres params.
   if ((view === 'employee-detail' || view === 'ma-fiche') && !('employeeDetailTab' in params)) params = { ...params, employeeDetailTab: 'fiche' };
-  Object.assign(state, params);
+  // Copie des objets/tableaux passés (ex. fraisFilters de NAVPARAMS_FRAIS_A_VALIDER) : les filtres sont
+  // ensuite modifiés EN PLACE (state.fraisFilters.employeeId = ...), ce qui altérait la constante
+  // partagée et faisait réapparaître d'anciens filtres au prochain « à valider » (audit du 09/10/2026).
+  const copie = {};
+  Object.keys(params).forEach(k => {
+    const v = params[k];
+    copie[k] = Array.isArray(v) ? v.slice() : (v && typeof v === 'object' ? { ...v } : v);
+  });
+  Object.assign(state, copie);
   renderSidebar();
   syncNotifications();
   updateNotifBadge();
@@ -7102,7 +7110,8 @@ function renderDashboardProprietaire() {
   const actifs = employees.filter(e => e.statut === 'Actif');
   const year = new Date().getFullYear();
 
-  const turnover = calculateTurnoverRate(employees);
+  // Tous les salariés, archivés compris : ceux qui sont partis sont archivés (voir calculateTurnoverRate).
+  const turnover = calculateTurnoverRate(employeeRepository.getAll());
   const anciennete = calculateAverageAnciennete(employees);
   const absenteisme = calculateAbsenteeismRate(employees, leaveRequests, leaveTypes, year);
   const fraisValides = expenses.filter(n => (n.statut === 'Remboursé') && String(n.date).startsWith(String(year)));
@@ -8261,15 +8270,18 @@ function paginate(list, pageStateKey) {
   return { pageItems: list.slice(pageStart, pageStart + LIST_PAGE_SIZE), totalPages, page, pageStart };
 }
 
-function renderPaginationControls(page, totalPages, pageStart, pageCount, total) {
+// idPrefix : le panneau de notifications reste dans le DOM (avant #view-root) même fermé — avec les mêmes
+// id que les listes, getElementById('btn-page-prev') retournait SES boutons et la pagination des listes
+// (Frais, Congés, Audit...) ne répondait plus après avoir ouvert la cloche (audit du 09/10/2026).
+function renderPaginationControls(page, totalPages, pageStart, pageCount, total, idPrefix = 'btn-page') {
   if (totalPages <= 1) return '';
   return `
     <div class="pagination-bar">
       <p class="text-muted">${pageStart + 1}–${pageStart + pageCount} sur ${total}</p>
       <div class="pagination-controls">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-page-prev" ${page <= 1 ? 'disabled' : ''}>← Précédent</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="${idPrefix}-prev" ${page <= 1 ? 'disabled' : ''}>← Précédent</button>
         <span class="text-muted">Page ${page} / ${totalPages}</span>
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-page-next" ${page >= totalPages ? 'disabled' : ''}>Suivant →</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="${idPrefix}-next" ${page >= totalPages ? 'disabled' : ''}>Suivant →</button>
       </div>
     </div>
   `;
@@ -9856,7 +9868,7 @@ function openOrganigrammePrintModal() {
       </div>
       <div class="modal-body">
         <div class="print-area print-document print-landscape">
-          ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${escapeHtml(f.service)}` : ''}${f.equipe ? ` · ${escapeHtml(f.equipe)}` : ''}`)}
+          ${renderPrintDocumentHeader(companyRepository.getProfile(), 'Organigramme', `${employees.length} salarié${employees.length > 1 ? 's' : ''} actif${employees.length > 1 ? 's' : ''}${f.service ? ` · ${f.service}` : ''}${f.equipe ? ` · ${f.equipe}` : ''}`)}
           <ul class="org-tree">
             ${employees.length ? renderOrgSiblings(roots, childrenOf, true) : '<li><p class="text-muted">Aucun salarié ne correspond à ces filtres.</p></li>'}
           </ul>
@@ -12554,13 +12566,25 @@ function openAjouterAvenantModal(employeeId) {
       showToast('Indiquez la nouvelle valeur, ou choisissez "Aucun changement de valeur".', 'error');
       return;
     }
+    // Champs numériques : le placeholder suggère « 2 800 » (espace) et la virgule décimale française
+    // est courante — Number('2 800') valait NaN, écrit tel quel sur la fiche ET le contrat (audit du
+    // 09/10/2026). La valeur est normalisée ici, ou refusée si ce n'est pas un nombre.
+    let nouvelleValeur = champModifie ? document.getElementById('f-avenant-nouvelle-valeur').value.trim() : null;
+    if (champModifie && ['salaireBrutMensuel', 'pourcentageActivite', 'horairesHebdo'].includes(champModifie)) {
+      const nombre = Number(nouvelleValeur.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+      if (!Number.isFinite(nombre) || nombre < 0) {
+        showToast('La nouvelle valeur doit être un nombre positif (ex. 2800 ou 2800,50).', 'error');
+        return;
+      }
+      nouvelleValeur = String(nombre);
+    }
     employeeRepository.ajouterAvenant(employeeId, {
       type: document.getElementById('f-avenant-type').value,
       date,
       description: document.getElementById('f-avenant-description').value.trim(),
       contratId: contratSelect ? contratSelect.value : null,
       champModifie: champModifie || null,
-      nouvelleValeur: champModifie ? document.getElementById('f-avenant-nouvelle-valeur').value.trim() : null
+      nouvelleValeur
     });
     closeModal();
     showToast('Avenant enregistré.');
@@ -24133,6 +24157,10 @@ function openPointageScanModal() {
 
   const tick = () => {
     if (stopped) return;
+    // Échap ou un clic sur le fond appellent closeModal() directement (sans passer par finishClose) :
+    // la vidéo quitte alors le document. Sans ce test, la caméra restait allumée et un QR visible
+    // enregistrait un pointage à l'insu de l'utilisateur (audit du 09/10/2026).
+    if (!document.contains(video)) { stop(); return; }
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -25368,11 +25396,14 @@ async function submitExpenseForm(evt) {
     const messages = [];
     if (doublon) messages.push('Une note très similaire (même salarié, même date, même montant, même catégorie) existe déjà.');
     if (plafondDepasse) messages.push(`Ce montant dépasse le plafond habituel de ${formatCurrencyFR(categorieConfig.plafond)} pour "${categorie}".`);
+    // openConfirm ferme la modale (donc closeModal remet pendingAttachmentFile à null) AVANT onConfirm :
+    // le justificatif doit être capturé ici, sinon « Envoyer quand même » le perdait sans message.
+    const justificatifEnAttente = state.pendingAttachmentFile;
     openConfirm({
       title: isEditing ? 'Confirmer la modification ?' : 'Confirmer l\'envoi de cette note ?',
       message: messages.join(' '),
       confirmLabel: isEditing ? 'Enregistrer quand même' : 'Envoyer quand même',
-      onConfirm: () => finalizeExpenseSubmit(data, submitBtn, editingExpenseId)
+      onConfirm: () => finalizeExpenseSubmit(data, submitBtn, editingExpenseId, justificatifEnAttente)
     });
     return;
   }
@@ -25385,7 +25416,7 @@ async function submitExpenseForm(evt) {
  * saisie depuis zéro. editingExpenseId est un PARAMÈTRE explicite, jamais relu depuis
  * state.editingExpenseId ici : openConfirm ferme déjà la modale (donc remet ce state à null, voir
  * closeModal) avant d'appeler onConfirm. */
-async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId) {
+async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId, justificatifFile = state.pendingAttachmentFile) {
   // §correctif audit du 01/09/2026 : voir le même garde-fou dans submitLeaveRequestForm.
   if (submitBtn) submitBtn.disabled = true;
 
@@ -25413,7 +25444,7 @@ async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId) {
     if (data.categorie === 'Kilométrique' && anneeNouvelle !== anneeOrigine) expenseRepository.recalculerIndemnitesKilometriques(data.employeeId, anneeNouvelle);
     uploadJustificatifBestEffort({
       uploader: window.SupabaseSync.uploadJustificatifFile,
-      employeeId: data.employeeId, recordId: id, file: state.pendingAttachmentFile,
+      employeeId: data.employeeId, recordId: id, file: justificatifFile,
       patcher: (justificatif) => expenseRepository.update(id, { justificatif })
     });
     auditLogRepository.logAudit('Modification', 'Note de frais', auditLabelForEmployee(data.employeeId), auditDetailsForActor());
@@ -25428,7 +25459,7 @@ async function finalizeExpenseSubmit(data, submitBtn, editingExpenseId) {
 
   uploadJustificatifBestEffort({
     uploader: window.SupabaseSync.uploadJustificatifFile,
-    employeeId: data.employeeId, recordId: createdExpense.id, file: state.pendingAttachmentFile,
+    employeeId: data.employeeId, recordId: createdExpense.id, file: justificatifFile,
     patcher: (justificatif) => expenseRepository.update(createdExpense.id, { justificatif })
   });
 

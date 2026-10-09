@@ -268,7 +268,7 @@ async function run() {
     const panelHtml = sandbox.document.getElementById('notif-panel').innerHTML;
     assert.ok(panelHtml.includes('Page 1 / 2'), '25 notifications avec des pages de 20 (LIST_PAGE_SIZE) doivent donner 2 pages');
     assert.ok(!panelHtml.includes('Affichage limité'), 'l\'ancien plafond fixe sans suite possible ne doit plus jamais apparaître');
-    assert.ok(panelHtml.includes('id="btn-page-next"'), 'un vrai contrôle de pagination doit être présent');
+    assert.ok(panelHtml.includes('id="notif-page-next"'), 'un vrai contrôle de pagination doit être présent (id propre au panneau : voir renderPaginationControls)');
   }
 
   console.log('OK — refonte-ux-09-09.test.js (planning des absences du calendrier avec quantièmes début/fin, design carte du Planning Semaine, couleurs congé/télétravail alignées, tableaux carte mobile généralisés, popover filtres généralisé, sommaire formulaire salarié, pagination notifications)');
