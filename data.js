@@ -5227,7 +5227,7 @@ const DB = {
     if (!company) {
       this.removeSavedAccount(accountId);
       await this._restoreSessionAfterFailedSwitch(previousAccountId);
-      return { success: false, error: 'Aucun salarié associé à ce compte.' };
+      return { success: false, error: "Aucun salarié actif n'est associé à ce compte (compte archivé ou inexistant). Contactez votre RH." };
     }
     this._currentEmployeeId = company._currentEmployeeId;
     this._companiesCache = [company];
@@ -5307,7 +5307,7 @@ const DB = {
     if (!company) {
       await window.SupabaseSync.signOut();
       await this._purgeLocalCompanyCache();
-      return { success: false, error: 'Aucun salarié associé à ce compte.' };
+      return { success: false, error: "Aucun salarié actif n'est associé à ce compte (compte archivé ou inexistant). Contactez votre RH." };
     }
     const statutAbonnement = company.abonnement && company.abonnement.statut;
     if (statutAbonnement === 'suspendu' || statutAbonnement === 'resilie') {

@@ -71,3 +71,31 @@ try {
   console.error(err.stack || err.message);
   process.exitCode = 1;
 }
+
+// ---- Lot 2 : comptes archivés ----
+function runLesComptesArchivesNOntPlusAucunDroit() {
+  const sql = read('supabase', 'migrations', '0067_comptes_archives_sans_acces.sql');
+  ['current_employee_id', 'current_company_id', 'current_role_name'].forEach(fn => {
+    const re = new RegExp('create or replace function ' + fn + '\\(\\)[\\s\\S]*?and not archive limit 1;');
+    assert.ok(re.test(sql), `${fn}() doit ignorer les comptes archivés`);
+  });
+  assert.ok(/select \* into emp from employees where auth_user_id = auth\.uid\(\) and not archive limit 1;/.test(sql), 'has_permission() doit ignorer les comptes archivés');
+  // Même catalogue de permissions que la dernière définition (0033) : seule la sélection du salarié change.
+  const ancien = read('supabase', 'migrations', '0033_role_proprietaire.sql');
+  const catalogue = (s) => (s.match(/default_perms := case emp\.role[\s\S]*?end;/) || [''])[0];
+  assert.strictEqual(catalogue(sql), catalogue(ancien), 'le catalogue de permissions par rôle ne doit pas dériver de la dernière définition');
+  console.log('OK — escalade-privileges-accuse-lecture-09-10.test.js (migration 0067 : un salarié archivé perd tout accès, catalogue de permissions inchangé)');
+}
+try { runLesComptesArchivesNOntPlusAucunDroit(); } catch (err) { console.error('ÉCHEC — escalade-privileges-accuse-lecture-09-10.test.js'); console.error(err.stack || err.message); process.exitCode = 1; }
+
+function runLesCvSontSupprimablesEtLeWebhookStripeRejoueLesEchecs() {
+  const sql = read('supabase', 'migrations', '0067_comptes_archives_sans_acces.sql');
+  assert.ok(/create policy candidatures_files_delete on storage\.objects for delete/.test(sql), 'le bucket des CV doit avoir une policy DELETE');
+  assert.ok(/current_company_id\(\) \|\| '\/%'/.test(sql) && /has_permission\('creerSalarie'\)/.test(sql), 'limitée au dossier de son entreprise et au droit de supprimer la candidature');
+
+  const wh = read('supabase', 'functions', 'stripe-webhook', 'index.ts');
+  assert.ok(/error\.code === "23505"\) return true;\s*\n\s*throw error;/.test(wh), 'seule une violation de clé primaire vaut "déjà traité"');
+  assert.ok(/from\("processed_stripe_events"\)\.delete\(\)\.eq\("event_id", event\.id\)/.test(wh), 'un traitement en échec doit retirer l\'événement pour que Stripe le rejoue');
+  console.log('OK — escalade-privileges-accuse-lecture-09-10.test.js (CV supprimables du stockage, webhook Stripe : un échec est rejoué)');
+}
+try { runLesCvSontSupprimablesEtLeWebhookStripeRejoueLesEchecs(); } catch (err) { console.error('ÉCHEC — escalade-privileges-accuse-lecture-09-10.test.js'); console.error(err.stack || err.message); process.exitCode = 1; }

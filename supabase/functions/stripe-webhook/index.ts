@@ -121,7 +121,12 @@ async function alreadyProcessed(eventId: string): Promise<boolean> {
   // Stripe peut renvoyer le même événement plusieurs fois (retry réseau) — l'insertion échoue si
   // déjà présent (clé primaire), ce qui nous dit directement "déjà traité, ne rien refaire".
   const { error } = await supabaseAdmin.from("processed_stripe_events").insert({ event_id: eventId });
-  return !!error;
+  if (!error) return false;
+  // 23505 = violation de clé primaire : l'événement est réellement déjà enregistré. Toute AUTRE
+  // erreur (base indisponible...) ne prouve rien : elle remonte pour que Stripe réessaie, au lieu
+  // d'être prise pour "déjà traité" et de perdre l'événement (audit du 09/10/2026).
+  if (error.code === "23505") return true;
+  throw error;
 }
 
 async function companyIdFromSubscription(subscription: any): Promise<string | null> {
@@ -148,8 +153,13 @@ Deno.serve(async (req) => {
     return new Response("Signature invalide", { status: 400 });
   }
 
-  if (await alreadyProcessed(event.id)) {
-    return new Response("Déjà traité", { status: 200 });
+  try {
+    if (await alreadyProcessed(event.id)) {
+      return new Response("Déjà traité", { status: 200 });
+    }
+  } catch (err) {
+    console.error("Enregistrement de l'événement Stripe impossible:", err);
+    return new Response("Erreur interne", { status: 500 });
   }
 
   try {
@@ -189,6 +199,9 @@ Deno.serve(async (req) => {
     }
   } catch (err) {
     console.error(`Erreur traitement ${event.type}:`, err);
+    // L'identifiant a été enregistré AVANT le traitement : sans ce retrait, le nouvel envoi de Stripe
+    // recevrait "Déjà traité" et l'événement raté (résiliation, impayé...) ne serait jamais rejoué.
+    await supabaseAdmin.from("processed_stripe_events").delete().eq("event_id", event.id);
     return new Response("Erreur interne", { status: 500 });
   }
 
