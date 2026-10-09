@@ -60,19 +60,19 @@ async function run() {
 
     // RH tente de confirmer À LA PLACE du salarié : doit être refusé, jamais enregistré.
     DB._currentEmployeeId = rh.id;
-    confirmerAccuseLectureDocument(doc.id);
+    await confirmerAccuseLectureDocument(doc.id);
     assert.strictEqual(documentRepository.getById(doc.id).accuseLectureAt, null, 'RH ne doit jamais pouvoir confirmer à la place du salarié, même en appelant la fonction directement');
 
     // Le salarié concerné confirme : horodatage + auteur enregistrés.
     DB._currentEmployeeId = salarie.id;
-    confirmerAccuseLectureDocument(doc.id);
+    await confirmerAccuseLectureDocument(doc.id);
     const docConfirme = documentRepository.getById(doc.id);
     assert.ok(docConfirme.accuseLectureAt, 'la confirmation par le bon salarié doit enregistrer un horodatage');
     assert.strictEqual(docConfirme.accuseLecturePar, salarie.id);
 
     // Une seconde tentative (déjà confirmé) ne doit rien changer, ni planter.
     const horodatageInitial = docConfirme.accuseLectureAt;
-    confirmerAccuseLectureDocument(doc.id);
+    await confirmerAccuseLectureDocument(doc.id);
     assert.strictEqual(documentRepository.getById(doc.id).accuseLectureAt, horodatageInitial, 'une confirmation déjà enregistrée ne doit jamais être écrasée par une seconde tentative');
   }
 

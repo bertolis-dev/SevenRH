@@ -74,6 +74,8 @@ globalThis.__teleworkRequestToRow = teleworkRequestToRow;
 globalThis.__teleworkRequestFromRow = teleworkRequestFromRow;
 globalThis.__expenseToRow = expenseToRow;
 globalThis.__expenseFromRow = expenseFromRow;
+globalThis.__documentToRow = documentToRow;
+globalThis.__documentFromRow = documentFromRow;
 `;
   vm.runInContext(withoutImport + expose, sandbox, { filename: 'supabase-client.js' });
 
@@ -87,6 +89,8 @@ globalThis.__expenseFromRow = expenseFromRow;
     leaveTypeFromRow: sandbox.__leaveTypeFromRow,
     leaveRequestToRow: sandbox.__leaveRequestToRow,
     leaveRequestFromRow: sandbox.__leaveRequestFromRow,
+    documentToRow: sandbox.__documentToRow,
+    documentFromRow: sandbox.__documentFromRow,
     teleworkRequestToRow: sandbox.__teleworkRequestToRow,
     teleworkRequestFromRow: sandbox.__teleworkRequestFromRow,
     expenseToRow: sandbox.__expenseToRow,

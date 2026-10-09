@@ -10018,14 +10018,19 @@ function bindDocumentRowEvents(scopeSelector) {
 /** Défense en profondeur (même raisonnement que openRegulariserModal, etc.) : rejoue la même
  * condition que le bouton (renderDocumentRow) au cas où l'appelant serait sollicité autrement qu'en
  * cliquant ce bouton précis. */
-function confirmerAccuseLectureDocument(documentId) {
+async function confirmerAccuseLectureDocument(documentId) {
   const doc = documentRepository.getById(documentId);
   const user = authRepository.getCurrentUser();
   if (!doc || !doc.accuseLectureRequis || doc.accuseLectureAt || user.id !== doc.employeeId) {
     showToast('Action non autorisée.', 'error');
     return;
   }
-  documentRepository.update(documentId, { accuseLectureAt: new Date().toISOString(), accuseLecturePar: user.id });
+  const result = await documentRepository.accuserLecture(documentId, user.id);
+  if (!result.success) {
+    showToast(result.error, 'error');
+    render();
+    return;
+  }
   auditLogRepository.logAudit('Confirmation', 'Accusé de lecture', doc.nom);
   showToast('Confirmation enregistrée.');
   render();

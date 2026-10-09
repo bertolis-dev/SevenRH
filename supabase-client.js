@@ -209,6 +209,8 @@ function documentFromRow(row) {
     id: row.id, employeeId: row.employee_id, categorie: row.categorie ?? '', nom: row.nom ?? '',
     dateExpiration: row.date_expiration ?? '',
     fichier: row.fichier_path ? { nom: row.nom, path: row.fichier_path } : null,
+    accuseLectureRequis: row.accuse_lecture_requis ?? false, accuseLectureAt: row.accuse_lecture_at ?? null,
+    accuseLecturePar: row.accuse_lecture_par ?? null, diffusionId: row.diffusion_id ?? null,
     dateCreation: row.created_at, dateModification: row.created_at
   };
 }
@@ -341,7 +343,11 @@ function documentToRow(d, companyId) {
   return {
     id: d.id, company_id: companyId, employee_id: d.employeeId,
     categorie: d.categorie || '', nom: d.nom || '', date_expiration: d.dateExpiration || null,
-    fichier_path: (d.fichier && d.fichier.path) || null
+    fichier_path: (d.fichier && d.fichier.path) || null,
+    // accuse_lecture_at/par volontairement absents : posés UNIQUEMENT par accuser_lecture_document (RPC,
+    // 0066) — un upsert depuis le cache d'un RH, possiblement périmé, effacerait sinon la confirmation
+    // qu'un salarié vient de donner.
+    accuse_lecture_requis: Boolean(d.accuseLectureRequis), diffusion_id: d.diffusionId || null
   };
 }
 
@@ -1251,6 +1257,13 @@ const pushEtablissements = (rows, companyId) => syncTable('etablissements', rows
 const pushServices = (rows, companyId) => syncTable('services', rows, serviceToRow, companyId);
 const pushLeaveTypes = (rows, companyId) => syncTable('leave_types', rows, leaveTypeToRow, companyId);
 const pushDocuments = (rows, companyId) => syncTable('documents', rows, documentToRow, companyId);
+
+/** Accusé de lecture d'un document par le salarié concerné (0066) : seule écriture du salarié sur la
+ * table documents, via une fonction qui ne touche que SES lignes réclamant un accusé. */
+async function accuserLectureDocument(documentId) {
+  const { error } = await supabase.rpc('accuser_lecture_document', { p_document_id: documentId });
+  if (error) throw error;
+}
 // Insertion uniquement, jamais un resync complet (voir DB.addSupportTicket, data.js) — un ticket
 // existant n'est jamais réécrit via cette fonction.
 const pushSupportTickets = (rows, companyId) => insertRows('support_tickets', rows, ticketToRow, companyId);
@@ -1489,7 +1502,7 @@ window.SupabaseSync = {
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
-  pushTeleworkRequests, pushExpenses, pushDocuments, pushDrafts, pushNotifications,
+  pushTeleworkRequests, pushExpenses, pushDocuments, accuserLectureDocument, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog, reportClientErrorToBertolis,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien,

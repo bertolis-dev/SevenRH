@@ -88,11 +88,25 @@ Deno.serve(async (req) => {
 
   const { data: employee, error: empErr } = await supabaseAdmin
     .from("employees")
-    .select("id, email, company_id, auth_user_id, data")
+    .select("id, email, company_id, auth_user_id, data, role")
     .eq("id", employeeId)
     .maybeSingle();
   if (empErr || !employee || employee.company_id !== companyId) {
     return jsonResponse({ error: "Salarié introuvable dans votre entreprise." }, 404);
+  }
+
+  // Un compte Propriétaire ne se gère que par le Propriétaire lui-même (audit du 09/10/2026) :
+  // sans cette vérification, un RH (gererUtilisateurs par défaut) réinitialisait le mot de passe du
+  // Propriétaire, se connectait à sa place et héritait de la facturation et du transfert de propriété.
+  if (employee.role === "proprietaire") {
+    const { data: caller } = await supabaseAdmin
+      .from("employees")
+      .select("role")
+      .eq("id", callerEmployeeId)
+      .maybeSingle();
+    if (!caller || caller.role !== "proprietaire") {
+      return jsonResponse({ error: "Seul le Propriétaire peut gérer le compte de connexion du Propriétaire." }, 403);
+    }
   }
 
   const tempPassword = generateTempPassword();

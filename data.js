@@ -4375,6 +4375,30 @@ const DB = {
     return this.getDocuments().find(d => d.id === id) || null;
   },
 
+  /** Accusé de lecture par le salarié concerné : écriture locale immédiate puis RPC dédiée (0066) —
+   * jamais saveDocuments (resync complet de la table, refusé par RLS à un salarié, et qui effacerait
+   * des lignes par omission). En cas d'échec serveur, l'état local est rétabli : une confirmation
+   * jamais enregistrée ne doit pas s'afficher comme valide. */
+  async accuserLectureDocument(id, employeeId) {
+    const company = this.getCurrentCompany();
+    const doc = (company.documents || []).find(d => d.id === id);
+    if (!doc) return { success: false, error: 'Document introuvable.' };
+    const avant = { at: doc.accuseLectureAt || null, par: doc.accuseLecturePar || null };
+    doc.accuseLectureAt = new Date().toISOString();
+    doc.accuseLecturePar = employeeId;
+    this.saveCurrentCompany(company);
+    try {
+      await window.SupabaseSync.accuserLectureDocument(id);
+      return { success: true };
+    } catch (err) {
+      console.error("Échec de l'accusé de lecture :", err);
+      const c2 = this.getCurrentCompany();
+      const d2 = (c2.documents || []).find(d => d.id === id);
+      if (d2) { d2.accuseLectureAt = avant.at; d2.accuseLecturePar = avant.par; this.saveCurrentCompany(c2); }
+      return { success: false, error: "La confirmation n'a pas pu être enregistrée. Réessayez." };
+    }
+  },
+
   getDocumentsForEmployee(employeeId) {
     return this.getDocuments()
       .filter(d => d.employeeId === employeeId)
@@ -5617,6 +5641,7 @@ const documentRepository = {
   getForEmployee: (employeeId) => DB.getDocumentsForEmployee(employeeId),
   create: (data) => DB.addDocument(data),
   update: (id, patch) => DB.updateDocument(id, patch),
+  accuserLecture: (id, employeeId) => DB.accuserLectureDocument(id, employeeId),
   delete: (id) => DB.deleteDocument(id),
   diffuser: (data) => DB.diffuserDocument(data),
   resolveEmployeesForScope: (scope) => DB.resolveEmployeesForDiffusionScope(scope),
