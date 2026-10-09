@@ -829,7 +829,7 @@ async function hydrateCurrentCompanyWithMigrations() {
       try {
         const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
           teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-          brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+          brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
         await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
       } catch (err) {
         console.error('seedExampleShifts : échec de synchronisation, retentera à la prochaine connexion.', err);
@@ -890,7 +890,7 @@ async function ensureDefaultLeaveTypesBackfilled(company, currentUser) {
     // d'audit du client).
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
     await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
     // Échec silencieux volontaire (ex. hors ligne) : `company` reste correct EN MÉMOIRE pour cette
@@ -1100,7 +1100,7 @@ async function ensureDocumentTemplatesAttestationCertificatBackfilled(company, c
     // this._companiesCache par `company` — même contrainte que ensureContratsTermineDateDepartAutoDeduite).
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
     await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
     console.error('ensureDocumentTemplatesAttestationCertificatBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
@@ -1458,6 +1458,15 @@ const CHAMPS_FUSION_MODELE = [
  * ce serait pire qu'un simple blanc dans un document officiel). salaireBrutMensuel vide
  * volontairement si le suivi de la masse salariale est désactivé (settings.masseSalarialeActivee)
  * — même garde que l'attestation de salaire. */
+/** Le salaire n'entre dans un document fusionné que si l'utilisateur qui le génère a le droit de le voir
+ * (VOIR_INFOS_FINANCIERES) ou s'il s'agit de sa propre fiche — sans cela, un RH sans ce droit imprimait
+ * {{salaireBrutMensuel}} (audit du 09/10/2026). Hors session (tests/outils), aucune restriction. */
+function salaireAutoriseDansDocument(employee) {
+  const user = typeof DB !== 'undefined' && DB._currentEmployeeId ? DB.getEmployeeById(DB._currentEmployeeId) : null;
+  if (!user) return true;
+  return user.id === employee.id || hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES);
+}
+
 function construireValeursFusionModele(employee, company) {
   const adresse = employee.adresse || {};
   const profile = company || {};
@@ -1473,7 +1482,7 @@ function construireValeursFusionModele(employee, company) {
     nationalite: employee.nationalite || '', numeroSecu: employee.numeroSecu || '',
     adresseComplete: [adresse.rue, adresse.codePostal, adresse.ville].filter(Boolean).join(', '),
     email: employee.email || '', telephone: employee.telephone || '',
-    salaireBrutMensuel: settings.masseSalarialeActivee ? (employee.salaireBrutMensuel || '') : '',
+    salaireBrutMensuel: settings.masseSalarialeActivee && salaireAutoriseDansDocument(employee) ? (employee.salaireBrutMensuel || '') : '',
     conventionCollective: employee.conventionCollective || '',
     raisonSociale: profile.raisonSociale || '', siret: profile.siret || '',
     adresseEntreprise: profile.adresse || '',
@@ -1496,14 +1505,14 @@ function construireValeursFusionContrat(employee, contrat, company) {
     poste: c.poste || base.poste,
     typeContrat: c.typeContrat || base.typeContrat,
     tempsTravail: c.tempsTravail || base.tempsTravail,
-    salaireBrutMensuel: settings.masseSalarialeActivee ? (c.salaireBrutMensuel || '') : '',
+    salaireBrutMensuel: settings.masseSalarialeActivee && salaireAutoriseDansDocument(employee) ? (c.salaireBrutMensuel || '') : '',
     dateDebutContrat: c.dateDebut ? formatDate(c.dateDebut) : '',
     dateFinContrat: c.dateFin ? formatDate(c.dateFin) : '',
     motifRecours: c.motifRecours || '',
     classification: c.classification || '',
     statutCadre: c.statutCadre ? 'cadre' : 'non-cadre',
     etablissement: (((company && company.etablissements) || []).find(et => et.id === c.etablissementId) || {}).nom || '',
-    nombreMoisSalaire: settings.masseSalarialeActivee ? (c.nombreMoisSalaire || '') : '',
+    nombreMoisSalaire: settings.masseSalarialeActivee && salaireAutoriseDansDocument(employee) ? (c.nombreMoisSalaire || '') : '',
     // §retour Betty du 23/09/2026 : primesRecurrentes/avantagesNature (listes) n'avaient jusqu'ici
     // AUCUNE traduction texte pour un document fusionné — saisies, jamais visibles nulle part une
     // fois enregistrées (ni dans l'aperçu du projet de contrat, ni dans un document généré). Une
@@ -2218,7 +2227,7 @@ const DB = {
     if (blobName === 'companyProfile') {
       const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
         teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-        brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+        brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
       return window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
     }
     if (blobName === 'settings') return window.SupabaseSync.pushSettings(company.id, company.settings);
@@ -2303,7 +2312,7 @@ const DB = {
     // personne ne relit plus, mais mieux vaut ne jamais l'y remettre du tout.
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
   },
 
@@ -2969,7 +2978,7 @@ const DB = {
   _pushCompanyDataBlob(company) {
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
   },
 
@@ -3237,6 +3246,15 @@ const DB = {
     this._pushCompanyDataBlob(company);
   },
 
+  /** Écriture locale seule : le serveur a déjà reçu ce pointage par enregistrer_pointage (0068). Ne pousse
+   * volontairement PAS le blob companies.data (refusé en silence par RLS à un salarié/manager, et qui,
+   * poussé depuis un cache périmé, effacerait les pointages des autres). */
+  _savePointagesLocal(list) {
+    const company = this.getCurrentCompany();
+    company.pointages = list;
+    this.saveCurrentCompany(company);
+  },
+
   getPointagesForEmployeeOnDate(employeeId, date) {
     return this.getPointages().filter(p => p.employeeId === employeeId && p.date === date);
   },
@@ -3328,8 +3346,15 @@ const DB = {
       .sort((a, b) => `${b.date} ${b.heureArrivee}`.localeCompare(`${a.date} ${a.heureArrivee}`))[0];
 
     if (ouvert) {
+      const departAvant = ouvert.heureDepart;
       ouvert.heureDepart = heure;
-      this.savePointages(list);
+      try {
+        await window.SupabaseSync.enregistrerPointageServeur(etablissementId, code, ouvert);
+      } catch (err) {
+        ouvert.heureDepart = departAvant;
+        return { success: false, error: "Le pointage n'a pas pu être enregistré sur le serveur : " + ((err && err.message) || "erreur inconnue") + ". Réessayez." };
+      }
+      this._savePointagesLocal(list);
       this.logAudit('Modification', 'Pointage', `${employee.prenom} ${employee.nom} · départ ${heure}`);
       // Inclut le pointage tout juste clôturé (peut dater d'hier pour un quart de nuit) + les autres
       // pointages déjà clos aujourd'hui (ex. pause déjeuner) — jamais compté deux fois si `ouvert`
@@ -3340,8 +3365,13 @@ const DB = {
     }
 
     const pointage = Object.assign(makeEmptyPointage(), { id: generateId('pointage'), employeeId, etablissementId, date, heureArrivee: heure });
+    try {
+      await window.SupabaseSync.enregistrerPointageServeur(etablissementId, code, pointage);
+    } catch (err) {
+      return { success: false, error: "Le pointage n'a pas pu être enregistré sur le serveur : " + ((err && err.message) || "erreur inconnue") + ". Réessayez." };
+    }
     list.push(pointage);
-    this.savePointages(list);
+    this._savePointagesLocal(list);
     this.logAudit('Création', 'Pointage', `${employee.prenom} ${employee.nom} · arrivée ${heure}`);
     return { success: true, type: 'arrivee', heure };
   },

@@ -673,6 +673,14 @@ async function getPointageQrCode(etablissementId) {
   return data;
 }
 
+/** Enregistre le pointage du salarié appelant (0068) : seul chemin d'écriture qui fonctionne pour qui n'a pas
+ * gererParametres (le blob companies.data, lui, est refusé en silence par RLS). Le code du QR est
+ * revérifié côté serveur. */
+async function enregistrerPointageServeur(etablissementId, code, pointage) {
+  const { error } = await supabase.rpc('enregistrer_pointage', { p_etablissement_id: etablissementId, p_code: code, p_pointage: pointage });
+  if (error) throw error;
+}
+
 async function verifierPointageCode(etablissementId, code) {
   const { data, error } = await supabase.rpc('verifier_pointage_code', { p_etablissement_id: etablissementId, p_code: code });
   if (error) throw error;
@@ -720,6 +728,15 @@ async function hydrateCurrentCompany() {
   if (!employeeRow) return null;
   const companyId = employeeRow.company_id;
   const windowCutoff = hydrationWindowCutoffISO();
+
+  // Tolérant : avant l'application de 0069 la fonction n'existe pas encore — jamais de blocage de la connexion.
+  let delegationsRecues = [];
+  try {
+    const { data: delegData, error: delegError } = await supabase.rpc('delegations_recues');
+    if (!delegError && Array.isArray(delegData)) delegationsRecues = delegData;
+  } catch (err) {
+    console.error('Délégations reçues indisponibles :', err);
+  }
 
   const [
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
@@ -839,6 +856,10 @@ async function hydrateCurrentCompany() {
     favorites: favoritesFromRows(favoritesRes.data),
     notifications: (notificationsRes.data || []).map(notificationFromRow),
     brouillons: (draftsRes.data || []).map(draftFromRow),
+    // Délégations de validation que d'AUTRES managers m'ont accordées (0069) : la fiche du manager
+    // délégant n'est jamais visible d'un remplaçant (employees_select), donc sa liste `delegations` ne
+    // peut pas être lue depuis le cache — voir isManagerOfEmployee (app.js).
+    delegationsRecues,
     _currentEmployeeId: employeeRow.id
   };
 }
@@ -1510,7 +1531,7 @@ window.SupabaseSync = {
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
   getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature, supprimerCandidature,
-  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, regeneratePointageTokenRemote,
+  getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, enregistrerPointageServeur, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
   deleteRow
 };

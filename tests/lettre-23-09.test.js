@@ -16,6 +16,8 @@ function setup() {
   api.DB.init();
   const rh = api.DB.getEmployees().find(e => e.role === 'rh');
   api.DB._currentEmployeeId = rh.id;
+  // Le salaire d'un contrat demande VOIR_INFOS_FINANCIERES (audit du 09/10/2026).
+  api.DB.updateEmployee(rh.id, { permissionsOverrides: { voirInfosFinancieres: true } });
   return { ...api, rh };
 }
 

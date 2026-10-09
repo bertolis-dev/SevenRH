@@ -10456,6 +10456,12 @@ function isManagerOfEmployee(managerId, targetEmployeeId, dateStr) {
   if (!target) return false;
   if ((target.managerIds || []).includes(managerId)) return true;
   const today = dateStr || toISODate(new Date());
+  // Délégations reçues, fournies par le serveur (delegations_recues, 0069) : seule source fiable pour un
+  // remplaçant, qui ne voit jamais la fiche du manager délégant. Ne vaut que pour l'utilisateur connecté.
+  const recues = (DB.getCurrentCompany().delegationsRecues || []);
+  const connecte = authRepository.getCurrentUser();
+  const delegantsDuSalarie = target.managerIds || [];
+  if (connecte && connecte.id === managerId && recues.some(d => delegantsDuSalarie.includes(d.delegantId) && d.dateDebut <= today && d.dateFin >= today)) return true;
   return (target.managerIds || []).some(mid => {
     const manager = employeeRepository.getById(mid);
     return Boolean(manager && (manager.delegations || []).some(d => d.delegataireId === managerId && d.dateDebut <= today && d.dateFin >= today));
@@ -11956,7 +11962,7 @@ const CHAMP_AVENANT_OPTIONS = [
 ];
 
 function formatValeurAvenantChange(a) {
-  if (a.champModifie === 'salaireBrutMensuel') return formatCurrencyFR(Number(a.nouvelleValeur));
+  if (a.champModifie === 'salaireBrutMensuel') return peutVoirSalaireContrat() ? formatCurrencyFR(Number(a.nouvelleValeur)) : 'Information financière';
   if (a.champModifie === 'horairesHebdo') return formatNumberFR(Number(a.nouvelleValeur)) + ' h';
   if (a.champModifie === 'pourcentageActivite') return formatPercentFR(Number(a.nouvelleValeur));
   return escapeHtml(a.nouvelleValeur);
@@ -11989,6 +11995,15 @@ function resumeRemunerationContrat(c) {
   return parts.join(' · ');
 }
 
+/** Le salaire d'un contrat suit la même règle que la carte Rémunération de la fiche
+ * (renderConfidentialEmployeeCard) : réservé à VOIR_INFOS_FINANCIERES (audit du 09/10/2026 : l'onglet
+ * Contrat et ses formulaires l'affichaient et le modifiaient à tout RH, qui n'a pourtant pas ce droit par
+ * défaut). */
+function peutVoirSalaireContrat() {
+  const user = authRepository.getCurrentUser();
+  return !!user && hasPermission(user, PERMISSIONS.VOIR_INFOS_FINANCIERES);
+}
+
 function renderEmployeeContratTab(e, canEdit) {
   const contrats = (e.contrats || []).slice().sort((a, b) => (b.dateDebut || '').localeCompare(a.dateDebut || ''));
   const avenants = (e.avenants || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -12008,7 +12023,7 @@ function renderEmployeeContratTab(e, canEdit) {
                 <span>
                   <span class="badge ${!c.dateFin ? 'badge-success' : 'badge-muted'}">${!c.dateFin ? 'Courant' : 'Terminé'}</span>
                   ${escapeHtml(c.typeContrat || '—')} · ${escapeHtml(c.tempsTravail || '—')}${c.forfait && c.forfait !== 'Aucun' ? ' · ' + escapeHtml(c.forfait) : ''}
-                  ${c.salaireBrutMensuel ? `<br><span class="text-muted">${formatCurrencyFR(c.salaireBrutMensuel)} brut/mois</span>` : ''}
+                  ${c.salaireBrutMensuel && (peutVoirSalaireContrat() || (authRepository.getCurrentUser() || {}).id === e.id) ? `<br><span class="text-muted">${formatCurrencyFR(c.salaireBrutMensuel)} brut/mois</span>` : ''}
                   ${hasModule('remuneration') && resumeRemunerationContrat(c) ? `<br><span class="text-muted">${escapeHtml(resumeRemunerationContrat(c))}</span>` : ''}
                 </span>
                 <span style="text-align: right; white-space: nowrap;">
@@ -12109,10 +12124,14 @@ function renderContratFormFields(contrat, employee, settings) {
 
     <p class="form-subsection-title">Rémunération</p>
     <div class="form-grid">
+      ${peutVoirSalaireContrat() ? `
       <div class="form-field">
         <label for="f-contrat-salaire">Salaire brut mensuel (€)</label>
         <input class="input" type="number" id="f-contrat-salaire" value="${escapeHtml(contrat.salaireBrutMensuel || 0)}" step="any">
-      </div>
+      </div>` : `
+      <div class="form-field">
+        <p class="text-muted">Le salaire n'est pas affiché : il demande le droit « Voir les informations financières ». Il est conservé tel quel.</p>
+      </div>`}
       ${hasModule('remuneration') ? `
       <div class="form-field">
         <label for="f-contrat-nombre-mois-salaire">Réparti sur${fieldHelpIcon('Nombre de mois sur lesquels le salaire annuel est versé : 12 en temps normal, 13 ou 14 pour un 13ᵉ/14ᵉ mois. Une façon de RÉPARTIR le même salaire, pas un élément de rémunération en plus.')}</label>
@@ -12225,7 +12244,9 @@ function readAndValidateContratForm(employee, contratDepart) {
     forfait: document.getElementById('f-contrat-forfait').value,
     dateFinPeriodeEssai: document.getElementById('f-contrat-fin-periode-essai').value,
     periodeEssaiRenouvelee: document.getElementById('f-contrat-periode-essai-renouvelee').checked,
-    salaireBrutMensuel: Number(document.getElementById('f-contrat-salaire').value) || 0,
+    // Champ absent sans le droit financier (voir peutVoirSalaireContrat) : on conserve la valeur du contrat
+    // de départ plutôt que de la remettre à 0.
+    salaireBrutMensuel: peutVoirSalaireContrat() ? (Number(document.getElementById('f-contrat-salaire').value) || 0) : (Number(depart.salaireBrutMensuel) || 0),
     nombreMoisSalaire,
     partVariable,
     avantagesNature,
@@ -12526,7 +12547,7 @@ function openAjouterAvenantModal(employeeId) {
           <div class="form-field">
             <label for="f-avenant-champ">Valeur à modifier</label>
             <select class="input" id="f-avenant-champ">
-              ${CHAMP_AVENANT_OPTIONS.map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
+              ${CHAMP_AVENANT_OPTIONS.filter(o => o.value !== 'salaireBrutMensuel' || peutVoirSalaireContrat()).map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
             </select>
           </div>
           <div class="form-field" id="field-avenant-nouvelle-valeur" hidden>
