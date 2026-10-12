@@ -24,6 +24,19 @@ sur Légifrance ou auprès d'un professionnel avant tout usage**.
 | Congés par anticipation | **Interdite** par défaut : une demande ne peut pas dépasser le solde disponible. Option : autorisée dans la limite des jours déjà acquis à date | Pas de règle unique : dépend de l'accord d'entreprise ou de la convention | `congesAnticipation` ; Paramètres > Congés et absences > Congés par anticipation | |
 | Télétravail et tickets restaurant | Un jour de télétravail **ne réduit pas** le nombre de tickets | À vérifier : égalité de traitement avec un salarié sur site, convention, accord télétravail | `ticketsInclureTeletravail` ; Paramètres > Tickets restaurant | |
 | Libellé d'une note de frais | 3 caractères minimum et au moins une lettre | Règle de gestion interne (pas une règle de droit) | `validerLibelleNoteFrais` (data.js) | |
+| Justificatif d'une note de frais | Obligatoire pour toute note (réglage général, activé par défaut ; désactivé, les règles par catégorie s'appliquent) | Pratique de contrôle des frais ; à confronter à la politique de remboursement et aux exigences de l'organisme de recouvrement | `justificatifNoteFraisObligatoire` ; Paramètres > Notes de frais > Justificatif | |
+| Barème kilométrique | **Vide par défaut** : l'entreprise saisit puis confirme son barème par année et par motorisation. Tant qu'il est vide, les valeurs indicatives de la plateforme servent de repli, affichées « non validé » | Barème fiscal officiel publié chaque année (service-public.fr, impots.gouv.fr) | `baremesKilometriques` (réglage) et `BAREMES_KILOMETRIQUES` (repli indicatif, data.js) ; Paramètres > Notes de frais > Barème kilométrique | |
+| Tolérance du pointage face au planning | 10 min (retard, départ anticipé, dépassement) | Règle de gestion interne | `pointageToleranceMinutes` ; Paramètres > Planning | |
+| Rappel avant perte de congés | Premier rappel 60 jours avant la clôture du compteur, dernier rappel 14 jours avant | Règle de gestion interne ; la perte elle-même dépend du report configuré sur chaque type de congé | `delaiRappelPerteCongesJours` ; Paramètres > Congés et absences | |
+| Entretien professionnel | Tous les 2 ans après le dernier entretien (ou l'embauche) ; rappels à 30 jours, 7 jours et en retard | Code du travail L6315-1 | `getUpcomingEntretiensProfessionnels` (app.js) ; la clôture d'un entretien met à jour la date du dernier entretien | |
+| Bilan à 6 ans | 6 ans après l'embauche, puis 6 ans après chaque bilan réalisé ; mêmes rappels | Code du travail L6315-1 (II) | `getUpcomingBilansSixAns` (app.js) ; `dateDernierBilanSixAns` | |
+| Cycle de statuts d'une note de frais | Soumise, Validée (à payer), Remboursée (date de paiement), Refusée, Annulée ; pas de retour en arrière | Règle de gestion interne | `TRANSITIONS_NOTE_FRAIS`, `libelleStatutNoteFrais` (data.js) | |
+| Types de congé inactifs | Chiffres masqués dans le Tableau des compteurs, ignorés par les anomalies de paie | Règle de gestion interne | `renderTableauCompteurs`, `getPaieAnomalies` (app.js) | |
+
+## Limites connues
+
+- **Échéance de report des congés.** `dateLimiteReportMMJJ` tombe, par construction du calcul, dans la période de référence déjà close : il n'y a donc jamais d'échéance de report « à venir » à rappeler. Les rappels portent sur la perte à la clôture du compteur.
+- **Pointage.** Un salarié en congé validé (journée entière), en télétravail validé ou un jour férié/fermé n'est jamais signalé en écart ; une demi-journée de congé isolée ne l'excuse pas.
 
 ## Limites connues des contrôles du planning
 
