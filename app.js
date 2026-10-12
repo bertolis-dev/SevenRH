@@ -20103,7 +20103,8 @@ function renderParametresTicketsRestaurant() {
           <input class="input" type="number" step="any" min="0" max="100" id="f-tickets-part" value="${escapeHtml(settings.ticketsPartEmployeurPct)}">
         </div>
         <div class="form-field form-field-checkbox" style="justify-content: flex-end;">
-          <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
+          <label><input type="checkbox" id="f-tickets-teletravail" ${settings.ticketsInclureTeletravail !== false ? 'checked' : ''}> Le télétravail donne droit à un ticket</label>
+          <p class="form-hint">Coché par défaut : un jour de télétravail ne réduit pas le nombre de tickets. Règle à valider juridiquement (situation du salarié comparée à celle d'un salarié sur site) avant de la décocher.</p>
         </div>
         <div class="form-field">
           <label for="f-tickets-distribution">Distribution des titres</label>

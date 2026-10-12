@@ -7121,7 +7121,9 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
     if (onLeave) { joursAbsences += 1; continue; }
 
     const remote = employeeTelework.some(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
-    if (remote && !settings.ticketsInclureTeletravail) { joursAbsences += 1; continue; }
+    // Exclu SEULEMENT si le réglage vaut explicitement faux : une valeur absente (entreprise ancienne, appel avec
+    // des réglages partiels) ne retire jamais un ticket — défaut voulu du brief du 12/10/2026 (B2).
+    if (remote && settings.ticketsInclureTeletravail === false) { joursAbsences += 1; continue; }
   }
 
   const theorique = joursOuvres - joursFeriesFermetures - joursAbsences;
