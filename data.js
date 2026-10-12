@@ -1365,7 +1365,7 @@ function verifierControlesLegauxPlanning(employeeId, shifts, seuils) {
   // Alerte optionnelle (désactivée par défaut) : travail le dimanche. Signalement seulement, jamais un blocage —
   // de nombreuses dérogations au repos dominical existent selon l'activité (L3132-12 et suivants).
   if (seuil.alerteDimanche && parJour['Dim'].length) {
-    violations.push({ type: 'dimanche', jour: 'Dim', message: 'Dim : quart programmé le dimanche — vérifiez que votre activité ou votre convention prévoit une dérogation au repos dominical (L3132-3).' });
+    violations.push({ type: 'dimanche', jour: 'Dim', message: 'Dim : quart programmé le dimanche : vérifiez que votre activité ou votre convention prévoit une dérogation au repos dominical (L3132-3).' });
   }
 
   return violations;
