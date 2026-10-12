@@ -6950,6 +6950,17 @@ function computeMontantTVA(montantTTC, tauxTVA) {
   return round2(montantTTC - computeMontantHT(montantTTC, tauxTVA));
 }
 
+/** Ventilation TTC / HT / TVA d'une note, affichée en direct dans le formulaire (brief du 12/10/2026, C1). `texte` est
+ * vide tant que le montant saisi n'est pas un nombre. La TVA se déduit du HT arrondi : HT + TVA = TTC au centime. */
+function ventilationTvaNote(montantTTC, tauxTVA) {
+  const ttc = typeof montantTTC === 'string' ? Number(montantTTC.replace(',', '.')) : Number(montantTTC);
+  if (montantTTC === '' || montantTTC == null || !Number.isFinite(ttc)) return { ttc: null, ht: null, tva: null, texte: '' };
+  const taux = Number(tauxTVA) || 0;
+  const ht = computeMontantHT(ttc, taux);
+  const tva = computeMontantTVA(ttc, taux);
+  return { ttc: round2(ttc), ht, tva, texte: 'HT ' + formatCurrencyFR(ht) + ' · TVA ' + formatCurrencyFR(tva) + ' (' + formatPercentFR(taux) + ') · TTC ' + formatCurrencyFR(round2(ttc)) };
+}
+
 /**
  * Barème kilométrique officiel, par motorisation/tranche de puissance fiscale/distance annuelle.
  * §retour Betty du 11/09/2026 (point 5, "ce qui reste ouvert") : le commentaire précédent (07/09)

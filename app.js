@@ -25425,6 +25425,7 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
                 ${TVA_RATES.map(t => `<option value="${t}" ${champs.tauxTVA !== undefined && Number(champs.tauxTVA) === t ? 'selected' : ''}>${formatPercentFR(t)}</option>`).join('')}
               </select>
             </div>
+            <p class="text-muted" id="expense-ht-tva-hint" style="grid-column: 1 / -1; margin: 0;"></p>
           </div>
           <!-- §retour Betty du 14/09/2026 (Notes de frais point 3, "forfaits journaliers") : montant
                pré-rempli automatiquement quand la catégorie a un forfait configuré (Paramètres),
@@ -25495,6 +25496,9 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
   // §retour Betty du 07/09/2026 (point 4) : le seuil de justificatif dépend du montant saisi — le
   // libellé doit se mettre à jour en direct, pas seulement au chargement de la modale.
   document.getElementById('f-montantTTC').addEventListener('input', updateExpenseJustificatifLabel);
+  document.getElementById('f-montantTTC').addEventListener('input', updateExpenseTvaHint);
+  document.getElementById('f-tauxTVA').addEventListener('change', updateExpenseTvaHint);
+  updateExpenseTvaHint();
   document.getElementById('expense-form').addEventListener('submit', submitExpenseForm);
   const saveDraftBtn = document.getElementById('btn-save-draft');
   if (saveDraftBtn) saveDraftBtn.addEventListener('click', () => {
@@ -25502,6 +25506,15 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
   });
 
   updateExpenseCategoryFields();
+}
+
+/** Ligne « HT … · TVA … (taux) · TTC … » sous les champs montant et taux (brief du 12/10/2026, C1). */
+function updateExpenseTvaHint() {
+  const hint = document.getElementById('expense-ht-tva-hint');
+  if (!hint) return;
+  const montant = document.getElementById('f-montantTTC');
+  const taux = document.getElementById('f-tauxTVA');
+  hint.textContent = ventilationTvaNote(montant ? montant.value : '', taux ? taux.value : 0).texte;
 }
 
 function updateExpenseJustificatifLabel() {
@@ -25534,6 +25547,8 @@ function updateExpenseCategoryFields() {
   } else if (forfaitHint) {
     forfaitHint.textContent = '';
   }
+  // Un forfait peut venir de remplir le montant : la ventilation HT/TVA suit (brief du 12/10/2026, C1).
+  updateExpenseTvaHint();
 }
 
 /** §retour Betty du 11/09/2026 (point 5, barème paramétrable par motorisation) : un cyclomoteur
