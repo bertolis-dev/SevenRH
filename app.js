@@ -20010,6 +20010,11 @@ function renderParametresPlanningTeletravail() {
       <h2>Planning</h2>
       <div class="form-grid">
         <div class="form-field">
+          <label for="f-pause-defaut">Pause déduite par défaut (minutes)</label>
+          <input class="input" type="number" min="0" step="5" id="f-pause-defaut" value="${escapeHtml(settings.pauseParDefautMinutes)}">
+          <p class="form-hint">Proposée à chaque nouveau créneau, modifiable créneau par créneau. Elle est déduite du total d'heures affiché dans le Planning. Règle à faire valider selon votre convention collective.</p>
+        </div>
+        <div class="form-field">
           <label for="f-budget-planning">Budget hebdomadaire du planning (€)</label>
           <input class="input" type="number" min="0" step="1" id="f-budget-planning" value="${escapeHtml(settings.budgetHebdomadairePlanningEuros)}">
           <p class="form-hint">0 = pas de budget fixé (le coût de la semaine s'affiche sans comparaison, voir Planning). N'a d'effet que si le suivi de la masse salariale est activé (Paramètres → Rémunération).</p>
@@ -20031,6 +20036,7 @@ function renderParametresPlanningTeletravail() {
 }
 
 function bindParametresPlanningTeletravailEvents() {
+  bindNumberField('f-pause-defaut', 'pauseParDefautMinutes', 30, 'Pause par défaut mise à jour.');
   bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
   bindWorkflowField('f-workflow-teletravail', 'workflowTeletravail', 'Chaîne de validation du télétravail mise à jour.');
@@ -22467,7 +22473,9 @@ function renderPlanningPostes() {
   const weekEndStr = toISODate(weekDates[6]);
 
   const allShifts = shiftRepository.getAll();
-  const shiftsFor = (employeeId, weekday) => allShifts.find(s => s.employeeId === employeeId && s.weekday === weekday);
+  // TOUS les créneaux d'un jour (plusieurs possibles : matin + après-midi) — la grille n'en montrait qu'un
+  // (find) alors que le total hebdomadaire les additionnait tous (brief du 12/10/2026, A1).
+  const shiftsFor = (employeeId, weekday) => allShifts.filter(s => s.employeeId === employeeId && s.weekday === weekday);
   const employeeShifts = (employeeId) => allShifts.filter(s => s.employeeId === employeeId);
   const employeeWeekHeures = (employeeId) => round2(employeeShifts(employeeId).reduce((sum, s) => sum + computeShiftHeures(s), 0));
 
@@ -22505,15 +22513,16 @@ function renderPlanningPostes() {
   // bord du Planning principal (.planning-shift-card) — les deux écrans suivent chacun leur propre
   // référence visuelle, ils n'ont pas à se ressembler entre eux.
   const renderCell = (employee, weekday, dateStr) => {
-    const shift = shiftsFor(employee.id, weekday);
+    const shiftsDuJour = shiftsFor(employee.id, weekday);
     const dernierPointage = getDernierPointage(employee.id, dateStr);
-    if (shift && !f.masquerQuartsConfirmes) {
+    if (shiftsDuJour.length && !f.masquerQuartsConfirmes) {
       // §retour Betty du 13/09/2026 : la pause n'apparaît plus sur la carte (allégée à horaire +
       // service) — retiré uniquement de cet affichage, shift.pauseMinutes reste saisi dans la
       // modale (openShiftModal) et continue de compter dans le calcul des heures travaillées
       // (computeShiftHeures, data.js), jamais touché ici.
       // §retour Betty du 14/09/2026 (Planning point 4) : signale (jamais un blocage) un quart posé
       // sur une indisponibilité déclarée par CE salarié (voir Mon compte > Disponibilités).
+      const renderCarte = (shift) => {
       const conflitIndisponibilite = shiftChevaucheIndisponibilite(shift, employee.indisponibilitesRecurrentes);
       const pointageDot = dernierPointage ? `<span class="poste-shift-pointage-dot" title="Pointé : ${escapeHtml(pointageTexte(dernierPointage))}">${icon(ICONS.checkCircle, 10)}</span>` : '';
       // §retour Betty du 22/09/2026 (revue de bugs, "tour de l'application") : data-edit-shift
@@ -22525,13 +22534,14 @@ function renderPlanningPostes() {
       // pour tout le monde (voir/consulter le planning reste ouvert), seule l'ouverture en édition
       // est désormais réservée à qui a le droit de modifier.
       const shiftCardStyle = [conflitIndisponibilite ? 'border-left-color: var(--color-danger);' : '', canManage ? '' : 'cursor: default;'].filter(Boolean).join(' ');
-      return `<td class="planning-cell">
-        <div class="poste-shift-card" ${canManage ? `data-edit-shift="${shift.id}"` : ''} ${shiftCardStyle ? `style="${shiftCardStyle}"` : ''} title="${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée' : ''}">
+      const titreCarte = `${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée. ' : ''}Pause déduite : ${Number(shift.pauseMinutes) || 0} min`;
+      return `<div class="poste-shift-card" ${canManage ? `data-edit-shift="${shift.id}"` : ''} ${shiftCardStyle ? `style="${shiftCardStyle}"` : ''} title="${escapeHtml(titreCarte)}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
           <div class="poste-shift-position">${escapeHtml(employee.service || '')}${pointageDot}</div>
           ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
-        </div>
-      </td>`;
+        </div>`;
+      };
+      return `<td class="planning-cell">${shiftsDuJour.map(renderCarte).join('')}</td>`;
     }
     if (dernierPointage) {
       // Un pointage réel existe aujourd'hui même sans quart programmé (ex. quart non renseigné) —
@@ -22563,6 +22573,7 @@ function renderPlanningPostes() {
         <div class="planning-employee-info">
           <div>${personNameHtml(employee)} ${violations.length ? `<span class="badge badge-danger" title="${escapeHtml(violations.map(v => v.message).join(' · '))}">${icon(ICONS.warningTriangle, 11)} ${violations.length}</span>` : ''}</div>
           <div class="poste-employee-hours">${formatNumberFR(employeeWeekHeures(employee.id))} h</div>
+          <div class="text-muted" style="font-size: 11px;">${escapeHtml(resumePausesDeduites(employeeShifts(employee.id)))}</div>
         </div>
       </td>
       ${weekDates.map(d => renderCell(employee, WEEKDAY_LABELS[(d.getDay() + 6) % 7], toISODate(d))).join('')}
@@ -23055,7 +23066,8 @@ function openShiftModal(shift, preset) {
 }
 
 function makeEmptyShiftDraft() {
-  return { employeeId: '', weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
+  const pause = Number(settingsRepository.getSettings().pauseParDefautMinutes);
+  return { employeeId: '', weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: Number.isFinite(pause) ? pause : 30 };
 }
 
 /** Sprint SIRH premium §3 : glisser une case de congé/télétravail VALIDÉ (renderPlanningStatusCell

@@ -519,6 +519,9 @@ const DEFAULT_SETTINGS = {
   // 2026-0001) — false retire le tiret (20260001). Purement cosmétique : voir formatMatricule ;
   // n'affecte jamais l'unicité, garantie côté serveur indépendamment de ce réglage.
   matriculeAvecTiret: true,
+  // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
+  // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
+  pauseParDefautMinutes: 30,
   teletravailQuotaSemaine: 2,
   categoriesFrais: ['Transport', 'Repas', 'Hébergement', 'Fournitures', 'Kilométrique', 'Autre'],
   // §retour Betty du 07/09/2026 (points 4/11/12) : réglages PAR CATÉGORIE de notes de frais — clé =
@@ -1202,6 +1205,18 @@ function migrateCompanyAbonnement(company) {
 // qu'à un salarié. Pas de champ couleur par service (contrairement à la maquette envoyée) : Betty a
 // confirmé garder bleu marine + or, voir seven_rh_design_palette_rule.
 // ---------------------------------------------------------------------------
+
+/** Phrase affichée sous le total d'heures du planning : la règle de pause réellement appliquée aux créneaux
+ * comptés (brief du 12/10/2026, A1 — le total « 21,50 h » restait incompréhensible sans elle). */
+function resumePausesDeduites(shifts) {
+  const liste = (shifts || []).map(s => Number(s.pauseMinutes) || 0);
+  if (!liste.length) return '';
+  const min = Math.min(...liste);
+  const max = Math.max(...liste);
+  if (max === 0) return 'aucune pause déduite';
+  if (min === max) return 'pause déduite : ' + min + ' min par créneau';
+  return 'pauses déduites : de ' + min + ' à ' + max + ' min selon les créneaux';
+}
 
 function makeEmptyShift() {
   return { id: null, employeeId: null, weekday: 'Lun', heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 };
