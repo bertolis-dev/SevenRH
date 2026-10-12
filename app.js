@@ -20129,6 +20129,13 @@ function renderParametresNotesFrais() {
     <div class="settings-lists-grid">
       ${renderSettingsListCard({ key: 'categoriesFrais', label: 'Catégories de notes de frais' }, settings.categoriesFrais || [])}
     </div>
+    <div class="card">
+      <h2>Justificatif</h2>
+      <div class="form-field form-field-checkbox">
+        <label><input type="checkbox" id="f-justificatif-obligatoire" ${settings.justificatifNoteFraisObligatoire !== false ? 'checked' : ''}> Justificatif obligatoire pour toute note de frais</label>
+        <p class="form-hint">Une note ne peut pas être soumise sans photo ou fichier. Décochez pour revenir aux règles par catégorie ci-dessous (obligatoire, ou au-delà d'un seuil).</p>
+      </div>
+    </div>
     ${renderCategoriesFraisConfigCard(settings)}
     <div class="card">
       <h2>Validation</h2>
@@ -20144,6 +20151,7 @@ function bindParametresNotesFraisEvents() {
   // voir data-cat-* dans renderCategoriesFraisConfigCard) — même fonction générique qu'avant
   // l'éclatement de l'ex-onglet "Référentiels" par module, rien à réécrire ici.
   bindChipListEvents();
+  bindCheckboxField('f-justificatif-obligatoire', 'justificatifNoteFraisObligatoire', 'Règle du justificatif mise à jour.');
   bindWorkflowField('f-workflow-frais', 'workflowFrais', 'Chaîne de validation des notes de frais mise à jour.');
 }
 
@@ -25240,6 +25248,8 @@ function exportExpensesCSV() {
 /** Justificatif requis pour cette catégorie/montant — §retour Betty du 07/09/2026 (point 4).
  * Absent de categoriesFraisConfig = jamais obligatoire, comme avant ce correctif. */
 function isJustificatifObligatoireForExpense(categorie, montantTTC, settings) {
+  // Règle générale (brief du 12/10/2026, C1) : tout justificatif obligatoire, sauf réglage explicitement désactivé.
+  if (settings.justificatifNoteFraisObligatoire === true) return true;
   const config = (settings.categoriesFraisConfig || {})[categorie];
   if (!config) return false;
   if (config.justificatifObligatoire) return true;

@@ -522,6 +522,9 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (C1) : justificatif (photo ou fichier) obligatoire pour soumettre toute note de frais. Désactivé,
+  // les règles par catégorie (obligatoire / au-delà d'un seuil) s'appliquent comme auparavant.
+  justificatifNoteFraisObligatoire: true,
   // Brief du 12/10/2026 (C2) : tolérance (minutes) avant de signaler un retard, un départ anticipé ou un dépassement
   // entre le pointage et le quart planifié. Valeur proposée, à valider (docs/regles-a-valider.md).
   pointageToleranceMinutes: 10,
