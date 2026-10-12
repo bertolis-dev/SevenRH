@@ -58,6 +58,7 @@ function runLaGrilleAfficheLaRegleEtTousLesCreneauxDuJour() {
   const ligne = html.split('<tr>').find(l => l.includes(salarie.nom)) || '';
   assert.ok(ligne.includes('09:00-12:00') && ligne.includes('14:00-18:00'), 'les deux créneaux du lundi sont affichés (la grille n\'en montrait qu\'un)');
   assert.ok(/pauses? déduites?/.test(ligne), 'le total indique la règle de pause appliquée');
+  assert.ok(ligne.includes('planning-cell-stack'), 'deux créneaux le même jour sont empilés dans la cellule (jamais superposés)');
   const heures = api.sandbox.computeShiftHeures;
   const attendu = 3 + 4 + heures({ heureDebut: '09:00', heureFin: '17:00', pauseMinutes: 30 });
   assert.ok(ligne.includes(api.sandbox.formatNumberFR(attendu) + ' h'), 'le total affiché correspond à la somme de TOUS les créneaux visibles');

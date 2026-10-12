@@ -1998,6 +1998,10 @@ textarea.input { resize: vertical; font-family: inherit; }
    légèrement teinté de la case elle-même (.poste-grid-card) rejoue le fond menthe de la référence
    avec un ton neutre de l'appli plutôt qu'une nouvelle couleur. */
 .poste-grid-card { background: var(--color-bg); }
+/* Cellule de planning avec plusieurs créneaux le même jour : cartes empilées, hauteur libre. */
+.planning-cell-stack { display: flex; flex-direction: column; gap: 4px; padding: 4px; }
+.planning-cell-stack .poste-shift-card { position: static; inset: auto; }
+
 .poste-shift-card {
   position: absolute;
   inset: 4px;

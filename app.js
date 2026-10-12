@@ -22742,7 +22742,11 @@ function renderPlanningPostes() {
           ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
         </div>`;
       };
-      return `<td class="planning-cell">${shiftsDuJour.map(renderCarte).join('')}</td>`;
+      // Plusieurs créneaux le même jour : empilés (la carte seule remplit toute la cellule en position absolue,
+      // deux cartes se superposaient et la seconde cachait la première).
+      return shiftsDuJour.length > 1
+        ? `<td class="planning-cell"><div class="planning-cell-stack">${shiftsDuJour.map(renderCarte).join('')}</div></td>`
+        : `<td class="planning-cell">${shiftsDuJour.map(renderCarte).join('')}</td>`;
     }
     if (dernierPointage) {
       // Un pointage réel existe aujourd'hui même sans quart programmé (ex. quart non renseigné) —
