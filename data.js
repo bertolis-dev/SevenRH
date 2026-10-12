@@ -522,6 +522,14 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (B4) : seuils des alertes NON bloquantes du planning. Valeurs par défaut = seuils légaux
+  // de repli (L3121-18, L3121-20, L3131-1, L3132-2), relevables ou abaissables par accord/convention — à faire
+  // valider (docs/regles-a-valider.md). Alerte dimanche désactivée : de nombreuses dérogations existent.
+  planningDureeMaxQuotidienneHeures: 10,
+  planningDureeMaxHebdomadaireHeures: 48,
+  planningReposQuotidienHeures: 11,
+  planningReposHebdomadaireHeures: 35,
+  planningAlerteDimanche: false,
   teletravailQuotaSemaine: 2,
   categoriesFrais: ['Transport', 'Repas', 'Hébergement', 'Fournitures', 'Kilométrique', 'Autre'],
   // §retour Betty du 07/09/2026 (points 4/11/12) : réglages PAR CATÉGORIE de notes de frais — clé =
@@ -1254,9 +1262,33 @@ function getShiftsParJour(employeeId, shifts) {
   return parJour;
 }
 
+function seuilsPlanningParDefaut() {
+  return {
+    dureeMaxQuotidienne: DUREE_MAX_QUOTIDIENNE_MINUTES, dureeMaxHebdomadaire: DUREE_MAX_HEBDOMADAIRE_MINUTES,
+    reposQuotidien: REPOS_QUOTIDIEN_MIN_MINUTES, reposHebdomadaire: REPOS_HEBDOMADAIRE_MIN_MINUTES, alerteDimanche: false
+  };
+}
+
+/** Seuils (en minutes) lus dans les réglages de l'entreprise ; une valeur absente ou invalide retombe sur le seuil légal. */
+function seuilsPlanningDepuisReglages(settings) {
+  const s = settings || {};
+  const heures = (valeur, repli) => { const n = Number(valeur); return Number.isFinite(n) && n > 0 ? Math.round(n * 60) : repli; };
+  const defauts = seuilsPlanningParDefaut();
+  return {
+    dureeMaxQuotidienne: heures(s.planningDureeMaxQuotidienneHeures, defauts.dureeMaxQuotidienne),
+    dureeMaxHebdomadaire: heures(s.planningDureeMaxHebdomadaireHeures, defauts.dureeMaxHebdomadaire),
+    reposQuotidien: heures(s.planningReposQuotidienHeures, defauts.reposQuotidien),
+    reposHebdomadaire: heures(s.planningReposHebdomadaireHeures, defauts.reposHebdomadaire),
+    alerteDimanche: Boolean(s.planningAlerteDimanche)
+  };
+}
+
 /** Vérifie l'ensemble des règles ci-dessus pour UN salarié sur son modèle hebdomadaire. Retourne un
- * tableau de violations ({ type, jour?, message }), jamais lui-même bloquant. */
-function verifierControlesLegauxPlanning(employeeId, shifts) {
+ * tableau de violations ({ type, jour?, message }), jamais lui-même bloquant. `seuils` (minutes, voir
+ * seuilsPlanningDepuisReglages) est optionnel : sans lui, ce sont les seuils légaux de repli. */
+function verifierControlesLegauxPlanning(employeeId, shifts, seuils) {
+  const seuil = Object.assign(seuilsPlanningParDefaut(), seuils || {});
+  const heuresTxt = (minutes) => round2(minutes / 60);
   const violations = [];
   const parJour = getShiftsParJour(employeeId, shifts);
   let totalHebdoMinutes = 0;
@@ -1266,8 +1298,8 @@ function verifierControlesLegauxPlanning(employeeId, shifts) {
     if (!shiftsDuJour.length) return;
     const dureeTravailleeMinutes = shiftsDuJour.reduce((sum, s) => sum + Math.round(computeShiftHeures(s) * 60), 0);
     totalHebdoMinutes += dureeTravailleeMinutes;
-    if (dureeTravailleeMinutes > DUREE_MAX_QUOTIDIENNE_MINUTES) {
-      violations.push({ type: 'duree-max-quotidienne', jour, message: `${jour} : ${round2(dureeTravailleeMinutes / 60)} h travaillées, au-delà des 10 h maximum légales par jour (L3121-18).` });
+    if (dureeTravailleeMinutes > seuil.dureeMaxQuotidienne) {
+      violations.push({ type: 'duree-max-quotidienne', jour, message: `${jour} : ${round2(dureeTravailleeMinutes / 60)} h travaillées, au-delà des ${heuresTxt(seuil.dureeMaxQuotidienne)} h maximum${seuil.dureeMaxQuotidienne === DUREE_MAX_QUOTIDIENNE_MINUTES ? ' légales' : ' paramétrées'} par jour (L3121-18).` });
     }
     if (dureeTravailleeMinutes > SEUIL_PAUSE_OBLIGATOIRE_MINUTES) {
       const pauseTotale = shiftsDuJour.reduce((sum, s) => sum + (s.pauseMinutes || 0), 0);
@@ -1277,13 +1309,13 @@ function verifierControlesLegauxPlanning(employeeId, shifts) {
     }
     const debut = Math.min(...shiftsDuJour.map(s => shiftPlagesMinutes(s).debut));
     const fin = Math.max(...shiftsDuJour.map(s => shiftPlagesMinutes(s).fin));
-    if (fin - debut > 24 * 60 - REPOS_QUOTIDIEN_MIN_MINUTES) {
-      violations.push({ type: 'amplitude', jour, message: `${jour} : amplitude de ${round2((fin - debut) / 60)} h entre le premier début et le dernier départ, incompatible avec les 11 h de repos quotidien (L3131-1).` });
+    if (fin - debut > 24 * 60 - seuil.reposQuotidien) {
+      violations.push({ type: 'amplitude', jour, message: `${jour} : amplitude de ${round2((fin - debut) / 60)} h entre le premier début et le dernier départ, incompatible avec les ${heuresTxt(seuil.reposQuotidien)} h de repos quotidien (L3131-1).` });
     }
   });
 
-  if (totalHebdoMinutes > DUREE_MAX_HEBDOMADAIRE_MINUTES) {
-    violations.push({ type: 'duree-max-hebdomadaire', message: `${round2(totalHebdoMinutes / 60)} h sur la semaine, au-delà des 48 h maximum absolues (L3121-20).` });
+  if (totalHebdoMinutes > seuil.dureeMaxHebdomadaire) {
+    violations.push({ type: 'duree-max-hebdomadaire', message: `${round2(totalHebdoMinutes / 60)} h sur la semaine, au-delà des ${heuresTxt(seuil.dureeMaxHebdomadaire)} h maximum${seuil.dureeMaxHebdomadaire === DUREE_MAX_HEBDOMADAIRE_MINUTES ? ' absolues' : ' paramétrées'} (L3121-20).` });
   }
 
   for (let i = 0; i < 7; i++) {
@@ -1295,8 +1327,8 @@ function verifierControlesLegauxPlanning(employeeId, shifts) {
     const finA = Math.max(...shiftsA.map(s => shiftPlagesMinutes(s).fin));
     const debutB = Math.min(...shiftsB.map(s => shiftPlagesMinutes(s).debut));
     const reposMinutes = (24 * 60 - finA) + debutB;
-    if (reposMinutes < REPOS_QUOTIDIEN_MIN_MINUTES) {
-      violations.push({ type: 'repos-quotidien', jour: jourB, message: `${jourA} → ${jourB} : seulement ${round2(reposMinutes / 60)} h de repos entre les deux journées, en dessous des 11 h minimum (L3131-1).` });
+    if (reposMinutes < seuil.reposQuotidien) {
+      violations.push({ type: 'repos-quotidien', jour: jourB, message: `${jourA} → ${jourB} : seulement ${round2(reposMinutes / 60)} h de repos entre les deux journées, en dessous des ${heuresTxt(seuil.reposQuotidien)} h minimum (L3131-1).` });
     }
   }
 
@@ -1321,9 +1353,15 @@ function verifierControlesLegauxPlanning(employeeId, shifts) {
       }
       plusGrandeCoupureMinutes = Math.max(plusGrandeCoupureMinutes, minutesEcoulees);
     }
-    if (plusGrandeCoupureMinutes < REPOS_HEBDOMADAIRE_MIN_MINUTES) {
-      violations.push({ type: 'repos-hebdomadaire', message: `Aucune coupure d'au moins 35 h consécutives sur la semaine (la plus longue fait ${round2(plusGrandeCoupureMinutes / 60)} h) : repos hebdomadaire minimum non respecté (L3132-2).` });
+    if (plusGrandeCoupureMinutes < seuil.reposHebdomadaire) {
+      violations.push({ type: 'repos-hebdomadaire', message: `Aucune coupure d'au moins ${heuresTxt(seuil.reposHebdomadaire)} h consécutives sur la semaine (la plus longue fait ${round2(plusGrandeCoupureMinutes / 60)} h) : repos hebdomadaire minimum non respecté (L3132-2).` });
     }
+  }
+
+  // Alerte optionnelle (désactivée par défaut) : travail le dimanche. Signalement seulement, jamais un blocage —
+  // de nombreuses dérogations au repos dominical existent selon l'activité (L3132-12 et suivants).
+  if (seuil.alerteDimanche && parJour['Dim'].length) {
+    violations.push({ type: 'dimanche', jour: 'Dim', message: 'Dim : quart programmé le dimanche — vérifiez que votre activité ou votre convention prévoit une dérogation au repos dominical (L3132-3).' });
   }
 
   return violations;

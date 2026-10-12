@@ -20023,6 +20023,17 @@ function renderParametresPlanningTeletravail() {
       </div>
     </div>
     <div class="card">
+      <h2>Alertes du planning</h2>
+      <p class="form-hint">Signalements non bloquants affichés sur le Planning. Les valeurs proposées sont les seuils légaux de repli ; votre convention ou un accord d'entreprise peut les modifier. Règles à faire valider avant de vous y fier.</p>
+      <div class="form-grid">
+        <div class="form-field"><label for="f-plan-max-jour">Durée maximale par jour (heures)</label><input class="input" type="number" min="1" max="24" step="0.5" id="f-plan-max-jour" value="${escapeHtml(settings.planningDureeMaxQuotidienneHeures)}"></div>
+        <div class="form-field"><label for="f-plan-max-semaine">Durée maximale par semaine (heures)</label><input class="input" type="number" min="1" max="84" step="0.5" id="f-plan-max-semaine" value="${escapeHtml(settings.planningDureeMaxHebdomadaireHeures)}"></div>
+        <div class="form-field"><label for="f-plan-repos-jour">Repos minimum entre deux journées (heures)</label><input class="input" type="number" min="1" max="24" step="0.5" id="f-plan-repos-jour" value="${escapeHtml(settings.planningReposQuotidienHeures)}"></div>
+        <div class="form-field"><label for="f-plan-repos-semaine">Repos minimum par semaine (heures consécutives)</label><input class="input" type="number" min="1" max="168" step="0.5" id="f-plan-repos-semaine" value="${escapeHtml(settings.planningReposHebdomadaireHeures)}"></div>
+        <div class="form-field"><label><input type="checkbox" id="f-plan-alerte-dimanche" ${settings.planningAlerteDimanche ? 'checked' : ''}> Signaler le travail le dimanche</label></div>
+      </div>
+    </div>
+    <div class="card">
       <h2>Télétravail</h2>
       <div class="form-grid">
         <div class="form-field">
@@ -20038,6 +20049,11 @@ function renderParametresPlanningTeletravail() {
 
 function bindParametresPlanningTeletravailEvents() {
   bindNumberField('f-pause-defaut', 'pauseParDefautMinutes', 30, 'Pause par défaut mise à jour.');
+  bindNumberField('f-plan-max-jour', 'planningDureeMaxQuotidienneHeures', 10, 'Seuil mis à jour.');
+  bindNumberField('f-plan-max-semaine', 'planningDureeMaxHebdomadaireHeures', 48, 'Seuil mis à jour.');
+  bindNumberField('f-plan-repos-jour', 'planningReposQuotidienHeures', 11, 'Seuil mis à jour.');
+  bindNumberField('f-plan-repos-semaine', 'planningReposHebdomadaireHeures', 35, 'Seuil mis à jour.');
+  bindCheckboxField('f-plan-alerte-dimanche', 'planningAlerteDimanche', 'Alerte mise à jour.');
   bindNumberField('f-budget-planning', 'budgetHebdomadairePlanningEuros', 0, 'Budget mis à jour.');
   bindNumberField('f-teletravail-quota', 'teletravailQuotaSemaine', 0, 'Quota mis à jour.');
   bindWorkflowField('f-workflow-teletravail', 'workflowTeletravail', 'Chaîne de validation du télétravail mise à jour.');
@@ -22563,7 +22579,8 @@ function renderPlanningPostes() {
   // en rouge") : calculé une seule fois par salarié affiché, jamais par cellule (les règles portent
   // sur la semaine entière du salarié, pas sur un jour isolé) — voir verifierControlesLegauxPlanning,
   // data.js. Jamais bloquant : un badge d'alerte, jamais un empêchement d'enregistrer un quart.
-  const violationsFor = (employeeId) => verifierControlesLegauxPlanning(employeeId, allShifts);
+  const seuilsPlanning = seuilsPlanningDepuisReglages(settingsRepository.getSettings());
+  const violationsFor = (employeeId) => verifierControlesLegauxPlanning(employeeId, allShifts, seuilsPlanning);
 
   const renderEmployeeRow = (employee) => {
     const violations = violationsFor(employee.id);
@@ -23055,7 +23072,7 @@ function openShiftModal(shift, preset) {
     // construit, pas après") : contrôles légaux + indisponibilité déclarée, vérifiés dès la
     // sauvegarde de CE quart, jamais un blocage (le quart est déjà enregistré ci-dessus).
     const employeeConcerne = employeeRepository.getById(data.employeeId);
-    const violations = verifierControlesLegauxPlanning(data.employeeId, shiftRepository.getAll());
+    const violations = verifierControlesLegauxPlanning(data.employeeId, shiftRepository.getAll(), seuilsPlanningDepuisReglages(settingsRepository.getSettings()));
     if (violations.length) {
       const suffixe = violations.length > 1 ? ` (+${violations.length - 1} autre${violations.length > 2 ? 's' : ''} contrôle${violations.length > 2 ? 's' : ''})` : '';
       showToast(`Attention, ${employeeConcerne.prenom} ${employeeConcerne.nom} : ${violations[0].message}${suffixe}`, 'error');
