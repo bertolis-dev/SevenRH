@@ -5931,17 +5931,19 @@ async function syncNotifications() {
     leaveTypeRepository.getLeaveTypes().filter(t => t.actif && t.dateClotureCompteur).forEach(type => {
       const current = getCompteurPeriodBounds(type.dateClotureCompteur, today);
       const joursAvantCloture = Math.round((current.periodEnd - today) / 86400000);
-      if (joursAvantCloture < 0 || joursAvantCloture > 60) return;
+      const delaiRappel = Number(settingsRepository.getSettings().delaiRappelPerteCongesJours) || 60;
+      if (joursAvantCloture < 0 || joursAvantCloture > delaiRappel) return;
       employeeRepository.getAll().filter(e => !e.archive).forEach(employee => {
         const balanceNow = getLeaveBalance(employee, type, allRequests, null, today);
         if (balanceNow.disponible === Infinity || balanceNow.disponible <= 0) return;
-        let perdu = 0;
-        if (type.reportCompteur === 'aucun') perdu = balanceNow.disponible;
-        else if (type.reportCompteur === 'limite') perdu = Math.max(0, round2(balanceNow.disponible - (Number(type.reportLimiteJours) || 0)));
+        const perdu = balanceNow.expiration ? balanceNow.expiration.jours : 0;
         if (perdu <= 0) return;
-        candidates.push(makeNotification(`cloture-perte-${type.id}-${employee.id}-${toISODate(current.periodEnd)}`, ICONS.warningTriangle, 'Congés à perdre avant la clôture',
-          `${employee.prenom} ${employee.nom} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`,
-          'absences', { absencesHubTab: 'conges' }, employee.id));
+        // Deux paliers (brief du 12/10/2026, C3) : au délai réglé, puis 14 jours avant — chacun notifié une fois.
+        // Le premier palier garde l'ancienne clé pour ne pas dupliquer les rappels déjà envoyés.
+        const cle = `cloture-perte-${type.id}-${employee.id}-${toISODate(current.periodEnd)}`;
+        const texte = `${employee.prenom} ${employee.nom} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`;
+        candidates.push(makeNotification(cle, ICONS.warningTriangle, 'Congés à perdre avant la clôture', texte, 'absences', { absencesHubTab: 'conges' }, employee.id));
+        if (joursAvantCloture <= 14) candidates.push(makeNotification(`${cle}-j14`, ICONS.warningTriangle, 'Dernière chance : congés à perdre sous 14 jours', texte, 'absences', { absencesHubTab: 'conges' }, employee.id));
       });
     });
   }
@@ -13972,6 +13974,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
             <div class="balance-value">${disponibleLabel}</div>
             <div class="balance-sub">disponible${periodeLabel}${balance.enAttente ? ` · ${formatDurationFR(balance.enAttente)} en attente` : ''}${balance.ajustement ? ` · ajustement ${balance.ajustement >= 0 ? '+' : ''}${formatDurationFR(balance.ajustement)}` : ''}</div>
             ${balance.enCoursAcquisition ? `<div class="balance-sub">${formatDurationFR(balance.enCoursAcquisition.acquis)} en cours d'acquisition (${formatDate(balance.enCoursAcquisition.periode.debut)} au ${formatDate(balance.enCoursAcquisition.periode.fin)}), disponible à partir du ${formatDate(toISODate(addDays(parseISODateLocal(balance.enCoursAcquisition.periode.fin), 1)))}</div>` : ''}
+            ${balance.expiration ? `<div class="balance-sub"><span class="badge badge-warning">${formatDurationFR(balance.expiration.jours)} à prendre avant le ${formatDate(balance.expiration.date)}</span> <span class="text-muted">sinon perdus</span></div>` : ''}
             ${balance.reportPerdu ? `<div class="balance-sub text-danger">${formatDurationFR(balance.reportPerdu)} de report perdu (échéance dépassée)</div>` : ''}
           </div>
         `;
@@ -18486,6 +18489,16 @@ function renderParametresTypesAbsences() {
       </div>
     </div>
     <div class="card" style="margin-bottom: 16px;">
+      <h2>Rappel avant perte de congés</h2>
+      <p class="text-muted">Le salarié et son manager sont prévenus quand des jours vont être perdus à la clôture du compteur, puis une dernière fois 14 jours avant.</p>
+      <div class="form-grid" style="max-width: 520px;">
+        <div class="form-field">
+          <label for="f-rappel-perte-conges">Premier rappel (jours avant la clôture)</label>
+          <input class="input" type="number" min="15" max="365" step="1" id="f-rappel-perte-conges" value="${escapeHtml(settings.delaiRappelPerteCongesJours)}">
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
       <h2>Chaîne de validation par défaut</h2>
       <p class="text-muted">Modèle proposé à la création d'un nouveau type de congé (chaque type garde ensuite sa propre chaîne, modifiable ci-dessous).</p>
       <div class="form-grid" style="max-width: 400px;">
@@ -18508,6 +18521,7 @@ function bindParametresTypesAbsencesEvents() {
     btn.addEventListener('click', () => { state.parametresTypesCategorie = btn.dataset.parametresTypesCategorie; render(); });
   });
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
+  bindNumberField('f-rappel-perte-conges', 'delaiRappelPerteCongesJours', 60, 'Délai de rappel mis à jour.');
   const anticipationField = document.getElementById('f-conges-anticipation');
   if (anticipationField) anticipationField.addEventListener('change', () => {
     const reglages = settingsRepository.getSettings();

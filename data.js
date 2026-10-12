@@ -522,6 +522,9 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (C3) : nombre de jours avant la clôture d'un compteur à partir duquel un rappel prévient
+  // d'une perte de congés (un second rappel part 14 jours avant, quel que soit ce délai).
+  delaiRappelPerteCongesJours: 60,
   // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
   // immédiatement disponible ; 'autorise_acquis_a_date' : elle peut aller jusqu'aux jours déjà acquis à date sur la
   // période en cours. Règle à valider (docs/regles-a-valider.md) — le code ne tranche pas la question juridique.
@@ -8229,8 +8232,19 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   const enAttente = requestsDisponible.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, current.periodEnd), 0);
   const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
 
+  // Brief du 12/10/2026 (C3) : à la clôture du compteur en cours, le solde disponible sort de la fenêtre de
+  // consommation — perdu en totalité (report « aucun ») ou pour l'excédent d'un report plafonné. `expiration`
+  // dit QUAND et COMBIEN, avant la perte (reportPerdu, lui, ne parle que d'une échéance déjà dépassée).
+  // Note : l'échéance de report (dateLimiteReportMMJJ) tombe dans la période déjà close, jamais à venir.
+  let perteALaCloture = 0;
+  if (disponible !== Infinity && disponible > 0) {
+    if (leaveType.reportCompteur === 'aucun') perteALaCloture = disponible;
+    else if (leaveType.reportCompteur === 'limite') perteALaCloture = Math.max(0, round2(disponible - (Number(leaveType.reportLimiteJours) || 0)));
+  }
+  const expiration = perteALaCloture > 0 ? { date: toISODate(current.periodEnd), jours: perteALaCloture, motif: 'cloture' } : null;
+
   return {
-    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement, conventionCollectiveBonus,
+    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement, conventionCollectiveBonus, expiration,
     periodeDisponible: { debut: toISODate(previous.periodStart), fin: toISODate(previous.periodEnd) },
     enCoursAcquisition: {
       acquis: acquisEnCours,
