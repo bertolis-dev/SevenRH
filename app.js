@@ -8533,7 +8533,7 @@ function renderTableauCompteurs() {
                 ${pageItems.map(row => `
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
-                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${renderTableauCompteursCell(b)}</td>`).join('')}
+                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${leaveTypes[i].actif ? renderTableauCompteursCell(b) : '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>'}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
@@ -8541,6 +8541,7 @@ function renderTableauCompteurs() {
                 <tr>
                   <td data-label="Total" class="row-title"><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
                   ${leaveTypes.map((t, i) => {
+                    if (!t.actif) return `<td data-label="${escapeHtml(t.nom)}" style="text-align: right;" class="tc-inactif"><span class="text-muted">—</span></td>`;
                     const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
                     const hasIllimite = finiteValues.length < rows.length;
                     const total = finiteValues.reduce((sum, v) => sum + v, 0);
@@ -26140,7 +26141,9 @@ function getPaieAnomalies(year, month) {
   const overlapsMonth = (dateDebut, dateFin) => dateDebut <= monthEnd && dateFin >= monthStart;
   // Hoistés hors de la boucle par salarié : ne dépendent pas de `e`, recalculer/reconcaténer à
   // chaque itération serait du travail identique refait pour rien.
-  const congeTypesFinis = leaveTypes.filter(t => t.categorie === 'conge' && t.acquisition !== 'Illimitée');
+  // Types ACTIFS seulement (brief du 12/10/2026, A4) : un RTT non activé n'est ouvert à personne, son solde
+  // « négatif » ne doit pas bloquer la paie.
+  const congeTypesFinis = leaveTypes.filter(t => t.actif && t.categorie === 'conge' && t.acquisition !== 'Illimitée');
   const validLeaveAndTeleworkRequests = validLeaveRequests.concat(validTeleworkRequests);
 
   // §correctif audit du 31/08/2026 (efficiency) : les 3 lignes ci-dessous étaient chacune un
