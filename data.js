@@ -4324,6 +4324,9 @@ const DB = {
     const list = this.getExpenses();
     const index = list.findIndex(n => n.id === id);
     if (index === -1) return null;
+    if (patch && patch.statut !== undefined && !transitionNoteFraisAutorisee(list[index].statut, patch.statut)) {
+      throw new Error('Transition de statut non autorisée pour une note de frais : ' + list[index].statut + ' vers ' + patch.statut + '.');
+    }
     list[index] = Object.assign({}, list[index], patch, { dateModification: new Date().toISOString() });
     this.saveExpenses(list);
     return list[index];
@@ -7328,6 +7331,35 @@ function findDuplicateExpense(employeeId, categorie, dateStr, montantTTC, allExp
   return allExpenses.find(e => e.id !== excludeExpenseId && e.employeeId === employeeId && e.categorie === categorie
     && e.date === dateStr && Math.abs(e.montantTTC - montantTTC) < 0.01
     && e.statut !== 'Refusé' && e.statut !== 'Annulé') || null;
+}
+
+/** Cycle de vie d'une note de frais (brief du 12/10/2026, A2). Les 4 statuts STOCKÉS ne changent pas : le
+ * statut « Remboursé » signifie « validée » (dernière étape du circuit franchie) et la date de paiement
+ * (datePaiement, posée par « Marquer comme payé ») est un second axe — d'où l'ancien affichage
+ * contradictoire « Remboursé » + « à payer ». Libellés affichés : Soumise -> Validée, à payer ->
+ * Remboursée, ou Refusée / Annulée. Un brouillon n'est pas une note : il vit dans les brouillons. */
+const TRANSITIONS_NOTE_FRAIS = {
+  'En attente': ['En attente', 'Remboursé', 'Refusé', 'Annulé'],
+  'Remboursé': ['Remboursé', 'Annulé'],
+  'Refusé': ['Refusé'],
+  'Annulé': ['Annulé']
+};
+
+function transitionNoteFraisAutorisee(de, vers) {
+  const permises = TRANSITIONS_NOTE_FRAIS[de];
+  return Boolean(permises && permises.includes(vers));
+}
+
+function libelleStatutNoteFrais(expense) {
+  switch (expense && expense.statut) {
+    case 'En attente': return { libelle: 'Soumise', classe: 'warning' };
+    case 'Remboursé': return expense.datePaiement
+      ? { libelle: 'Remboursée', classe: 'success' }
+      : { libelle: 'Validée, à payer', classe: 'info' };
+    case 'Refusé': return { libelle: 'Refusée', classe: 'muted' };
+    case 'Annulé': return { libelle: 'Annulée', classe: 'muted' };
+    default: return { libelle: (expense && expense.statut) || '—', classe: 'muted' };
+  }
 }
 
 function getExpenseRembourseDate(expense) {

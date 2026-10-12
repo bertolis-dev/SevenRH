@@ -13263,7 +13263,7 @@ function renderEmployeeFraisCard(e, user) {
                     <td>${escapeHtml(n.categorie)}</td>
                     <td>${escapeHtml(n.libelle)}</td>
                     <td class="cell-numeric">${formatCurrencyFR(n.montantTTC)}</td>
-                    <td>${renderRequestStatutBadge(n)}</td>
+                    <td>${renderExpenseStatutBadge(n)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -14945,6 +14945,22 @@ function renderLeaveRequestRow(r, selection) {
  * §correctif audit du 23/08/2026 (§7.7) : le motif de refus (désormais obligatoire à la saisie,
  * voir openRefuseModal) s'affiche directement sous le badge plutôt que de forcer à rouvrir
  * l'historique — c'est l'information que le salarié cherche en premier sur un refus. */
+/** Badge de statut d'une NOTE DE FRAIS : un seul libellé par état (voir libelleStatutNoteFrais), plus de
+ * « Remboursé » à côté de « à payer ». L'étape de validation en cours reste indiquée entre parenthèses. */
+// Le filtre « Remboursé » regroupe les notes validées (à payer) ET payées : libellé honnête pour les deux.
+const LIBELLE_FILTRE_STATUT_FRAIS = { 'En attente': 'Soumises', 'Remboursé': 'Validées ou remboursées', 'Refusé': 'Refusées', 'Annulé': 'Annulées' };
+
+function renderExpenseStatutBadge(n) {
+  const { libelle, classe } = libelleStatutNoteFrais(n);
+  const role = n.statut === 'En attente' && n.workflow && n.workflow[n.etapeIndex];
+  const suffixe = role ? ` (${ROLE_LABELS[role] || role})` : '';
+  const motif = n.statut === 'Refusé' && n.motifRefus
+    ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">${escapeHtml(n.motifRefus)}</div>` : '';
+  const paye = n.statut === 'Remboursé' && n.datePaiement
+    ? ` <span class="text-muted" style="font-size:12px;">le ${formatDate(n.datePaiement)}</span>` : '';
+  return `<span class="badge badge-${classe}">${escapeHtml(libelle)}${suffixe}</span>${paye}${motif}`;
+}
+
 function renderRequestStatutBadge(r) {
   const map = { 'En attente': 'warning', 'Validé': 'success', 'Remboursé': 'success', 'Refusé': 'muted', 'Annulé': 'muted' };
   const currentRole = r.statut === 'En attente' && r.workflow && r.workflow[r.etapeIndex];
@@ -24594,7 +24610,7 @@ function renderFrais() {
         <h1>Notes de frais</h1>
         <p class="view-subtitle">
           ${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC dû (en attente + remboursé)
-          ${totauxParStatut.map(t => ` · <span class="badge badge-${STATUT_BADGE_CLASS[t.statut]}">${escapeHtml(t.statut)} : ${t.notes.length} (${formatCurrencyFR(t.montant)})</span>`).join('')}
+          ${totauxParStatut.map(t => ` · <span class="badge badge-${STATUT_BADGE_CLASS[t.statut]}">${escapeHtml(LIBELLE_FILTRE_STATUT_FRAIS[t.statut])} : ${t.notes.length} (${formatCurrencyFR(t.montant)})</span>`).join('')}
         </p>
       </div>
       <div class="detail-header-actions">
@@ -24624,7 +24640,7 @@ function renderFrais() {
       </select>
       <select id="frais-filter-statut" class="input">
         <option value="">Tous les statuts</option>
-        ${['En attente', 'Remboursé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${state.fraisFilters.statut === s ? 'selected' : ''}>${s}</option>`).join('')}
+        ${['En attente', 'Remboursé', 'Refusé', 'Annulé'].map(s => `<option value="${s}" ${state.fraisFilters.statut === s ? 'selected' : ''}>${LIBELLE_FILTRE_STATUT_FRAIS[s]}</option>`).join('')}
       </select>
       <input class="input" type="month" id="frais-filter-periode" value="${escapeHtml(state.fraisFilters.periode)}" title="Filtrer par mois de la dépense">
     </div>
@@ -24692,7 +24708,7 @@ function renderExpenseRow(n) {
       <td data-label="Catégorie">${escapeHtml(n.categorie)}</td>
       <td data-label="Libellé">${escapeHtml(n.libelle)}${dossier ? ` <span class="badge badge-info" title="Fait partie du dossier">${icon(ICONS.folder, 10)} ${escapeHtml(dossier.motif)}</span>` : ''}</td>
       <td class="cell-numeric" data-label="Montant TTC">${formatCurrencyFR(n.montantTTC)}</td>
-      <td data-label="Statut">${renderRequestStatutBadge(n)}${n.statut === 'Remboursé' ? (n.datePaiement ? ` <span class="text-muted" style="font-size:12px;">payé le ${formatDate(n.datePaiement)}</span>` : ` <span class="badge badge-muted">à payer</span>`) : ''}${releveBancaireRepository.getAll().some(l => l.expenseId === n.id) ? ` <span class="badge badge-success" title="Un mouvement du relevé bancaire importé correspond à cette note">${icon(ICONS.checkCircle, 10)} Rapproché</span>` : ''}</td>
+      <td data-label="Statut">${renderExpenseStatutBadge(n)}${releveBancaireRepository.getAll().some(l => l.expenseId === n.id) ? ` <span class="badge badge-success" title="Un mouvement du relevé bancaire importé correspond à cette note">${icon(ICONS.checkCircle, 10)} Rapproché</span>` : ''}</td>
       <td class="table-actions">
         <button class="btn-link" data-view-nf="${n.id}">Détail</button>
         <button class="btn-link" data-history="${n.id}">Historique</button>
@@ -25088,7 +25104,7 @@ function exportExpensesCSV() {
   // indicateur, pas une règle fiscale complète — voir categoriesFraisConfig, data.js) séparé en
   // colonne pour que le comptable distingue la TVA récupérable du reste sans recalculer à la main.
   const settings = settingsRepository.getSettings();
-  const headers = ['Matricule', 'Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'TVA déductible', 'Montant TTC', 'Statut', 'Date de remboursement'];
+  const headers = ['Matricule', 'Salarié', 'Date', 'Catégorie', 'Libellé', 'Montant HT', 'TVA', 'TVA déductible', 'Montant TTC', 'Statut', 'Date de remboursement (paiement)'];
   const rows = expenses.map(n => {
     const employee = employeeRepository.getById(n.employeeId);
     const categorieConfig = (settings.categoriesFraisConfig || {})[n.categorie];
@@ -25105,8 +25121,8 @@ function exportExpensesCSV() {
       computeMontantTVA(n.montantTTC, n.tauxTVA),
       tvaDeductible ? 'Oui' : 'Non',
       n.montantTTC,
-      n.statut,
-      n.statut === 'Remboursé' ? formatDate(getExpenseRembourseDate(n)) : ''
+      libelleStatutNoteFrais(n).libelle,
+      n.datePaiement ? formatDate(n.datePaiement) : ''
     ];
   });
   exportRowsToCSV(headers, rows, 'notes-de-frais.csv');

@@ -69,6 +69,9 @@ async function run() {
 
     // Refuse la 2ᵉ note, comme le ferait handleRefuseExpense (app.js) — puis déclenche le recalcul,
     // exactement comme ce handler le fait désormais pour toute note Kilométrique.
+    // Sans circuit de validation la note est créée déjà validée ; un refus réel n'arrive que sur une note
+    // en attente (transitions contrôlées, brief du 12/10/2026) : on la remet donc en attente d'abord.
+    DB.saveExpenses(DB.getExpenses().map(n => n.id === note2.id ? { ...n, statut: 'En attente' } : n));
     DB.updateExpense(note2.id, refuseRequest(DB.getExpenseById(note2.id), 'Justificatif illisible'));
     DB.recalculerIndemnitesKilometriques(rh.id, '2026');
 

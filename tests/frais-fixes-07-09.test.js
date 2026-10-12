@@ -257,7 +257,7 @@ async function run() {
     const html = renderFrais();
     const subtitle = (html.match(/<p class="view-subtitle">([\s\S]*?)<\/p>/) || [])[1] || '';
     assert.ok(subtitle.includes('1 note'), 'le filtre période=2026-01 ne doit garder que la note de janvier');
-    assert.ok(subtitle.includes('Remboursé : 1'), 'les totaux par statut doivent apparaître à côté du total dû');
+    assert.ok(subtitle.includes('Validées ou remboursées : 1'), 'les totaux par statut doivent apparaître à côté du total dû');
     assert.ok(!html.includes('>B<'), 'la note de février (hors période filtrée) ne doit pas apparaître dans le tableau');
   }
 
