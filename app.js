@@ -20123,6 +20123,117 @@ function bindParametresPlanningTeletravailEvents() {
 
 /** §point 9 du 22/09/2026 : extrait de l'ex-onglet "Référentiels" — réglages propres au module
  * Notes de frais (catégories, justificatif/plafond/TVA par catégorie, chaîne de validation). */
+const BAREMES_STRUCTURE_KM = {
+  voiture: { label: 'Voiture', lignes: [3, 4, 5, 6, null] },
+  moto: { label: 'Moto', lignes: [2, 5, null] },
+  cyclomoteur: { label: 'Cyclomoteur', lignes: [null] }
+};
+
+/** Carte « Barème kilométrique » (brief du 12/10/2026, C1) : un barème par année, vide tant que l'entreprise ne l'a pas
+ * saisi ET confirmé ; la structure (puissances fiscales) est préremplie, jamais les taux. */
+function renderBaremeKilometriqueCard(settings) {
+  const anneeCourante = new Date().getFullYear();
+  const annees = Array.from(new Set([anneeCourante - 1, anneeCourante, anneeCourante + 1, ...Object.keys(settings.baremesKilometriques || {}).map(Number)])).sort((a, b) => a - b);
+  const annee = state.baremeKmAnnee || anneeCourante;
+  const existant = (settings.baremesKilometriques || {})[annee];
+  const valeur = (type, i, champ) => {
+    const l = existant && Array.isArray(existant[type]) ? existant[type][i] : null;
+    return l && l[champ] != null ? l[champ] : '';
+  };
+  const statut = existant && existant.valide
+    ? `<p class="text-muted">Barème de l'entreprise confirmé pour ${annee} : il est utilisé pour les notes de cette année.</p>`
+    : `<p class="form-hint">Aucun barème validé pour ${annee} : le barème indicatif de la plateforme est utilisé en attendant. Il est <strong>non validé</strong> : vérifiez les valeurs officielles (service-public.fr, impots.gouv.fr) avant de vous y fier en paie.</p>`;
+  const tableau = (type) => {
+    const def = BAREMES_STRUCTURE_KM[type];
+    return `
+      <h3 style="margin: 14px 0 6px;">${def.label}</h3>
+      <div class="table-wrapper"><table class="table">
+        <thead><tr><th>Jusqu'à (CV)</th><th>≤ seuil 1 : €/km</th><th>Tranche 2 : €/km</th><th>Tranche 2 : + fixe (€)</th><th>Au-delà : €/km</th></tr></thead>
+        <tbody>${def.lignes.map((cv, i) => `
+          <tr>
+            <td><input class="input" inputmode="decimal" id="bk-${type}-${i}-cvMax" value="${escapeHtml(cv == null ? '' : (valeur(type, i, 'cvMax') !== '' ? valeur(type, i, 'cvMax') : cv))}" placeholder="et plus" ${cv == null ? 'disabled' : ''}></td>
+            <td><input class="input" inputmode="decimal" id="bk-${type}-${i}-tranche1" value="${escapeHtml(valeur(type, i, 'tranche1'))}"></td>
+            <td><input class="input" inputmode="decimal" id="bk-${type}-${i}-tranche2Coef" value="${escapeHtml(valeur(type, i, 'tranche2Coef'))}"></td>
+            <td><input class="input" inputmode="decimal" id="bk-${type}-${i}-tranche2Fixe" value="${escapeHtml(valeur(type, i, 'tranche2Fixe'))}"></td>
+            <td><input class="input" inputmode="decimal" id="bk-${type}-${i}-tranche3" value="${escapeHtml(valeur(type, i, 'tranche3'))}"></td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
+  };
+  return `
+    <div class="card" id="card-bareme-km">
+      <h2>Barème kilométrique</h2>
+      <p class="text-muted">Un barème par année. Les seuils de distance sont ceux du barème officiel (voiture 5 000 / 20 000 km ; moto et cyclomoteur 3 000 / 6 000 km). Les taux sont vides tant que vous ne les avez pas saisis et confirmés.</p>
+      ${statut}
+      <div class="form-field" style="max-width: 220px;">
+        <label for="f-bareme-annee">Année</label>
+        <select class="input" id="f-bareme-annee">${annees.map(y => `<option value="${y}" ${y === annee ? 'selected' : ''}>${y}</option>`).join('')}</select>
+      </div>
+      ${Object.keys(BAREMES_STRUCTURE_KM).map(tableau).join('')}
+      <div class="form-field form-field-checkbox" style="margin-top: 12px;">
+        <label><input type="checkbox" id="f-bareme-confirme"> Je confirme avoir vérifié ces valeurs pour ${annee}</label>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+        <button type="button" class="btn btn-secondary" id="btn-bareme-preremplir">Préremplir avec le barème indicatif</button>
+        <button type="button" class="btn btn-primary" id="btn-bareme-enregistrer">Enregistrer le barème ${annee}</button>
+        ${existant ? '<button type="button" class="btn btn-secondary" id="btn-bareme-retirer">Retirer ce barème</button>' : ''}
+      </div>
+    </div>
+  `;
+}
+
+function lireSaisieBaremeKilometrique() {
+  const saisie = {};
+  Object.keys(BAREMES_STRUCTURE_KM).forEach(type => {
+    saisie[type] = BAREMES_STRUCTURE_KM[type].lignes.map((_, i) => {
+      const val = (champ) => { const el = document.getElementById(`bk-${type}-${i}-${champ}`); return el ? el.value : ''; };
+      return { cvMax: val('cvMax'), tranche1: val('tranche1'), tranche2Coef: val('tranche2Coef'), tranche2Fixe: val('tranche2Fixe'), tranche3: val('tranche3') };
+    });
+  });
+  return saisie;
+}
+
+function bindBaremeKilometriqueEvents() {
+  const annee = state.baremeKmAnnee || new Date().getFullYear();
+  const select = document.getElementById('f-bareme-annee');
+  if (select) select.addEventListener('change', () => { state.baremeKmAnnee = Number(select.value); render(); });
+  const preremplir = document.getElementById('btn-bareme-preremplir');
+  if (preremplir) preremplir.addEventListener('click', () => {
+    Object.keys(BAREMES_STRUCTURE_KM).forEach(type => {
+      const lignes = getBaremeKilometrique(type, annee, {});
+      BAREMES_STRUCTURE_KM[type].lignes.forEach((_, i) => {
+        const l = lignes[i];
+        if (!l) return;
+        ['tranche1', 'tranche2Coef', 'tranche2Fixe', 'tranche3'].forEach(champ => { document.getElementById(`bk-${type}-${i}-${champ}`).value = String(l[champ]).replace('.', ','); });
+      });
+    });
+    showToast('Valeurs indicatives chargées : vérifiez-les, cochez la confirmation puis enregistrez.');
+  });
+  const enregistrer = document.getElementById('btn-bareme-enregistrer');
+  if (enregistrer) enregistrer.addEventListener('click', () => {
+    if (!document.getElementById('f-bareme-confirme').checked) {
+      showToast('Cochez la confirmation : le barème sera utilisé pour calculer des indemnités.', 'error');
+      return;
+    }
+    const resultat = normaliserBaremeKilometriqueSaisi(lireSaisieBaremeKilometrique());
+    if (!resultat.ok) { showToast(resultat.error, 'error'); return; }
+    const reglages = settingsRepository.getSettings();
+    reglages.baremesKilometriques = { ...(reglages.baremesKilometriques || {}), [annee]: { valide: true, dateValidation: new Date().toISOString(), ...resultat.bareme } };
+    settingsRepository.saveSettings(reglages);
+    showToast(`Barème kilométrique ${annee} enregistré.`);
+    render();
+  });
+  const retirer = document.getElementById('btn-bareme-retirer');
+  if (retirer) retirer.addEventListener('click', () => {
+    const reglages = settingsRepository.getSettings();
+    const copie = { ...(reglages.baremesKilometriques || {}) };
+    delete copie[annee];
+    reglages.baremesKilometriques = copie;
+    settingsRepository.saveSettings(reglages);
+    showToast(`Barème ${annee} retiré : le barème indicatif s'applique de nouveau.`);
+    render();
+  });
+}
+
 function renderParametresNotesFrais() {
   const settings = settingsRepository.getSettings();
   return `
@@ -20137,6 +20248,7 @@ function renderParametresNotesFrais() {
       </div>
     </div>
     ${renderCategoriesFraisConfigCard(settings)}
+    ${renderBaremeKilometriqueCard(settings)}
     <div class="card">
       <h2>Validation</h2>
       <div class="form-grid">
@@ -20152,6 +20264,7 @@ function bindParametresNotesFraisEvents() {
   // l'éclatement de l'ex-onglet "Référentiels" par module, rien à réécrire ici.
   bindChipListEvents();
   bindCheckboxField('f-justificatif-obligatoire', 'justificatifNoteFraisObligatoire', 'Règle du justificatif mise à jour.');
+  bindBaremeKilometriqueEvents();
   bindWorkflowField('f-workflow-frais', 'workflowFrais', 'Chaîne de validation des notes de frais mise à jour.');
 }
 
@@ -25451,10 +25564,12 @@ function updateExpenseKmHint() {
   const employeeId = document.getElementById('f-employeeId').value;
   const dateStr = document.getElementById('f-date').value || toISODate(new Date());
   const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, dateStr, expenseRepository.getAll(), state.editingExpenseId, typeVehicule);
-  const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique });
+  const reglagesBareme = settingsRepository.getSettings();
+  const montant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique, annee: dateStr.slice(0, 4), settings: reglagesBareme });
+  const avertissementBareme = infoBaremeKilometrique(typeVehicule, dateStr.slice(0, 4), reglagesBareme).valide ? '' : ' Barème indicatif non validé par l\'entreprise (Paramètres > Notes de frais).';
   hint.textContent = kmDejaDeclares > 0
-    ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année pour ce type de véhicule, avant cette note).`
-    : `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)}`;
+    ? `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)} (${formatNumberFR(kmDejaDeclares)} km déjà déclarés cette année pour ce type de véhicule, avant cette note).${avertissementBareme}`
+    : `Indemnité kilométrique calculée automatiquement : ${formatCurrencyFR(montant)}.${avertissementBareme}`;
 }
 
 async function submitExpenseForm(evt) {
@@ -25519,7 +25634,7 @@ async function submitExpenseForm(evt) {
     // cumul est scopé au type de véhicule (point 5, 11/09/2026) : voiture et moto ne se mélangent
     // jamais dans le même compteur annuel.
     const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll(), state.editingExpenseId, typeVehicule);
-    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique });
+    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique, annee: dateDepense.slice(0, 4), settings });
     tauxTVA = 0;
     kilometrage = { distanceKm, puissanceFiscale, typeVehicule, electrique };
   } else {

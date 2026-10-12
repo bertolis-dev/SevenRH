@@ -522,6 +522,10 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (C1) : barème kilométrique de l'ENTREPRISE, par année et par motorisation, vide tant que
+  // l'entreprise n'a pas saisi et confirmé ses valeurs ({ '2026': { valide: true, voiture: [...], moto: [...] } }).
+  // Tant qu'il est vide, le barème indicatif de la plateforme (BAREMES_KILOMETRIQUES) sert de repli, signalé non validé.
+  baremesKilometriques: {},
   // Brief du 12/10/2026 (C1) : justificatif (photo ou fichier) obligatoire pour soumettre toute note de frais. Désactivé,
   // les règles par catégorie (obligatoire / au-delà d'un seuil) s'appliquent comme auparavant.
   justificatifNoteFraisObligatoire: true,
@@ -4422,7 +4426,7 @@ const DB = {
    * annulée — jamais l'année en cours, une note peut être refusée bien après l'année du trajet. */
   recalculerIndemnitesKilometriques(employeeId, annee) {
     const list = this.getExpenses();
-    const misesAJour = recalculerIndemnitesKilometriquesAnnee(employeeId, annee, list);
+    const misesAJour = recalculerIndemnitesKilometriquesAnnee(employeeId, annee, list, this.getSettings());
     if (!misesAJour.length) return;
     misesAJour.forEach(({ id, montantTTC }) => {
       const index = list.findIndex(e => e.id === id);
@@ -7001,7 +7005,67 @@ const BAREMES_KILOMETRIQUES = {
 
 const MAJORATION_VEHICULE_ELECTRIQUE = 0.20;
 
-function getBaremeKilometrique(typeVehicule, annee) {
+/** Lignes du barème de l'ENTREPRISE applicables (année de la note ou dernière année antérieure renseignée, uniquement
+ * si l'entreprise l'a confirmé) ; null si elle n'en a pas pour cette motorisation. cvMax null = « et plus ». */
+function getBaremeEntrepriseKilometrique(typeVehicule, annee, settings) {
+  const parAnnee = (settings && settings.baremesKilometriques) || {};
+  const demandee = Number(annee) || new Date().getFullYear();
+  const annees = Object.keys(parAnnee).map(Number)
+    .filter(y => y <= demandee && parAnnee[y] && parAnnee[y].valide && Array.isArray(parAnnee[y][typeVehicule]) && parAnnee[y][typeVehicule].length)
+    .sort((a, b) => a - b);
+  if (!annees.length) return null;
+  const annee0 = annees[annees.length - 1];
+  return { annee: annee0, lignes: parAnnee[annee0][typeVehicule].map(l => ({ ...l, cvMax: l.cvMax == null ? Infinity : Number(l.cvMax) })) };
+}
+
+/** D'où vient le barème utilisé : « entreprise » (validé par elle) ou « indicatif » (valeurs de la plateforme, NON
+ * validées, à vérifier avant tout usage en paie). */
+function infoBaremeKilometrique(typeVehicule, annee, settings) {
+  const entreprise = getBaremeEntrepriseKilometrique(typeVehicule, annee, settings);
+  return entreprise ? { source: 'entreprise', annee: entreprise.annee, valide: true } : { source: 'indicatif', annee: null, valide: false };
+}
+
+/** Contrôle et normalise la saisie du barème (écran Paramètres) : nombres (virgule acceptée), jamais négatifs, puissances
+ * fiscales strictement croissantes, dernière tranche « et plus » (cvMax null, car Infinity ne survit pas à
+ * l'enregistrement JSON). */
+function normaliserBaremeKilometriqueSaisi(saisie) {
+  const nombre = (v) => {
+    const t = String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.');
+    return t === '' ? NaN : Number(t);
+  };
+  const bareme = {};
+  for (const type of ['voiture', 'moto', 'cyclomoteur']) {
+    const lignes = saisie && saisie[type];
+    if (!Array.isArray(lignes) || !lignes.length) continue;
+    const resultat = [];
+    let precedent = 0;
+    for (let i = 0; i < lignes.length; i++) {
+      const l = lignes[i];
+      const derniere = i === lignes.length - 1;
+      const champs = { tranche1: nombre(l.tranche1), tranche2Coef: nombre(l.tranche2Coef), tranche2Fixe: nombre(l.tranche2Fixe), tranche3: nombre(l.tranche3) };
+      const invalide = Object.entries(champs).find(([, v]) => !Number.isFinite(v) || v < 0);
+      if (invalide) return { ok: false, error: 'Barème ' + type + ', ligne ' + (i + 1) + ' : « ' + invalide[0] + ' » doit être un nombre positif.' };
+      let cvMax = null;
+      if (!derniere) {
+        cvMax = nombre(l.cvMax);
+        if (!Number.isFinite(cvMax) || cvMax <= precedent) return { ok: false, error: 'Barème ' + type + ', ligne ' + (i + 1) + ' : les puissances fiscales doivent être croissantes.' };
+        precedent = cvMax;
+      } else {
+        const brut = nombre(l.cvMax);
+        if (Number.isFinite(brut) && brut <= precedent) return { ok: false, error: 'Barème ' + type + ', ligne ' + (i + 1) + ' : les puissances fiscales doivent être croissantes.' };
+        cvMax = null;
+      }
+      resultat.push({ cvMax, ...champs });
+    }
+    bareme[type] = resultat;
+  }
+  if (!Object.keys(bareme).length) return { ok: false, error: 'Aucun barème à enregistrer.' };
+  return { ok: true, bareme };
+}
+
+function getBaremeKilometrique(typeVehicule, annee, settings) {
+  const entreprise = getBaremeEntrepriseKilometrique(typeVehicule, annee, settings);
+  if (entreprise) return entreprise.lignes;
   const tables = BAREMES_KILOMETRIQUES[typeVehicule] || BAREMES_KILOMETRIQUES.voiture;
   const years = Object.keys(tables).map(Number).sort((a, b) => a - b);
   const demandee = Number(annee) || years[years.length - 1];
@@ -7035,7 +7099,7 @@ function getSeuilsKilometriques(typeVehicule) {
  * télescope de la même façon : 1,2×(a−b) = 1,2a − 1,2b), plus simple à écrire ainsi. */
 function calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, options = {}) {
   const typeVehicule = options.typeVehicule || 'voiture';
-  const tiers = getBaremeKilometrique(typeVehicule, options.annee);
+  const tiers = getBaremeKilometrique(typeVehicule, options.annee, options.settings);
   const seuils = getSeuilsKilometriques(typeVehicule);
   const tier = tiers.find(b => puissanceFiscale <= b.cvMax) || tiers[tiers.length - 1];
   const bareme = (d) => {
@@ -7079,7 +7143,7 @@ function getKilometrageDejaDeclareAnnee(employeeId, dateStr, allExpenses, exclud
  * salarié. Pure fonction (pas d'écriture) — voir DB.recalculerIndemnitesKilometriques pour la
  * persistance, appelée après tout refus/annulation d'une note Kilométrique (voir
  * handleRefuseExpense/handleCancelExpense/handleSelfCancelExpense, app.js). */
-function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses) {
+function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses, settings) {
   const notes = allExpenses
     .filter(e => e.employeeId === employeeId && e.categorie === 'Kilométrique'
       && (e.date || '').slice(0, 4) === year && e.statut !== 'Refusé' && e.statut !== 'Annulé')
@@ -7095,7 +7159,7 @@ function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses) {
     const typeVehicule = (note.kilometrage && note.kilometrage.typeVehicule) || 'voiture';
     const electrique = Boolean(note.kilometrage && note.kilometrage.electrique);
     const cumul = cumulParType[typeVehicule] || 0;
-    const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul, { typeVehicule, electrique });
+    const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul, { typeVehicule, electrique, annee: year, settings });
     cumulParType[typeVehicule] = cumul + distanceKm;
     if (Math.abs(nouveauMontant - note.montantTTC) > 0.001) misesAJour.push({ id: note.id, montantTTC: nouveauMontant });
   });
