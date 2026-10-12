@@ -6822,6 +6822,21 @@ function makeEmptyTicket() {
   };
 }
 
+/** Libellé d'une note de frais : obligatoire ET significatif (brief du 12/10/2026, A3) — 3 caractères
+ * minimum après nettoyage, au moins une lettre (jamais « 123 » ou « ... »). Retourne le libellé
+ * nettoyé (espaces multiples fusionnés) à enregistrer. */
+const LIBELLE_NOTE_FRAIS_MIN = 3;
+function validerLibelleNoteFrais(libelle) {
+  const propre = String(libelle == null ? '' : libelle).replace(/\s+/g, ' ').trim();
+  if (propre.length < LIBELLE_NOTE_FRAIS_MIN) {
+    return { ok: false, error: 'Le libellé doit faire au moins ' + LIBELLE_NOTE_FRAIS_MIN + ' caractères (ex. « Taxi gare »).' };
+  }
+  if (!/\p{L}/u.test(propre)) {
+    return { ok: false, error: 'Le libellé doit contenir des lettres : décrivez la dépense (ex. « Déjeuner client »).' };
+  }
+  return { ok: true, libelle: propre };
+}
+
 function computeMontantHT(montantTTC, tauxTVA) {
   return round2(montantTTC / (1 + (Number(tauxTVA) || 0) / 100));
 }

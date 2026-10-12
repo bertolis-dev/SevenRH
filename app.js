@@ -25328,6 +25328,12 @@ async function submitExpenseForm(evt) {
     return;
   }
 
+  const libelleValide = validerLibelleNoteFrais(formData.get('libelle'));
+  if (!libelleValide.ok) {
+    showToast(libelleValide.error, 'error');
+    return;
+  }
+
   // §retour Betty du 07/09/2026 (point 3) : aucun contrôle n'existait sur la date de la dépense —
   // une dépense datée dans le futur ou antérieure à l'embauche du salarié était acceptée telle
   // quelle, alors que le module Congés vérifie déjà ce genre de choses sur ses propres dates.
@@ -25395,7 +25401,7 @@ async function submitExpenseForm(evt) {
   const data = {
     employeeId, categorie, kilometrage, montantTTC, tauxTVA,
     date: dateDepense,
-    libelle: formData.get('libelle'),
+    libelle: libelleValide.libelle,
     commentaire: formData.get('commentaire') || '',
     justificatif: state.pendingAttachment
   };
