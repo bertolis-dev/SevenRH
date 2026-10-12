@@ -4970,6 +4970,13 @@ const DB = {
     this.saveCurrentCompany(company);
     this._pushInBackground(window.SupabaseSync.updateEntretien(entretien, company.id), { kind: 'singleUpdate', table: 'entretiens', companyId: company.id, id: entretien.id });
     const employee = this.getEmployeeById(entretien.employeeId);
+    // Brief du 12/10/2026 (C4) : la date du dernier entretien (professionnel ou bilan) était saisie à la main —
+    // clôturer l'entretien ne la mettait jamais à jour, donc le rappel restait « en retard » indéfiniment.
+    // Jamais reculée : une date déjà plus récente est conservée.
+    if (employee) {
+      const champ = entretien.type === 'bilan' ? 'dateDernierBilanSixAns' : 'dateDernierEntretienProfessionnel';
+      if (!employee[champ] || employee[champ] < entretien.dateRealisee) this.updateEmployee(employee.id, { [champ]: entretien.dateRealisee });
+    }
     this.logAudit('Modification', 'Entretien', employee ? `${employee.prenom} ${employee.nom}` : '—', 'Clôturé');
     return entretien;
   },
@@ -6124,6 +6131,7 @@ function makeEmptyEmployee() {
     dateFinContrat: '',
     dateFinPeriodeEssai: '',
     dateDernierEntretienProfessionnel: '',
+    dateDernierBilanSixAns: '', // posée à la clôture d'un entretien de type « bilan » (brief du 12/10/2026, C4)
     // §retour Betty du 17/09/2026 : dateDerniereVisiteMedicale (un champ unique, écrasé à chaque
     // visite, sans confirmation ni historique) remplacé par un vrai historique — voir
     // visitesMedicales ci-dessous et VISITES_MEDICALES_MIGRATION_FLAG (migration ponctuelle,

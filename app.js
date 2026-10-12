@@ -5998,13 +5998,19 @@ async function syncNotifications() {
       `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
+  // Brief du 12/10/2026 (C4) : trois rappels distincts par échéance (30 jours, dernière semaine, retard) au lieu
+  // d'un seul ; chaque palier a sa propre clé, donc n'est notifié qu'une fois. Le palier « 30 jours » garde l'ancienne
+  // clé pour ne pas dupliquer les rappels déjà envoyés.
+  const echelonRappel = (daysUntil) => daysUntil < 0 ? { suffixe: '-retard', etat: 'en retard' } : daysUntil <= 7 ? { suffixe: '-j7', etat: 'dans moins de 7 jours' } : { suffixe: '', etat: '' };
   if (hasModule('rh')) getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}`, ICONS.notepad, 'Entretien professionnel à programmer',
+    const palier = echelonRappel(x.daysUntil);
+    candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Entretien professionnel ${palier.etat}` : 'Entretien professionnel à programmer',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
-    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}`, ICONS.notepad, 'Bilan à 6 ans à réaliser',
+    const palier = echelonRappel(x.daysUntil);
+    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Bilan à 6 ans ${palier.etat}` : 'Bilan à 6 ans à réaliser',
       `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
@@ -7321,6 +7327,14 @@ function getUpcomingBilansSixAns(daysAhead = 60, employees, limit = 5) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
+      // Un bilan réalisé (dateDernierBilanSixAns, posée à la clôture d'un entretien « bilan ») : la prochaine
+      // échéance est 6 ans plus tard, un bilan manqué reste en retard (jamais reporté en silence).
+      if (e.dateDernierBilanSixAns) {
+        const dernier = parseISODateLocal(e.dateDernierBilanSixAns);
+        const prochain = new Date(dernier.getFullYear() + 6, dernier.getMonth(), dernier.getDate());
+        const annees = Math.max(6, Math.round((prochain - parseISODateLocal(e.dateEmbauche)) / (365.25 * 86400000)));
+        return { employee: e, next: prochain, years: annees, daysUntil: Math.round((prochain - today) / 86400000) };
+      }
       const hire = parseISODateLocal(e.dateEmbauche);
       let years = 6;
       let next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate());
@@ -13013,6 +13027,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         })()}
         ${canSeeContractuel && e.dateFinPeriodeEssai ? `<p class="form-hint">Délai de prévenance estimé (article L1221-25 du Code du travail), à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>` : ''}
         ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
+        ${canSeeContractuel && e.dateDernierBilanSixAns ? infoRow('Dernier bilan à 6 ans', formatDate(e.dateDernierBilanSixAns)) : ''}
       </div>
 
       ${ifModule('rh', renderVisitesMedicalesCard(e, canEdit))}
