@@ -522,6 +522,10 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
+  // immédiatement disponible ; 'autorise_acquis_a_date' : elle peut aller jusqu'aux jours déjà acquis à date sur la
+  // période en cours. Règle à valider (docs/regles-a-valider.md) — le code ne tranche pas la question juridique.
+  congesAnticipation: 'interdit',
   // Brief du 12/10/2026 (B4) : seuils des alertes NON bloquantes du planning. Valeurs par défaut = seuils légaux
   // de repli (L3121-18, L3121-20, L3131-1, L3132-2), relevables ou abaissables par accord/convention — à faire
   // valider (docs/regles-a-valider.md). Alerte dimanche désactivée : de nombreuses dérogations existent.
@@ -7415,6 +7419,33 @@ function libelleStatutNoteFrais(expense) {
     case 'Annulé': return { libelle: 'Annulée', classe: 'muted' };
     default: return { libelle: (expense && expense.statut) || '—', classe: 'muted' };
   }
+}
+
+/** Contrôle d'une demande de congé contre le solde (brief du 12/10/2026, B1). Ne concerne que les types de
+ * congé à solde (ni illimités, ni absences). Retourne { ok, message }. `refDate` : date de début de la demande
+ * (solde et acquisition évalués à cette date). */
+function verifierSoldeDemandeConge(employee, leaveType, nbJours, allRequests, allLeaveTypes, settings, refDate) {
+  if (!leaveType || leaveType.categorie !== 'conge' || leaveType.illimite || leaveType.acquisition === 'Illimitée') return { ok: true };
+  const bilan = getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate);
+  if (bilan.disponible === Infinity) return { ok: true };
+  const anticipation = (settings && settings.congesAnticipation) === 'autorise_acquis_a_date';
+  const enCours = anticipation && bilan.enCoursAcquisition ? bilan.enCoursAcquisition.acquis : 0;
+  const plafond = round2(bilan.disponible + enCours);
+  if (nbJours <= plafond + 0.001) return { ok: true, plafond };
+  const detail = anticipation
+    ? 'Les jours pris par anticipation sont limités aux jours déjà acquis à cette date.'
+    : 'Les jours en cours d\'acquisition ne peuvent pas être pris avant leur acquisition (réglage Paramètres > Congés et absences).';
+  return {
+    ok: false, plafond,
+    message: 'Solde insuffisant pour « ' + leaveType.nom + ' » : ' + formatDurationFR(nbJours) + ' demandés, ' + formatDurationFR(Math.max(0, plafond)) + ' disponibles. ' + detail
+  };
+}
+
+/** Texte de l'écran des compteurs, selon le réglage d'anticipation. */
+function libelleRegleAnticipationConges(settings) {
+  return (settings && settings.congesAnticipation) === 'autorise_acquis_a_date'
+    ? 'ce qui s\'acquiert sur la période en cours peut être pris par anticipation, dans la limite des jours déjà acquis à date (réglage de l\'entreprise).'
+    : 'ce qui s\'acquiert sur la période en cours n\'est pas consommable avant sa propre clôture (la prise par anticipation est désactivée dans les réglages).';
 }
 
 function getExpenseRembourseDate(expense) {

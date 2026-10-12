@@ -8496,7 +8496,7 @@ function renderTableauCompteurs() {
   return `
     <div class="view-header">
       <h1>Tableau des compteurs</h1>
-      <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ce qui s'acquiert sur la période en cours n'est jamais consommable avant sa propre clôture.</p>
+      <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ${escapeHtml(libelleRegleAnticipationConges(settingsRepository.getSettings()))}</p>
     </div>
     <!-- §retour Betty du 19/09/2026 (point 6, "socle commun") : recherche + filtre établissement
          ajoutés ("l'application gère les établissements", pas de raison qu'un seul écran l'ignore),
@@ -16245,6 +16245,13 @@ async function submitLeaveRequestForm(evt) {
     return;
   }
 
+  // Brief du 12/10/2026 (B1) : plafond de la demande selon le réglage d'anticipation de l'entreprise.
+  const controleSolde = verifierSoldeDemandeConge(employee, type, nbJours, leaveRepository.getAll(), leaveTypeRepository.getLeaveTypes(), settingsRepository.getSettings(), dateDebut);
+  if (!controleSolde.ok) {
+    showToast(controleSolde.message, 'error');
+    return;
+  }
+
   if (!type.autoriserPlusieursDemandes) {
     const bothSingleDay = dateDebut === dateFin;
     const overlapping = leaveRepository.getAll().some(r => {
@@ -18451,6 +18458,19 @@ function renderParametresTypesAbsences() {
   const settings = settingsRepository.getSettings();
   return `
     <div class="card" style="margin-bottom: 16px;">
+      <h2>Congés par anticipation</h2>
+      <p class="text-muted">Un salarié peut-il poser des jours qu'il n'a pas encore acquis ? Règle à valider avant de l'autoriser (accord d'entreprise, convention).</p>
+      <div class="form-grid" style="max-width: 520px;">
+        <div class="form-field">
+          <label for="f-conges-anticipation">Prise de congés par anticipation</label>
+          <select class="input" id="f-conges-anticipation">
+            <option value="interdit" ${settings.congesAnticipation !== 'autorise_acquis_a_date' ? 'selected' : ''}>Interdite : seulement le solde disponible</option>
+            <option value="autorise_acquis_a_date" ${settings.congesAnticipation === 'autorise_acquis_a_date' ? 'selected' : ''}>Autorisée dans la limite des jours acquis à date</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
       <h2>Chaîne de validation par défaut</h2>
       <p class="text-muted">Modèle proposé à la création d'un nouveau type de congé (chaque type garde ensuite sa propre chaîne, modifiable ci-dessous).</p>
       <div class="form-grid" style="max-width: 400px;">
@@ -18473,6 +18493,13 @@ function bindParametresTypesAbsencesEvents() {
     btn.addEventListener('click', () => { state.parametresTypesCategorie = btn.dataset.parametresTypesCategorie; render(); });
   });
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
+  const anticipationField = document.getElementById('f-conges-anticipation');
+  if (anticipationField) anticipationField.addEventListener('change', () => {
+    const reglages = settingsRepository.getSettings();
+    reglages.congesAnticipation = anticipationField.value === 'autorise_acquis_a_date' ? 'autorise_acquis_a_date' : 'interdit';
+    settingsRepository.saveSettings(reglages);
+    showToast('Règle de prise par anticipation mise à jour.');
+  });
   if (categorie === 'quotas') bindParametresQuotasSimultanesEvents();
   else if (categorie === 'vacances') bindParametresVacancesEvents();
   else bindCongesTypesEvents(categorie);
