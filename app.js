@@ -20067,6 +20067,11 @@ function renderParametresPlanningTeletravail() {
       <h2>Planning</h2>
       <div class="form-grid">
         <div class="form-field">
+          <label for="f-pointage-tolerance">Tolérance du pointage (minutes)</label>
+          <input class="input" type="number" min="0" max="120" step="1" id="f-pointage-tolerance" value="${escapeHtml(settings.pointageToleranceMinutes)}">
+          <p class="form-hint">Écart accepté entre le pointage et le quart planifié avant de signaler un retard, un départ anticipé ou un dépassement (écran Pointeuse). Valeur à valider.</p>
+        </div>
+        <div class="form-field">
           <label for="f-pause-defaut">Pause déduite par défaut (minutes)</label>
           <input class="input" type="number" min="0" step="5" id="f-pause-defaut" value="${escapeHtml(settings.pauseParDefautMinutes)}">
           <p class="form-hint">Proposée à chaque nouveau créneau, modifiable créneau par créneau. Elle est déduite du total d'heures affiché dans le Planning. Règle à faire valider selon votre convention collective.</p>
@@ -20104,6 +20109,7 @@ function renderParametresPlanningTeletravail() {
 }
 
 function bindParametresPlanningTeletravailEvents() {
+  bindNumberField('f-pointage-tolerance', 'pointageToleranceMinutes', 10, 'Tolérance mise à jour.');
   bindNumberField('f-pause-defaut', 'pauseParDefautMinutes', 30, 'Pause par défaut mise à jour.');
   bindNumberField('f-plan-max-jour', 'planningDureeMaxQuotidienneHeures', 10, 'Seuil mis à jour.');
   bindNumberField('f-plan-max-semaine', 'planningDureeMaxHebdomadaireHeures', 48, 'Seuil mis à jour.');
@@ -23906,15 +23912,30 @@ function renderPointeuseEquipe() {
 /** §retour Betty du 14/09/2026 (Pointeuse QR point 5, "écarts et alertes") : constats des 7
  * derniers jours (hier inclus, jamais aujourd'hui — une journée en cours n'a pas encore de "départ"
  * à comparer). Purement informatif, jamais un blocage ni une notation du salarié. */
+/** Un jour sans écart possible pour le pointage : jour férié/fermeture, congé validé (journée entière) ou télétravail
+ * validé — le quart planifié n'est alors pas à pointer sur site (brief du 12/10/2026, C2). */
+function estAbsentPourPointage(employee, dateStr, settings) {
+  if (!isJourTravaillePourSalarie(dateStr, employee, settings)) return true;
+  const couvre = (r) => r.employeeId === employee.id && r.statut === 'Validé' && dateStr >= r.dateDebut && dateStr <= r.dateFin;
+  if (leaveRepository.getAll().some(r => couvre(r) && !(r.demiJournee && r.dateDebut === r.dateFin))) return true;
+  return teleworkRepository.getAll().some(couvre);
+}
+
+const LIBELLE_ECART_POINTAGE = { oubli: 'Oubli', absence: 'Absent', retard: 'Retard', 'depart-anticipe': 'Départ anticipé', depassement: 'Dépassement' };
+
 function renderEcartsPointageCard(employees) {
   const allShifts = shiftRepository.getAll();
+  const settings = settingsRepository.getSettings();
+  const tolerance = Number.isFinite(Number(settings.pointageToleranceMinutes)) ? Number(settings.pointageToleranceMinutes) : 10;
   const constats = [];
-  for (let i = 1; i <= 7; i++) {
+  // i = 0 : aujourd'hui, comparé à l'heure actuelle ; i = 1..7 : jours passés (brief du 12/10/2026, C2).
+  for (let i = 0; i <= 7; i++) {
     const date = addDays(new Date(), -i);
     const dateStr = toISODate(date);
     const weekday = WEEKDAY_LABELS[(date.getDay() + 6) % 7];
     employees.forEach(e => {
-      const ecarts = calculerEcartsPointageJour(e.id, dateStr, weekday, allShifts, pointageRepository.getForEmployeeOnDate(e.id, dateStr));
+      const ecarts = calculerEcartsPointageJour(e.id, dateStr, weekday, allShifts, pointageRepository.getForEmployeeOnDate(e.id, dateStr), tolerance,
+        { enCours: i === 0, absentCeJour: estAbsentPourPointage(e, dateStr, settings) });
       ecarts.forEach(ecart => constats.push({ employee: e, date: dateStr, ecart }));
     });
   }
@@ -23922,11 +23943,11 @@ function renderEcartsPointageCard(employees) {
   constats.sort((a, b) => b.date.localeCompare(a.date));
   return `
     <div class="card" style="margin-top: 16px;">
-      <h2>Écarts constatés (7 derniers jours)</h2>
+      <h2>Écarts constatés (aujourd'hui et 7 derniers jours)</h2>
       ${constats.slice(0, 20).map(c => `
         <div class="mini-list-item">
           <span>${formatDate(c.date)} · ${personNameHtml(c.employee)} · ${escapeHtml(c.ecart.message)}</span>
-          <span class="badge badge-${c.ecart.type === 'oubli' ? 'muted' : 'warning'}">${c.ecart.type === 'oubli' ? 'Oubli' : c.ecart.type === 'retard' ? 'Retard' : 'Dépassement'}</span>
+          <span class="badge badge-${c.ecart.type === 'oubli' ? 'muted' : 'warning'}">${LIBELLE_ECART_POINTAGE[c.ecart.type] || c.ecart.type}</span>
         </div>
       `).join('')}
     </div>

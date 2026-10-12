@@ -522,6 +522,9 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Brief du 12/10/2026 (C2) : tolérance (minutes) avant de signaler un retard, un départ anticipé ou un dépassement
+  // entre le pointage et le quart planifié. Valeur proposée, à valider (docs/regles-a-valider.md).
+  pointageToleranceMinutes: 10,
   // Brief du 12/10/2026 (C3) : nombre de jours avant la clôture d'un compteur à partir duquel un rappel prévient
   // d'une perte de congés (un second rappel part 14 jours avant, quel que soit ce délai).
   delaiRappelPerteCongesJours: 60,
@@ -1379,26 +1382,44 @@ function verifierControlesLegauxPlanning(employeeId, shifts, seuils) {
  * (minutes) évite de signaler un simple bruit de quelques minutes comme un vrai écart. Retourne un
  * tableau de constats, jamais un jugement pré-formaté ("mauvais salarié") — juste les faits, au
  * manager d'apprécier. */
-function calculerEcartsPointageJour(employeeId, dateStr, weekday, shifts, pointagesJour, toleranceMinutes) {
+function calculerEcartsPointageJour(employeeId, dateStr, weekday, shifts, pointagesJour, toleranceMinutes, options) {
+  const opts = options || {};
   const tolerance = toleranceMinutes == null ? 10 : toleranceMinutes;
+  // Brief du 12/10/2026 (C2) : congé, télétravail, jour férié ou fermeture (calculé par l'appelant) : le quart
+  // planifié ne donne lieu à aucun écart — un salarié absent n'est pas en « oubli » de pointage.
+  if (opts.absentCeJour) return [];
   const shift = shifts.find(s => s.employeeId === employeeId && s.weekday === weekday);
   if (!shift) return [];
+  const enMinutes = (hhmm) => shiftPlagesMinutes({ heureDebut: hhmm, heureFin: hhmm }).debut;
+  const debutPrevuMin = enMinutes(shift.heureDebut);
+  const finPrevueMin = enMinutes(shift.heureFin);
+  // Jour EN COURS (opts.enCours) : on compare à l'heure actuelle (opts.maintenant, 'HH:MM') — pas d'« oubli » tant
+  // que la journée n'est pas finie, mais une absence/un retard visibles en direct.
+  const maintenantMin = opts.enCours ? enMinutes(opts.maintenant || new Date().toTimeString().slice(0, 5)) : null;
+
   if (!pointagesJour.length) {
-    return [{ type: 'oubli', message: `Quart prévu ${shift.heureDebut}-${shift.heureFin}, aucun pointage ce jour-là.` }];
+    if (!opts.enCours) return [{ type: 'oubli', message: `Quart prévu ${shift.heureDebut}-${shift.heureFin}, aucun pointage ce jour-là.` }];
+    if (maintenantMin > debutPrevuMin + tolerance) {
+      return [{ type: 'absence', message: `Pas encore pointé : quart prévu à ${shift.heureDebut} (${maintenantMin - debutPrevuMin} min de retard).` }];
+    }
+    return [];
   }
+
   const ecarts = [];
-  const heureArriveeMin = shiftPlagesMinutes({ heureDebut: pointagesJour[0].heureArrivee, heureFin: pointagesJour[0].heureArrivee }).debut;
-  const debutPrevuMin = shiftPlagesMinutes(shift).debut;
+  const heureArriveeMin = enMinutes(pointagesJour[0].heureArrivee);
   if (heureArriveeMin > debutPrevuMin + tolerance) {
     ecarts.push({ type: 'retard', message: `Arrivée à ${pointagesJour[0].heureArrivee}, quart prévu à ${shift.heureDebut} (retard de ${heureArriveeMin - debutPrevuMin} min).` });
   }
   const dernier = pointagesJour[pointagesJour.length - 1];
   if (dernier.heureDepart) {
-    const departMin = shiftPlagesMinutes({ heureDebut: dernier.heureDepart, heureFin: dernier.heureDepart }).debut;
-    const finPrevueMin = shiftPlagesMinutes(shift).fin;
+    const departMin = enMinutes(dernier.heureDepart);
     if (departMin > finPrevueMin + tolerance) {
       ecarts.push({ type: 'depassement', message: `Départ à ${dernier.heureDepart}, quart prévu jusqu'à ${shift.heureFin} (dépassement de ${departMin - finPrevueMin} min).` });
+    } else if (departMin < finPrevueMin - tolerance) {
+      ecarts.push({ type: 'depart-anticipe', message: `Départ à ${dernier.heureDepart}, quart prévu jusqu'à ${shift.heureFin} (départ ${finPrevueMin - departMin} min plus tôt).` });
     }
+  } else if (opts.enCours && maintenantMin > finPrevueMin + tolerance) {
+    ecarts.push({ type: 'depassement', message: `Toujours pointé présent, quart prévu jusqu'à ${shift.heureFin} (dépassement de ${maintenantMin - finPrevueMin} min).` });
   }
   return ecarts;
 }
