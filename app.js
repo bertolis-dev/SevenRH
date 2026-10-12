@@ -7389,6 +7389,11 @@ function getDataQualityIssues() {
   const sansPoste = employees.filter(e => !e.poste);
   if (sansPoste.length) issues.push({ severity: 'warning', label: 'Sans poste', employees: sansPoste });
 
+  // Brief du 12/10/2026 (A5) : la date d'entrée est exigée par le formulaire et l'import, mais une fiche
+  // ancienne ou migrée peut l'avoir vide — sans elle, ancienneté, acquisition de congés et essai sont faux.
+  const sansDateEntree = employees.filter(e => !e.dateEmbauche);
+  if (sansDateEntree.length) issues.push({ severity: 'warning', label: 'Sans date d\'entrée', employees: sansDateEntree });
+
   // §retour Betty du 28/09/2026 ("dans contrat & poste il y a une petite incohérence sur le
   // statut, catégorie cadre et le statut est à non cadre") : deux champs distincts encodent chacun
   // un statut cadre — statutPro/categorieSalarieId (catégorie de salarié, modifiable depuis "Modifier
@@ -8733,8 +8738,10 @@ function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
     const get = (field) => (mapping[field] !== undefined ? (cells[mapping[field]] || '').trim() : '');
     const record = {
       matricule: preserveMatricule ? get('matricule') : '',
-      nom: get('nom'),
-      prenom: get('prenom'),
+      // Déjà mis en forme comme à l'enregistrement (formatNomFamille/formatPrenom) : l'aperçu montre ce
+      // qui sera réellement créé, pas la saisie brute du fichier.
+      nom: formatNomFamille(get('nom')),
+      prenom: formatPrenom(get('prenom')),
       email: get('email'),
       telephone: get('telephone'),
       poste: get('poste'),

@@ -6318,9 +6318,15 @@ function generateId(prefix) {
  * couvre déjà la création manuelle, l'import Excel et la conversion d'une candidature, qui passent
  * tous par ces deux fonctions) et depuis bindCandidatureFormEvents (app.js) pour le formulaire
  * public lui-même. */
+/** Espaces multiples fusionnés, tirets spéciaux (insécable U+2011, demi-cadratin...) ramenés au tiret normal —
+ * typiques d'un copier-coller depuis un document (brief du 12/10/2026, A5). */
+function nettoyerNomSaisi(valeur) {
+  return String(valeur).replace(/[\u2010\u2011\u2012\u2013]/g, '-').replace(/\s+/g, ' ').trim();
+}
+
 function formatNomFamille(nom) {
   if (!nom) return nom;
-  return nom.trim().toLocaleUpperCase('fr-FR');
+  return nettoyerNomSaisi(nom).toLocaleUpperCase('fr-FR');
 }
 
 /** Majuscule en première lettre de chaque "mot", un mot commençant après un espace, un tiret ou une
@@ -6329,7 +6335,7 @@ function formatNomFamille(nom) {
  * que formatNomFamille), y compris si la saisie d'origine était tout en majuscules. */
 function formatPrenom(prenom) {
   if (!prenom) return prenom;
-  return prenom.trim().toLocaleLowerCase('fr-FR').replace(/(^|[\s\-'’])(\p{L})/gu, (match, sep, letter) => sep + letter.toLocaleUpperCase('fr-FR'));
+  return nettoyerNomSaisi(prenom).toLocaleLowerCase('fr-FR').replace(/(^|[\s\-'’])(\p{L})/gu, (match, sep, letter) => sep + letter.toLocaleUpperCase('fr-FR'));
 }
 
 /** §retour Betty du 18/09/2026 (point 5, postes) : dérive masculin/féminin à partir d'un intitulé au
