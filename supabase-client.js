@@ -513,8 +513,11 @@ async function syncSingleRow(tableName, companyId, data) {
   if (error) throw error;
 }
 
-async function syncCompanyProfile(companyId, raisonSociale, data) {
-  const { error } = await supabase.from('companies').update({ raison_sociale: raisonSociale, data }).eq('id', companyId);
+// Écriture par la fonction save_company_profile (0070) plutôt qu'un UPDATE direct : un remplacement complet du blob depuis un
+// cache périmé effaçait les pointages enregistrés entre-temps par les salariés. Le serveur conserve ses pointages ; avec
+// `inclurePointages` (régularisation par un RH), ceux de l'appelant sont fusionnés par identifiant.
+async function syncCompanyProfile(companyId, raisonSociale, data, inclurePointages = false) {
+  const { error } = await supabase.rpc('save_company_profile', { p_raison_sociale: raisonSociale, p_data: data, p_inclure_pointages: Boolean(inclurePointages) });
   if (error) throw error;
 }
 
@@ -1482,7 +1485,7 @@ const pushNotifications = (rows, companyId) => syncTable('notifications', rows, 
 const pushFavorites = (companyId, map) => syncFavorites(companyId, map);
 const pushSchoolHolidays = (companyId, data) => syncSingleRow('school_holidays', companyId, data);
 const pushSettings = (companyId, data) => syncSingleRow('settings', companyId, data);
-const pushCompanyProfile = (companyId, raisonSociale, data) => syncCompanyProfile(companyId, raisonSociale, data);
+const pushCompanyProfile = (companyId, raisonSociale, data, inclurePointages = false) => syncCompanyProfile(companyId, raisonSociale, data, inclurePointages);
 
 /** Journal d'audit : append-only, jamais un resync complet (jusqu'à 2000 entrées — un resync à
  * chaque action serait ruineux). Une seule ligne insérée par appel. */

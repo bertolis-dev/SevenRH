@@ -27,11 +27,16 @@ function typeAvecCloture(api) {
 
 function runLeReglageExisteEtVautInterditParDefaut() {
   const api = setup();
-  assert.strictEqual(api.settingsRepository.getSettings().congesAnticipation, 'interdit', 'défaut : interdit');
+  assert.strictEqual(api.settingsRepository.getSettings().congesAnticipation, 'sans_controle', 'défaut : aucun contrôle (comportement d\'avant le 12/10, aucune régression pour les entreprises existantes)');
   const html = api.sandbox.renderParametresTypesAbsences();
   assert.ok(html.includes('id="f-conges-anticipation"'), 'le réglage est dans Paramètres > Congés et absences');
   assert.ok(/à valider/i.test(html), 'la règle est signalée comme à valider');
-  console.log('OK — b1-conges-anticipation-12-10.test.js (réglage par entreprise, « interdit » par défaut, mention « à valider »)');
+  const { verifierSoldeDemandeConge } = api.sandbox;
+  const salarie = api.DB.getEmployees().find(e => e.role === 'salarie');
+  const types = api.DB.getLeaveTypes();
+  const cp = types.find(tt => /congés payés/i.test(tt.nom));
+  assert.strictEqual(verifierSoldeDemandeConge(api.employeeRepository.getById(salarie.id), cp, 500, [], types, api.settingsRepository.getSettings(), '2026-07-01').ok, true, 'par défaut, aucune demande n\'est refusée pour solde insuffisant');
+  console.log('OK — b1-conges-anticipation-12-10.test.js (réglage par entreprise, aucun contrôle par défaut, mention « à valider »)');
 }
 
 function runUneDemandeAuDessusDuSoldeEstRefuseeSiInterdit() {

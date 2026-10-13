@@ -538,7 +538,9 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
   // immédiatement disponible ; 'autorise_acquis_a_date' : elle peut aller jusqu'aux jours déjà acquis à date sur la
   // période en cours. Règle à valider (docs/regles-a-valider.md) — le code ne tranche pas la question juridique.
-  congesAnticipation: 'interdit',
+  // Défaut 'sans_controle' (comportement d'avant le 12/10) : un défaut « interdit » refusait TOUTE demande d'un salarié sans
+  // période close (embauché en octobre : solde disponible 0 jusqu'au 1er juin) — régression pour les entreprises existantes.
+  congesAnticipation: 'sans_controle',
   // Brief du 12/10/2026 (B4) : seuils des alertes NON bloquantes du planning. Valeurs par défaut = seuils légaux
   // de repli (L3121-18, L3121-20, L3131-1, L3132-2), relevables ou abaissables par accord/convention — à faire
   // valider (docs/regles-a-valider.md). Alerte dimanche désactivée : de nombreuses dérogations existent.
@@ -1395,11 +1397,16 @@ function calculerEcartsPointageJour(employeeId, dateStr, weekday, shifts, pointa
   // Brief du 12/10/2026 (C2) : congé, télétravail, jour férié ou fermeture (calculé par l'appelant) : le quart
   // planifié ne donne lieu à aucun écart — un salarié absent n'est pas en « oubli » de pointage.
   if (opts.absentCeJour) return [];
-  const shift = shifts.find(s => s.employeeId === employeeId && s.weekday === weekday);
-  if (!shift) return [];
+  const creneauxDuJour = shifts.filter(s => s.employeeId === employeeId && s.weekday === weekday);
+  if (!creneauxDuJour.length) return [];
   const enMinutes = (hhmm) => shiftPlagesMinutes({ heureDebut: hhmm, heureFin: hhmm }).debut;
-  const debutPrevuMin = enMinutes(shift.heureDebut);
-  const finPrevueMin = enMinutes(shift.heureFin);
+  // Plusieurs créneaux le même jour (matin + après-midi) : la journée prévue va du premier début à la dernière fin ; comparer
+  // à un seul créneau donnait un faux « dépassement » ou un faux « départ anticipé ».
+  const debutsMin = creneauxDuJour.map(s => enMinutes(s.heureDebut));
+  const finsMin = creneauxDuJour.map(s => enMinutes(s.heureFin));
+  const debutPrevuMin = Math.min(...debutsMin);
+  const finPrevueMin = Math.max(...finsMin);
+  const shift = { heureDebut: creneauxDuJour.find(s => enMinutes(s.heureDebut) === debutPrevuMin).heureDebut, heureFin: creneauxDuJour.find(s => enMinutes(s.heureFin) === finPrevueMin).heureFin };
   // Jour EN COURS (opts.enCours) : on compare à l'heure actuelle (opts.maintenant, 'HH:MM') — pas d'« oubli » tant
   // que la journée n'est pas finie, mais une absence/un retard visibles en direct.
   const maintenantMin = opts.enCours ? enMinutes(opts.maintenant || new Date().toTimeString().slice(0, 5)) : null;
@@ -3063,11 +3070,13 @@ const DB = {
    * d'effacer silencieusement les autres champs déjà en base. Même liste de champs exclus que
    * saveCompanyProfile (ceux qui ont leur propre table dédiée) — factorisé ici pour shifts plutôt
    * que dupliqué une nouvelle fois. */
-  _pushCompanyDataBlob(company) {
+  _pushCompanyDataBlob(company, options) {
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
       brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
-    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
+    // `options.pointages` : seul savePointages (régularisation) demande l'envoi de la liste des pointages ; partout ailleurs le
+    // serveur conserve les siens (voir save_company_profile, 0070).
+    this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData, Boolean(options && options.pointages)), { kind: 'blob', blob: 'companyProfile', companyId: id });
   },
 
   getShifts() {
@@ -3331,7 +3340,7 @@ const DB = {
     const company = this.getCurrentCompany();
     company.pointages = list;
     this.saveCurrentCompany(company);
-    this._pushCompanyDataBlob(company);
+    this._pushCompanyDataBlob(company, { pointages: true });
   },
 
   /** Écriture locale seule : le serveur a déjà reçu ce pointage par enregistrer_pointage (0068). Ne pousse
@@ -4944,7 +4953,10 @@ const DB = {
     const proposition = (campagne.propositions || []).find(p => p.employeeId === employeeId);
     if (!proposition) return { success: false, error: 'Ce salarié n\'est pas concerné par cette campagne.' };
     if (proposition.statut === 'validee') return { success: false, error: 'Cette révision a déjà été validée et appliquée : elle ne peut plus être modifiée.' };
-    proposition.salairePropose = Number(salairePropose);
+    // Un montant négatif ou non numérique (NaN) était enregistré tel quel puis appliqué à la fiche à la validation.
+    const montantPropose = typeof salairePropose === 'string' ? Number(salairePropose.replace(/\s/g, '').replace(',', '.')) : Number(salairePropose);
+    if (!Number.isFinite(montantPropose) || montantPropose <= 0) return { success: false, error: "Le salaire proposé doit être un nombre positif." };
+    proposition.salairePropose = montantPropose;
     proposition.motif = motif || '';
     proposition.statut = 'proposee';
     this.saveCampagnesRevisionSalariale(list);
@@ -6998,8 +7010,8 @@ const BAREMES_KILOMETRIQUES = {
   // puissance (1-2 CV / 3-5 CV / plus de 5 CV), valeurs ⚠️ à vérifier avant application réelle.
   moto: {
     2026: [
-      { cvMax: 2, tranche1: 0.395, tranche2Coef: 0.099, tranche2Fixe: 891, tranche3: 0.234 },
-      { cvMax: 5, tranche1: 0.468, tranche2Coef: 0.082, tranche2Fixe: 1158, tranche3: 0.281 },
+      { cvMax: 2, tranche1: 0.395, tranche2Coef: 0.099, tranche2Fixe: 891, tranche3: 0.248 }, // 0,248 : continuité à 6 000 km (0,099 x 6000 + 891 = 1485 = 0,2475 x 6000), sinon l'indemnité devenait négative
+      { cvMax: 5, tranche1: 0.468, tranche2Coef: 0.082, tranche2Fixe: 1158, tranche3: 0.275 }, // 0,275 : continuité à 6 000 km (0,082 x 6000 + 1158 = 1650 = 0,275 x 6000)
       { cvMax: Infinity, tranche1: 0.606, tranche2Coef: 0.079, tranche2Fixe: 1583, tranche3: 0.343 }
     ]
   },
@@ -7172,6 +7184,9 @@ function recalculerIndemnitesKilometriquesAnnee(employeeId, year, allExpenses, s
     const cumul = cumulParType[typeVehicule] || 0;
     const nouveauMontant = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, cumul, { typeVehicule, electrique, annee: year, settings });
     cumulParType[typeVehicule] = cumul + distanceKm;
+    // Une note déjà payée (datePaiement) garde son montant : le recalcul (après un refus, ou un barème confirmé en cours d'année)
+    // réécrivait sinon un montant déjà versé, sans aucun écart signalé. Ses kilomètres comptent toujours dans le cumul.
+    if (note.datePaiement) return;
     if (Math.abs(nouveauMontant - note.montantTTC) > 0.001) misesAJour.push({ id: note.id, montantTTC: nouveauMontant });
   });
   return misesAJour;
@@ -7536,9 +7551,11 @@ function libelleStatutNoteFrais(expense) {
  * (solde et acquisition évalués à cette date). */
 function verifierSoldeDemandeConge(employee, leaveType, nbJours, allRequests, allLeaveTypes, settings, refDate) {
   if (!leaveType || leaveType.categorie !== 'conge' || leaveType.illimite || leaveType.acquisition === 'Illimitée') return { ok: true };
+  const mode = (settings && settings.congesAnticipation) || 'sans_controle';
+  if (mode !== 'interdit' && mode !== 'autorise_acquis_a_date') return { ok: true };
   const bilan = getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate);
   if (bilan.disponible === Infinity) return { ok: true };
-  const anticipation = (settings && settings.congesAnticipation) === 'autorise_acquis_a_date';
+  const anticipation = mode === 'autorise_acquis_a_date';
   const enCours = anticipation && bilan.enCoursAcquisition ? bilan.enCoursAcquisition.acquis : 0;
   const plafond = round2(bilan.disponible + enCours);
   if (nbJours <= plafond + 0.001) return { ok: true, plafond };
@@ -7553,9 +7570,10 @@ function verifierSoldeDemandeConge(employee, leaveType, nbJours, allRequests, al
 
 /** Texte de l'écran des compteurs, selon le réglage d'anticipation. */
 function libelleRegleAnticipationConges(settings) {
-  return (settings && settings.congesAnticipation) === 'autorise_acquis_a_date'
-    ? 'ce qui s\'acquiert sur la période en cours peut être pris par anticipation, dans la limite des jours déjà acquis à date (réglage de l\'entreprise).'
-    : 'ce qui s\'acquiert sur la période en cours n\'est pas consommable avant sa propre clôture (la prise par anticipation est désactivée dans les réglages).';
+  const mode = (settings && settings.congesAnticipation) || 'sans_controle';
+  if (mode === 'autorise_acquis_a_date') return 'ce qui s\'acquiert sur la période en cours peut être pris par anticipation, dans la limite des jours déjà acquis à date (réglage de l\'entreprise).';
+  if (mode === 'interdit') return 'ce qui s\'acquiert sur la période en cours n\'est pas consommable avant sa propre clôture (la prise par anticipation est interdite dans les réglages).';
+  return 'ce qui s\'acquiert sur la période en cours n\'est pas compté dans le solde disponible ; aucun contrôle ne bloque une demande au-dessus du solde (réglable dans Paramètres > Congés et absences).';
 }
 
 function getExpenseRembourseDate(expense) {
@@ -7564,7 +7582,14 @@ function getExpenseRembourseDate(expense) {
 }
 
 function getExpensePayableMonthKey(expense) {
-  return getExpenseRembourseDate(expense).slice(0, 7);
+  const date = getExpenseRembourseDate(expense);
+  // Une date-heure ISO est en UTC : une validation le 1er du mois à 00:30 heure de Paris tombait dans le mois précédent.
+  // Lue en heure locale pour la clé de mois (revue du 13/10/2026).
+  if (date.length > 10) {
+    const local = new Date(date);
+    if (!Number.isNaN(local.getTime())) return toISODate(local).slice(0, 7);
+  }
+  return date.slice(0, 7);
 }
 
 /** Refus/annulation génériques, communs aux congés et au télétravail (même forme de demande). */
@@ -7653,7 +7678,7 @@ function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings,
  * en découpant la période aux bornes du mois. Réutilise computeWorkingDays plutôt que
  * de dupliquer la boucle de comptage — utilisé par l'export paie.
  */
-function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings, unite = 'ouvres') {
+function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, employee, settings, unite = 'ouvres', demiJourneeDebut, demiJourneeFin) {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
   const start = parseISODateLocal(dateDebut);
@@ -7663,7 +7688,12 @@ function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, e
   if (clippedStart > clippedEnd) return 0;
 
   const fullyWithinMonth = start >= monthStart && end <= monthEnd;
-  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, employee, settings, unite);
+  // Demi-journées de début/fin d'une période (ex. vendredi après-midi au lundi matin) : ne comptent que pour le mois qui contient
+  // réellement ce premier ou ce dernier jour — sans elles, la paie comptait 1 jour plein par mois pour 0,5 + 0,5 (revue du 13/10/2026).
+  const debutDansLeMois = start >= monthStart;
+  const finDansLeMois = end <= monthEnd;
+  return computeWorkingDays(toISODate(clippedStart), toISODate(clippedEnd), fullyWithinMonth && demiJournee, employee, settings, unite,
+    debutDansLeMois ? demiJourneeDebut : undefined, finDansLeMois ? demiJourneeFin : undefined);
 }
 
 function daysBetween(a, b) {
@@ -7698,8 +7728,10 @@ function toRefDate(refDate) {
 function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
   const [month, day] = dateClotureMMJJ.split('-').map(Number);
   const now = toRefDate(refDate);
+  // Jours entiers : un `now` à 14 h le jour de la clôture dépassait la clôture à minuit et basculait déjà dans la période suivante.
+  const jour = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const clotureThisYear = new Date(now.getFullYear(), month - 1, day);
-  if (now <= clotureThisYear) {
+  if (jour <= clotureThisYear) {
     return { periodStart: new Date(now.getFullYear() - 1, month - 1, day + 1), periodEnd: clotureThisYear };
   }
   return { periodStart: new Date(now.getFullYear(), month - 1, day + 1), periodEnd: new Date(now.getFullYear() + 1, month - 1, day) };
@@ -8400,10 +8432,15 @@ function calculateIndemniteCompensatrice(employee, refDate) {
   let montant = 0;
   types.forEach(t => {
     const balance = getLeaveBalance(employee, t, requests, allTypes, refDate);
-    if (balance.disponible === Infinity || balance.disponible <= 0) return;
+    if (balance.disponible === Infinity) return;
+    // Au départ, tout jour acquis et non pris est dû, y compris ceux acquis sur la période EN COURS (depuis la dernière
+    // clôture) : `disponible` ne couvre que la période close. Sans eux, un départ au 31/12 payait 30 jours au lieu de ~47,5
+    // (revue du 13/10/2026 ; règle à faire confirmer par l'expert-comptable, voir docs/regles-a-valider.md).
+    const dus = round2(balance.disponible + (balance.enCoursAcquisition ? balance.enCoursAcquisition.acquis : 0));
+    if (dus <= 0) return;
     const diviseur = t.uniteDecompte === 'ouvrables' ? 26 : 22;
-    joursRestants = round2(joursRestants + balance.disponible);
-    montant = round2(montant + balance.disponible * (employee.salaireBrutMensuel / diviseur));
+    joursRestants = round2(joursRestants + dus);
+    montant = round2(montant + dus * (employee.salaireBrutMensuel / diviseur));
   });
   return { montant, joursRestants };
 }

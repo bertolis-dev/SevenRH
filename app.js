@@ -3433,7 +3433,7 @@ function renderBertolisTicketsTab() {
               <td><span class="badge badge-${TICKET_STATUT_BADGE_CLASS[t.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[t.statut] || t.statut)}</span></td>
               <td>${escapeHtml(t.priorite)}</td>
               <td>${formatDate(t.created_at)}</td>
-              <td class="table-actions"><button type="button" class="btn btn-secondary btn-sm" data-open-bertolis-ticket="${t.id}">Ouvrir</button></td>
+              <td class="table-actions"><button type="button" class="btn btn-secondary btn-sm" data-open-bertolis-ticket="${escapeHtml(t.id)}">Ouvrir</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -8725,7 +8725,20 @@ function guessEmployeeColumnMapping(headers) {
  * texte libre, arrivaient dans des formats que la seule variante JJ/MM/AAAA à barres ne couvrait
  * pas). Les vraies cellules de type Date sont, elles, converties AVANT d'arriver ici — voir
  * l'appel à XLSX.read/sheet_to_json (cellDates:true) dans openImportSalariesModal. */
+// Une date impossible (31/02, 99/99, mois 13) était acceptée telle quelle puis écrite sur la fiche : validée contre un vrai calendrier.
+function dateImportValide(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]);
+}
+
 function parseImportDate(value) {
+  const brut = parseImportDateBrute(value);
+  return dateImportValide(brut) ? brut : '';
+}
+
+function parseImportDateBrute(value) {
   if (!value) return '';
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
@@ -8800,8 +8813,17 @@ function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
 }
 
 async function importEmployeesRows(previewRows) {
-  const results = { created: 0, skipped: 0, errors: 0 };
+  const results = { created: 0, skipped: 0, errors: 0, plafondAtteint: 0 };
+  // Même plafond de salariés que le formulaire de création (submitEmployeeForm) : l'import l'ignorait (revue du 13/10/2026).
+  const abonnement = companyRepository.getCurrent().abonnement;
+  const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
+  const plafond = abonnement ? abonnement.nombreSalariesMax : offre.nombreSalariesMax;
   for (const r of previewRows.filter(r => r.status === 'ok')) {
+    if (plafond !== null && plafond !== undefined && employeeRepository.getAll().filter(e => !e.archive).length >= plafond) {
+      results.plafondAtteint++;
+      results.errors++;
+      continue;
+    }
     try {
       await employeeRepository.create(r.record);
       results.created++;
@@ -9408,6 +9430,7 @@ function openImportSalariesModal() {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Import en cours...';
       const results = await importEmployeesRows(currentPreview);
+      if (results.plafondAtteint) showToast(`Plafond de salariés de l'offre atteint : ${results.plafondAtteint} ligne${results.plafondAtteint > 1 ? 's' : ''} non importée${results.plafondAtteint > 1 ? 's' : ''}.`, 'error');
       auditLogRepository.logAudit('Création', 'Salariés (import CSV)', `${results.created} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}`);
       document.getElementById('import-preview-zone').innerHTML = `
         <div class="empty-state">
@@ -10070,6 +10093,9 @@ function bindDocumentRowEvents(scopeSelector) {
 async function confirmerAccuseLectureDocument(documentId) {
   const doc = documentRepository.getById(documentId);
   const user = authRepository.getCurrentUser();
+  // Déjà confirmé par la bonne personne (double clic : l'état local est posé avant la réponse du serveur) : rien à faire, et
+  // surtout pas un message d'erreur juste après une confirmation réussie.
+  if (doc && doc.accuseLectureRequis && doc.accuseLectureAt && user.id === doc.employeeId) return;
   if (!doc || !doc.accuseLectureRequis || doc.accuseLectureAt || user.id !== doc.employeeId) {
     showToast('Action non autorisée.', 'error');
     return;
@@ -10591,7 +10617,7 @@ function openSupportTicketModal() {
 function renderTicketRow(t, showAuthor) {
   const author = showAuthor ? employeeRepository.getById(t.employeeId) : null;
   return `
-    <div class="mini-list-item ticket-row" data-open-ticket="${t.id}">
+    <div class="mini-list-item ticket-row" data-open-ticket="${escapeHtml(t.id)}">
       <span>
         <span class="badge badge-${TICKET_STATUT_BADGE_CLASS[t.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[t.statut] || t.statut)}</span>
         ${escapeHtml(t.titre)}
@@ -10703,7 +10729,7 @@ function renderTicketDescriptionAndAi(description, contexte, pieceJointe, aiAnal
     <div class="card">
       ${description ? `<p>${escapeHtml(description).replace(/\n/g, '<br>')}</p>` : ''}
       ${contexte && contexte.vue ? `<p class="text-muted">Contexte : ${escapeHtml(contexte.vue)}</p>` : ''}
-      ${pieceJointe ? `<p><a href="${pieceJointe.dataUrl}" download="${escapeHtml(pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 13)} ${escapeHtml(pieceJointe.nom)}</a></p>` : ''}
+      ${pieceJointe ? `<p><a href="${escapeHtml(safeDataUrl(pieceJointe.dataUrl))}" download="${escapeHtml(pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 13)} ${escapeHtml(pieceJointe.nom)}</a></p>` : ''}
     </div>
   `;
   if (!aiAnalysis) return descriptionCard;
@@ -11326,7 +11352,7 @@ function openGererTramesModal() {
           ${trames.length === 0 ? '<p class="text-muted">Aucune trame pour l\'instant.</p>' : trames.map(t => `
             <div class="mini-list-item">
               <span>${escapeHtml(t.nom)} · ${escapeHtml(POPULATION_LABELS[t.population] || t.population)} · ${t.questions.length} question${t.questions.length > 1 ? 's' : ''}</span>
-              <button type="button" class="btn-link btn-link-danger" data-delete-trame="${t.id}">Supprimer</button>
+              <button type="button" class="btn-link btn-link-danger" data-delete-trame="${escapeHtml(t.id)}">Supprimer</button>
             </div>
           `).join('')}
         </div>
@@ -11519,11 +11545,11 @@ function renderIdeeCard(idee, userId) {
   const votes = idee.votes || [];
   const aVote = votes.includes(userId);
   return `
-    <div class="idee-card" data-open-idee="${idee.id}">
+    <div class="idee-card" data-open-idee="${escapeHtml(idee.id)}">
       <div class="idee-card-title">${escapeHtml(idee.titre)}</div>
       <div class="idee-card-meta">
         <span class="text-muted">${author ? personNameHtml(author) : '—'}</span>
-        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'} idee-vote-btn" data-vote-idee="${idee.id}" title="${aVote ? 'Retirer mon vote' : 'Voter pour cette idée'}">
+        <button type="button" class="btn btn-sm ${aVote ? 'btn-primary' : 'btn-secondary'} idee-vote-btn" data-vote-idee="${escapeHtml(idee.id)}" title="${aVote ? 'Retirer mon vote' : 'Voter pour cette idée'}">
           ${icon(ICONS.thumbsUp, 13)} ${votes.length}
         </button>
       </div>
@@ -11969,7 +11995,7 @@ function renderVisitesMedicalesCard(employee, canEdit) {
                 ${escapeHtml(VISITE_MEDICALE_TYPE_LABELS[v.type] || v.type)}
                 ${v.contreVisite ? '<span class="badge badge-info">Contre-visite/examen complémentaire</span>' : ''}
                 ${v.amenagements ? `<br><span class="text-muted">Aménagements préconisés : ${escapeHtml(v.amenagements)}</span>` : ''}
-                ${v.pieceJointe ? `<br><a href="${v.pieceJointe.dataUrl}" download="${escapeHtml(v.pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 12)} ${escapeHtml(v.pieceJointe.nom)}</a>` : ''}
+                ${v.pieceJointe ? `<br><a href="${escapeHtml(safeDataUrl(v.pieceJointe.dataUrl))}" download="${escapeHtml(v.pieceJointe.nom)}" class="btn-link">${icon(ICONS.paperclip, 12)} ${escapeHtml(v.pieceJointe.nom)}</a>` : ''}
               </span>
               <span style="text-align: right; white-space: nowrap;">
                 <span class="text-muted">${formatDate(v.date)}</span>
@@ -18504,7 +18530,8 @@ function renderParametresTypesAbsences() {
         <div class="form-field">
           <label for="f-conges-anticipation">Prise de congés par anticipation</label>
           <select class="input" id="f-conges-anticipation">
-            <option value="interdit" ${settings.congesAnticipation !== 'autorise_acquis_a_date' ? 'selected' : ''}>Interdite : seulement le solde disponible</option>
+            <option value="sans_controle" ${!['interdit', 'autorise_acquis_a_date'].includes(settings.congesAnticipation) ? 'selected' : ''}>Aucun contrôle : une demande peut dépasser le solde</option>
+            <option value="interdit" ${settings.congesAnticipation === 'interdit' ? 'selected' : ''}>Interdite : seulement le solde disponible</option>
             <option value="autorise_acquis_a_date" ${settings.congesAnticipation === 'autorise_acquis_a_date' ? 'selected' : ''}>Autorisée dans la limite des jours acquis à date</option>
           </select>
         </div>
@@ -18547,7 +18574,7 @@ function bindParametresTypesAbsencesEvents() {
   const anticipationField = document.getElementById('f-conges-anticipation');
   if (anticipationField) anticipationField.addEventListener('change', () => {
     const reglages = settingsRepository.getSettings();
-    reglages.congesAnticipation = anticipationField.value === 'autorise_acquis_a_date' ? 'autorise_acquis_a_date' : 'interdit';
+    reglages.congesAnticipation = ['interdit', 'autorise_acquis_a_date'].includes(anticipationField.value) ? anticipationField.value : 'sans_controle';
     settingsRepository.saveSettings(reglages);
     showToast('Règle de prise par anticipation mise à jour.');
   });
@@ -20500,7 +20527,15 @@ const bindNumberField = (id, settingKey, fallback, toastMsg) => {
     // défaut du champ, 0 étant falsy en JS — le repli ne doit jouer que sur une saisie réellement
     // vide ou invalide, jamais sur un 0 explicite.
     const parsed = Number(e.target.value);
-    settings[settingKey] = e.target.value !== '' && Number.isFinite(parsed) ? parsed : fallback;
+    let valeur = e.target.value !== '' && Number.isFinite(parsed) ? parsed : fallback;
+    // Bornes déclarées sur le champ (min / max) : ignorées jusqu'ici — un délai de rappel de 5 jours ou une pause négative
+    // étaient acceptés tels quels (revue du 13/10/2026).
+    const min = e.target.getAttribute('min');
+    const max = e.target.getAttribute('max');
+    if (min !== null && min !== '' && valeur < Number(min)) valeur = Number(min);
+    if (max !== null && max !== '' && valeur > Number(max)) valeur = Number(max);
+    e.target.value = valeur;
+    settings[settingKey] = valeur;
     settingsRepository.saveSettings(settings);
     showToast(toastMsg);
   });
@@ -22217,7 +22252,7 @@ function renderPlanningAnnee() {
               const monthCounts = MONTH_NAMES.map((_, monthIndex) =>
                 leaveRequests
                   .filter(r => r.employeeId === e.id)
-                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte), 0)
+                  .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, monthIndex, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte, r.demiJourneeDebut, r.demiJourneeFin), 0)
               );
               const total = monthCounts.reduce((a, b) => a + b, 0);
               return `
@@ -25214,7 +25249,7 @@ function bindFraisEvents() {
   const btnAValider = document.getElementById('btn-frais-a-valider');
   if (btnAValider) {
     btnAValider.addEventListener('click', () => {
-      Object.assign(state, NAVPARAMS_FRAIS_A_VALIDER);
+      Object.assign(state, { fraisFilters: { ...NAVPARAMS_FRAIS_A_VALIDER.fraisFilters } }); // copie : les filtres sont modifiés en place
       state.fraisPage = 1;
       render();
     });
@@ -26327,7 +26362,7 @@ function getPaieRows(year, month) {
     // même nom avec des réglages différents).
     const sumTypeIdsInMonth = (typeIds) => leaveRequests
       .filter(r => r.employeeId === e.id && typeIds.includes(r.typeId))
-      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte), 0);
+      .reduce((sum, r) => sum + countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, month, e, settings, (leaveTypes.find(t => t.id === r.typeId) || {}).uniteDecompte, r.demiJourneeDebut, r.demiJourneeFin), 0);
 
     const congesParType = leaveTypesExportables.map(t => sumTypeIdsInMonth([t.id]));
 
@@ -26442,7 +26477,7 @@ function getPaieAnomalies(year, month) {
   employees.forEach(e => {
     const employeeLeaveRequests = allLeaveRequestsByEmployeeId.get(e.id) || [];
     congeTypesFinis.forEach(t => {
-      const balance = getLeaveBalance(e, t, employeeLeaveRequests, leaveTypes, monthEnd);
+      const balance = getLeaveBalance(e, t, employeeLeaveRequests.filter(r => r.dateDebut <= monthEnd), leaveTypes, monthEnd);
       if (balance.disponible < 0) {
         anomalies.push({ severity: 'bloquante', type: 'compteur_negatif', employee: e, message: `Solde "${t.nom}" négatif : ${formatDurationFR(balance.disponible)}` });
       }
@@ -27242,7 +27277,11 @@ function exportPaieCSV() {
   const settings = settingsRepository.getSettings();
   const modele = settings.exportPaieModele || 'generique';
   const colonnes = settings.exportPaieColonnes || { conges: true, teletravail: true, tickets: true, frais: true };
-  const showColonne = (key) => modele !== 'personnalise' || colonnes[key];
+  // Même règle que l'onglet Export (renderExportPaieExportTab) : le module souscrit prime. Sans ceci, les en-têtes listaient
+  // les types de congé alors que getPaieRows renvoyait des congés vides (module non souscrit) : colonnes décalées dans le
+  // fichier (revue du 13/10/2026).
+  const COLONNE_MODULE = { conges: 'conges', teletravail: 'planning', tickets: 'tickets', frais: 'frais' };
+  const showColonne = (key) => hasModule(COLONNE_MODULE[key]) && (modele !== 'personnalise' || colonnes[key]);
   const delimiter = (EXPORT_PAIE_MODELES[modele] || EXPORT_PAIE_MODELES.generique).delimiter;
 
   const leaveTypesExportables = showColonne('conges') ? leaveTypeRepository.getLeaveTypes().filter(t => t.exportPaie) : [];
@@ -29620,6 +29659,12 @@ function closeQuickCreateWindow() {
   root.innerHTML = '';
   if (quickCreateTargetSelect) quickCreateTargetSelect.value = quickCreateTargetSelect.dataset.quickCreatePrevious || '';
   quickCreateTargetSelect = null;
+}
+
+/** Pièce jointe en data: URL (base64) seulement : la valeur vient d'un champ que le client peut remplir librement (ticket, retour
+ * de visite) ; un `javascript:` ou une adresse externe injectés dans href s'exécuteraient chez le lecteur (revue du 13/10/2026). */
+function safeDataUrl(url) {
+  return /^data:[\w.+/-]{1,100};base64,[A-Za-z0-9+/=]*$/.test(String(url || '')) ? String(url) : '#';
 }
 
 function escapeHtml(value) {

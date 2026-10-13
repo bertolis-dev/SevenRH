@@ -75,11 +75,16 @@ Deno.serve(async (req) => {
   // l'ID seul.
   const { data: candidature } = await supabaseAdmin
     .from("candidatures")
-    .select("id, company_id, nom, prenom, email")
+    .select("id, company_id, nom, prenom, email, statut")
     .eq("id", candidatureId)
     .maybeSingle();
   if (!candidature || candidature.company_id !== companyId) {
     return jsonResponse({ error: "Candidature introuvable." }, 404);
+  }
+  // Jamais d'email de refus à un candidat déjà embauché ou déjà archivé (revue du 13/10/2026) : le statut est revérifié
+  // AVANT l'envoi, pas seulement par set_candidature_statut une fois l'email parti.
+  if (!["nouvelle", "entretien", "offre"].includes(candidature.statut)) {
+    return jsonResponse({ error: "Cette candidature a déjà été traitée." }, 409);
   }
 
   const { data: company } = await supabaseAdmin.from("companies").select("raison_sociale, data").eq("id", companyId).maybeSingle();
