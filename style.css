@@ -898,7 +898,7 @@ p { margin: 0; line-height: 1.5; }
 @media (max-width: 860px) {
   .table.mobile-cards, .table.mobile-cards tbody, .table.mobile-cards tfoot, .table.mobile-cards tr, .table.mobile-cards td { display: block; width: 100%; }
   .table.mobile-cards thead { display: none; }
-  .table.mobile-cards tr { border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); margin: 12px; padding: 12px 14px; }
+  .table.mobile-cards tr { border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); margin: 12px; padding: 12px 14px; box-sizing: border-box; width: calc(100% - 24px); }
   .table.mobile-cards td { padding: 7px 0; text-align: left !important; border: none !important; white-space: normal; }
   .tc-periode, .tc-detail, .tc-en-cours { white-space: normal; }
   .table.mobile-cards td[data-label]::before {
