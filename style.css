@@ -749,7 +749,7 @@ p { margin: 0; line-height: 1.5; }
 .btn-secondary:hover { background: var(--color-muted-soft); }
 
 .btn-danger { background: var(--color-danger-soft); color: var(--color-danger); }
-.btn-danger:hover { background: #fde2e2; }
+.btn-danger:hover { background: var(--color-danger-soft); filter: brightness(0.95); }
 
 .btn-link {
   background: none;

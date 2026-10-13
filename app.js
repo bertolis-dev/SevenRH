@@ -4305,6 +4305,9 @@ function renderUserMenuPanel() {
     exportMyDataRGPD();
   });
   document.getElementById('btn-logout').addEventListener('click', async () => {
+    // Le clic reste dans .user-menu-wrapper : l'écouteur « clic extérieur » ne referme pas le menu. Sans ceci, le menu
+    // (nom, e-mail, comptes enregistrés) de l'utilisateur précédent réapparaissait ouvert après la connexion suivante.
+    document.getElementById('user-menu-panel').classList.remove('open');
     const result = await authRepository.logout();
     if (result.switchedTo) showApp();
     else showLogin();
@@ -4922,12 +4925,19 @@ function bindGlobalEvents() {
     }
   });
 
+  let modalMousedownCible = null; // cible du dernier appui sur un fond de modale (voir la fermeture au clic)
   const modalRoot = document.getElementById('modal-root');
   // Une modale marquée data-blocking (ex. changement de mot de passe obligatoire) ne doit pouvoir
   // se fermer QUE via son propre bouton de validation — ni le clic sur le fond sombre, ni Échap.
   modalRoot.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-root' && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
+    // Fermeture seulement si l'APPUI a aussi eu lieu sur le fond : une sélection de texte démarrée dans un champ et
+    // relâchée sur le fond produit un « click » dont la cible est le fond (ancêtre commun) — la modale se fermait et la
+    // saisie était perdue.
+    const appuiSurLeFond = modalMousedownCible === modalRoot;
+    modalMousedownCible = null;
+    if (e.target.id === 'modal-root' && appuiSurLeFond && !modalRoot.querySelector('.modal[data-blocking]')) closeModal();
   });
+  modalRoot.addEventListener('mousedown', (e) => { modalMousedownCible = e.target; });
 
   // §retour Betty du 19/09/2026 ("ajouter une valeur sur place"), famille 2 : #quick-create-root est
   // un DOM root séparé (voir index.html), toujours par-dessus une modale éventuellement déjà
@@ -4935,8 +4945,11 @@ function bindGlobalEvents() {
   // fermer la modale en dessous (voir la priorité sur le clavier ci-dessous).
   const quickCreateRoot = document.getElementById('quick-create-root');
   quickCreateRoot.addEventListener('click', (e) => {
-    if (e.target.id === 'quick-create-root') closeQuickCreateWindow();
+    const appuiSurLeFond = modalMousedownCible === quickCreateRoot;
+    modalMousedownCible = null;
+    if (e.target.id === 'quick-create-root' && appuiSurLeFond) closeQuickCreateWindow();
   });
+  quickCreateRoot.addEventListener('mousedown', (e) => { modalMousedownCible = e.target; });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (quickCreateRoot.classList.contains('open')) { closeQuickCreateWindow(); return; }
@@ -17125,11 +17138,20 @@ function renderFilterToggleBar(targetId, activeCount, resetKey) {
   return `<button type="button" class="btn btn-secondary btn-sm filter-toggle-btn" data-toggle-filters="${targetId}">Filtres${activeCount ? ` (${activeCount})` : ''}</button>${activeCount && resetKey ? `<button type="button" class="btn-link filter-reset-link" data-reset-filters="${resetKey}">Réinitialiser les filtres</button>` : ''}`;
 }
 
+// Barres de filtres dépliées sur mobile, par identifiant : chaque saisie dans un filtre relance render(), qui
+// reconstruit la barre SANS la classe `open` — elle se refermait donc à chaque frappe (et le champ perdait le focus).
+const filtresMobileOuverts = new Set();
+
 function bindFilterToggleButtons() {
   document.querySelectorAll('[data-toggle-filters]').forEach(btn => {
+    const id = btn.dataset.toggleFilters;
+    const cible = document.getElementById(id);
+    if (cible && filtresMobileOuverts.has(id)) cible.classList.add('open');
     btn.addEventListener('click', () => {
-      const target = document.getElementById(btn.dataset.toggleFilters);
-      if (target) target.classList.toggle('open');
+      const target = document.getElementById(id);
+      if (!target) return;
+      target.classList.toggle('open');
+      if (target.classList.contains('open')) filtresMobileOuverts.add(id); else filtresMobileOuverts.delete(id);
     });
   });
   // §amélioration du 09/09/2026 : le lien "Réinitialiser les filtres" (voir renderFilterToggleBar)
@@ -19476,12 +19498,26 @@ async function openPointageQrModal(etablissementId) {
   // fermée (le nœud du QR n'existe alors plus), sans dépendre d'un hook sur les boutons de fermeture.
   // Gardé par `typeof setInterval` : absent du bac à sable minimal des tests (voir load-app-js.js),
   // qui n'émule pas les minuteurs répétés — jamais un problème en navigateur réel.
-  if (typeof setInterval === 'function') {
-    const intervalId = setInterval(() => {
-      if (!document.getElementById('pointage-qr-print-area')) { clearInterval(intervalId); return; }
-      refreshPointageQrModalContent(etablissementId, false);
-    }, 30000);
-  }
+  demarrerRafraichissementPointageQr(etablissementId);
+}
+
+// Un seul minuteur à la fois, redémarré à chaque (ré)affichage de la modale : « Régénérer le secret » remplace la modale
+// par une confirmation, le minuteur d'avant voyait alors le QR disparaître et s'arrêtait pour toujours — le QR
+// réaffiché ne se renouvelait plus. Ouvrir la modale d'un autre établissement ne laisse plus l'ancien minuteur écrire
+// dedans non plus.
+let pointageQrIntervalId = null;
+function demarrerRafraichissementPointageQr(etablissementId) {
+  if (typeof setInterval !== 'function') return;
+  if (pointageQrIntervalId) clearInterval(pointageQrIntervalId);
+  pointageQrIntervalId = setInterval(() => {
+    const zone = document.getElementById('pointage-qr-print-area');
+    // Modale fermée, ou remplacée un instant par la confirmation : on attend le prochain tour sans rien écrire.
+    if (!zone) {
+      if (!document.getElementById('modal-root') || !document.getElementById('modal-root').classList.contains('open')) { clearInterval(pointageQrIntervalId); pointageQrIntervalId = null; }
+      return;
+    }
+    refreshPointageQrModalContent(etablissementId, false);
+  }, 30000);
 }
 
 async function refreshPointageQrModalContent(etablissementId, premiereOuverture) {
@@ -19551,6 +19587,7 @@ function renderPointageQrModalContent(etab, code) {
         const result = await etablissementRepository.regenererPointageToken(etab.id);
         if (!result.success) return; // le toast d'erreur est déjà affiché par onSaveError (data.js)
         showToast('Secret régénéré.');
+        demarrerRafraichissementPointageQr(etab.id);
         refreshPointageQrModalContent(etab.id, true);
       }
     });
@@ -25653,7 +25690,7 @@ async function submitExpenseForm(evt) {
     // cumul est scopé au type de véhicule (point 5, 11/09/2026) : voiture et moto ne se mélangent
     // jamais dans le même compteur annuel.
     const kmDejaDeclares = getKilometrageDejaDeclareAnnee(employeeId, formData.get('date'), expenseRepository.getAll(), state.editingExpenseId, typeVehicule);
-    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique, annee: dateDepense.slice(0, 4), settings });
+    montantTTC = calculateIndemniteKilometrique(distanceKm, puissanceFiscale, kmDejaDeclares, { typeVehicule, electrique, annee: dateDepense.slice(0, 4), settings: settingsRepository.getSettings() });
     tauxTVA = 0;
     kilometrage = { distanceKm, puissanceFiscale, typeVehicule, electrique };
   } else {
@@ -29026,6 +29063,10 @@ function submitEmployeeForm(evt, id, candidatureId) {
     };
 
     if (candidatureId) {
+      // Désactivé AVANT la vérification asynchrone : jusqu'ici le bouton ne l'était qu'une fois la vérification terminée,
+      // un second clic pendant l'appel réseau créait deux salariés (revue du 13/10/2026).
+      const boutonEmbauche = form.querySelector('button[type="submit"]');
+      if (boutonEmbauche) boutonEmbauche.disabled = true;
       // §correctif bug sweep 19/08/2026 : revérifie l'état RÉEL de la candidature (fetch direct
       // Supabase, pas le cache local) juste avant de créer le salarié — jusqu'ici la création du
       // salarié était inconditionnelle, seule la mise à jour du statut de la candidature était
@@ -29036,8 +29077,12 @@ function submitEmployeeForm(evt, id, candidatureId) {
       // refonte serveur pour un cas volontairement traité en atténuation, pas en garantie absolue.
       candidatureRepository.getAll().then(list => {
         const fresh = list.find(c => c.id === candidatureId);
-        if (fresh && fresh.statut !== 'nouvelle') {
+        // « Embaucher » est proposé pour nouvelle, entretien ET offre (voir le détail d'une candidature) : seul un autre statut
+        // (déjà embauchée, archivée) signifie « déjà traitée » — l'ancien test `!== 'nouvelle'` interdisait toute embauche
+        // après « Entretien » ou « Offre ».
+        if (fresh && !['nouvelle', 'entretien', 'offre'].includes(fresh.statut)) {
           showToast('Cette candidature a déjà été traitée (probablement par quelqu\'un d\'autre).', 'error');
+          if (boutonEmbauche) boutonEmbauche.disabled = false;
           return;
         }
         finalizeEmployeeCreation();
