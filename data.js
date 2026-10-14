@@ -7592,6 +7592,107 @@ function getExpensePayableMonthKey(expense) {
   return date.slice(0, 7);
 }
 
+// ---------------------------------------------------------------------------
+// Export vers Nexus Gestion (comptabilité TPE) — brief du 14/10/2026. FORMAT = CONTRAT PARTAGÉ (version 1) : ne pas
+// modifier les clés, leur ordre ni leurs types sans accord avec Nexus Gestion. Voir docs/exemple-export-nexus-rh-v1.json.
+// ---------------------------------------------------------------------------
+
+function sirenLuhnValide(siren) {
+  let somme = 0;
+  for (let i = 0; i < siren.length; i++) {
+    let chiffre = Number(siren[siren.length - 1 - i]);
+    if (i % 2 === 1) { chiffre *= 2; if (chiffre > 9) chiffre -= 9; }
+    somme += chiffre;
+  }
+  return somme % 10 === 0;
+}
+
+/** SIREN (9 premiers chiffres du SIRET) de l'entreprise, contrôlé avant tout export : absent, incomplet, factice (que
+ * des zéros, valeur de démonstration) ou de clé de contrôle fausse → export bloqué avec un message qui dit où corriger. */
+function validerSirenPourExport(siret) {
+  const chiffres = String(siret == null ? '' : siret).replace(/\D/g, '');
+  const aide = ' Renseignez-le dans Paramètres > Entreprise.';
+  if (!chiffres.length) return { ok: false, error: "Le SIRET de l'entreprise n'est pas renseigné : l'export vers Nexus Gestion en a besoin pour identifier l'entreprise." + aide };
+  if (chiffres.length < 9) return { ok: false, error: 'Le SIRET de l\'entreprise est incomplet (' + chiffres.length + ' chiffres saisis, 14 attendus ; le SIREN en compte 9).' + aide };
+  const siren = chiffres.slice(0, 9);
+  if (/^0+$/.test(siren)) return { ok: false, error: "Le SIRET de l'entreprise est une valeur factice (que des zéros) : saisissez le vrai SIRET." + aide };
+  if (!sirenLuhnValide(siren)) return { ok: false, error: 'Le SIREN ' + siren + ' n\'est pas valide (clé de contrôle fausse) : vérifiez le SIRET saisi.' + aide };
+  return { ok: true, siren };
+}
+
+/** Date AAAA-MM-JJ (heure locale) depuis une date ou une date-heure ISO ; null si absente. */
+function dateExportISO(valeur) {
+  if (!valeur) return null;
+  const texte = String(valeur);
+  if (texte.length <= 10) return texte;
+  const locale = new Date(texte);
+  return Number.isNaN(locale.getTime()) ? texte.slice(0, 10) : toISODate(locale);
+}
+
+/** Construit l'export « nexus-rh-export » version 1 d'un mois. Pure : aucune lecture de la base, aucun appel réseau.
+ *  - notes_de_frais : statut « Remboursé » (= validée, éventuellement payée) dont le mois de validation/remboursement est le
+ *    mois exporté (même règle que la Préparation de paie) ; id = id de la note (stable) ; justificatif_url = CHEMIN de
+ *    stockage ou null ; date_remboursement = date de paiement réel ou null ;
+ *  - tickets_restaurant : nombre COMMANDÉ quand il a été enregistré, sinon recalculé ; null si le module est absent ;
+ *  - paie : null (version 1, pas de calcul de paie dans Nexus RH). */
+function construireExportNexusGestion({ annee, mois, maintenant, profile, lignesPaie, expenses, employees, settings, modules }) {
+  const siren = validerSirenPourExport(profile && profile.siret);
+  if (!siren.ok) return { ok: false, error: siren.error };
+  const periode = annee + '-' + String(mois + 1).padStart(2, '0');
+  const parId = new Map((employees || []).map(e => [e.id, e]));
+
+  const notes = !(modules && modules.frais) ? [] : (expenses || [])
+    .filter(n => n.statut === 'Remboursé' && getExpensePayableMonthKey(n) === periode)
+    .map(n => {
+      const salarie = parId.get(n.employeeId);
+      const ttc = round2(Number(n.montantTTC) || 0);
+      const taux = Number(n.tauxTVA) || 0;
+      return {
+        id: String(n.id),
+        date: dateExportISO(n.date),
+        salarie: salarie ? (salarie.prenom + ' ' + salarie.nom).trim() : 'Salarié inconnu',
+        categorie: n.categorie,
+        libelle: n.libelle,
+        montant_ht: computeMontantHT(ttc, taux),
+        tva: computeMontantTVA(ttc, taux),
+        montant_ttc: ttc,
+        taux_tva: taux,
+        justificatif_url: (n.justificatif && typeof n.justificatif.path === 'string' && n.justificatif.path) ? n.justificatif.path : null,
+        date_remboursement: dateExportISO(n.datePaiement)
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+  let tickets = null;
+  if (modules && modules.tickets) {
+    const nombre = (lignesPaie || []).reduce((somme, l) => {
+      const commande = l.employee && l.employee.ticketsCommandesEnregistrees && l.employee.ticketsCommandesEnregistrees[periode];
+      return somme + (typeof commande === 'number' ? commande : (l.tickets ? l.tickets.nbTickets : 0));
+    }, 0);
+    const montantTotal = round2(nombre * (Number(settings && settings.ticketsValeurFaciale) || 0));
+    tickets = {
+      nombre,
+      montant_total: montantTotal,
+      part_employeur: round2(montantTotal * (Number(settings && settings.ticketsPartEmployeurPct) || 0) / 100),
+      date_commande: dateExportISO(((settings && settings.ticketsCommandesDates) || {})[periode])
+    };
+  }
+
+  return {
+    ok: true,
+    export: {
+      format: 'nexus-rh-export',
+      version: 1,
+      siren: siren.siren,
+      periode,
+      genere_le: (maintenant || new Date()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      notes_de_frais: notes,
+      tickets_restaurant: tickets,
+      paie: null
+    }
+  };
+}
+
 /** Refus/annulation génériques, communs aux congés et au télétravail (même forme de demande). */
 /** §correctif audit du 23/08/2026 (§7.7) : un refus était jusqu'ici muet — le salarié voyait sa
  * demande refusée sans explication, et rien n'en gardait la trace. motif est désormais obligatoire
