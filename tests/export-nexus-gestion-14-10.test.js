@@ -14,6 +14,7 @@ const { loadAppJs } = require('./load-app-js');
 
 const CLES_RACINE = ['format', 'version', 'siren', 'periode', 'genere_le', 'notes_de_frais', 'tickets_restaurant', 'paie'];
 const CLES_NOTE = ['id', 'date', 'salarie', 'categorie', 'libelle', 'montant_ht', 'tva', 'montant_ttc', 'taux_tva', 'justificatif_url', 'date_remboursement'];
+const CLES_PAIE = ['brut', 'charges_salariales', 'charges_patronales', 'net_a_payer', 'date_paiement', 'detail_par_organisme'];
 const CLES_TICKETS = ['nombre', 'montant_total', 'part_employeur', 'date_commande'];
 
 const deuxDecimales = (n) => typeof n === 'number' && Number.isFinite(n) && Math.round(n * 100) / 100 === n;
@@ -43,7 +44,17 @@ function validerFormatV1(x) {
     assert.ok(deuxDecimales(x.tickets_restaurant.montant_total) && deuxDecimales(x.tickets_restaurant.part_employeur), 'tickets : montants à 2 décimales');
     assert.ok(x.tickets_restaurant.date_commande === null || dateISO(x.tickets_restaurant.date_commande), 'tickets.date_commande');
   }
-  assert.strictEqual(x.paie, null, 'paie : null en version 1');
+  // paie : null (aucun journal de paie enregistré pour le mois) ou l'objet exact du contrat (phase 2, 14/10/2026)
+  if (x.paie !== null) {
+    assert.deepStrictEqual(Object.keys(x.paie), CLES_PAIE, 'paie : clés');
+    ['brut', 'charges_salariales', 'charges_patronales', 'net_a_payer'].forEach(k => assert.ok(deuxDecimales(x.paie[k]) && x.paie[k] >= 0, `paie.${k} nombre à 2 décimales, positif ou nul`));
+    assert.ok(dateISO(x.paie.date_paiement), 'paie.date_paiement AAAA-MM-JJ');
+    assert.ok(Array.isArray(x.paie.detail_par_organisme));
+    x.paie.detail_par_organisme.forEach((o, i) => {
+      assert.deepStrictEqual(Object.keys(o), ['organisme', 'montant'], `organisme ${i} : clés`);
+      assert.ok(typeof o.organisme === 'string' && o.organisme.length > 0 && deuxDecimales(o.montant) && o.montant >= 0, `organisme ${i} : nom et montant`);
+    });
+  }
 }
 
 function setup() {

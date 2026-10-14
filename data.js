@@ -7637,15 +7637,154 @@ function dateExportISO(valeur) {
   return Number.isNaN(locale.getTime()) ? texte.slice(0, 10) : toISODate(locale);
 }
 
+// ---------------------------------------------------------------------------
+// Journal de paie mensuel (pont Nexus Gestion, phase 2, décision du 14/10/2026). Nexus RH NE CALCULE PAS la paie : ces
+// montants sont saisis ou importés depuis le logiciel de paie externe, puis servent uniquement au bloc « paie » de l'export.
+// ---------------------------------------------------------------------------
+
+/** Montant écrit « à la française » (« 1 234,56 », « 1.234,56 € », « 1234.56 », « -15,30 ») → nombre ; null si illisible. */
+function parseMontantFR(valeur) {
+  if (typeof valeur === 'number') return Number.isFinite(valeur) ? valeur : null;
+  if (valeur == null) return null;
+  let texte = String(valeur).replace(/[\s  €]/g, '');
+  if (!texte) return null;
+  let signe = 1;
+  if (texte[0] === '-' || texte[0] === '−') { signe = -1; texte = texte.slice(1); }
+  else if (texte[0] === '+') texte = texte.slice(1);
+  if (!/^[\d.,]+$/.test(texte) || !/\d/.test(texte)) return null;
+  const virgules = (texte.match(/,/g) || []).length;
+  const points = (texte.match(/\./g) || []).length;
+  let normalise;
+  if (virgules && points) {
+    const sepDecimal = texte.lastIndexOf(',') > texte.lastIndexOf('.') ? ',' : '.';
+    const sepMilliers = sepDecimal === ',' ? '.' : ',';
+    if ((texte.match(sepDecimal === ',' ? /,/g : /\./g) || []).length > 1) return null;
+    normalise = texte.split(sepMilliers).join('').replace(sepDecimal, '.');
+  } else if (virgules) {
+    if (virgules > 1) return null;
+    normalise = texte.replace(',', '.');
+  } else if (points > 1) {
+    normalise = texte.split('.').join('');
+  } else if (points === 1 && /^[1-9]\d{0,2}\.\d{3}$/.test(texte)) {
+    normalise = texte.replace('.', ''); // « 1.234 » : séparateur de milliers
+  } else {
+    normalise = texte;
+  }
+  if (!/^\d+(\.\d+)?$/.test(normalise)) return null;
+  return signe * Number(normalise);
+}
+
+function normaliserEnteteJournalPaie(texte) {
+  return String(texte == null ? '' : texte).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/** Devine, d'après l'en-tête de chaque colonne, laquelle contient quoi. Rien n'est attribué au hasard : une colonne
+ *  non reconnue reste absente du résultat (à choisir à la main). Retourne { champ: indexDeColonne }. */
+function devinerColonnesJournalPaie(entetes) {
+  const regles = [
+    ['charges_patronales', /(cotis|charge).*(patron|employeur)|part patron|patronal/],
+    ['charges_salariales', /(cotis|charge).*(salari|employe(?!ur)|ouvrier)|part salari|salarial/],
+    ['net_a_payer', /net.*(payer|verser|paye)|a payer|a verser/],
+    ['montant_organisme', /montant.*(organisme|caisse)|(organisme|caisse).*montant/],
+    ['organisme', /organisme|caisse/],
+    ['brut', /brut/]
+  ];
+  const resultat = {};
+  const pris = new Set();
+  const lus = (entetes || []).map(normaliserEnteteJournalPaie);
+  regles.forEach(([champ, regle]) => {
+    const i = lus.findIndex((texte, idx) => !pris.has(idx) && texte && regle.test(texte) && (champ !== 'brut' || !/cotis|charge/.test(texte)));
+    if (i >= 0) { resultat[champ] = i; pris.add(i); }
+  });
+  return resultat;
+}
+
+/** Additionne les lignes d'un journal de paie importé (une ligne par salarié ou par organisme). Les lignes « Total » du
+ *  fichier sont ignorées pour ne pas compter deux fois. Colonne non associée = 0, à compléter à la main. */
+function agregerJournalPaie(lignes, colonnes) {
+  const somme = { brut: 0, charges_salariales: 0, charges_patronales: 0, net_a_payer: 0 };
+  const organismes = new Map();
+  let lignesLues = 0;
+  const lire = (ligne, champ) => (colonnes && Number.isInteger(colonnes[champ])) ? parseMontantFR(ligne[colonnes[champ]]) : null;
+  (lignes || []).forEach(ligne => {
+    if (!Array.isArray(ligne)) return;
+    if (ligne.some(cellule => typeof cellule === 'string' && /^(sous[\s-]*)?total/.test(normaliserEnteteJournalPaie(cellule)))) return;
+    let utile = false;
+    Object.keys(somme).forEach(champ => {
+      const valeur = lire(ligne, champ);
+      if (valeur !== null) { somme[champ] += valeur; utile = true; }
+    });
+    const nomOrganisme = (colonnes && Number.isInteger(colonnes.organisme)) ? String(ligne[colonnes.organisme] == null ? '' : ligne[colonnes.organisme]).trim() : '';
+    const montantOrganisme = lire(ligne, 'montant_organisme');
+    if (nomOrganisme && montantOrganisme !== null) {
+      organismes.set(nomOrganisme, (organismes.get(nomOrganisme) || 0) + montantOrganisme);
+      utile = true;
+    }
+    if (utile) lignesLues++;
+  });
+  return {
+    brut: round2(somme.brut),
+    charges_salariales: round2(somme.charges_salariales),
+    charges_patronales: round2(somme.charges_patronales),
+    net_a_payer: round2(somme.net_a_payer),
+    detail_par_organisme: Array.from(organismes, ([organisme, montant]) => ({ organisme, montant: round2(montant) })),
+    lignesLues
+  };
+}
+
+/** Contrôle et normalise la saisie d'un journal de paie : montants positifs ou nuls, date réelle, organismes complets.
+ *  Retourne { ok, journal } (clés dans l'ordre du contrat) ou { ok:false, error } en français. */
+function validerJournalPaie(saisie) {
+  const s = saisie || {};
+  const champs = [['brut', 'Le brut'], ['charges_salariales', 'Les charges salariales'], ['charges_patronales', 'Les charges patronales'], ['net_a_payer', 'Le net à payer']];
+  const journal = {};
+  for (const [cle, libelle] of champs) {
+    const brut = s[cle];
+    if (brut === '' || brut == null) return { ok: false, error: libelle + " ne peut pas rester vide (mettez 0 s'il n'y en a pas)." };
+    const valeur = parseMontantFR(brut);
+    if (valeur === null) return { ok: false, error: libelle + " n'est pas un montant valide." };
+    if (valeur < 0) return { ok: false, error: libelle + ' ne peut pas être négatif.' };
+    journal[cle] = round2(valeur);
+  }
+  const date = String(s.date_paiement || '').trim();
+  if (!date) return { ok: false, error: 'La date de paiement des salaires est obligatoire.' };
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const reelle = m && (() => { const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])); return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]); })();
+  if (!reelle) return { ok: false, error: "La date de paiement n'est pas une date valide." };
+  journal.date_paiement = date;
+  const detail = [];
+  for (const ligne of (s.detail_par_organisme || [])) {
+    const organisme = String((ligne && ligne.organisme) || '').trim();
+    const montantBrut = ligne ? ligne.montant : '';
+    const vide = montantBrut === '' || montantBrut == null;
+    if (!organisme && vide) continue;
+    if (!organisme) return { ok: false, error: "Un montant d'organisme n'a pas de nom d'organisme." };
+    if (vide) return { ok: false, error: 'Indiquez le montant dû à ' + organisme + ' (ou supprimez la ligne).' };
+    const montant = parseMontantFR(montantBrut);
+    if (montant === null) return { ok: false, error: 'Le montant dû à ' + organisme + " n'est pas un montant valide." };
+    if (montant < 0) return { ok: false, error: 'Le montant dû à ' + organisme + ' ne peut pas être négatif.' };
+    detail.push({ organisme, montant: round2(montant) });
+  }
+  journal.detail_par_organisme = detail;
+  return { ok: true, journal };
+}
+
 /** Construit l'export « nexus-rh-export » version 1 d'un mois. Pure : aucune lecture de la base, aucun appel réseau.
  *  - notes_de_frais : statut « Remboursé » (= validée, éventuellement payée) dont le mois de validation/remboursement est le
  *    mois exporté (même règle que la Préparation de paie) ; id = id de la note (stable) ; justificatif_url = CHEMIN de
  *    stockage ou null ; date_remboursement = date de paiement réel ou null ;
  *  - tickets_restaurant : nombre COMMANDÉ quand il a été enregistré, sinon recalculé ; null si le module est absent ;
- *  - paie : null (version 1, pas de calcul de paie dans Nexus RH). */
-function construireExportNexusGestion({ annee, mois, maintenant, profile, lignesPaie, expenses, employees, settings, modules }) {
+ *  - paie : null tant qu'aucun journal de paie n'est enregistré pour le mois ; sinon le journal saisi ou importé (Nexus RH ne
+ *    calcule pas la paie : montants issus du logiciel de paie externe). */
+function construireExportNexusGestion({ annee, mois, maintenant, profile, lignesPaie, expenses, employees, settings, modules, journalPaie }) {
   const siren = validerSirenPourExport(profile && profile.siret);
   if (!siren.ok) return { ok: false, error: siren.error };
+  let paie = null;
+  if (journalPaie) {
+    const controle = validerJournalPaie(journalPaie);
+    if (!controle.ok) return { ok: false, error: 'Le journal de paie enregistré pour ce mois est incomplet : ' + controle.error + ' Corrigez-le dans Préparation de paie > Journal de paie.' };
+    paie = controle.journal;
+  }
   const periode = annee + '-' + String(mois + 1).padStart(2, '0');
   const parId = new Map((employees || []).map(e => [e.id, e]));
 
@@ -7696,7 +7835,7 @@ function construireExportNexusGestion({ annee, mois, maintenant, profile, lignes
       genere_le: (maintenant || new Date()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
       notes_de_frais: notes,
       tickets_restaurant: tickets,
-      paie: null
+      paie
     }
   };
 }
