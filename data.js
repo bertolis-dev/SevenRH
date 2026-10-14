@@ -41,20 +41,25 @@ const BERTOLIS_ADMINS_KEY = 'sevenrh_bertolis_admins';
 const BERTOLIS_SESSION_KEY = 'sevenrh_bertolis_session';
 
 /**
- * Secret partagé avec l'Edge Function "bertolis-tickets" (voir supabase/functions/bertolis-tickets)
- * — la console BERTOLIS garde son login local (ci-dessus) plutôt qu'un vrai compte Supabase Auth,
- * donc elle ne peut pas passer par les policies RLS habituelles pour lire les tickets support de
- * TOUTES les entreprises. Ce secret joue ce rôle à sa place.
- *
- * ⚠️ COMPROMIS DE SÉCURITÉ ASSUMÉ : ce fichier est servi tel quel dans le bundle JS public
- * (GitHub Pages) — n'importe qui peut lire ce secret en inspectant app.js/data.js, et donc appeler
- * l'Edge Function pour lire/répondre aux tickets de toutes les entreprises clientes. Contrairement
- * au login BERTOLIS local (qui n'accède aujourd'hui à AUCUNE donnée réelle), ce secret donne un
- * accès réel en lecture/écriture via service-role. Acceptable pour une v1 avec peu de clients ; à
- * remplacer par un vrai compte Supabase Auth pour BERTOLIS si le nombre de clients grandit.
- * Doit correspondre EXACTEMENT au secret Supabase "BERTOLIS_TICKETS_SECRET" de la fonction.
+ * Clé d'accès à l'Edge Function "bertolis-tickets" (tickets support et erreurs de TOUTES les entreprises). Elle n'est plus écrite
+ * dans le code (revue du 13/10/2026 : ce fichier est public, le secret l'était donc aussi, ainsi que dans l'historique du
+ * dépôt) : la console BERTOLIS la demande à la connexion et ne la garde que pour la session du navigateur (sessionStorage,
+ * effacée à la déconnexion ou à la fermeture de l'onglet). Elle doit correspondre au secret Supabase "BERTOLIS_TICKETS_SECRET".
  */
-const BERTOLIS_TICKETS_SECRET = '9cedfffcd52b0afa010476d1bd528473a6eb267925ab8611';
+const BERTOLIS_ACCESS_KEY_STORAGE = 'sevenrh_bertolis_key';
+
+function getBertolisAccessKey() {
+  try { return sessionStorage.getItem(BERTOLIS_ACCESS_KEY_STORAGE) || ''; }
+  catch (err) { return ''; }
+}
+
+function setBertolisAccessKey(cle) {
+  try {
+    const propre = String(cle || '').trim();
+    if (propre) sessionStorage.setItem(BERTOLIS_ACCESS_KEY_STORAGE, propre);
+    else sessionStorage.removeItem(BERTOLIS_ACCESS_KEY_STORAGE);
+  } catch (err) { /* stockage indisponible : la clé devra être ressaisie */ }
+}
 
 /**
  * Rôles disponibles et niveau d'accès associé. IMPORTANT — ceci est une simulation
@@ -2047,6 +2052,7 @@ const DB = {
 
   bertolisLogout() {
     sessionStorage.removeItem(BERTOLIS_SESSION_KEY);
+    setBertolisAccessKey('');
   },
 
   getCurrentBertolisAdmin() {

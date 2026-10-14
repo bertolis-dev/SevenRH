@@ -47,6 +47,12 @@ function loadAppJs() {
     setItem: (k, v) => { store[k] = String(v); },
     removeItem: (k) => { delete store[k]; },
   };
+  const sessionStore = {};
+  const sessionStorage = {
+    getItem: (k) => (k in sessionStore ? sessionStore[k] : null),
+    setItem: (k, v) => { sessionStore[k] = String(v); },
+    removeItem: (k) => { delete sessionStore[k]; },
+  };
 
   // Éléments persistants par id (pas une vraie arborescence DOM) : suffisant pour que
   // document.getElementById('view-root').innerHTML = ... écrive quelque chose qu'un test peut
@@ -69,7 +75,7 @@ function loadAppJs() {
 
   const navigator = { clipboard: { writeText: async () => {} }, userAgent: 'node-test' };
 
-  const sandbox = { console, localStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl, URLSearchParams };
+  const sandbox = { console, localStorage, sessionStorage, document, navigator, setTimeout, clearTimeout, Promise, Date, Math, JSON, Intl, URLSearchParams };
   sandbox.window = sandbox;
   // Minimal, mutable par un test qui a besoin d'un autre chemin/paramètre (ex. ?poste=...) — voir
   // candidatureUrlForCompany/carriereUrlForCompany/renderCarrierePage (app.js), seules fonctions de

@@ -3397,7 +3397,7 @@ function bindBertolisEntreprisesEvents() {
 
 /** Seul accès de la console BERTOLIS aux tickets support — cross-entreprises, donc jamais via le
  * cache local (qui ne connaît que la/les entreprises déjà visitées dans CE navigateur) : passe par
- * l'Edge Function bertolis-tickets (secret partagé, voir data.js:BERTOLIS_TICKETS_SECRET). Comme
+ * l'Edge Function bertolis-tickets (clé de session, voir data.js:getBertolisAccessKey). Comme
  * rien dans ce projet ne rafraîchit les données en tâche de fond (tout se resynchronise à la
  * connexion), on déclenche ce chargement explicitement au premier affichage de l'onglet, puis à
  * chaque action (changement de statut, réponse) plutôt que de retoucher un cache local à la main. */
@@ -3444,7 +3444,7 @@ function renderBertolisTicketsTab() {
 }
 
 async function loadBertolisTickets() {
-  const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'list', {});
+  const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'list', {});
   state.bertolisTicketsLoading = false;
   state.bertolisTicketsData = result.success ? { tickets: result.tickets } : { error: result.error || 'Erreur inconnue.' };
   if (state.bertolisTab === 'tickets') renderBertolisConsole();
@@ -3503,7 +3503,7 @@ function bindBertolisTicketsEvents() {
   if (statutSelect) {
     statutSelect.addEventListener('change', async () => {
       statutSelect.disabled = true;
-      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'updateStatus', {
+      const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'updateStatus', {
         ticketId: state.bertolisCurrentTicketId, statut: statutSelect.value
       });
       if (!result.success) { showToast(result.error || 'Erreur.', 'error'); statutSelect.disabled = false; return; }
@@ -3521,7 +3521,7 @@ function bindBertolisTicketsEvents() {
       if (!texte) return;
       const submitBtn = commentForm.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
-      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'addComment', {
+      const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'addComment', {
         ticketId: state.bertolisCurrentTicketId, texte
       });
       submitBtn.disabled = false;
@@ -3535,7 +3535,7 @@ function bindBertolisTicketsEvents() {
   if (applyAiBtn) {
     applyAiBtn.addEventListener('click', async () => {
       applyAiBtn.disabled = true;
-      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'applyAiSuggestion', {
+      const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'applyAiSuggestion', {
         ticketId: state.bertolisCurrentTicketId
       });
       if (!result.success) { showToast(result.error || 'Erreur.', 'error'); applyAiBtn.disabled = false; return; }
@@ -3613,7 +3613,7 @@ function renderBertolisErreursTab() {
 }
 
 async function loadBertolisErreurs() {
-  const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'listErrors', {
+  const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'listErrors', {
     includeReviewed: !!state.bertolisErreursShowAll
   });
   state.bertolisErreursLoading = false;
@@ -3634,7 +3634,7 @@ function bindBertolisErreursEvents() {
   document.querySelectorAll('[data-mark-erreur-reviewed]').forEach(btn => {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
-      const result = await window.SupabaseSync.invokeBertolisTickets(BERTOLIS_TICKETS_SECRET, 'markErrorReviewed', {
+      const result = await window.SupabaseSync.invokeBertolisTickets(getBertolisAccessKey(), 'markErrorReviewed', {
         errorId: btn.dataset.markErreurReviewed
       });
       if (!result.success) { showToast(result.error || 'Erreur.', 'error'); btn.disabled = false; return; }
@@ -3841,6 +3841,11 @@ function renderBertolisLoginView() {
             <button type="button" class="btn-icon password-toggle" data-target="f-bertolis-password" tabindex="-1" aria-label="Afficher le mot de passe">${icon(ICONS.eye, 14)}</button>
           </div>
         </div>
+        <div class="form-field">
+          <label for="f-bertolis-key">Clé d'accès support</label>
+          <input class="input" type="password" id="f-bertolis-key" autocomplete="off">
+          <p class="text-muted" style="margin: 4px 0 0;">Nécessaire pour lire les tickets et les erreurs des clients. Elle n'est gardée que le temps de la session.</p>
+        </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" style="width: 100%;">Se connecter</button>
       </form>
@@ -3968,6 +3973,7 @@ function bindLoginScreenEvents() {
       renderLoginScreen();
       return;
     }
+    setBertolisAccessKey(document.getElementById('f-bertolis-key').value);
     showBertolisConsole();
   });
 
