@@ -26551,6 +26551,7 @@ function renderExportPaie() {
         <button class="btn btn-secondary btn-sm" id="btn-paie-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-paie-next">Suivant →</button>
         ${tab === 'export' ? '<button class="btn btn-secondary" id="btn-export-paie">Exporter CSV</button>' : ''}
+        <button class="btn btn-secondary" id="btn-export-nexus-gestion" title="Fichier JSON des notes de frais validées et du récapitulatif des tickets restaurant du mois, à importer dans Nexus Gestion">Exporter vers Nexus Gestion</button>
       </div>
     </div>
     <div class="tabs" style="margin-bottom: 10px;">
@@ -26724,6 +26725,8 @@ function bindExportPaieEvents() {
 
   const exportBtn = document.getElementById('btn-export-paie');
   if (exportBtn) exportBtn.addEventListener('click', handleExportPaieClick);
+  const exportNexusGestionBtn = document.getElementById('btn-export-nexus-gestion');
+  if (exportNexusGestionBtn) exportNexusGestionBtn.addEventListener('click', exporterVersNexusGestion);
 
   const modeleSelect = document.getElementById('f-export-paie-modele');
   if (modeleSelect) modeleSelect.addEventListener('change', (e) => {
@@ -27261,6 +27264,34 @@ function exportRowsToCSVWithDelimiter(headers, rows, filename, delimiter) {
  * anomalies bloquantes "obligatoire" pour autant. Compromis : une confirmation explicite s'affiche
  * s'il reste des anomalies bloquantes pour le mois exporté — l'utilisateur DOIT la voir et
  * l'acquitter, mais garde la main s'il juge que c'est un faux positif. */
+/** Export du mois affiché vers Nexus Gestion (brief du 14/10/2026) : un simple fichier JSON à télécharger, aucun appel réseau.
+ * Bloqué avec un message clair si le SIREN de l'entreprise n'est pas valide. Voir construireExportNexusGestion (data.js). */
+function exporterVersNexusGestion() {
+  // Même droit que l'export de paie : le bouton n'est qu'un raccourci, jamais la seule barrière.
+  if (!hasPermission(authRepository.getCurrentUser(), PERMISSIONS.EXPORTER_PAIE)) {
+    showToast("Vous n'avez pas le droit d'exporter ces données.", 'error');
+    return;
+  }
+  const annee = state.paieYear;
+  const mois = state.paieMonth;
+  const resultat = construireExportNexusGestion({
+    annee, mois, maintenant: new Date(),
+    profile: companyRepository.getProfile(),
+    lignesPaie: getPaieRows(annee, mois),
+    expenses: expenseRepository.getAll(),
+    employees: employeeRepository.getAll(),
+    settings: settingsRepository.getSettings(),
+    modules: { frais: hasModule('frais'), tickets: hasModule('tickets') }
+  });
+  if (!resultat.ok) {
+    showToast(resultat.error, 'error');
+    return;
+  }
+  downloadJSONFile(resultat.export, `nexus-rh-export-${resultat.export.periode}.json`);
+  auditLogRepository.logAudit('Export', 'Export Nexus Gestion', `${MONTH_NAMES[mois]} ${annee} · ${resultat.export.notes_de_frais.length} note${resultat.export.notes_de_frais.length > 1 ? 's' : ''} de frais`);
+  showToast(`Export Nexus Gestion de ${MONTH_NAMES[mois]} ${annee} téléchargé.`);
+}
+
 function handleExportPaieClick() {
   const bloquantes = getPaieAnomalies(state.paieYear, state.paieMonth).filter(a => a.severity === 'bloquante');
   if (!bloquantes.length) { exportPaieCSV(); return; }
