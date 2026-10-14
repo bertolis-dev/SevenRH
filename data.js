@@ -8001,8 +8001,19 @@ function getCompteurPeriodBounds(dateClotureMMJJ, refDate) {
  * détermine SON palier. */
 function calculateAncienneteYears(employee, refDate) {
   if (!employee.dateEmbauche) return 0;
+  // Années civiles entières + fraction de l'année en cours (revue du 13/10/2026) : l'ancien calcul en jours / 365,25 donnait
+  // 4,9993 le jour d'un 5e anniversaire et faisait manquer les paliers d'ancienneté d'un jour. Ici le jour de l'anniversaire
+  // vaut exactement un entier ; l'heure du jour est ignorée.
   const now = toRefDate(refDate);
-  return Math.max(0, (now - parseISODateLocal(employee.dateEmbauche)) / (365.25 * 86400000));
+  const debut = parseISODateLocal(employee.dateEmbauche);
+  const jour = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (!(jour > debut)) return 0;
+  const anniversaire = (n) => new Date(debut.getFullYear() + n, debut.getMonth(), debut.getDate()); // 29 février : 1er mars les années non bissextiles
+  let annees = jour.getFullYear() - debut.getFullYear();
+  if (anniversaire(annees) > jour) annees--;
+  const dernier = anniversaire(annees);
+  const suivant = anniversaire(annees + 1);
+  return annees + (jour - dernier) / (suivant - dernier);
 }
 
 /** §7.18 : nombreAnnuel effectif, remplacé par le palier d'ancienneté le plus haut ATTEINT si le
