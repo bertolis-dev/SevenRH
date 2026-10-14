@@ -522,6 +522,9 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (A1) : pause déduite par défaut d'un NOUVEAU créneau de planning (minutes) — reste
   // modifiable créneau par créneau. Valeur proposée, à valider (docs/regles-a-valider.md).
   pauseParDefautMinutes: 30,
+  // Date (AAAA-MM-JJ) à laquelle le fichier de commande des tickets restaurant a été généré, par mois (clé AAAA-MM) : sert de
+  // « date de commande » dans l'export vers Nexus Gestion. Vide pour les mois commandés avant ce suivi.
+  ticketsCommandesDates: {},
   // Brief du 12/10/2026 (C1) : barème kilométrique de l'ENTREPRISE, par année et par motorisation, vide tant que
   // l'entreprise n'a pas saisi et confirmé ses valeurs ({ '2026': { valide: true, voiture: [...], moto: [...] } }).
   // Tant qu'il est vide, le barème indicatif de la plateforme (BAREMES_KILOMETRIQUES) sert de repli, signalé non validé.
@@ -3962,6 +3965,11 @@ const DB = {
       });
     });
     this.saveEmployees(misesAJour);
+    // Écriture directe des réglages (pas saveSettings) : pour ne pas ajouter une fausse ligne « Modification Paramètres » au journal.
+    const company = this.getCurrentCompany();
+    company.settings = Object.assign({}, this.getSettings(), { ticketsCommandesDates: Object.assign({}, this.getSettings().ticketsCommandesDates, { [monthKey]: toISODate(new Date()) }) });
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushSettings(company.id, company.settings), { kind: 'blob', blob: 'settings', companyId: company.id });
     this.logAudit('Export', 'Fichier de commande tickets restaurant', monthKey);
   },
 
