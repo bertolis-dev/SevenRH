@@ -31,6 +31,75 @@ function currentSiteBase() {
 // Row -> objet JS (même forme que les makeEmptyXxx() de data.js)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Rémunération séparée (0074) : salaire, historique, primes, part variable et avantages (fiche, contrats, avenants) et campagnes
+// de révision salariale ne sont plus dans employees.data / companies.data, lisibles par l'API pour tout RH ou manager, mais dans
+// employee_remuneration / company_remuneration, lisibles seulement avec « voirInfosFinancieres » (un salarié lit sa propre ligne).
+// C'est le SERVEUR qui sépare à l'écriture (déclencheurs) : le site continue d'envoyer la fiche entière. Ici, il recompose la fiche
+// à la lecture quand la table renvoie des lignes.
+// ---------------------------------------------------------------------------
+const REMUNERATION_CLES_FICHE = ['salaireBrutMensuel', 'historiqueSalaire', 'nombreMoisSalaire', 'primesRecurrentes', 'partVariable', 'avantagesNature'];
+const REMUNERATION_CLES_CONTRAT = ['salaireBrutMensuel', 'nombreMoisSalaire', 'primesRecurrentes', 'partVariable', 'avantagesNature'];
+
+/** Vrai quand la lecture des rémunérations a échoué pour une autre raison qu'une table pas encore créée : le site n'a alors PAS
+ * les vraies valeurs, et ne doit surtout pas renvoyer au serveur les valeurs par défaut de makeEmptyEmployee (0 €, listes vides)
+ * qui écraseraient les vrais salaires d'un compte autorisé. */
+let remunerationIndisponible = false;
+
+function estTableAbsente(error) {
+  if (!error) return false;
+  return error.code === 'PGRST205' || error.code === '42P01' || /does not exist|schema cache|could not find the table/i.test(error.message || '');
+}
+
+/** Recompose une fiche avec sa ligne de rémunération (null : rien à fusionner, fiche inchangée). */
+function appliquerRemuneration(employee, prive) {
+  if (!prive || typeof prive !== 'object') return employee;
+  const out = { ...employee };
+  REMUNERATION_CLES_FICHE.forEach(k => { if (k in prive) out[k] = prive[k]; });
+  if (prive.contrats && Array.isArray(out.contrats)) {
+    out.contrats = out.contrats.map(c => (c && prive.contrats[c.id]) ? { ...c, ...prive.contrats[c.id] } : c);
+  }
+  if (prive.avenants && Array.isArray(out.avenants)) {
+    out.avenants = out.avenants.map(a => (a && a.id in prive.avenants) ? { ...a, nouvelleValeur: prive.avenants[a.id] } : a);
+  }
+  return out;
+}
+
+/** Retire de la partie « data » d'une fiche les champs de rémunération (voir remunerationIndisponible). */
+function retirerRemuneration(rest) {
+  const out = { ...rest };
+  REMUNERATION_CLES_FICHE.forEach(k => { delete out[k]; });
+  if (Array.isArray(out.contrats)) {
+    out.contrats = out.contrats.map(c => {
+      if (!c || typeof c !== 'object') return c;
+      const copie = { ...c };
+      REMUNERATION_CLES_CONTRAT.forEach(k => { delete copie[k]; });
+      return copie;
+    });
+  }
+  return out;
+}
+
+/** Lit les deux tables de rémunération. Table absente (migration pas encore appliquée) : mode d'avant, rien à fusionner. Autre
+ * erreur : on le note (remunerationIndisponible) et on n'envoie plus de valeurs de rémunération tant qu'on ne les a pas lues. */
+async function fetchRemuneration(companyId) {
+  const [empRes, coRes] = await Promise.all([
+    supabase.from('employee_remuneration').select('*').eq('company_id', companyId),
+    supabase.from('company_remuneration').select('*').eq('company_id', companyId).maybeSingle()
+  ]);
+  remunerationIndisponible = false;
+  [['employee_remuneration', empRes], ['company_remuneration', coRes]].forEach(([table, res]) => {
+    if (res && res.error && !estTableAbsente(res.error)) {
+      remunerationIndisponible = true;
+      console.error(`Échec de lecture Supabase (${table}) :`, res.error);
+    }
+  });
+  const parEmploye = new Map();
+  ((empRes && empRes.data) || []).forEach(r => parEmploye.set(r.employee_id, r.data));
+  const campagnes = coRes && coRes.data && coRes.data.data ? coRes.data.data.campagnesRevisionSalariale : undefined;
+  return { parEmploye, campagnes };
+}
+
 /** §retour Betty du 23/09/2026 (revue "quinze champs enregistrés mais jamais relus") : cette
  * fonction énumérait ses champs un par un depuis le début (D2, audit du 19/08/2026, puis re-cassée
  * deux fois de plus par des champs ajoutés après coup et jamais rajoutés à la liste — voir
@@ -292,7 +361,7 @@ function employeeToRow(e, companyId) {
     id, company_id: companyId, email, role, matricule, nom, prenom,
     manager_ids: managerIds || [], etablissement_id: etablissementId || null,
     service, equipe, archive: Boolean(archive), permissions_overrides: permissionsOverrides || {},
-    data: rest
+    data: remunerationIndisponible ? retirerRemuneration(rest) : rest
   };
 }
 
@@ -799,6 +868,7 @@ async function hydrateCurrentCompany() {
   // jusqu'ici ; on logue au moins celles qui ont échoué pour que ça reste diagnosticable.
   const company = companyRes.data;
   if (!company) return null;
+  const remuneration = await fetchRemuneration(companyId);
   [
     ['companies', companyRes], ['employees', employeesRes], ['etablissements', etablissementsRes],
     ['services', servicesRes], ['leave_types', leaveTypesRes], ['leave_requests', leaveRequestsRes],
@@ -830,6 +900,8 @@ async function hydrateCurrentCompany() {
     id: company.id,
     raisonSociale: company.raison_sociale,
     ...(company.data || {}),
+    // Campagnes de révision salariale (0074) : lues dans company_remuneration, jamais dans le bloc public.
+    ...(remuneration.campagnes !== undefined ? { campagnesRevisionSalariale: remuneration.campagnes } : {}),
     // Toujours après le spread de company.data : abonnement vit désormais dans sa propre table
     // (migration 0010, jamais dans data) — au cas où une ligne pas encore migrée aurait encore un
     // data.abonnement obsolète, cette clé explicite gagne toujours.
@@ -843,7 +915,7 @@ async function hydrateCurrentCompany() {
     // même raison que abonnement juste au-dessus.
     moduleLicenses,
     etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
-    employees: (employeesRes.data || []).map(employeeFromRow),
+    employees: (employeesRes.data || []).map(row => appliquerRemuneration(employeeFromRow(row), remuneration.parEmploye.get(row.id))),
     services: (servicesRes.data || []).map(serviceFromRow),
     settings: settingsRes.data ? settingsRes.data.data : {},
     leaveTypes: (leaveTypesRes.data || []).map(leaveTypeFromRow),
@@ -915,16 +987,17 @@ async function fetchFullCompanyExportData(companyId) {
     ['subscription_modules', subscriptionModulesRes]
   ].filter(([, res]) => res && res.error);
   if (failed.length) throw new Error('Échec de lecture (' + failed.map(([t]) => t).join(', ') + '), export incomplet, réessayez.');
+  const remuneration = await fetchRemuneration(companyId);
 
   return {
     exporteLe: new Date().toISOString(),
-    entreprise: { id: company.id, raisonSociale: company.raison_sociale, ...(company.data || {}) },
+    entreprise: { id: company.id, raisonSociale: company.raison_sociale, ...(company.data || {}), ...(remuneration.campagnes !== undefined ? { campagnesRevisionSalariale: remuneration.campagnes } : {}) },
     abonnement: {
       ...abonnementFromRow(subscriptionRes.data),
       modules: (subscriptionModulesRes.data || []).map(r => ({ key: r.module_key, quantite: r.quantite }))
     },
     etablissements: (etablissementsRes.data || []).map(etablissementFromRow),
-    salaries: (employeesRes.data || []).map(employeeFromRow),
+    salaries: (employeesRes.data || []).map(row => appliquerRemuneration(employeeFromRow(row), remuneration.parEmploye.get(row.id))),
     services: (servicesRes.data || []).map(serviceFromRow),
     parametres: settingsRes.data ? settingsRes.data.data : {},
     typesConge: (leaveTypesRes.data || []).map(leaveTypeFromRow),

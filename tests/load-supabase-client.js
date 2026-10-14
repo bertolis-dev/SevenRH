@@ -33,7 +33,7 @@ function makeInertProxy() {
   return new Proxy(fn, handler);
 }
 
-function loadSupabaseClient() {
+function loadSupabaseClient(options) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'supabase-client.js'), 'utf8');
   const withoutImport = source.replace(
     /^import \{ createClient \} from '[^']*';$/m,
@@ -50,7 +50,7 @@ function loadSupabaseClient() {
   const sandbox = { console, localStorage };
   sandbox.window = sandbox;
   sandbox.window.location = { origin: 'http://localhost:8811', pathname: '/index.html' };
-  sandbox.__inertSupabaseClient = makeInertProxy();
+  sandbox.__inertSupabaseClient = (options && options.supabase) || makeInertProxy();
   vm.createContext(sandbox);
 
   // employeeFromRow lit `window.makeEmptyEmployee()` (data.js, chargé AVANT ce module différé dans
@@ -76,6 +76,8 @@ globalThis.__expenseToRow = expenseToRow;
 globalThis.__expenseFromRow = expenseFromRow;
 globalThis.__documentToRow = documentToRow;
 globalThis.__documentFromRow = documentFromRow;
+globalThis.__appliquerRemuneration = appliquerRemuneration;
+globalThis.__retirerRemuneration = retirerRemuneration;
 `;
   vm.runInContext(withoutImport + expose, sandbox, { filename: 'supabase-client.js' });
 
@@ -94,7 +96,9 @@ globalThis.__documentFromRow = documentFromRow;
     teleworkRequestToRow: sandbox.__teleworkRequestToRow,
     teleworkRequestFromRow: sandbox.__teleworkRequestFromRow,
     expenseToRow: sandbox.__expenseToRow,
-    expenseFromRow: sandbox.__expenseFromRow
+    expenseFromRow: sandbox.__expenseFromRow,
+    appliquerRemuneration: sandbox.__appliquerRemuneration,
+    retirerRemuneration: sandbox.__retirerRemuneration
   };
 }
 
