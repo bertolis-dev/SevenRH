@@ -11167,6 +11167,23 @@ function openPlanEntretienModal() {
   });
 }
 
+/** Questions de la trame choisie au lancement de la campagne (revue du 13/10/2026 : l'identifiant de la trame était enregistré
+ * sur chaque entretien mais ses questions n'apparaissaient nulle part). Visible par le salarié, son manager et le RH, comme
+ * guide de préparation ; une trame supprimée depuis n'affiche simplement rien. */
+function renderTrameEntretien(entretien) {
+  if (!entretien.trameId) return '';
+  const trame = entretienTrameRepository.getAll().find(t => t.id === entretien.trameId);
+  if (!trame || !(trame.questions || []).length) return '';
+  return `
+    <div class="card">
+      <div class="search-section-label" style="padding-left:0;">Trame d'entretien : ${escapeHtml(trame.nom)}</div>
+      <p class="text-muted" style="margin: 0 0 6px;">Questions pour préparer l'entretien.</p>
+      <ol style="margin: 0; padding-left: 20px;">
+        ${trame.questions.map(q => `<li>${escapeHtml(q.label)}</li>`).join('')}
+      </ol>
+    </div>`;
+}
+
 function renderEntretienDetail(id) {
   const entretien = entretienRepository.getById(id);
   if (!entretien) return `<button class="btn-link" id="btn-back-to-entretiens">← Retour</button><div class="empty-state"><p>Entretien introuvable.</p></div>`;
@@ -11198,6 +11215,8 @@ function renderEntretienDetail(id) {
     </div>
 
     ${entretien.objectifs ? `<div class="card"><div class="search-section-label" style="padding-left:0;">Objectifs</div><p style="margin:0;">${escapeHtml(entretien.objectifs).replace(/\n/g, '<br>')}</p></div>` : ''}
+
+    ${renderTrameEntretien(entretien)}
 
     <!-- §retour Betty du 14/09/2026 (Entretiens point 3, "préparation croisée") : chacun prépare de
          son côté, sans voir la réponse de l'autre avant que LES DEUX aient soumis la leur (ou que
