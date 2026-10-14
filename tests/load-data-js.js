@@ -83,6 +83,7 @@ globalThis.__idbAvailable = idbAvailable;
 globalThis.__idbGet = idbGet;
 globalThis.__isArretTravailType = isArretTravailType;
 globalThis.__calculerJoursCarenceArret = calculerJoursCarenceArret;
+globalThis.__calculerJoursCarenceMaintien = calculerJoursCarenceMaintien;
 globalThis.__calculerSalaireJournalierBase = calculerSalaireJournalierBase;
 globalThis.__calculerIJSecuEstimee = calculerIJSecuEstimee;
 globalThis.__calculerPlafondSJBIndicatif = calculerPlafondSJBIndicatif;
@@ -155,6 +156,7 @@ globalThis.__calculerEcartsPointageJour = calculerEcartsPointageJour;
     idbGet: sandbox.__idbGet,
     isArretTravailType: sandbox.__isArretTravailType,
     calculerJoursCarenceArret: sandbox.__calculerJoursCarenceArret,
+    calculerJoursCarenceMaintien: sandbox.__calculerJoursCarenceMaintien,
     calculerSalaireJournalierBase: sandbox.__calculerSalaireJournalierBase,
     calculerIJSecuEstimee: sandbox.__calculerIJSecuEstimee,
     calculerPlafondSJBIndicatif: sandbox.__calculerPlafondSJBIndicatif,

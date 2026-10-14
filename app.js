@@ -15586,13 +15586,14 @@ function renderEstimationIndemnitesArret(r, employee) {
     return `<h2>Estimation des indemnités</h2><p class="text-muted">Non calculable : aucun salaire brut mensuel renseigné sur la fiche salarié.</p>`;
   }
   const allRequestsEmployee = leaveRepository.getForEmployee(employee.id);
-  const estimation = calculerEstimationIndemnitesArret(r, employee, allRequestsEmployee);
+  const estimation = calculerEstimationIndemnitesArret(r, employee, allRequestsEmployee, { carenceMaintienMaladie: settingsRepository.getSettings().carenceMaintienMaladieJours });
   if (!estimation) return '';
   const m = estimation.maintien;
   return `
     <h2>Estimation des indemnités <span class="badge badge-warning">Indicatif, non contractuel</span></h2>
     <p class="text-muted">${icon(ICONS.warningTriangle, 12)} Estimation calculée à partir du seul salaire brut mensuel de la fiche salarié (${formatCurrencyFR(employee.salaireBrutMensuel)}), pas de la moyenne réelle des 3 derniers mois (primes, heures supplémentaires...) que retient la CPAM. Ne remplace jamais le décompte officiel de la CPAM ni le calcul de votre gestionnaire de paie.</p>
-    <p>Carence : <strong>${estimation.joursCarence} jour(s)</strong> · Jours indemnisables : <strong>${estimation.joursIndemnisables}</strong> sur ${estimation.nbJoursCalendaires} jours calendaires</p>
+    <p>Carence Sécurité sociale : <strong>${estimation.joursCarence} jour(s)</strong> · Jours indemnisés par la Sécurité sociale : <strong>${estimation.joursIndemnisables}</strong> sur ${estimation.nbJoursCalendaires} jours calendaires</p>
+    <p>Carence du maintien de salaire par l'employeur : <strong>${estimation.joursCarenceMaintien} jour(s)</strong> · Jours maintenus par l'employeur : <strong>${estimation.joursMaintien}</strong></p>
     <p>IJ sécurité sociale estimée : <strong>${formatCurrencyFR(estimation.ijSecuEstimee)}</strong></p>
     ${m.ancienneteInsuffisante
       ? `<p>Maintien de salaire employeur : <strong>aucun</strong> (ancienneté inférieure à 1 an, minimum légal L1226-1, une convention collective peut prévoir mieux, non appliqué ici).</p>`
@@ -18539,6 +18540,16 @@ function renderParametresTypesAbsences() {
       </div>
     </div>
     <div class="card" style="margin-bottom: 16px;">
+      <h2>Arrêt maladie : maintien de salaire</h2>
+      <p class="text-muted">Nombre de jours d'arrêt maladie (hors accident du travail) avant que l'employeur ne maintienne le salaire. La loi prévoit 7 jours (maintien à partir du 8e jour) ; votre convention collective peut prévoir moins. Sert aux estimations d'indemnités de l'attestation de salaire.</p>
+      <div class="form-grid" style="max-width: 520px;">
+        <div class="form-field">
+          <label for="f-carence-maintien-maladie">Carence employeur (jours)</label>
+          <input class="input" type="number" min="0" max="30" step="1" id="f-carence-maintien-maladie" value="${escapeHtml(settings.carenceMaintienMaladieJours)}">
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
       <h2>Rappel avant perte de congés</h2>
       <p class="text-muted">Le salarié et son manager sont prévenus quand des jours vont être perdus à la clôture du compteur, puis une dernière fois 14 jours avant.</p>
       <div class="form-grid" style="max-width: 520px;">
@@ -18572,6 +18583,7 @@ function bindParametresTypesAbsencesEvents() {
   });
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
   bindNumberField('f-rappel-perte-conges', 'delaiRappelPerteCongesJours', 60, 'Délai de rappel mis à jour.');
+  bindNumberField('f-carence-maintien-maladie', 'carenceMaintienMaladieJours', 7, 'Carence du maintien de salaire mise à jour.');
   const anticipationField = document.getElementById('f-conges-anticipation');
   if (anticipationField) anticipationField.addEventListener('change', () => {
     const reglages = settingsRepository.getSettings();

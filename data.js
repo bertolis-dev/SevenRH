@@ -538,6 +538,8 @@ const DEFAULT_SETTINGS = {
   // Brief du 12/10/2026 (C3) : nombre de jours avant la clôture d'un compteur à partir duquel un rappel prévient
   // d'une perte de congés (un second rappel part 14 jours avant, quel que soit ce délai).
   delaiRappelPerteCongesJours: 60,
+  // Revue du 13/10/2026 : carence du maintien de salaire par l'employeur en maladie ordinaire (jours). 7 = à partir du 8e jour (D1226-3) ; distinct des 3 jours de carence des IJ Sécurité sociale. Valeur à valider (docs/regles-a-valider.md).
+  carenceMaintienMaladieJours: 7,
   // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
   // immédiatement disponible ; 'autorise_acquis_a_date' : elle peut aller jusqu'aux jours déjà acquis à date sur la
   // période en cours. Règle à valider (docs/regles-a-valider.md) — le code ne tranche pas la question juridique.
@@ -8291,6 +8293,11 @@ function isArretTravailType(leaveType) {
 const SMIC_MENSUEL_BRUT_INDICATIF = 1801.80;
 
 const CARENCE_JOURS_MALADIE_ORDINAIRE = 3;
+// Maintien de salaire par l'EMPLOYEUR (art. L1226-1, D1226-3) : en maladie ordinaire il ne démarre qu'au 8e jour d'absence
+// (7 jours de carence), à ne pas confondre avec les 3 jours de carence des indemnités journalières de la Sécurité sociale
+// ci-dessus. Aucune carence pour un accident du travail / une maladie professionnelle. Valeur proposée, réglable (une
+// convention collective peut faire mieux) : Paramètres > Congés et absences, voir docs/regles-a-valider.md.
+const CARENCE_MAINTIEN_EMPLOYEUR_MALADIE_JOURS = 7;
 const TAUX_IJ_MALADIE_ORDINAIRE = 0.5;
 const TAUX_IJ_ATMP_INITIAL = 0.6;
 const TAUX_IJ_ATMP_APRES_28J = 0.8;
@@ -8319,6 +8326,14 @@ function isArretSansCarence(typeArret) {
 
 function calculerJoursCarenceArret(typeArret) {
   return isArretSansCarence(typeArret) ? 0 : CARENCE_JOURS_MALADIE_ORDINAIRE;
+}
+
+/** Carence du maintien de salaire employeur (≠ carence des IJ Sécurité sociale) : `carenceMaladie` vient du réglage
+ * carenceMaintienMaladieJours ; une valeur absente ou invalide retombe sur 7, un 0 explicite est respecté. */
+function calculerJoursCarenceMaintien(typeArret, carenceMaladie) {
+  if (isArretSansCarence(typeArret)) return 0;
+  const reglee = carenceMaladie === '' || carenceMaladie == null ? NaN : Number(carenceMaladie);
+  return Number.isFinite(reglee) && reglee >= 0 ? Math.floor(reglee) : CARENCE_MAINTIEN_EMPLOYEUR_MALADIE_JOURS;
 }
 
 /** Salaire journalier de base approximatif — méthode CPAM (moyenne des 3 derniers mois / 91,25)
@@ -8356,7 +8371,7 @@ function getBaremeMaintienPourAnciennete(ancienneteAnneesEntieres) {
  * glissants précédant le début de CET arrêt — même logique de cumul que le barème kilométrique
  * (getKilometrageDejaDeclareAnnee) : les arrêts plus anciens que 12 mois ne comptent plus, la demande
  * en cours d'édition (excludeRequestId) ne se compte jamais elle-même. */
-function getJoursMaintienDejaConsommes12Mois(employeeId, dateDebutArret, allLeaveRequests, excludeRequestId) {
+function getJoursMaintienDejaConsommes12Mois(employeeId, dateDebutArret, allLeaveRequests, excludeRequestId, carenceMaladie) {
   const dateArretRef = parseISODateLocal(dateDebutArret);
   const debutFenetre = new Date(dateArretRef);
   debutFenetre.setFullYear(debutFenetre.getFullYear() - 1);
@@ -8368,7 +8383,8 @@ function getJoursMaintienDejaConsommes12Mois(employeeId, dateDebutArret, allLeav
     if (debutReq < debutFenetre || debutReq >= dateArretRef) return;
     const finReq = parseISODateLocal(req.dateFin);
     const nbJoursCalendaires = Math.round((finReq - debutReq) / 86400000) + 1;
-    const carence = calculerJoursCarenceArret(req.arretTravail.typeArret);
+    // Jours effectivement MAINTENUS par l'employeur : la carence employeur (pas celle des IJ) s'applique.
+    const carence = calculerJoursCarenceMaintien(req.arretTravail.typeArret, carenceMaladie);
     total += Math.max(0, nbJoursCalendaires - carence);
   });
   return total;
@@ -8399,7 +8415,7 @@ function calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursIndemnisab
  * estimer, voir openAttestationSalaireModal qui gère déjà ce cas honnêtement pour l'affichage du
  * salaire seul). Ne modifie JAMAIS la demande elle-même — recalculé à chaque affichage, comme le
  * recalcul kilométrique, pour ne jamais servir un montant figé si le barème ou le salaire changent. */
-function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests) {
+function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests, options) {
   const arret = request && request.arretTravail;
   if (!arret || !employee || !employee.salaireBrutMensuel) return null;
   const debut = parseISODateLocal(request.dateDebut);
@@ -8408,12 +8424,19 @@ function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests) 
   const joursCarence = calculerJoursCarenceArret(arret.typeArret);
   const joursIndemnisables = Math.max(0, nbJoursCalendaires - joursCarence);
   const ijSecuEstimee = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, joursIndemnisables);
+  const carenceMaladie = options && options.carenceMaintienMaladie;
+  const joursCarenceMaintien = calculerJoursCarenceMaintien(arret.typeArret, carenceMaladie);
+  const joursMaintien = Math.max(0, nbJoursCalendaires - joursCarenceMaintien);
   const ancienneteAnneesEntieres = Math.floor(calculateAncienneteYears(employee, request.dateDebut));
-  const joursDejaConsommes = getJoursMaintienDejaConsommes12Mois(employee.id, request.dateDebut, allLeaveRequests, request.id);
-  const maintien = calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursIndemnisables, joursDejaConsommes, employee.salaireBrutMensuel);
-  const complementEmployeurEstime = Math.max(0, round2(maintien.montant - ijSecuEstimee));
+  const joursDejaConsommes = getJoursMaintienDejaConsommes12Mois(employee.id, request.dateDebut, allLeaveRequests, request.id, carenceMaladie);
+  const maintien = calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursMaintien, joursDejaConsommes, employee.salaireBrutMensuel);
+  // Le complément employeur compare le maintien et l'IJ sur LES MÊMES jours (ceux que l'employeur maintient), pas sur tous
+  // les jours indemnisés par la Sécurité sociale.
+  const ijSurJoursMaintenus = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, Math.min(joursMaintien, joursIndemnisables));
+  const complementEmployeurEstime = Math.max(0, round2(maintien.montant - ijSurJoursMaintenus));
   return {
     nbJoursCalendaires, joursCarence, joursIndemnisables, ijSecuEstimee,
+    joursCarenceMaintien, joursMaintien,
     ancienneteAnneesEntieres, maintien, complementEmployeurEstime
   };
 }

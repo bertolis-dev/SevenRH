@@ -51,14 +51,14 @@ async function run() {
     const { getJoursMaintienDejaConsommes12Mois } = loadDataJs();
     const base = { employeeId: 'e1', arretTravail: { typeArret: 'maladie' }, statut: 'Validé' };
     const requests = [
-      { ...base, id: 'r-recent', dateDebut: '2026-06-01', dateFin: '2026-06-10' }, // 10 jours - 3 carence = 7
+      { ...base, id: 'r-recent', dateDebut: '2026-06-01', dateFin: '2026-06-10' }, // 10 jours - 7 de carence employeur = 3
       { ...base, id: 'r-trop-vieux', dateDebut: '2024-01-01', dateFin: '2024-01-10' }, // > 12 mois avant sept 2026
       { ...base, id: 'r-autre-salarie', employeeId: 'e2', dateDebut: '2026-07-01', dateFin: '2026-07-10' },
       { ...base, id: 'r-non-valide', statut: 'En attente', dateDebut: '2026-07-01', dateFin: '2026-07-10' },
       { ...base, id: 'r-exclue', dateDebut: '2026-08-01', dateFin: '2026-08-10' }
     ];
     const total = getJoursMaintienDejaConsommes12Mois('e1', '2026-09-14', requests, 'r-exclue');
-    assert.strictEqual(total, 7, 'seule r-recent doit compter (7 jours indemnisables), les autres cas doivent tous être exclus');
+    assert.strictEqual(total, 3, 'seule r-recent doit compter (3 jours maintenus par employeur), les autres cas doivent tous être exclus');
   }
 
   // ---- Maintien de salaire : ancienneté insuffisante (<1 an) = aucun maintien légal ----
