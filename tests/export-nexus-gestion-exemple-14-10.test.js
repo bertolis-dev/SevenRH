@@ -36,3 +36,18 @@ function run() {
 }
 
 try { run(); } catch (err) { console.error('ÉCHEC — export-nexus-gestion-exemple-14-10.test.js'); console.error(err.stack || err.message); process.exitCode = 1; }
+
+// Phase 2 (14/10/2026) : second exemple, avec le bloc « paie » rempli, pour que Nexus Gestion puisse tester les deux cas.
+function runExempleAvecPaie() {
+  const brut = fs.readFileSync(path.join(__dirname, '..', 'docs', 'exemple-export-nexus-rh-v1-avec-paie.json'), 'utf8');
+  assert.notStrictEqual(brut.charCodeAt(0), 0xFEFF, 'JSON sans BOM');
+  const x = JSON.parse(brut);
+  validerFormatV1(x);
+  assert.ok(x.paie && x.paie.detail_par_organisme.length >= 2, 'bloc paie rempli, avec plusieurs organismes');
+  assert.ok(x.paie.brut >= x.paie.net_a_payer, 'cohérence des ordres de grandeur (brut ≥ net)');
+  assert.ok(!/@/.test(brut), 'aucune adresse e-mail');
+  const sans = JSON.parse(fs.readFileSync(fichier, 'utf8'));
+  assert.deepStrictEqual(x.notes_de_frais, sans.notes_de_frais, 'mêmes notes que l\'exemple sans paie : seule la paie diffère');
+  console.log('OK — export-nexus-gestion-exemple-14-10.test.js (exemple avec bloc paie conforme au contrat v1)');
+}
+try { runExempleAvecPaie(); } catch (err) { console.error('ÉCHEC — exemple avec paie'); console.error(err.stack || err.message); process.exitCode = 1; }

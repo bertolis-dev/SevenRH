@@ -229,6 +229,7 @@ function getInitialViewState() {
     paieYear: new Date().getFullYear(),
     paieMonth: new Date().getMonth(),
     paieTab: 'preparation', // Sprint SIRH premium §6 : préparation/anomalies affichée par défaut, avant l'export
+    journalPaie: { periode: null, chargement: false, erreur: '', enregistre: null, brouillon: null }, // onglet « Journal de paie » (voir chargerJournalPaie)
     // Brouillon du compositeur d'abonnement à la carte (souscription initiale ou modification d'un
     // abonnement déjà actif, voir renderAbonnementAlaCarteComposer) — remis à zéro entre deux
     // entreprises comme tout autre état de vue (même bug de fond déjà corrigé pour fraisFilters).
@@ -26551,14 +26552,15 @@ function renderExportPaie() {
         <button class="btn btn-secondary btn-sm" id="btn-paie-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-paie-next">Suivant →</button>
         ${tab === 'export' ? '<button class="btn btn-secondary" id="btn-export-paie">Exporter CSV</button>' : ''}
-        <button class="btn btn-secondary" id="btn-export-nexus-gestion" title="Fichier JSON des notes de frais validées et du récapitulatif des tickets restaurant du mois, à importer dans Nexus Gestion">Exporter vers Nexus Gestion</button>
+        <button class="btn btn-secondary" id="btn-export-nexus-gestion" title="Fichier JSON des notes de frais validées, du récapitulatif des tickets restaurant et du journal de paie du mois (s'il est enregistré), à importer dans Nexus Gestion">Exporter vers Nexus Gestion</button>
       </div>
     </div>
     <div class="tabs" style="margin-bottom: 10px;">
       <button class="tab ${tab === 'preparation' ? 'active' : ''}" data-paie-tab="preparation">Préparation &amp; anomalies</button>
       <button class="tab ${tab === 'export' ? 'active' : ''}" data-paie-tab="export">Export CSV</button>
+      ${peutGererJournalPaie() ? `<button class="tab ${tab === 'journal' ? 'active' : ''}" data-paie-tab="journal">Journal de paie</button>` : ''}
     </div>
-    ${tab === 'export' ? renderExportPaieExportTab(rows) : renderExportPaiePreparationTab(rows)}
+    ${tab === 'export' ? renderExportPaieExportTab(rows) : tab === 'journal' ? renderExportPaieJournalTab() : renderExportPaiePreparationTab(rows)}
   `;
 }
 
@@ -26709,6 +26711,307 @@ function renderExportPaieExportTab(rows) {
   `;
 }
 
+// ---------------------------------------------------------------------------
+// Journal de paie du mois (pont Nexus Gestion, phase 2, 14/10/2026) : totaux saisis à la main OU importés depuis le journal
+// CSV/Excel du logiciel de paie. Nexus RH ne calcule pas la paie. Données financières : réservées au droit « voir les infos
+// financières », stockées dans une table à part (0071), jamais dans le cache local ni dans les réglages de l'entreprise.
+// ---------------------------------------------------------------------------
+
+function periodeJournalPaie() {
+  return state.paieYear + '-' + String(state.paieMonth + 1).padStart(2, '0');
+}
+
+function peutGererJournalPaie() {
+  return hasPermission(authRepository.getCurrentUser(), PERMISSIONS.VOIR_INFOS_FINANCIERES);
+}
+
+const montantVersSaisie = (n) => String(n).replace('.', ',');
+
+/** Formulaire (tout en texte, comme saisi) depuis un journal enregistré ; sans journal, date de paiement proposée = dernier
+ * jour du mois (à corriger si besoin, jamais envoyée sans clic sur Enregistrer). */
+function brouillonJournalPaie(journal, periode) {
+  if (journal) {
+    return {
+      brut: montantVersSaisie(journal.brut), charges_salariales: montantVersSaisie(journal.charges_salariales),
+      charges_patronales: montantVersSaisie(journal.charges_patronales), net_a_payer: montantVersSaisie(journal.net_a_payer),
+      date_paiement: journal.date_paiement || '',
+      detail_par_organisme: (journal.detail_par_organisme || []).map(o => ({ organisme: o.organisme, montant: montantVersSaisie(o.montant) }))
+    };
+  }
+  const [annee, mois] = periode.split('-').map(Number);
+  return { brut: '', charges_salariales: '', charges_patronales: '', net_a_payer: '', date_paiement: toISODate(new Date(annee, mois, 0)), detail_par_organisme: [] };
+}
+
+function chargerJournalPaie() {
+  const j = state.journalPaie;
+  const periode = periodeJournalPaie();
+  j.periode = periode;
+  j.chargement = true;
+  j.erreur = '';
+  j.enregistre = null;
+  j.brouillon = null;
+  const fin = () => { if (state.view === 'export-paie' && state.paieTab === 'journal' && j.periode === periode) render(); };
+  return Promise.resolve()
+    .then(() => journalPaieRepository.get(periode))
+    .then(journal => {
+      if (j.periode !== periode) return;
+      j.enregistre = journal || null;
+      j.brouillon = brouillonJournalPaie(journal, periode);
+      j.chargement = false;
+      fin();
+    })
+    .catch(err => {
+      if (j.periode !== periode) return;
+      j.erreur = (err && err.message) || 'erreur inconnue';
+      j.chargement = false;
+      fin();
+    });
+}
+
+function renderExportPaieJournalTab() {
+  const j = state.journalPaie;
+  const periode = periodeJournalPaie();
+  const titre = `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`;
+  if (!peutGererJournalPaie()) {
+    return `<div class="card"><p>Le journal de paie contient des montants confidentiels : il est réservé aux personnes autorisées à voir les informations financières.</p></div>`;
+  }
+  if (j.periode !== periode || j.chargement) return `<div class="card"><p class="text-muted">Chargement du journal de paie de ${titre}…</p></div>`;
+  if (j.erreur) {
+    return `
+      <div class="card">
+        <p class="login-error" role="alert">Le journal de paie de ${titre} n'a pas pu être chargé : ${escapeHtml(j.erreur)}</p>
+        <button type="button" class="btn btn-secondary" id="btn-jp-retry" style="margin-top: 10px;">Réessayer</button>
+      </div>`;
+  }
+  const b = j.brouillon;
+  return `
+    <div class="card">
+      <h3 style="margin-bottom: 6px;">Journal de paie de ${titre}</h3>
+      <p class="text-muted">Nexus RH ne calcule pas la paie : reportez ici les totaux du mois fournis par votre logiciel de paie (ou importez son journal). Ils servent uniquement à remplir le bloc « paie » du fichier envoyé à Nexus Gestion. ${j.enregistre ? '<strong>Un journal est déjà enregistré pour ce mois.</strong>' : 'Aucun journal enregistré pour ce mois : le fichier Nexus Gestion partira sans bloc « paie ».'}</p>
+      <div style="margin: 12px 0;"><button type="button" class="btn btn-secondary btn-sm" id="btn-jp-import">${icon(ICONS.upload, 14)} Importer un journal de paie (CSV ou Excel)</button></div>
+      <div class="form-grid">
+        ${textField('jp-brut', 'Salaire brut total (€)', b.brut, true)}
+        ${textField('jp-charges_salariales', 'Charges salariales (€)', b.charges_salariales, true)}
+        ${textField('jp-charges_patronales', 'Charges patronales (€)', b.charges_patronales, true)}
+        ${textField('jp-net_a_payer', 'Net à payer (€)', b.net_a_payer, true)}
+        ${textField('jp-date_paiement', 'Date de paiement des salaires', b.date_paiement, true, 'date')}
+      </div>
+      <h4 style="margin: 16px 0 6px;">Montants dus par organisme <span class="text-muted">(facultatif)</span></h4>
+      <div id="jp-organismes">
+        ${b.detail_par_organisme.map((o, i) => `
+          <div class="form-grid" style="align-items: end; margin-bottom: 6px;">
+            ${textField(`jp-org-${i}`, 'Organisme', o.organisme, false)}
+            ${textField(`jp-mont-${i}`, 'Montant (€)', o.montant, false)}
+            <div class="form-field"><button type="button" class="btn btn-secondary btn-sm" data-jp-remove="${i}">Retirer</button></div>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm" id="btn-jp-add-org">+ Ajouter un organisme</button></div>
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <button type="button" class="btn btn-primary" id="btn-jp-save">Enregistrer le journal</button>
+        ${j.enregistre ? '<button type="button" class="btn btn-secondary" id="btn-jp-delete">Supprimer le journal</button>' : ''}
+      </div>
+    </div>`;
+}
+
+function bindJournalPaieEvents() {
+  const j = state.journalPaie;
+  const retry = document.getElementById('btn-jp-retry');
+  if (retry) retry.addEventListener('click', () => { chargerJournalPaie(); render(); });
+  if (!peutGererJournalPaie()) return;
+  if (j.periode !== periodeJournalPaie()) { chargerJournalPaie(); render(); return; }
+  const b = j.brouillon;
+  if (!b) return;
+  ['brut', 'charges_salariales', 'charges_patronales', 'net_a_payer', 'date_paiement'].forEach(champ => {
+    const el = document.getElementById(`f-jp-${champ}`);
+    if (el) el.addEventListener('input', () => { b[champ] = el.value; });
+  });
+  b.detail_par_organisme.forEach((ligne, i) => {
+    const org = document.getElementById(`f-jp-org-${i}`);
+    const mont = document.getElementById(`f-jp-mont-${i}`);
+    if (org) org.addEventListener('input', () => { ligne.organisme = org.value; });
+    if (mont) mont.addEventListener('input', () => { ligne.montant = mont.value; });
+  });
+  document.querySelectorAll('[data-jp-remove]').forEach(btn => btn.addEventListener('click', () => {
+    b.detail_par_organisme.splice(Number(btn.dataset.jpRemove), 1);
+    render();
+  }));
+  const ajout = document.getElementById('btn-jp-add-org');
+  if (ajout) ajout.addEventListener('click', () => { b.detail_par_organisme.push({ organisme: '', montant: '' }); render(); });
+  const importBtn = document.getElementById('btn-jp-import');
+  if (importBtn) importBtn.addEventListener('click', openImportJournalPaieModal);
+  const save = document.getElementById('btn-jp-save');
+  if (save) save.addEventListener('click', enregistrerJournalPaie);
+  const suppr = document.getElementById('btn-jp-delete');
+  if (suppr) suppr.addEventListener('click', () => openConfirm({
+    title: 'Supprimer le journal de paie',
+    message: `Supprimer le journal de paie de ${MONTH_NAMES[state.paieMonth]} ${state.paieYear} ? Le fichier Nexus Gestion de ce mois partira sans bloc « paie ».`,
+    confirmLabel: 'Supprimer',
+    danger: true,
+    onConfirm: supprimerJournalPaie
+  }));
+}
+
+async function enregistrerJournalPaie() {
+  if (!peutGererJournalPaie()) { showToast("Vous n'avez pas le droit de modifier ces données.", 'error'); return; }
+  const j = state.journalPaie;
+  const periode = periodeJournalPaie();
+  const controle = validerJournalPaie(j.brouillon);
+  if (!controle.ok) { showToast(controle.error, 'error'); return; }
+  try {
+    await journalPaieRepository.save(periode, controle.journal);
+  } catch (err) {
+    showToast(`Le journal de paie n'a pas pu être enregistré : ${(err && err.message) || 'erreur inconnue'}`, 'error');
+    return;
+  }
+  j.enregistre = controle.journal;
+  j.brouillon = brouillonJournalPaie(controle.journal, periode);
+  // Aucun montant dans le journal d'audit : il est lisible par plus de monde que le journal de paie lui-même.
+  auditLogRepository.logAudit('Modification', 'Journal de paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`);
+  showToast(`Journal de paie de ${MONTH_NAMES[state.paieMonth]} ${state.paieYear} enregistré.`);
+  render();
+}
+
+async function supprimerJournalPaie() {
+  if (!peutGererJournalPaie()) { showToast("Vous n'avez pas le droit de modifier ces données.", 'error'); return; }
+  const j = state.journalPaie;
+  const periode = periodeJournalPaie();
+  try {
+    await journalPaieRepository.remove(periode);
+  } catch (err) {
+    showToast(`Le journal de paie n'a pas pu être supprimé : ${(err && err.message) || 'erreur inconnue'}`, 'error');
+    return;
+  }
+  j.enregistre = null;
+  j.brouillon = brouillonJournalPaie(null, periode);
+  auditLogRepository.logAudit('Suppression', 'Journal de paie', `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`);
+  showToast('Journal de paie supprimé.');
+  render();
+}
+
+const CHAMPS_IMPORT_JOURNAL_PAIE = [
+  ['brut', 'Salaire brut'], ['charges_salariales', 'Charges salariales'], ['charges_patronales', 'Charges patronales'],
+  ['net_a_payer', 'Net à payer'], ['organisme', 'Organisme (nom)'], ['montant_organisme', 'Montant dû à l\'organisme']
+];
+
+/** Lit un fichier CSV/Excel en tableau de lignes. Les nombres restent des nombres (jamais convertis en texte : « 1.234 » serait
+ * relu comme 1234), les vraies cellules Date deviennent JJ/MM/AAAA. */
+function lireFichierTableur(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Fichier illisible.'));
+    reader.onload = async () => {
+      try {
+        await loadXLSXLibrary();
+        // raw:true : un CSV français (« 650,50 ») resterait sinon lu à l'américaine par SheetJS (650,50 → 65050), ce qui fausserait les totaux.
+        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true, raw: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+          .map(row => row.map(cell => {
+            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
+              return `${String(cell.getUTCDate()).padStart(2, '0')}/${String(cell.getUTCMonth() + 1).padStart(2, '0')}/${cell.getUTCFullYear()}`;
+            }
+            return typeof cell === 'number' ? cell : (cell == null ? '' : String(cell));
+          }))
+          .filter(row => row.some(cell => cell !== ''));
+        resolve(rows);
+      } catch (err) {
+        reject(new Error("Fichier illisible : vérifiez qu'il s'agit bien d'un fichier CSV ou Excel valide."));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function openImportJournalPaieModal() {
+  loadXLSXLibrary().catch(() => {});
+  const titre = `${MONTH_NAMES[state.paieMonth]} ${state.paieYear}`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Importer le journal de paie de ${titre}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Fichier CSV ou Excel exporté de votre logiciel de paie, avec une ligne d'en-têtes puis une ligne par salarié (ou par organisme). Les colonnes sont reconnues d'après leur titre ; vous pouvez les corriger avant de reprendre les totaux. Rien n'est enregistré tant que vous ne cliquez pas sur « Enregistrer le journal ».</p>
+        <input type="file" id="f-jp-fichier" accept=".csv,.xlsx,.xls">
+        <div id="jp-import-zone" style="margin-top: 16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-jp-reprendre" style="display: none;">Reprendre ces montants</button>
+      </div>
+    </div>`;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  let lignes = [];
+  let colonnes = {};
+  let resultat = null;
+  const zone = document.getElementById('jp-import-zone');
+  const reprendre = document.getElementById('btn-jp-reprendre');
+
+  const recalculer = () => {
+    resultat = agregerJournalPaie(lignes, colonnes);
+    document.getElementById('jp-import-resume').innerHTML = resultat.lignesLues
+      ? `<strong>${resultat.lignesLues} ligne${resultat.lignesLues > 1 ? 's' : ''} lue${resultat.lignesLues > 1 ? 's' : ''}</strong> : brut ${formatCurrencyFR(resultat.brut)} · charges salariales ${formatCurrencyFR(resultat.charges_salariales)} · charges patronales ${formatCurrencyFR(resultat.charges_patronales)} · net à payer ${formatCurrencyFR(resultat.net_a_payer)}${resultat.detail_par_organisme.length ? ` · ${resultat.detail_par_organisme.length} organisme${resultat.detail_par_organisme.length > 1 ? 's' : ''}` : ''}`
+      : `<span class="login-error" role="alert">Aucune ligne exploitable avec ces colonnes : choisissez les bonnes colonnes ci-dessus.</span>`;
+    reprendre.style.display = resultat.lignesLues ? '' : 'none';
+  };
+
+  document.getElementById('f-jp-fichier').addEventListener('change', async (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    let rows;
+    try {
+      rows = await lireFichierTableur(file);
+    } catch (err) {
+      zone.innerHTML = `<p class="login-error" role="alert">${escapeHtml(err.message)}</p>`;
+      reprendre.style.display = 'none';
+      return;
+    }
+    if (rows.length < 2) {
+      zone.innerHTML = `<p class="login-error" role="alert">Fichier vide ou illisible (une ligne d'en-têtes et au moins une ligne de données sont attendues).</p>`;
+      reprendre.style.display = 'none';
+      return;
+    }
+    const [entetes, ...donnees] = rows;
+    lignes = donnees;
+    colonnes = devinerColonnesJournalPaie(entetes);
+    zone.innerHTML = `
+      <div class="form-grid">
+        ${CHAMPS_IMPORT_JOURNAL_PAIE.map(([champ, libelle]) => `
+          <div class="form-field">
+            <label for="f-jp-col-${champ}">${escapeHtml(libelle)}</label>
+            <select class="input" id="f-jp-col-${champ}" data-jp-col="${champ}">
+              <option value="">Aucune colonne</option>
+              ${entetes.map((e, i) => `<option value="${i}" ${colonnes[champ] === i ? 'selected' : ''}>${escapeHtml(String(e) || `Colonne ${i + 1}`)}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+      <p id="jp-import-resume" style="margin-top: 12px;"></p>`;
+    zone.querySelectorAll('[data-jp-col]').forEach(sel => sel.addEventListener('change', () => {
+      if (sel.value === '') delete colonnes[sel.dataset.jpCol]; else colonnes[sel.dataset.jpCol] = Number(sel.value);
+      recalculer();
+    }));
+    recalculer();
+  });
+
+  reprendre.addEventListener('click', () => {
+    if (!resultat || !resultat.lignesLues) return;
+    const b = state.journalPaie.brouillon;
+    b.brut = montantVersSaisie(resultat.brut);
+    b.charges_salariales = montantVersSaisie(resultat.charges_salariales);
+    b.charges_patronales = montantVersSaisie(resultat.charges_patronales);
+    b.net_a_payer = montantVersSaisie(resultat.net_a_payer);
+    if (resultat.detail_par_organisme.length) b.detail_par_organisme = resultat.detail_par_organisme.map(o => ({ organisme: o.organisme, montant: montantVersSaisie(o.montant) }));
+    closeModal();
+    render();
+    showToast('Montants repris du fichier : vérifiez-les, puis cliquez sur « Enregistrer le journal ».');
+  });
+}
+
 function bindExportPaieEvents() {
   document.getElementById('btn-paie-prev').addEventListener('click', () => shiftPaieMonth(-1));
   document.getElementById('btn-paie-next').addEventListener('click', () => shiftPaieMonth(1));
@@ -26757,6 +27060,8 @@ function bindExportPaieEvents() {
   document.querySelectorAll('[data-adjust-repos-compensateur]').forEach(btn => {
     btn.addEventListener('click', () => openReposCompensateurPrisModal(btn.dataset.adjustReposCompensateur));
   });
+
+  if (state.paieTab === 'journal') bindJournalPaieEvents();
 }
 
 /** Nouvel écran dédié (module "Rémunération" du compositeur à la carte de la landing, 14/08/2026) —
@@ -27266,7 +27571,7 @@ function exportRowsToCSVWithDelimiter(headers, rows, filename, delimiter) {
  * l'acquitter, mais garde la main s'il juge que c'est un faux positif. */
 /** Export du mois affiché vers Nexus Gestion (brief du 14/10/2026) : un simple fichier JSON à télécharger, aucun appel réseau.
  * Bloqué avec un message clair si le SIREN de l'entreprise n'est pas valide. Voir construireExportNexusGestion (data.js). */
-function exporterVersNexusGestion() {
+async function exporterVersNexusGestion() {
   // Même droit que l'export de paie : le bouton n'est qu'un raccourci, jamais la seule barrière.
   if (!hasPermission(authRepository.getCurrentUser(), PERMISSIONS.EXPORTER_PAIE)) {
     showToast("Vous n'avez pas le droit d'exporter ces données.", 'error');
@@ -27274,22 +27579,42 @@ function exporterVersNexusGestion() {
   }
   const annee = state.paieYear;
   const mois = state.paieMonth;
-  const resultat = construireExportNexusGestion({
-    annee, mois, maintenant: new Date(),
-    profile: companyRepository.getProfile(),
-    lignesPaie: getPaieRows(annee, mois),
-    expenses: expenseRepository.getAll(),
-    employees: employeeRepository.getAll(),
-    settings: settingsRepository.getSettings(),
-    modules: { frais: hasModule('frais'), tickets: hasModule('tickets') }
-  });
-  if (!resultat.ok) {
-    showToast(resultat.error, 'error');
+  const avecDroitPaie = peutGererJournalPaie();
+  const produire = (journalPaie) => {
+    const resultat = construireExportNexusGestion({
+      annee, mois, maintenant: new Date(),
+      profile: companyRepository.getProfile(),
+      lignesPaie: getPaieRows(annee, mois),
+      expenses: expenseRepository.getAll(),
+      employees: employeeRepository.getAll(),
+      settings: settingsRepository.getSettings(),
+      modules: { frais: hasModule('frais'), tickets: hasModule('tickets') },
+      journalPaie
+    });
+    if (!resultat.ok) {
+      showToast(resultat.error, 'error');
+      return;
+    }
+    downloadJSONFile(resultat.export, `nexus-rh-export-${resultat.export.periode}.json`);
+    auditLogRepository.logAudit('Export', 'Export Nexus Gestion', `${MONTH_NAMES[mois]} ${annee} · ${resultat.export.notes_de_frais.length} note${resultat.export.notes_de_frais.length > 1 ? 's' : ''} de frais${resultat.export.paie ? ' · avec le journal de paie' : ''}`);
+    const sansPaie = avecDroitPaie && !resultat.export.paie ? " (sans bloc « paie » : aucun journal de paie enregistré pour ce mois)" : '';
+    showToast(`Export Nexus Gestion de ${MONTH_NAMES[mois]} ${annee} téléchargé${sansPaie}.`);
+  };
+  if (!avecDroitPaie) { produire(null); return; }
+  // Le journal de paie est une donnée financière lue à la demande (jamais en cache local).
+  let journal;
+  try {
+    journal = await journalPaieRepository.get(`${annee}-${String(mois + 1).padStart(2, '0')}`);
+  } catch (err) {
+    openConfirm({
+      title: 'Journal de paie illisible',
+      message: `Le journal de paie de ${MONTH_NAMES[mois]} ${annee} n'a pas pu être lu (${(err && err.message) || 'erreur inconnue'}). Exporter quand même, sans le bloc « paie » ?`,
+      confirmLabel: 'Exporter sans la paie',
+      onConfirm: () => produire(null)
+    });
     return;
   }
-  downloadJSONFile(resultat.export, `nexus-rh-export-${resultat.export.periode}.json`);
-  auditLogRepository.logAudit('Export', 'Export Nexus Gestion', `${MONTH_NAMES[mois]} ${annee} · ${resultat.export.notes_de_frais.length} note${resultat.export.notes_de_frais.length > 1 ? 's' : ''} de frais`);
-  showToast(`Export Nexus Gestion de ${MONTH_NAMES[mois]} ${annee} téléchargé.`);
+  produire(journal || null);
 }
 
 function handleExportPaieClick() {
