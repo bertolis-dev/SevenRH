@@ -1,0 +1,101 @@
+{
+  "format": "nexus-rh-export",
+  "version": 1,
+  "siren": "123456782",
+  "periode": "2026-10",
+  "genere_le": "2026-10-31T17:45:00Z",
+  "notes_de_frais": [
+    {
+      "id": "nf_mgx5f3a9_w4n5ij",
+      "date": "2026-09-29",
+      "salarie": "Alex DUBOIS",
+      "categorie": "Hébergement",
+      "libelle": "Nuit hôtel séminaire",
+      "montant_ht": 88,
+      "tva": 8.8,
+      "montant_ttc": 96.8,
+      "taux_tva": 10,
+      "justificatif_url": null,
+      "date_remboursement": null
+    },
+    {
+      "id": "nf_mgx4k2a1_p9q7ab",
+      "date": "2026-10-02",
+      "salarie": "Camille MARTIN",
+      "categorie": "Repas",
+      "libelle": "Déjeuner client Lyon",
+      "montant_ht": 38.18,
+      "tva": 3.82,
+      "montant_ttc": 42,
+      "taux_tva": 10,
+      "justificatif_url": "justificatifs/entreprise-exemple/emp_1/nf_mgx4k2a1_p9q7ab/ticket-restaurant.jpg",
+      "date_remboursement": "2026-10-20"
+    },
+    {
+      "id": "nf_mgx4k9d7_m3r8cd",
+      "date": "2026-10-03",
+      "salarie": "Alex DUBOIS",
+      "categorie": "Transport",
+      "libelle": "Taxi gare de Lyon",
+      "montant_ht": 25.91,
+      "tva": 2.59,
+      "montant_ttc": 28.5,
+      "taux_tva": 10,
+      "justificatif_url": "justificatifs/entreprise-exemple/emp_2/nf_mgx4k9d7_m3r8cd/taxi.pdf",
+      "date_remboursement": null
+    },
+    {
+      "id": "nf_mgx5a1b3_k2x9ef",
+      "date": "2026-10-07",
+      "salarie": "Sam LEROY",
+      "categorie": "Fournitures",
+      "libelle": "Cartouches imprimante",
+      "montant_ht": 99.92,
+      "tva": 19.98,
+      "montant_ttc": 119.9,
+      "taux_tva": 20,
+      "justificatif_url": null,
+      "date_remboursement": "2026-10-20"
+    },
+    {
+      "id": "nf_mgx5c8e2_t6v1gh",
+      "date": "2026-10-09",
+      "salarie": "Camille MARTIN",
+      "categorie": "Kilométrique",
+      "libelle": "Trajet client Grenoble",
+      "montant_ht": 63.4,
+      "tva": 0,
+      "montant_ttc": 63.4,
+      "taux_tva": 0,
+      "justificatif_url": null,
+      "date_remboursement": null
+    }
+  ],
+  "tickets_restaurant": {
+    "nombre": 63,
+    "montant_total": 567,
+    "part_employeur": 340.2,
+    "date_commande": "2026-09-29"
+  },
+  "paie": {
+    "brut": 8420.5,
+    "charges_salariales": 1840.3,
+    "charges_patronales": 3365.8,
+    "net_a_payer": 6580.2,
+    "date_paiement": "2026-10-30",
+    "detail_par_organisme": [
+      {
+        "organisme": "URSSAF",
+        "montant": 4120.4
+      },
+      {
+        "organisme": "Retraite complémentaire",
+        "montant": 1085.7
+      },
+      {
+        "organisme": "Mutuelle",
+        "montant": 310
+      }
+    ]
+  }
+}
