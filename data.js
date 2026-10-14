@@ -5920,6 +5920,14 @@ const integrationsRepository = {
   save: (patch) => window.SupabaseSync.saveCompanyIntegrations(DB.getCurrentCompany().id, patch)
 };
 
+/** Journal de paie mensuel (0071) : comme integrationsRepository, jamais dans le cache local optimiste — données
+ * financières réservées à voirInfosFinancieres par RLS, lues et écrites directement sur Supabase. */
+const journalPaieRepository = {
+  get: (periode) => window.SupabaseSync.getJournalPaie(DB.getCurrentCompany().id, periode),
+  save: (periode, journal) => window.SupabaseSync.saveJournalPaie(DB.getCurrentCompany().id, periode, journal),
+  remove: (periode) => window.SupabaseSync.deleteJournalPaie(DB.getCurrentCompany().id, periode)
+};
+
 /** Candidatures reçues via le QR code "Embauche" (voir renderEmbauche, app.js). Comme
  * integrationsRepository : jamais dans le cache local optimiste (company.*) — de nouvelles
  * candidatures peuvent arriver n'importe quand depuis le formulaire public, sans qu'aucun signal
@@ -7683,7 +7691,7 @@ function normaliserEnteteJournalPaie(texte) {
 function devinerColonnesJournalPaie(entetes) {
   const regles = [
     ['charges_patronales', /(cotis|charge).*(patron|employeur)|part patron|patronal/],
-    ['charges_salariales', /(cotis|charge).*(salari|employe(?!ur)|ouvrier)|part salari|salarial/],
+    ['charges_salariales', /(cotis|charge).*(salari|employ(?!eur)|ouvrier)|part salari|salarial/],
     ['net_a_payer', /net.*(payer|verser|paye)|a payer|a verser/],
     ['montant_organisme', /montant.*(organisme|caisse)|(organisme|caisse).*montant/],
     ['organisme', /organisme|caisse/],

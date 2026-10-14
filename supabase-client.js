@@ -1384,6 +1384,21 @@ async function getCompanyIntegrations(companyId) {
     ? { slackWebhookUrl: data.slack_webhook_url || '', teamsWebhookUrl: data.teams_webhook_url || '', googleChatWebhookUrl: data.google_chat_webhook_url || '' }
     : { slackWebhookUrl: '', teamsWebhookUrl: '', googleChatWebhookUrl: '' };
 }
+/** Journal de paie d'un mois (0071) : totaux saisis ou importés depuis le logiciel de paie externe, réservés à
+ * voirInfosFinancieres par RLS. Jamais dans le cache local (company.*), lu à l'ouverture de l'onglet et à l'export. */
+async function getJournalPaie(companyId, periode) {
+  const { data, error } = await supabase.from('paie_journaux').select('data').eq('company_id', companyId).eq('periode', periode).maybeSingle();
+  if (error) throw error;
+  return data ? data.data : null;
+}
+async function saveJournalPaie(companyId, periode, journal) {
+  const { error } = await supabase.from('paie_journaux').upsert({ company_id: companyId, periode, data: journal, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+async function deleteJournalPaie(companyId, periode) {
+  const { error } = await supabase.from('paie_journaux').delete().eq('company_id', companyId).eq('periode', periode);
+  if (error) throw error;
+}
 async function saveCompanyIntegrations(companyId, { slackWebhookUrl, teamsWebhookUrl, googleChatWebhookUrl }) {
   const { error } = await supabase.from('company_integrations').upsert({
     company_id: companyId,
@@ -1532,7 +1547,7 @@ window.SupabaseSync = {
   pushEntretiens, updateEntretien,
   pushIdees, toggleIdeeVote, setIdeeStatut,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
-  getCompanyIntegrations, saveCompanyIntegrations, notifySlack, notifyRequestEmail,
+  getCompanyIntegrations, saveCompanyIntegrations, getJournalPaie, saveJournalPaie, deleteJournalPaie, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature, supprimerCandidature,
   getCompanyPublicInfo, uploadCompanyLogo, uploadEmployeePhoto, getEmployeePhotoUrl, getExpenseTotalsForEmployee, hydrationWindowCutoffISO, getPointageQrCode, verifierPointageCode, enregistrerPointageServeur, regeneratePointageTokenRemote,
   uploadEmployeeDocumentFile, getEmployeeDocumentFileUrl, uploadJustificatifFile, getJustificatifFileUrl,
