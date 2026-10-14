@@ -1284,6 +1284,14 @@ const pushDocuments = (rows, companyId) => syncTable('documents', rows, document
 
 /** Accusé de lecture d'un document par le salarié concerné (0066) : seule écriture du salarié sur la
  * table documents, via une fonction qui ne touche que SES lignes réclamant un accusé. */
+/** Échange de créneaux (0072) : proposer / accepter / traiter, contrôlés côté serveur — les quarts et les demandes vivent dans
+ * companies.data, que seul gererParametres peut écrire, donc ni un salarié ni un manager ne pouvaient passer par le bloc. */
+async function echangeShiftAction(action, requestId, shiftId, accepter) {
+  const { data, error } = await supabase.rpc('echange_shift_action', { p_action: action, p_request_id: requestId, p_shift_id: shiftId || null, p_accepter: accepter === undefined ? null : accepter });
+  if (error) throw error;
+  return data;
+}
+
 async function accuserLectureDocument(documentId) {
   const { error } = await supabase.rpc('accuser_lecture_document', { p_document_id: documentId });
   if (error) throw error;
@@ -1541,7 +1549,7 @@ window.SupabaseSync = {
   updatePassword, sendPasswordResetEmail, onPasswordRecovery, wasPasswordRecoveryDetected, invokeBilling,
   switchToSession, onSessionRefreshed,
   pushEmployees, pushEtablissements, pushServices, pushLeaveTypes, pushLeaveRequests,
-  pushTeleworkRequests, pushExpenses, pushDocuments, accuserLectureDocument, pushDrafts, pushNotifications,
+  pushTeleworkRequests, pushExpenses, pushDocuments, accuserLectureDocument, echangeShiftAction, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog, reportClientErrorToBertolis,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien,

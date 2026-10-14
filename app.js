@@ -22840,9 +22840,13 @@ function renderPlanningPostes() {
       // est désormais réservée à qui a le droit de modifier.
       const shiftCardStyle = [conflitIndisponibilite ? 'border-left-color: var(--color-danger);' : '', canManage ? '' : 'cursor: default;'].filter(Boolean).join(' ');
       const titreCarte = `${conflitIndisponibilite ? 'Chevauche une indisponibilité déclarée. ' : ''}Pause déduite : ${Number(shift.pauseMinutes) || 0} min`;
+      // Échange de créneaux (0072) : le salarié propose SON quart depuis la carte, sans ouvrir l'édition réservée à qui planifie.
+      // Une icône (jamais une ligne de texte de plus : la hauteur de la carte est fixe). Masquée si une proposition est déjà ouverte.
+      const peutProposerEchange = shift.employeeId === user.id && !shiftSwapRepository.getAll().some(r => r.shiftId === shift.id && r.statut !== 'refusé' && r.statut !== 'validé');
+      const boutonEchange = peutProposerEchange ? `<button type="button" class="btn-link" style="padding: 0 0 0 4px; line-height: 1;" data-proposer-echange="${shift.id}" title="Proposer ce créneau à l'échange" aria-label="Proposer ce créneau à l'échange">${icon(ICONS.refresh, 11)}</button>` : '';
       return `<div class="poste-shift-card" ${canManage ? `data-edit-shift="${shift.id}"` : ''} ${shiftCardStyle ? `style="${shiftCardStyle}"` : ''} title="${escapeHtml(titreCarte)}">
           <div class="poste-shift-time">${escapeHtml(shift.heureDebut)}-${escapeHtml(shift.heureFin)}</div>
-          <div class="poste-shift-position">${escapeHtml(employee.service || '')}${pointageDot}</div>
+          <div class="poste-shift-position">${escapeHtml(employee.service || '')}${pointageDot}${boutonEchange}</div>
           ${conflitIndisponibilite ? `<div class="text-danger" style="font-size: 11px;">${icon(ICONS.warningTriangle, 10)} Indisponible</div>` : ''}
         </div>`;
       };
@@ -23015,9 +23019,15 @@ function renderShiftSwapCard(user, employeesVisibles) {
   // pouvait valider/refuser des échanges de créneaux entre salariés d'AUTRES équipes, hors de son
   // autorité (peutTraiter ne vérifie qu'une permission globale, jamais la portée d'équipe).
   const visibleIds = new Set(employeesVisibles.map(e => e.id));
-  const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé' && visibleIds.has(r.employeeId));
+  // Un salarié ne voit que sa propre fiche (employeesVisibles = lui seul) : sans cette ouverture, il ne verrait jamais les créneaux que ses
+  // collègues proposent, donc ne pourrait pas les prendre. Pour un SALARIÉ, les propositions OUVERTES des collègues sont donc
+  // visibles (jour et horaires, sans nom) ; celles où il est proposant ou repreneur aussi. Un manager reste limité à sa portée
+  // (décision de l'audit du 16/09/2026 : jamais un échange d'une autre équipe).
+  const estSalarie = user.role === ROLES.SALARIE;
+  const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé'
+    && (visibleIds.has(r.employeeId) || (estSalarie && (r.statut === 'proposé' || r.employeeId === user.id || r.destinataireId === user.id))));
   if (!requests.length) return '';
-  const nomDe = (id) => { const e = employeeRepository.getById(id); return e ? `${e.prenom} ${e.nom}` : '—'; };
+  const nomDe = (id) => { const e = visibleIds.has(id) ? employeeRepository.getById(id) : null; return e ? `${e.prenom} ${e.nom}` : 'un collègue'; };
   const describeShift = (shiftId) => {
     const shift = shiftRepository.getById(shiftId);
     return shift ? `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}` : 'Quart supprimé';
@@ -23026,7 +23036,8 @@ function renderShiftSwapCard(user, employeesVisibles) {
   const rows = requests.map(r => {
     const estProposant = r.employeeId === user.id;
     const peutAccepter = r.statut === 'proposé' && !estProposant;
-    const peutTraiter = r.statut === 'accepté' && canManage;
+    // Le manager du proposant valide aussi (le serveur, echange_shift_action, applique la même règle), pas seulement qui planifie.
+    const peutTraiter = r.statut === 'accepté' && (canManage || isManagerOfEmployee(user.id, r.employeeId));
     return `
       <div class="mini-list-item">
         <span>${describeShift(r.shiftId)} · proposé par ${escapeHtml(nomDe(r.employeeId))}${r.destinataireId ? ` → repris par ${escapeHtml(nomDe(r.destinataireId))}` : ''}</span>
@@ -23049,6 +23060,22 @@ function renderShiftSwapCard(user, employeesVisibles) {
 
 function bindShiftSwapCardEvents() {
   const user = authRepository.getCurrentUser();
+  document.querySelectorAll('[data-proposer-echange]').forEach(btn => {
+    btn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      const shiftId = btn.dataset.proposerEchange;
+      openConfirm({
+        title: 'Proposer ce créneau à l\'échange ?',
+        message: 'Vos collègues pourront le reprendre ; l\'échange n\'a lieu qu\'après validation par votre manager. Le créneau reste le vôtre d\'ici là.',
+        confirmLabel: 'Proposer',
+        onConfirm: () => {
+          shiftSwapRepository.proposer(shiftId, user.id);
+          showToast('Créneau proposé à l\'échange.');
+          render();
+        }
+      });
+    });
+  });
   document.querySelectorAll('[data-accepter-echange]').forEach(btn => {
     btn.addEventListener('click', () => {
       shiftSwapRepository.accepter(btn.dataset.accepterEchange, user.id);

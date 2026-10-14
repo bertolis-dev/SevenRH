@@ -3130,11 +3130,18 @@ const DB = {
     return (this.getCurrentCompany().shiftSwapRequests || []).slice();
   },
 
+  /** Écrit les demandes d'échange dans le cache local SEULEMENT : l'écriture serveur passe par echange_shift_action (0072), seul
+   * chemin ouvert à un salarié ou à un manager (le bloc companies.data exige gererParametres). */
   saveShiftSwapRequests(list) {
     const company = this.getCurrentCompany();
     company.shiftSwapRequests = list;
     this.saveCurrentCompany(company);
-    this._pushCompanyDataBlob(company);
+  },
+
+  /** Envoi serveur d'une action d'échange, en tâche de fond comme le reste des écritures : un refus du serveur (droit, quart déjà
+   * repris...) déclenche l'avertissement de synchronisation en haut de l'écran. */
+  _echangeShiftServeur(action, requestId, shiftId, accepter) {
+    this._pushInBackground(window.SupabaseSync.echangeShiftAction(action, requestId, shiftId, accepter));
   },
 
   getShiftSwapRequestById(id) {
@@ -3146,6 +3153,7 @@ const DB = {
     const request = Object.assign(makeEmptyShiftSwapRequest(), { id: generateId('echange'), shiftId, employeeId, dateCreation: new Date().toISOString() });
     list.push(request);
     this.saveShiftSwapRequests(list);
+    this._echangeShiftServeur('proposer', request.id, shiftId);
     this.logAudit('Création', 'Échange de créneau', `Proposé par ${this.getEmployeeById(employeeId).prenom} ${this.getEmployeeById(employeeId).nom}`);
     return request;
   },
@@ -3156,6 +3164,7 @@ const DB = {
     if (index === -1 || list[index].statut !== 'proposé') return null;
     list[index] = Object.assign({}, list[index], { destinataireId, statut: 'accepté' });
     this.saveShiftSwapRequests(list);
+    this._echangeShiftServeur('accepter', requestId);
     return list[index];
   },
 
@@ -3168,7 +3177,16 @@ const DB = {
     if (index === -1 || list[index].statut !== 'accepté') return null;
     const request = list[index];
     if (accepter) {
-      this.updateShift(request.shiftId, { employeeId: request.destinataireId });
+      // Réaffectation locale seulement : côté serveur, c'est echange_shift_action qui déplace le quart (un manager n'a pas le droit d'écrire le bloc).
+      const quarts = this.getShifts();
+      const iq = quarts.findIndex(s => s.id === request.shiftId);
+      if (iq !== -1) {
+        quarts[iq] = Object.assign({}, quarts[iq], { employeeId: request.destinataireId });
+        const company = this.getCurrentCompany();
+        company.shifts = quarts;
+        this.saveCurrentCompany(company);
+        this.logAudit('Modification', 'Quart de planning', `${quarts[iq].weekday} ${quarts[iq].heureDebut}-${quarts[iq].heureFin}`);
+      }
       list[index] = Object.assign({}, request, { statut: 'validé', dateTraitement: new Date().toISOString() });
       this.logAudit('Validation', 'Échange de créneau', `Quart réaffecté à ${this.getEmployeeById(request.destinataireId).prenom} ${this.getEmployeeById(request.destinataireId).nom}`);
     } else {
@@ -3176,6 +3194,7 @@ const DB = {
       this.logAudit('Refus', 'Échange de créneau', '');
     }
     this.saveShiftSwapRequests(list);
+    this._echangeShiftServeur('traiter', requestId, null, Boolean(accepter));
     return list[index];
   },
 
