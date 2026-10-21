@@ -551,6 +551,8 @@ const NAV_ITEMS = [
   // §retour QA du 26/08/2026 (point 7.2) : vue d'ensemble des soldes de congés, un manager ne voit
   // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
   { key: 'tableau-compteurs', label: 'Tableau des compteurs', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'conges' },
+  // Retour du 21/10/2026 : parcours guidé pour renseigner les données de départ (salariés, types de congés, soldes, historique). Pour ceux qui paramètrent.
+  { key: 'prise-en-main', label: 'Prise en main', icon: ICONS.rocket, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES], group: 'equipe' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
   // §"Boussole" (roadmap différenciation #2) : désactivée le 01/09/2026 à la demande de Betty (coût
   // API Anthropic non retenu — "je veux pas on annule"). L'entrée RESTE dans NAV_ITEMS (jamais
@@ -6508,6 +6510,10 @@ function renderInner() {
       root.innerHTML = renderTableauCompteurs();
       bindTableauCompteursEvents();
       break;
+    case 'prise-en-main':
+      root.innerHTML = renderPriseEnMain();
+      bindPriseEnMainEvents();
+      break;
     case 'organigramme':
       root.innerHTML = renderOrganigramme();
       bindOrganigrammeEvents();
@@ -8433,6 +8439,169 @@ function bindSortableHeadersGlobalDelegation() {
  * "Salarié" (voir renderTableauCompteurs) : trier par un solde précis se heurterait à Infinity
  * (compteur illimité, déjà exclu des totaux ci-dessous) sans bénéfice clair pour l'usage réel de cet
  * écran. */
+// ---------------------------------------------------------------------------
+// Prise en main (retour du 21/10/2026) : le parcours, dans l'ordre, pour bien renseigner les données de départ d'une entreprise qui
+// arrive sur Nexus. Chaque étape dit pourquoi, où aller, et si elle est déjà faite d'après les vraies données.
+// ---------------------------------------------------------------------------
+
+const PRISE_EN_MAIN_ETAPES = [
+  {
+    key: 'entreprise', court: 'Entreprise',
+    titre: 'Renseigner votre entreprise',
+    pourquoi: 'Raison sociale, SIRET et au moins un établissement : ils servent aux documents, aux jours fériés et aux exports.',
+    ou: 'Paramètres > Entreprise, puis Paramètres > Établissements',
+    action: { label: 'Ouvrir Paramètres', view: 'parametres', params: { parametresTab: 'entreprise' } }
+  },
+  {
+    key: 'salaries', court: 'Salariés',
+    titre: 'Ajouter vos salariés',
+    pourquoi: 'Tout part des fiches salariés : date d\'embauche (elle fixe les droits à congés), temps de travail, manager. Un import Excel évite de les saisir un par un.',
+    ou: 'Salariés > Importer (fichier Excel : matricule, nom, prénom, email, date d\'embauche...)',
+    action: { label: 'Aller aux salariés', view: 'employees', params: {} }
+  },
+  {
+    key: 'types', court: 'Types de congés',
+    titre: 'Vérifier les types de congés',
+    pourquoi: 'Nexus calcule les droits d\'après chaque type : nombre de jours par an, unité (ouvrés ou ouvrables), date de clôture du compteur. Les congés payés sont proposés par défaut selon la règle légale ; les RTT sont à activer et à régler selon votre accord. Corrigez ces valeurs AVANT d\'ajuster les soldes.',
+    ou: 'Paramètres > Congés et absences',
+    action: { label: 'Régler les types', view: 'parametres', params: { parametresTab: 'types-absences' } }
+  },
+  {
+    key: 'historique', court: 'Historique',
+    titre: 'Importer l\'historique des congés',
+    pourquoi: 'Les absences déjà prises doivent figurer dans Nexus pour que les soldes soient justes. Le modèle téléchargeable donne les colonnes, dont « Demi-journée début » (Après-midi) et « Demi-journée fin » (Matin) pour les demi-journées. Faites cette étape AVANT les soldes de départ : un congé importé s\'ajoute aux jours pris, donc au solde.',
+    ou: 'Congés & absences > Importer l\'historique (téléchargez le modèle)',
+    action: { label: 'Aller aux congés', view: 'absences', params: {} }
+  },
+  {
+    key: 'soldes', court: 'Soldes',
+    titre: 'Mettre les soldes de départ',
+    pourquoi: 'Nexus calcule lui-même ce que chaque salarié a acquis. À faire en dernier, une fois l\'historique importé, car le calcul tient compte des jours pris. Si vos chiffres de départ diffèrent, importez-les : choisissez « Le solde à avoir aujourd\'hui », Nexus calcule l\'ajustement et l\'aperçu montre le solde obtenu avant d\'enregistrer.',
+    ou: 'Salariés > Importer les soldes initiaux (une colonne par type, nommée comme le type)',
+    action: { label: 'Aller aux salariés', view: 'employees', params: {} }
+  },
+  {
+    key: 'verification', court: 'Vérification', manuelle: true,
+    titre: 'Contrôler les compteurs',
+    pourquoi: 'Le Tableau des compteurs donne le solde de chacun ; son onglet « Récapitulatif annuel » montre les jours pris mois par mois pour pointer avec vos propres tableaux.',
+    ou: 'Tableau des compteurs > Récapitulatif annuel',
+    action: { label: 'Ouvrir le tableau', view: 'tableau-compteurs', params: { tableauCompteursVue: 'annuel' } }
+  },
+  {
+    key: 'mise-en-service', court: 'Mise en service', manuelle: true,
+    titre: 'Autoriser les corrections pendant la mise en service',
+    pourquoi: 'Par principe, on ne corrige pas ses propres congés. Pendant la reprise, le propriétaire peut lever cette règle pour une durée limitée (tracé dans le journal d\'audit).',
+    ou: 'Paramètres > Congés et absences > Mode mise en service (propriétaire)',
+    action: { label: 'Ouvrir le réglage', view: 'parametres', params: { parametresTab: 'types-absences' } }
+  },
+  {
+    key: 'comptes', court: 'Comptes',
+    titre: 'Inviter vos salariés',
+    pourquoi: 'Quand les données sont justes, créez les comptes de connexion : chacun voit ses soldes, pose ses demandes et reçoit ses validations.',
+    ou: 'Fiche d\'un salarié > Compte de connexion',
+    action: { label: 'Aller aux salariés', view: 'employees', params: {} }
+  }
+];
+
+function getEtapesPriseEnMain() {
+  const settings = settingsRepository.getSettings();
+  const manuelles = settings.priseEnMainEtapes || {};
+  const profil = companyRepository.getProfile() || {};
+  const employes = employeeRepository.getAll().filter(e => !e.archive);
+  const automatique = {
+    entreprise: () => Boolean(profil.raisonSociale) && String(profil.siret || '').replace(/\D/g, '').length >= 9 && etablissementRepository.getAll().length >= 1,
+    salaries: () => employes.length >= 2,
+    types: () => leaveTypeRepository.getLeaveTypes().some(t => t.actif && leaveTypeNameMatches(t.nom, 'Congés payés')),
+    soldes: () => employes.some(e => Object.values(e.compteurs || {}).some(v => Number(v))),
+    historique: () => leaveRepository.getAll().some(r => (r.historique || []).some(h => /Import historique/.test(h.action || ''))),
+    comptes: () => employes.filter(e => e.authUserId).length >= 2
+  };
+  return PRISE_EN_MAIN_ETAPES.map(e => ({
+    ...e,
+    fait: e.manuelle ? Boolean(manuelles[e.key]) : Boolean(automatique[e.key] && automatique[e.key]())
+  }));
+}
+
+function marquerEtapePriseEnMain(key, fait) {
+  const reglages = settingsRepository.getSettings();
+  reglages.priseEnMainEtapes = Object.assign({}, reglages.priseEnMainEtapes, { [key]: Boolean(fait) });
+  settingsRepository.saveSettings(reglages);
+}
+
+/** Schéma : les 8 étapes sur une ligne, reliées, pleines quand elles sont faites. */
+function renderSchemaPriseEnMain(etapes) {
+  const pas = 96;
+  const largeur = 40 + pas * (etapes.length - 1) + 40;
+  const cercles = etapes.map((e, i) => {
+    const x = 40 + pas * i;
+    const relie = i > 0 ? `<line x1="${x - pas + 17}" y1="34" x2="${x - 17}" y2="34" stroke="var(--color-border)" stroke-width="2"/>` : '';
+    return `${relie}
+      <circle cx="${x}" cy="34" r="16" fill="${e.fait ? 'var(--color-primary)' : 'var(--color-surface)'}" stroke="${e.fait ? 'var(--color-primary)' : 'var(--landing-gold-500)'}" stroke-width="2"/>
+      <text x="${x}" y="39" text-anchor="middle" font-size="14" font-weight="700" fill="${e.fait ? '#ffffff' : 'var(--color-text)'}">${e.fait ? '✓' : i + 1}</text>
+      <text x="${x}" y="72" text-anchor="middle" font-size="11" fill="var(--color-text-muted)">${escapeHtml(e.court)}</text>`;
+  }).join('');
+  return `<div style="overflow-x: auto;"><svg viewBox="0 0 ${largeur} 84" width="${largeur}" height="84" role="img" aria-label="Les ${etapes.length} étapes de la prise en main" style="max-width: none;">${cercles}</svg></div>`;
+}
+
+function renderPriseEnMain() {
+  const etapes = getEtapesPriseEnMain();
+  const faites = etapes.filter(e => e.fait).length;
+  const prochaine = etapes.find(e => !e.fait);
+  return `
+    <div class="view-header">
+      <h1>Prise en main</h1>
+      <p class="view-subtitle">Les étapes, dans l'ordre, pour bien renseigner vos données de départ. ${faites} étape${faites > 1 ? 's' : ''} sur ${etapes.length} faite${faites > 1 ? 's' : ''}.</p>
+    </div>
+    <div class="card">
+      ${renderSchemaPriseEnMain(etapes)}
+      ${prochaine ? `<p style="margin: 8px 0 0;">Prochaine étape : <strong>${escapeHtml(prochaine.titre)}</strong></p>` : '<p style="margin: 8px 0 0;"><strong>Toutes les étapes sont faites.</strong> Vos données de départ sont en place.</p>'}
+    </div>
+    <div class="card" style="margin-top: 14px;">
+      <h2>Comment Nexus calcule un solde</h2>
+      <p class="text-muted">C'est le point qui prête le plus à confusion : le solde n'est pas le chiffre que vous importez, c'est une addition.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0;">
+        <span class="badge badge-info">Acquis (calculé par Nexus)</span> <strong>+</strong>
+        <span class="badge badge-warning">Ajustement (import ou saisie)</span> <strong>−</strong>
+        <span class="badge badge-muted">Pris (congés validés)</span> <strong>−</strong>
+        <span class="badge badge-muted">En attente</span> <strong>=</strong>
+        <span class="badge badge-success">Solde disponible</span>
+      </div>
+      <ul style="margin: 0; padding-left: 20px;">
+        <li><strong>Acquis</strong> : calculé d'après le type de congé (jours par an, unité, date d'embauche, ancienneté). Pour le modifier, changez le type, pas le salarié.</li>
+        <li><strong>Ajustement</strong> : l'écart entre ce que Nexus calcule et la réalité (reliquat de l'ancien outil, correction). À l'import, choisissez « Le solde à avoir aujourd'hui » : Nexus calcule l'ajustement à votre place, centièmes compris.</li>
+        <li><strong>Pris</strong> : les congés validés, y compris ceux de l'historique importé. Importer un congé déjà pris le retire du solde.</li>
+      </ul>
+    </div>
+    <div style="margin-top: 14px; display: grid; gap: 12px;">
+      ${etapes.map((e, i) => `
+        <div class="card" style="${e.fait ? 'border-left: 4px solid var(--color-primary);' : 'border-left: 4px solid var(--landing-gold-500);'}">
+          <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+            <h3 style="margin: 0;">${i + 1}. ${escapeHtml(e.titre)}</h3>
+            <span class="badge ${e.fait ? 'badge-success' : 'badge-muted'}">${e.fait ? 'Fait' : 'À faire'}</span>
+          </div>
+          <p style="margin: 8px 0;">${escapeHtml(e.pourquoi)}</p>
+          <p class="text-muted" style="margin: 0 0 10px;">Où : ${escapeHtml(e.ou)}</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" data-pem-aller="${e.key}">${escapeHtml(e.action.label)}</button>
+            ${e.manuelle ? `<button type="button" class="btn-link" data-pem-cocher="${e.key}" data-pem-fait="${e.fait ? '0' : '1'}">${e.fait ? 'Marquer à refaire' : 'Marquer comme fait'}</button>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function bindPriseEnMainEvents() {
+  document.querySelectorAll('[data-pem-aller]').forEach(btn => btn.addEventListener('click', () => {
+    const etape = PRISE_EN_MAIN_ETAPES.find(e => e.key === btn.dataset.pemAller);
+    if (etape) navigateTo(etape.action.view, etape.action.params);
+  }));
+  document.querySelectorAll('[data-pem-cocher]').forEach(btn => btn.addEventListener('click', () => {
+    marquerEtapePriseEnMain(btn.dataset.pemCocher, btn.dataset.pemFait === '1');
+    render();
+  }));
+}
+
 /** Salariés du Tableau des compteurs (portée du rôle, filtres, recherche, tri) : partagés par la vue des soldes et le récapitulatif annuel. */
 function getTableauCompteursEmployees() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();

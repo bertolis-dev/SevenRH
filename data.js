@@ -546,6 +546,8 @@ const DEFAULT_SETTINGS = {
   // Retour du 21/10/2026 : date (AAAA-MM-JJ) jusqu'à laquelle le mode « mise en service » est actif (vide : inactif). Pendant ce mode, le
   // RH peut corriger ses propres congés et compteurs ; activé et désactivé par le seul propriétaire, tracé dans le journal d'audit.
   miseEnServiceJusquau: '',
+  // Étapes de la « Prise en main » cochées à la main : { verification: true, ... } (les autres étapes se déduisent des données).
+  priseEnMainEtapes: {},
   // Revue du 13/10/2026 : carence du maintien de salaire par l'employeur en maladie ordinaire (jours). 7 = à partir du 8e jour (D1226-3) ; distinct des 3 jours de carence des IJ Sécurité sociale. Valeur à valider (docs/regles-a-valider.md).
   carenceMaintienMaladieJours: 7,
   // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
