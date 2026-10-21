@@ -8713,10 +8713,25 @@ const IMPORT_EMPLOYEE_FIELD_ALIASES = {
   dateNaissance: ['date de naissance', 'birthdate', 'date naissance', 'date of birth']
 };
 
+/** En-tête de colonne comparable : espaces de début/fin retirés, espaces multiples et insécables ramenés à un seul (retour du
+ * 21/10/2026 : « Congés payés 2026-2027 » suivi d'un espace n'était pas reconnu, et toute la colonne était ignorée sans un mot). */
+function normaliserEnteteImport(valeur) {
+  return normalizeForSearch(String(valeur == null ? '' : valeur).replace(/[\s  ]+/g, ' ').trim());
+}
+
+/** Date d'une cellule Excel lue avec cellDates:true, au format JJ/MM/AAAA. SheetJS rend MINUIT LOCAL de la machine (vérifié avec la
+ * version livrée) : lire ses composantes UTC faisait reculer chaque date d'un jour en France (minuit à Paris = 22 h ou 23 h la
+ * veille en UTC). On se place à midi (+12 h) avant de lire les composantes UTC : le même jour ressort que la date soit minuit local
+ * ou minuit UTC, dans tous les fuseaux. */
+function dateCelluleExcelEnFR(cellule) {
+  const midi = new Date(cellule.getTime() + 12 * 60 * 60 * 1000);
+  return String(midi.getUTCDate()).padStart(2, '0') + '/' + String(midi.getUTCMonth() + 1).padStart(2, '0') + '/' + midi.getUTCFullYear();
+}
+
 function guessEmployeeColumnMapping(headers) {
   const mapping = {};
   headers.forEach((h, i) => {
-    const norm = normalizeForSearch(h);
+    const norm = normaliserEnteteImport(h);
     for (const [field, aliases] of Object.entries(IMPORT_EMPLOYEE_FIELD_ALIASES)) {
       if (mapping[field] === undefined && aliases.some(a => normalizeForSearch(a) === norm)) { mapping[field] = i; break; }
     }
@@ -8852,18 +8867,33 @@ async function importEmployeesRows(previewRows) {
  * salarié) — aucune nouvelle colonne technique à inventer, RH nomme juste ses colonnes comme ses
  * types de congés existants. */
 function guessSoldesColumnMapping(headers, leaveTypes) {
-  const mapping = { identifiant: undefined, typeColumns: [] };
+  // `ignorees` : en-têtes non vides qui ne correspondent à rien (jamais ignorés en silence, voir l'aperçu).
+  const mapping = { identifiant: undefined, typeColumns: [], ignorees: [] };
   headers.forEach((h, i) => {
-    const norm = normalizeForSearch(h);
+    const norm = normaliserEnteteImport(h);
+    if (!norm) return;
     if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].includes(norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
     if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].includes(norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
-    const type = leaveTypes.find(t => normalizeForSearch(t.nom) === norm);
-    if (type) mapping.typeColumns.push({ typeId: type.id, typeNom: type.nom, index: i });
+    const type = leaveTypes.find(t => normaliserEnteteImport(t.nom) === norm);
+    if (type) { mapping.typeColumns.push({ typeId: type.id, typeNom: type.nom, index: i }); return; }
+    mapping.ignorees.push(String(h).trim());
   });
   return mapping;
 }
 
-function buildSoldesPreviewRows(dataRows, mapping) {
+/** `mode` : 'cible' (la valeur du fichier est le solde RÉEL à obtenir : l'ajustement est calculé) ou 'ajustement' (la valeur s'ajoute
+ * au calcul de Nexus, comportement d'avant). Dans les deux cas l'aperçu annonce le solde actuel et le solde obtenu (retour du 21/10/2026 :
+ * « soldes initiaux » laissait croire qu'on saisissait le solde réel alors que c'était un ajustement). */
+/** Nombre d'une cellule de solde : un nombre Excel est pris tel quel, un texte est lu « à la française » (« 12,5 », « -0,07 »). */
+function lireSoldeImporte(solde) {
+  if (typeof solde.brut === 'number') return Number.isFinite(solde.brut) ? solde.brut : null;
+  return parseMontantFR(solde.valeur);
+}
+
+function buildSoldesPreviewRows(dataRows, mapping, mode) {
+  const modeEffectif = mode === 'ajustement' ? 'ajustement' : 'cible';
+  const allRequests = leaveRepository.getAll();
+  const allTypes = leaveTypeRepository.getLeaveTypes();
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const findEmployee = (value) => {
     if (!value) return null;
@@ -8871,16 +8901,28 @@ function buildSoldesPreviewRows(dataRows, mapping) {
     return employees.find(e => normalizeForSearch(mapping.identifiant.field === 'matricule' ? (e.matricule || '') : (e.email || '')) === norm) || null;
   };
   return dataRows.map((cells, i) => {
-    const idValue = (cells[mapping.identifiant.index] || '').trim();
+    const idValue = String(cells[mapping.identifiant.index] == null ? '' : cells[mapping.identifiant.index]).trim();
     const employee = findEmployee(idValue);
     const soldes = mapping.typeColumns
-      .map(c => ({ typeId: c.typeId, typeNom: c.typeNom, valeur: (cells[c.index] || '').trim() }))
+      .map(c => ({ typeId: c.typeId, typeNom: c.typeNom, valeur: String(cells[c.index] == null ? '' : cells[c.index]).trim(), brut: cells[c.index] }))
       .filter(s => s.valeur !== '');
     let status = 'ok', message = '';
     if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
     else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
     else if (!soldes.length) { status = 'error'; message = 'Aucun solde renseigné sur cette ligne.'; }
-    else if (soldes.some(s => !Number.isFinite(Number(s.valeur)))) { status = 'error'; message = 'Un des soldes n\'est pas un nombre.'; }
+    else if (soldes.some(s => lireSoldeImporte(s) === null)) { status = 'error'; message = 'Un des soldes n\'est pas un nombre.'; }
+    else {
+      for (const s of soldes) {
+        const type = allTypes.find(t => t.id === s.typeId);
+        const nombre = lireSoldeImporte(s);
+        const balance = type ? getLeaveBalance(employee, type, allRequests, allTypes) : null;
+        if (!balance || balance.disponible === Infinity) { status = 'error'; message = '« ' + s.typeNom + ' » n\'a pas de solde chiffré (type illimité).'; break; }
+        const sansAjustement = round2(balance.disponible - (balance.ajustement || 0));
+        s.avant = balance.disponible;
+        s.ajustement = modeEffectif === 'cible' ? round2(nombre - sansAjustement) : nombre;
+        s.apres = round2(sansAjustement + s.ajustement);
+      }
+    }
     return { rowIndex: i + 2, idValue, employee, soldes, status, message };
   });
 }
@@ -8889,7 +8931,7 @@ function importSoldesRows(previewRows) {
   const results = { employes: 0, soldes: 0, errors: 0 };
   previewRows.filter(r => r.status === 'ok').forEach(r => {
     r.soldes.forEach(s => {
-      employeeRepository.ajusterCompteur(r.employee.id, s.typeId, Number(s.valeur), 'Import solde initial');
+      employeeRepository.ajusterCompteur(r.employee.id, s.typeId, s.ajustement, 'Import solde initial');
       results.soldes++;
     });
     results.employes++;
@@ -8908,7 +8950,18 @@ function openImportSoldesInitiauxModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Une colonne d'identification (Matricule ou Email) + une colonne par type de congé, nommée exactement comme le type (ex. « Congés payés », « RTT »). Remplace l'ajustement manuel actuel du compteur pour ce type, comme depuis la fiche du salarié.</p>
+        <p class="text-muted">Fichier Excel (.xlsx). Une colonne d'identification (Matricule ou Email) + une colonne par type de congé, nommée comme le type (ex. « Congés payés », « RTT » ; les espaces en trop ne gênent pas).</p>
+        <fieldset style="border: 1px solid var(--border-color, #e5e7eb); border-radius: 6px; padding: 10px 14px; margin: 12px 0;">
+          <legend style="font-size: 13px; padding: 0 6px;">Que représentent les chiffres du fichier ?</legend>
+          <label style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px;">
+            <input type="radio" name="mode-soldes" id="f-mode-soldes-cible" value="cible" checked>
+            <span><strong>Le solde à avoir aujourd'hui</strong> (recommandé) : Nexus calcule lui-même l'ajustement pour que le solde affiché soit exactement celui du fichier.</span>
+          </label>
+          <label style="display: flex; gap: 8px; align-items: flex-start;">
+            <input type="radio" name="mode-soldes" id="f-mode-soldes-ajustement" value="ajustement">
+            <span><strong>Des jours à ajouter ou retirer</strong> au solde que Nexus calcule (négatif pour retirer). Remplace l'ajustement précédent du compteur.</span>
+          </label>
+        </fieldset>
         <input type="file" id="f-import-file" accept=".xlsx,.xls,.csv">
         <div id="import-preview-zone" style="margin-top: 16px;"></div>
       </div>
@@ -8925,6 +8978,9 @@ function openImportSoldesInitiauxModal() {
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
 
   let currentPreview = [];
+  let lastDataRows = null;
+  let lastMapping = null;
+  const modeSoldesChoisi = () => (document.getElementById('f-mode-soldes-ajustement').checked ? 'ajustement' : 'cible');
 
   document.getElementById('f-import-file').addEventListener('change', (evt) => {
     const file = evt.target.files[0];
@@ -8942,7 +8998,8 @@ function openImportSoldesInitiauxModal() {
         const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
-          .map(row => row.map(cell => (cell == null ? '' : String(cell))))
+          // Les nombres restent des nombres : un solde de 2.125 jour ne doit pas être relu comme « 2 125 » par parseMontantFR.
+          .map(row => row.map(cell => (typeof cell === 'number' ? cell : (cell == null ? '' : String(cell)))))
           .filter(row => row.some(cell => cell !== ''));
       } catch (err) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
@@ -8962,28 +9019,40 @@ function openImportSoldesInitiauxModal() {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne reconnue comme un type de congé existant (${leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ')}).</p>`;
         return;
       }
-      currentPreview = buildSoldesPreviewRows(dataRows, mapping);
+      lastDataRows = dataRows;
+      lastMapping = mapping;
+      currentPreview = buildSoldesPreviewRows(dataRows, mapping, modeSoldesChoisi());
       renderSoldesPreview(currentPreview, mapping);
     };
     reader.readAsArrayBuffer(file);
   });
+
+  // Changer de mode recalcule l'aperçu sans redemander le fichier : le solde annoncé doit toujours correspondre au mode choisi.
+  document.querySelectorAll('input[name="mode-soldes"]').forEach(radio => radio.addEventListener('change', () => {
+    if (!lastDataRows) return;
+    currentPreview = buildSoldesPreviewRows(lastDataRows, lastMapping, modeSoldesChoisi());
+    renderSoldesPreview(currentPreview, lastMapping);
+  }));
 
   function renderSoldesPreview(preview, mapping) {
     const okCount = preview.filter(r => r.status === 'ok').length;
     const errCount = preview.filter(r => r.status === 'error').length;
     document.getElementById('import-preview-zone').innerHTML = `
       <p class="text-muted">Colonnes de solde reconnues : ${mapping.typeColumns.map(c => escapeHtml(c.typeNom)).join(', ')}</p>
+      ${(mapping.ignorees || []).length ? `<p class="login-error" role="alert">${icon(ICONS.warningTriangle, 14)} Colonnes non reconnues, donc ignorées : ${mapping.ignorees.map(h => `« ${escapeHtml(h)} »`).join(', ')}. Si l'une d'elles est un type de congé, renommez-la comme le type (${leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ')}).</p>` : ''}
       <p><span class="badge badge-success">${okCount} ligne${okCount > 1 ? 's' : ''} prête${okCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
-          <thead><tr><th>Ligne</th><th>Identifiant</th><th>Salarié</th><th>Soldes</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Ligne</th><th>Identifiant</th><th>Salarié</th><th>Fichier → solde actuel → solde après import</th><th>Statut</th></tr></thead>
           <tbody>
             ${preview.map(r => `
               <tr>
                 <td>${r.rowIndex}</td>
                 <td>${escapeHtml(r.idValue)}</td>
                 <td>${r.employee ? escapeHtml(r.employee.prenom) + ' ' + escapeHtml(r.employee.nom) : '—'}</td>
-                <td>${r.soldes.map(s => `${escapeHtml(s.typeNom)} : ${escapeHtml(s.valeur)}`).join(', ')}</td>
+                <td>${r.soldes.map(s => s.apres !== undefined
+                  ? `${escapeHtml(s.typeNom)} : ${escapeHtml(s.valeur)} → ${formatNumberFR(s.avant)} j → <strong>${formatNumberFR(s.apres)} j</strong>`
+                  : `${escapeHtml(s.typeNom)} : ${escapeHtml(s.valeur)}`).join('<br>')}</td>
                 <td>${r.status === 'ok' ? '<span class="badge badge-success">Prêt</span>' : `<span class="badge badge-danger" title="${escapeHtml(r.message)}">${escapeHtml(r.message)}</span>`}</td>
               </tr>
             `).join('')}
@@ -9020,17 +9089,18 @@ function guessAbsencesColumnMapping(headers, leaveTypes) {
   const demiJourneeDebutAliases = ['demi-journee debut', 'demi journee debut', 'demi-journée début', 'demi journée début', 'demi journee de debut'];
   const demiJourneeFinAliases = ['demi-journee fin', 'demi journee fin', 'demi-journée fin', 'demi journée fin', 'demi journee de fin'];
   const commentaireAliases = ['commentaire', 'motif', 'note', 'notes'];
-  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, demiJourneeDebut: undefined, demiJourneeFin: undefined, commentaire: undefined };
+  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, demiJourneeDebut: undefined, demiJourneeFin: undefined, commentaire: undefined, ignorees: [] };
   headers.forEach((h, i) => {
-    const norm = normalizeForSearch(h);
-    if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].some(a => normalizeForSearch(a) === norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
-    if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].some(a => normalizeForSearch(a) === norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
-    if (mapping.type === undefined && typeAliases.some(a => normalizeForSearch(a) === norm)) { mapping.type = i; return; }
-    if (mapping.dateDebut === undefined && dateDebutAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateDebut = i; return; }
-    if (mapping.dateFin === undefined && dateFinAliases.some(a => normalizeForSearch(a) === norm)) { mapping.dateFin = i; return; }
-    if (mapping.demiJourneeDebut === undefined && demiJourneeDebutAliases.some(a => normalizeForSearch(a) === norm)) { mapping.demiJourneeDebut = i; return; }
-    if (mapping.demiJourneeFin === undefined && demiJourneeFinAliases.some(a => normalizeForSearch(a) === norm)) { mapping.demiJourneeFin = i; return; }
-    if (mapping.commentaire === undefined && commentaireAliases.some(a => normalizeForSearch(a) === norm)) { mapping.commentaire = i; return; }
+    const norm = normaliserEnteteImport(h);
+    if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].some(a => normaliserEnteteImport(a) === norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
+    if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].some(a => normaliserEnteteImport(a) === norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
+    if (mapping.type === undefined && typeAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.type = i; return; }
+    if (mapping.dateDebut === undefined && dateDebutAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.dateDebut = i; return; }
+    if (mapping.dateFin === undefined && dateFinAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.dateFin = i; return; }
+    if (mapping.demiJourneeDebut === undefined && demiJourneeDebutAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.demiJourneeDebut = i; return; }
+    if (mapping.demiJourneeFin === undefined && demiJourneeFinAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.demiJourneeFin = i; return; }
+    if (mapping.commentaire === undefined && commentaireAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.commentaire = i; return; }
+    if (norm) mapping.ignorees.push(String(h).trim());
   });
   return mapping;
 }
@@ -9054,7 +9124,7 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   const findType = (value) => {
     if (!value) return null;
     const norm = normalizeForSearch(value);
-    return leaveTypes.find(t => normalizeForSearch(t.nom) === norm) || null;
+    return leaveTypes.find(t => normaliserEnteteImport(t.nom) === normaliserEnteteImport(value)) || null;
   };
   // §retour Betty du 18/09/2026 (import historique, point 1) : seules deux valeurs ont un sens (voir
   // le commentaire de guessAbsencesColumnMapping) — n'importe quel autre texte est une vraie erreur
@@ -9231,9 +9301,7 @@ function openImportAbsencesHistoriqueModal(categorie) {
         rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
           .map(row => row.map(cell => {
             if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
-              const jj = String(cell.getUTCDate()).padStart(2, '0');
-              const mm = String(cell.getUTCMonth() + 1).padStart(2, '0');
-              return `${jj}/${mm}/${cell.getUTCFullYear()}`;
+              return dateCelluleExcelEnFR(cell);
             }
             return cell == null ? '' : String(cell);
           }))
@@ -9257,15 +9325,16 @@ function openImportAbsencesHistoriqueModal(categorie) {
         return;
       }
       currentPreview = buildAbsencesPreviewRows(dataRows, mapping, categorie);
-      renderAbsencesPreview(currentPreview);
+      renderAbsencesPreview(currentPreview, mapping.ignorees || []);
     };
     reader.readAsArrayBuffer(file);
   });
 
-  function renderAbsencesPreview(preview) {
+  function renderAbsencesPreview(preview, ignorees) {
     const okCount = preview.filter(r => r.status === 'ok').length;
     const errCount = preview.filter(r => r.status === 'error').length;
     document.getElementById('import-preview-zone').innerHTML = `
+      ${(ignorees || []).length ? `<p class="login-error" role="alert">${icon(ICONS.warningTriangle, 14)} Colonnes non reconnues, donc ignorées : ${ignorees.map(h => `« ${escapeHtml(h)} »`).join(', ')}. Colonnes attendues : Matricule (ou Email), Type, Date début, Date fin, Demi-journée début, Demi-journée fin, Commentaire.</p>` : ''}
       <p><span class="badge badge-success">${okCount} ligne${okCount > 1 ? 's' : ''} prête${okCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
         <table class="table">
@@ -9362,9 +9431,7 @@ function openImportSalariesModal() {
               // décaleraient d'un jour en arrière dans tout fuseau en retard sur UTC (repéré en
               // testant depuis un fuseau américain). Toujours lire via les getters UTC pour rester
               // correct quel que soit le fuseau du navigateur de l'utilisateur.
-              const jj = String(cell.getUTCDate()).padStart(2, '0');
-              const mm = String(cell.getUTCMonth() + 1).padStart(2, '0');
-              return `${jj}/${mm}/${cell.getUTCFullYear()}`;
+              return dateCelluleExcelEnFR(cell);
             }
             return cell == null ? '' : String(cell);
           }))
@@ -14053,6 +14120,11 @@ function openAjusterCompteurModal(employeeId, typeId) {
   const type = leaveTypeRepository.getLeaveTypeById(typeId);
   if (!employee || !type) { showToast('Ce salarié ou ce type n\'est plus disponible.', 'error'); return; }
   const current = (employee.compteurs && employee.compteurs[typeId]) || 0;
+  // Solde chiffré actuel, avec et sans l'ajustement en cours (retour du 21/10/2026 : l'ajustement seul laissait croire qu'on saisissait le
+  // solde réel, et le champ refusait -0,07 jour).
+  const balance = getLeaveBalance(employee, type, leaveRepository.getAll(), leaveTypeRepository.getLeaveTypes());
+  const soldeChiffre = balance.disponible !== Infinity;
+  const sansAjustement = soldeChiffre ? round2(balance.disponible - (balance.ajustement || 0)) : 0;
 
   const html = `
     <div class="modal modal-small">
@@ -14062,11 +14134,20 @@ function openAjusterCompteurModal(employeeId, typeId) {
       </div>
       <form id="adjust-compteur-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} : cet ajustement s'ajoute (ou se retranche, si négatif) au solde calculé automatiquement. Il remplace l'ajustement précédent pour ce type de congé.</p>
+          <p class="text-muted">${personNameHtml(employee)} : ${soldeChiffre ? `Solde actuel affiché : <strong>${formatNumberFR(balance.disponible)} j</strong> (calculé par Nexus : ${formatNumberFR(sansAjustement)} j, ajustement en cours : ${formatNumberFR(balance.ajustement || 0)} j).` : 'ce type n\'a pas de solde chiffré.'} L'ajustement remplace l'ajustement précédent pour ce type de congé.</p>
+          ${soldeChiffre ? `
           <div class="form-field">
-            <label for="f-montant">Ajustement (jours, + ou -) *</label>
-            <input class="input" type="number" id="f-montant" name="montant" step="0.5" value="${current}" required>
+            <label for="f-mode-ajustement">Je saisis</label>
+            <select class="input" id="f-mode-ajustement">
+              <option value="cible" selected>Le solde que le salarié doit avoir (Nexus calcule l'ajustement)</option>
+              <option value="ajustement">Des jours à ajouter ou retirer au calcul de Nexus</option>
+            </select>
+          </div>` : ''}
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-montant" id="f-montant-label">${soldeChiffre ? 'Solde souhaité (jours) *' : 'Ajustement (jours, + ou -) *'}</label>
+            <input class="input" type="number" id="f-montant" name="montant" step="0.01" value="${soldeChiffre ? balance.disponible : current}" required>
           </div>
+          <p class="text-muted" id="adjust-compteur-apercu" style="margin: 8px 0 0;"></p>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-motif">Motif</label>
             <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. reliquat repris de l'ancien SIRH">
@@ -14084,11 +14165,39 @@ function openAjusterCompteurModal(employeeId, typeId) {
   modalRoot.innerHTML = html;
   modalRoot.classList.add('open');
 
+  const champMontant = document.getElementById('f-montant');
+  const champMode = document.getElementById('f-mode-ajustement');
+  // Ajustement réellement enregistré, selon le mode choisi (null : saisie illisible).
+  const ajustementSaisi = () => {
+    const saisi = parseMontantFR(champMontant.value);
+    if (saisi === null) return null;
+    return (champMode && champMode.value === 'cible') ? round2(saisi - sansAjustement) : saisi;
+  };
+  const majApercu = () => {
+    const apercu = document.getElementById('adjust-compteur-apercu');
+    const aj = ajustementSaisi();
+    apercu.innerHTML = (aj === null || !soldeChiffre) ? '' : `Après enregistrement : solde de <strong>${formatNumberFR(round2(sansAjustement + aj))} j</strong> (ajustement ${aj >= 0 ? '+' : ''}${formatNumberFR(aj)} j).`;
+  };
+  if (champMode) champMode.addEventListener('change', () => {
+    // Le champ change de sens : on le repart d'une valeur cohérente avec le nouveau mode.
+    if (champMode.value === 'cible') {
+      document.getElementById('f-montant-label').textContent = 'Solde souhaité (jours) *';
+      champMontant.value = balance.disponible;
+    } else {
+      document.getElementById('f-montant-label').textContent = 'Ajustement (jours, + ou -) *';
+      champMontant.value = current;
+    }
+    majApercu();
+  });
+  champMontant.addEventListener('input', majApercu);
+  majApercu();
+
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
   document.getElementById('adjust-compteur-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const montant = document.getElementById('f-montant').value;
+    const montant = ajustementSaisi();
+    if (montant === null) { showToast('Saisissez un nombre de jours valide.', 'error'); return; }
     const motif = document.getElementById('f-motif').value;
     const result = employeeRepository.ajusterCompteur(employeeId, typeId, montant, motif);
     if (!result.success) { showToast(result.error, 'error'); return; }
@@ -26972,7 +27081,7 @@ function lireFichierTableur(file) {
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
           .map(row => row.map(cell => {
             if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
-              return `${String(cell.getUTCDate()).padStart(2, '0')}/${String(cell.getUTCMonth() + 1).padStart(2, '0')}/${cell.getUTCFullYear()}`;
+              return dateCelluleExcelEnFR(cell);
             }
             return typeof cell === 'number' ? cell : (cell == null ? '' : String(cell));
           }))
