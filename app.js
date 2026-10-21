@@ -290,6 +290,9 @@ function getInitialViewState() {
     // ici retrierait aussi Salariés au retour sur cet écran.
     tableauCompteursFilters: { service: '', etablissementId: '' },
     tableauCompteursSearch: '',
+    tableauCompteursVue: 'soldes', // 'soldes' | 'annuel' (récapitulatif annuel, retour du 21/10/2026)
+    tableauCompteursAnnee: new Date().getFullYear(),
+    tableauCompteursTypeAnnuel: '',
     tableauCompteursSortBy: 'nom',
     tableauCompteursSortDir: 'asc',
     tableauCompteursPage: 1,
@@ -8430,7 +8433,8 @@ function bindSortableHeadersGlobalDelegation() {
  * "Salarié" (voir renderTableauCompteurs) : trier par un solde précis se heurterait à Infinity
  * (compteur illimité, déjà exclu des totaux ci-dessous) sans bénéfice clair pour l'usage réel de cet
  * écran. */
-function getTableauCompteursData() {
+/** Salariés du Tableau des compteurs (portée du rôle, filtres, recherche, tri) : partagés par la vue des soldes et le récapitulatif annuel. */
+function getTableauCompteursEmployees() {
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   if (visibleIds !== null) employees = employees.filter(e => visibleIds.includes(e.id));
@@ -8439,7 +8443,125 @@ function getTableauCompteursData() {
   if (filters.etablissementId) employees = employees.filter(e => e.etablissementId === filters.etablissementId);
   const term = normalizeForSearch(state.tableauCompteursSearch.trim());
   if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule}`).includes(term));
-  employees = sortListBy(employees, (e) => `${e.nom} ${e.prenom}`, state.tableauCompteursSortDir);
+  return sortListBy(employees, (e) => `${e.nom} ${e.prenom}`, state.tableauCompteursSortDir);
+}
+
+const MOIS_COURTS = ['Janv', 'Févr', 'Mars', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
+
+function renderTableauCompteursTabs(vue) {
+  return `
+    <div class="tabs" style="margin-bottom: 10px;">
+      <button class="tab ${vue === 'soldes' ? 'active' : ''}" data-tc-vue="soldes">Soldes à ce jour</button>
+      <button class="tab ${vue === 'annuel' ? 'active' : ''}" data-tc-vue="annuel">Récapitulatif annuel</button>
+    </div>`;
+}
+
+/** Type de congé du récapitulatif annuel : celui choisi, sinon Congés payés, sinon le premier type de la catégorie congés. */
+function getTypeRecapAnnuel() {
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === 'conge');
+  return types.find(t => t.id === state.tableauCompteursTypeAnnuel)
+    || types.find(t => leaveTypeNameMatches(t.nom, 'Congés payés'))
+    || types[0] || null;
+}
+
+function getRecapAnnuelData() {
+  const type = getTypeRecapAnnuel();
+  if (!type) return null;
+  return construireRecapAnnuelConges({
+    annee: state.tableauCompteursAnnee,
+    employees: getTableauCompteursEmployees(),
+    leaveType: type,
+    requests: leaveRepository.getAll(),
+    leaveTypes: leaveTypeRepository.getLeaveTypes(),
+    settings: settingsRepository.getSettings()
+  });
+}
+
+function renderRecapAnnuelConges() {
+  const recap = getRecapAnnuelData();
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === 'conge');
+  const filters = state.tableauCompteursFilters;
+  const annee = state.tableauCompteursAnnee;
+  const aujourdhui = new Date();
+  const libelleSolde = annee < aujourdhui.getFullYear() ? `Solde au 31/12/${annee}` : (annee === aujourdhui.getFullYear() ? 'Solde à ce jour' : 'Solde');
+  const jours = (n) => n ? formatNumberFR(n) : '<span class="text-muted">·</span>';
+  return `
+    <div class="view-header">
+      <h1>Tableau des compteurs</h1>
+      <p class="view-subtitle">Jours pris mois par mois, pour pointer facilement. Seuls les jours validés sont comptés dans les mois ; ceux en attente de validation sont indiqués à part.</p>
+    </div>
+    ${renderTableauCompteursTabs('annuel')}
+    <div class="toolbar card" style="flex-wrap: wrap; gap: 8px; align-items: center;">
+      <button type="button" class="btn btn-secondary btn-sm" id="tc-annee-prev">← ${annee - 1}</button>
+      <strong style="min-width: 48px; text-align: center;">${annee}</strong>
+      <button type="button" class="btn btn-secondary btn-sm" id="tc-annee-next">${annee + 1} →</button>
+      <select id="tc-type-annuel" class="input" style="max-width: 220px;" aria-label="Type de congé">
+        ${types.map(t => `<option value="${t.id}" ${recap && recap.type.id === t.id ? 'selected' : ''}>${escapeHtml(t.nom)}${t.actif ? '' : ' (non activé)'}</option>`).join('')}
+      </select>
+      <input type="text" id="tableau-compteurs-search" class="input" style="max-width: 240px;" placeholder="Rechercher un salarié..." value="${escapeHtml(state.tableauCompteursSearch)}">
+      <select id="filter-tableau-compteurs-service" class="input" style="max-width: 200px;">
+        <option value="">Tous les services</option>
+        ${serviceRepository.getAll().map(s => `<option value="${escapeHtml(s.nom)}" ${filters.service === s.nom ? 'selected' : ''}>${escapeHtml(s.nom)}</option>`).join('')}
+      </select>
+      <button type="button" class="btn btn-secondary" id="btn-export-recap-annuel">Exporter Excel</button>
+    </div>
+    ${!recap ? '<div class="card"><p class="text-muted">Aucun type de congé à afficher.</p></div>' : recap.lignes.length === 0 ? '<div class="card"><p class="text-muted">Aucun salarié à afficher.</p></div>' : `
+      <div class="card table-card">
+        <div style="overflow-x: auto;">
+          <table class="table tc-table">
+            <thead>
+              <tr>
+                <th>Salarié</th>
+                ${MOIS_COURTS.map(m => `<th style="text-align: right;">${m}</th>`).join('')}
+                <th style="text-align: right;">Total pris</th>
+                <th style="text-align: right;">En attente</th>
+                <th style="text-align: right;">${libelleSolde}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recap.lignes.map(l => `
+                <tr>
+                  <td>${personNameHtml(l.employee)}</td>
+                  ${l.mois.map(j => `<td style="text-align: right;">${jours(j)}</td>`).join('')}
+                  <td style="text-align: right;"><strong>${jours(l.totalPris)}</strong></td>
+                  <td style="text-align: right;">${jours(l.enAttente)}</td>
+                  <td style="text-align: right;">${l.solde ? (l.solde.disponible === Infinity ? 'Illimité' : formatNumberFR(l.solde.disponible)) : '<span class="text-muted">·</span>'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td><strong>Total</strong></td>
+                ${recap.totauxMois.map(j => `<td style="text-align: right;"><strong>${jours(j)}</strong></td>`).join('')}
+                <td style="text-align: right;"><strong>${jours(recap.totalPris)}</strong></td>
+                <td style="text-align: right;"><strong>${jours(recap.totalEnAttente)}</strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="text-muted" style="margin: 8px 14px;">Unité : ${recap.type.uniteDecompte === 'ouvrables' ? 'jours ouvrables' : 'jours ouvrés'}. ${annee < aujourdhui.getFullYear() ? 'Le solde est celui calculé au 31 décembre de l\'année affichée.' : ''}</p>
+      </div>
+    `}
+  `;
+}
+
+function exportRecapAnnuelExcel() {
+  const recap = getRecapAnnuelData();
+  if (!recap) { showToast('Aucun type de congé à exporter.', 'error'); return; }
+  const headers = ['Matricule', 'Salarié', 'Service', ...MOIS_COURTS, 'Total pris', 'En attente', 'Solde'];
+  const lignes = recap.lignes.map(l => [
+    l.employee.matricule, `${l.employee.prenom} ${l.employee.nom}`, l.employee.service,
+    ...l.mois.map(j => j || ''), l.totalPris || '', l.enAttente || '',
+    l.solde ? (l.solde.disponible === Infinity ? 'Illimité' : l.solde.disponible) : ''
+  ]);
+  const xml = buildExcelXmlWorkbook(headers, lignes, `${recap.type.nom} ${recap.annee}`.slice(0, 31), { zebra: true });
+  downloadExcelXmlFile(xml, `recapitulatif-${recap.type.nom.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${recap.annee}.xls`);
+  auditLogRepository.logAudit('Export', 'Récapitulatif annuel des congés', `${recap.type.nom} ${recap.annee} · ${recap.lignes.length} salarié${recap.lignes.length > 1 ? 's' : ''}`);
+}
+
+function getTableauCompteursData() {
+  const employees = getTableauCompteursEmployees();
 
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveTypes = allLeaveTypes.filter(t => t.categorie === 'conge');
@@ -8523,6 +8645,7 @@ function renderTableauCompteursCell(b) {
 }
 
 function renderTableauCompteurs() {
+  if (state.tableauCompteursVue === 'annuel') return renderRecapAnnuelConges();
   const { leaveTypes, rows, periodInfoByType } = getTableauCompteursData();
   const { pageItems, totalPages, page, pageStart } = paginate(rows, 'tableauCompteursPage');
   const filters = state.tableauCompteursFilters;
@@ -8534,6 +8657,7 @@ function renderTableauCompteurs() {
       <h1>Tableau des compteurs</h1>
       <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ${escapeHtml(libelleRegleAnticipationConges(settingsRepository.getSettings()))}</p>
     </div>
+    ${renderTableauCompteursTabs('soldes')}
     <!-- §retour Betty du 19/09/2026 (point 6, "socle commun") : recherche + filtre établissement
          ajoutés ("l'application gère les établissements", pas de raison qu'un seul écran l'ignore),
          export Excel, et le repli mobile (toolbar-collapsible) qui manquait ici alors qu'il existe
@@ -8598,6 +8722,18 @@ function renderTableauCompteurs() {
 
 function bindTableauCompteursEvents() {
   bindFilterToggleButtons();
+  document.querySelectorAll('[data-tc-vue]').forEach(btn => btn.addEventListener('click', () => {
+    state.tableauCompteursVue = btn.dataset.tcVue;
+    render();
+  }));
+  const anneePrev = document.getElementById('tc-annee-prev');
+  if (anneePrev) anneePrev.addEventListener('click', () => { state.tableauCompteursAnnee--; render(); });
+  const anneeNext = document.getElementById('tc-annee-next');
+  if (anneeNext) anneeNext.addEventListener('click', () => { state.tableauCompteursAnnee++; render(); });
+  const typeAnnuel = document.getElementById('tc-type-annuel');
+  if (typeAnnuel) typeAnnuel.addEventListener('change', () => { state.tableauCompteursTypeAnnuel = typeAnnuel.value; render(); });
+  const exportRecap = document.getElementById('btn-export-recap-annuel');
+  if (exportRecap) exportRecap.addEventListener('click', exportRecapAnnuelExcel);
   const searchInput = document.getElementById('tableau-compteurs-search');
   if (searchInput) searchInput.addEventListener('input', (e) => {
     state.tableauCompteursSearch = e.target.value;

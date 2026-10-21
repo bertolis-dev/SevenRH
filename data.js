@@ -7982,6 +7982,50 @@ function countRequestDaysInMonth(dateDebut, dateFin, demiJournee, year, month, e
     debutDansLeMois ? demiJourneeDebut : undefined, finDansLeMois ? demiJourneeFin : undefined);
 }
 
+/**
+ * Récapitulatif annuel d'un type de congé (retour du 21/10/2026 : « un récap CP/RTT par salarié et par année, pour pointer
+ * facilement »). Pure : n'écrit rien.
+ *  - mois[0..11] : jours VALIDÉS pris dans chaque mois de l'année (une demande à cheval sur deux mois est découpée) ;
+ *  - enAttente : jours des demandes en attente de validation dans l'année (comptés à part, jamais mêlés aux jours pris) ;
+ *  - solde : solde du type à la fin de l'année (au 31/12 pour une année passée, à la date du jour pour l'année en cours), ou null
+ *    pour une année qui n'a pas commencé.
+ * Refusées, annulées, autres années et autres types sont ignorés.
+ */
+function construireRecapAnnuelConges({ annee, employees, leaveType, requests, leaveTypes, settings, maintenant }) {
+  const aujourdhui = maintenant || new Date();
+  const anneeCourante = aujourdhui.getFullYear();
+  const dateDeReference = annee < anneeCourante ? new Date(annee, 11, 31) : (annee === anneeCourante ? aujourdhui : null);
+  const parSalarie = new Map();
+  (requests || []).forEach(r => {
+    if (r.typeId !== leaveType.id) return;
+    if (!parSalarie.has(r.employeeId)) parSalarie.set(r.employeeId, []);
+    parSalarie.get(r.employeeId).push(r);
+  });
+
+  const joursDuMois = (r, employee, mois) => countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, annee, mois, employee, settings, leaveType.uniteDecompte, r.demiJourneeDebut, r.demiJourneeFin);
+
+  const lignes = (employees || []).map(employee => {
+    const siennes = parSalarie.get(employee.id) || [];
+    const mois = new Array(12).fill(0);
+    let enAttente = 0;
+    siennes.forEach(r => {
+      if (r.statut !== 'Validé' && r.statut !== 'En attente') return;
+      for (let m = 0; m < 12; m++) {
+        const jours = joursDuMois(r, employee, m);
+        if (!jours) continue;
+        if (r.statut === 'Validé') mois[m] = round2(mois[m] + jours);
+        else enAttente = round2(enAttente + jours);
+      }
+    });
+    const totalPris = round2(mois.reduce((somme, j) => somme + j, 0));
+    const solde = dateDeReference ? getLeaveBalance(employee, leaveType, siennes, leaveTypes, dateDeReference) : null;
+    return { employee, mois, totalPris, enAttente, solde };
+  });
+
+  const totauxMois = new Array(12).fill(0).map((_, m) => round2(lignes.reduce((somme, l) => somme + l.mois[m], 0)));
+  return { annee, type: leaveType, lignes, totauxMois, totalPris: round2(totauxMois.reduce((somme, j) => somme + j, 0)), totalEnAttente: round2(lignes.reduce((somme, l) => somme + l.enAttente, 0)) };
+}
+
 function daysBetween(a, b) {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
