@@ -13229,7 +13229,7 @@ function renderEmployeeCongesTab(e, user) {
         <details class="collapsible-panel">
           <summary>Voir le détail des compteurs</summary>
           ${user.id === e.id || hasPermission(user, PERMISSIONS.VOIR_COMPTEURS)
-            ? renderEmployeeBalances(e, user.id !== e.id && hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS))
+            ? renderEmployeeBalances(e, peutAjusterCompteursDe(e))
             : '<p class="text-muted">Vous n\'avez pas accès aux compteurs de ce salarié.</p>'}
         </details>
       </div>
@@ -15213,7 +15213,48 @@ function isCurrentWorkflowStepFor(request, user, domain) {
  * seul cas où la séparation des tâches est levée, et seulement pour les congés/absences/télétravail
  * (domain 'absence'), jamais pour les notes de frais : le circuit financier reste séparé même pour lui. */
 function canSelfServiceAsProprietaire(user, domain) {
-  return domain === 'absence' && user.role === ROLES.PROPRIETAIRE;
+  if (domain !== 'absence') return false;
+  if (user.role === ROLES.PROPRIETAIRE) return true;
+  // Mode « mise en service » (retour du 21/10/2026) : le RH qui paramètre Nexus peut corriger ses propres congés, le temps limité que
+  // le propriétaire a fixé. Aucun effet pour qui n'a de toute façon pas de droit de gestion des absences.
+  return miseEnServiceActive() && (hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(user, PERMISSIONS.ANNULER_ABSENCE));
+}
+
+/** Vrai tant que la date fixée par le propriétaire n'est pas dépassée (réglage miseEnServiceJusquau). */
+function miseEnServiceActive() {
+  const jusquau = String(settingsRepository.getSettings().miseEnServiceJusquau || '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(jusquau) && jusquau >= toISODate(new Date());
+}
+
+/** Active le mode pour `jours` jours (1 à 90). Réservé au propriétaire ; tracé dans le journal d'audit. */
+function activerMiseEnService(jours) {
+  const user = authRepository.getCurrentUser();
+  if (!user || user.role !== ROLES.PROPRIETAIRE) return { success: false, error: 'Seul le propriétaire peut activer le mode mise en service.' };
+  const nombre = Number(jours);
+  if (!Number.isInteger(nombre) || nombre < 1 || nombre > 90) return { success: false, error: 'La durée doit être comprise entre 1 et 90 jours.' };
+  const fin = new Date(); fin.setDate(fin.getDate() + nombre);
+  const jusquau = toISODate(fin);
+  const reglages = settingsRepository.getSettings();
+  reglages.miseEnServiceJusquau = jusquau;
+  settingsRepository.saveSettings(reglages);
+  auditLogRepository.logAudit('Modification', 'Mode mise en service', "Activé jusqu'au " + formatDate(jusquau), 'Le RH peut corriger ses propres congés et compteurs');
+  return { success: true, jusquau };
+}
+
+function desactiverMiseEnService() {
+  const user = authRepository.getCurrentUser();
+  if (!user || user.role !== ROLES.PROPRIETAIRE) return { success: false, error: 'Seul le propriétaire peut désactiver le mode mise en service.' };
+  const reglages = settingsRepository.getSettings();
+  reglages.miseEnServiceJusquau = '';
+  settingsRepository.saveSettings(reglages);
+  auditLogRepository.logAudit('Modification', 'Mode mise en service', 'Désactivé');
+  return { success: true };
+}
+
+/** Peut-on ajuster les compteurs de ce salarié ? Pas les siens, sauf mode mise en service. */
+function peutAjusterCompteursDe(employee) {
+  const user = authRepository.getCurrentUser();
+  return !!user && hasPermission(user, PERMISSIONS.MODIFIER_COMPTEURS) && (user.id !== employee.id || miseEnServiceActive());
 }
 
 function canActOnRequestFor(request, domain = 'absence') {
@@ -18673,6 +18714,20 @@ function renderParametresTypesAbsences() {
         </div>
       </div>
     </div>
+    ${authRepository.getCurrentUser().role === ROLES.PROPRIETAIRE ? `
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Mode mise en service</h2>
+      <p class="text-muted">Pendant que vous reprenez vos données dans Nexus, la personne RH qui paramètre l'outil peut corriger <strong>ses propres</strong> congés et compteurs (normalement réservé au propriétaire, pour qu'on ne gère pas sa propre demande). Le mode s'éteint tout seul à la date choisie, et chaque activation est tracée dans le journal d'audit.</p>
+      ${miseEnServiceActive()
+        ? `<p><span class="badge badge-warning">Actif jusqu'au ${formatDate(settings.miseEnServiceJusquau)}</span></p><button type="button" class="btn btn-secondary" id="btn-mise-en-service-desactiver">Désactiver maintenant</button>`
+        : `<div style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">
+            <div class="form-field" style="margin: 0;">
+              <label for="f-mise-en-service-jours">Durée (jours)</label>
+              <input class="input" type="number" min="1" max="90" step="1" id="f-mise-en-service-jours" value="30" style="max-width: 120px;">
+            </div>
+            <button type="button" class="btn btn-secondary" id="btn-mise-en-service-activer">Activer le mode</button>
+          </div>`}
+    </div>` : ''}
     <div class="card" style="margin-bottom: 16px;">
       <h2>Arrêt maladie : maintien de salaire</h2>
       <p class="text-muted">Nombre de jours d'arrêt maladie (hors accident du travail) avant que l'employeur ne maintienne le salaire. La loi prévoit 7 jours (maintien à partir du 8e jour) ; votre convention collective peut prévoir moins. Sert aux estimations d'indemnités de l'attestation de salaire.</p>
@@ -18718,6 +18773,20 @@ function bindParametresTypesAbsencesEvents() {
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
   bindNumberField('f-rappel-perte-conges', 'delaiRappelPerteCongesJours', 60, 'Délai de rappel mis à jour.');
   bindNumberField('f-carence-maintien-maladie', 'carenceMaintienMaladieJours', 7, 'Carence du maintien de salaire mise à jour.');
+  const miseEnServiceActiver = document.getElementById('btn-mise-en-service-activer');
+  if (miseEnServiceActiver) miseEnServiceActiver.addEventListener('click', () => {
+    const resultat = activerMiseEnService(document.getElementById('f-mise-en-service-jours').value);
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    showToast('Mode mise en service activé jusqu\'au ' + formatDate(resultat.jusquau) + '.');
+    render();
+  });
+  const miseEnServiceDesactiver = document.getElementById('btn-mise-en-service-desactiver');
+  if (miseEnServiceDesactiver) miseEnServiceDesactiver.addEventListener('click', () => {
+    const resultat = desactiverMiseEnService();
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    showToast('Mode mise en service désactivé.');
+    render();
+  });
   const anticipationField = document.getElementById('f-conges-anticipation');
   if (anticipationField) anticipationField.addEventListener('change', () => {
     const reglages = settingsRepository.getSettings();
