@@ -4078,6 +4078,24 @@ const DB = {
    * lui-même (vers le bucket privé "employee-photos", voir 0046_employee_photos_private.sql) est
    * fait par employeeRepository.uploadMyPhoto AVANT d'appeler cette méthode, qui ne fait
    * qu'enregistrer le chemin obtenu (résolu en URL signée à l'affichage, jamais stocké comme URL). */
+  /** Carrière hors entreprise saisie par le salarié lui-même (Ma retraite) : réservé à SA propre fiche, seule liste acceptée (jamais un patch
+   * générique), chaque période revalidée. */
+  majMaCarriereExterne(employeeId, periodes) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    if (this._currentEmployeeId !== employeeId) return { success: false, error: 'Vous ne pouvez modifier que votre propre carrière.' };
+    if (!Array.isArray(periodes) || periodes.length > 100) return { success: false, error: 'Liste de périodes invalide.' };
+    const propres = [];
+    for (const p of periodes) {
+      const controle = validerPeriodeCarriere(p, new Date());
+      if (!controle.ok) return { success: false, error: controle.error };
+      propres.push(controle.periode);
+    }
+    this.updateEmployee(employeeId, { carriereExterne: propres });
+    this.logAudit('Modification', 'Carrière hors entreprise', employee.prenom + ' ' + employee.nom + ' (auto-modification)');
+    return { success: true };
+  },
+
   majMaPhoto(employeeId, photoPath) {
     const employee = this.getEmployeeById(employeeId);
     if (!employee) return { success: false, error: 'Salarié introuvable.' };
@@ -5704,6 +5722,7 @@ const employeeRepository = {
   ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
   ajusterReposCompensateurPris: (employeeId, year, month, heures, motif) => DB.ajusterReposCompensateurPris(employeeId, year, month, heures, motif),
   majCoordonnees: (employeeId, data) => DB.majPropresCoordonnees(employeeId, data),
+  majMaCarriere: (employeeId, periodes) => DB.majMaCarriereExterne(employeeId, periodes),
   /** §retour Betty du 10/09/2026 : téléverse le fichier vers le bucket privé "employee-photos"
    * (voir 0046_employee_photos_private.sql) puis enregistre le CHEMIN obtenu sur le salarié — voir
    * DB.majMaPhoto. Plus d'URL publique permanente : renderAvatar()/hydrateAvatarImages() (app.js)
@@ -6342,6 +6361,8 @@ function makeEmptyEmployee() {
     // motif, auteurId }], alimenté automatiquement par updateEmployee dès que salaireBrutMensuel
     // change — jamais saisi à la main, jamais réécrit une fois consigné.
     historiqueSalaire: [],
+    // Carrière hors entreprise saisie par le salarié (Ma retraite) : [{ id, employeur, dateDebut, dateFin, commentaire }].
+    carriereExterne: [],
     // §retour Betty du 18/09/2026 (point 5) : obsolète pour une NOUVELLE saisie (remplacé par sexe,
     // ci-dessus, obligatoire et binaire) — conservé ici seulement pour qu'une fiche créée avant ce
     // changement garde sa valeur lisible (voir getSexe), jamais retiré, jamais réutilisé en écriture.
@@ -8026,6 +8047,93 @@ function construireRecapAnnuelConges({ annee, employees, leaveType, requests, le
 
   const totauxMois = new Array(12).fill(0).map((_, m) => round2(lignes.reduce((somme, l) => somme + l.mois[m], 0)));
   return { annee, type: leaveType, lignes, totauxMois, totalPris: round2(totauxMois.reduce((somme, j) => somme + j, 0)), totalEnAttente: round2(lignes.reduce((somme, l) => somme + l.enAttente, 0)) };
+}
+
+// ---------------------------------------------------------------------------
+// Info retraite (retour du 21/10/2026). Nexus n'est PAS une caisse de retraite : aucun calcul de pension ni de trimestres validés (ils
+// dépendent des salaires). Seulement des repères indicatifs et un renvoi vers les services officiels. Valeurs à faire valider :
+// docs/regles-a-valider.md.
+// ---------------------------------------------------------------------------
+
+function dateISOValideRetraite(texte) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(texte || ''));
+  if (!m) return false;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]);
+}
+
+/** Âge légal de départ et durée d'assurance requise selon la génération (réforme de 2023, loi du 14 avril 2023). Indicatif : des
+ * dispositifs (carrière longue, handicap, inaptitude...) permettent un départ plus tôt. Retourne { annees, mois, trimestres, date } ou null. */
+function ageLegalDepartRetraite(dateNaissance) {
+  if (!dateISOValideRetraite(dateNaissance)) return null;
+  const [annee, mois] = dateNaissance.split('-').map(Number);
+  let annees = 64, moisSupp = 0, trimestres = 172;
+  if (annee < 1961 || (annee === 1961 && mois < 9)) { annees = 62; moisSupp = 0; trimestres = 168; }
+  else if (annee === 1961) { annees = 62; moisSupp = 3; trimestres = 169; }
+  else if (annee === 1962) { annees = 62; moisSupp = 6; trimestres = 169; }
+  else if (annee === 1963) { annees = 62; moisSupp = 9; trimestres = 170; }
+  else if (annee === 1964) { annees = 63; moisSupp = 0; trimestres = 171; }
+  else if (annee === 1965) { annees = 63; moisSupp = 3; trimestres = 172; }
+  else if (annee === 1966) { annees = 63; moisSupp = 6; trimestres = 172; }
+  else if (annee === 1967) { annees = 63; moisSupp = 9; trimestres = 172; }
+  const naissance = parseISODateLocal(dateNaissance);
+  const depart = new Date(naissance.getFullYear() + annees, naissance.getMonth() + moisSupp, naissance.getDate());
+  return { annees, mois: moisSupp, trimestres, date: toISODate(depart) };
+}
+
+/** Réunit des périodes [debut, fin] (dates locales) en retirant les chevauchements ; retourne le nombre de jours couverts. */
+function joursCouvertsParPeriodes(periodes) {
+  const triees = periodes.filter(p => p.debut <= p.fin).sort((a, b) => a.debut - b.debut);
+  let total = 0;
+  let courant = null;
+  triees.forEach(p => {
+    if (!courant) { courant = { debut: p.debut, fin: p.fin }; return; }
+    if (p.debut <= courant.fin) { if (p.fin > courant.fin) courant.fin = p.fin; return; }
+    total += Math.round((courant.fin - courant.debut) / 86400000) + 1;
+    courant = { debut: p.debut, fin: p.fin };
+  });
+  if (courant) total += Math.round((courant.fin - courant.debut) / 86400000) + 1;
+  return total;
+}
+
+/** Carrière d'un salarié : périodes dans l'entreprise (d'après ses contrats, à défaut sa date d'embauche), périodes hors entreprise saisies
+ * par lui, durées sans double compte. maxTrimestres : au plus un trimestre par période de trois mois (le nombre réellement validé dépend
+ * des salaires : voir le relevé de carrière officiel). */
+function resumerCarriere(employee, maintenant) {
+  const aujourdhui = new Date((maintenant || new Date()).getFullYear(), (maintenant || new Date()).getMonth(), (maintenant || new Date()).getDate());
+  const finParDefaut = dateISOValideRetraite(employee.dateDepart) ? parseISODateLocal(employee.dateDepart) : aujourdhui;
+  const bornee = (fin) => (fin > aujourdhui ? aujourdhui : fin);
+  const periodesEntreprise = [];
+  const contrats = Array.isArray(employee.contrats) ? employee.contrats : [];
+  contrats.forEach(c => {
+    if (!dateISOValideRetraite(c.dateDebut)) return;
+    const fin = dateISOValideRetraite(c.dateFin) ? parseISODateLocal(c.dateFin) : finParDefaut;
+    periodesEntreprise.push({ debut: parseISODateLocal(c.dateDebut), fin: bornee(fin), type: c.typeContrat || '' });
+  });
+  if (!periodesEntreprise.length && dateISOValideRetraite(employee.dateEmbauche)) {
+    periodesEntreprise.push({ debut: parseISODateLocal(employee.dateEmbauche), fin: bornee(finParDefaut), type: employee.typeContrat || '' });
+  }
+  const externes = (Array.isArray(employee.carriereExterne) ? employee.carriereExterne : [])
+    .filter(p => dateISOValideRetraite(p.dateDebut) && dateISOValideRetraite(p.dateFin))
+    .map(p => ({ debut: parseISODateLocal(p.dateDebut), fin: parseISODateLocal(p.dateFin) }));
+  const enMois = (jours) => Math.round(jours / 30.4375);
+  const dansEntreprise = { mois: enMois(joursCouvertsParPeriodes(periodesEntreprise)), periodes: periodesEntreprise.map(p => ({ debut: toISODate(p.debut), fin: toISODate(p.fin), type: p.type })) };
+  const horsEntreprise = { mois: enMois(joursCouvertsParPeriodes(externes)) };
+  const totalMois = dansEntreprise.mois + horsEntreprise.mois;
+  return { dansEntreprise, horsEntreprise, totalMois, maxTrimestres: Math.floor(totalMois / 3) };
+}
+
+/** Contrôle une période de carrière hors entreprise saisie par le salarié ; retourne { ok, periode } ou { ok:false, error }. */
+function validerPeriodeCarriere(saisie, maintenant) {
+  const s = saisie || {};
+  const employeur = String(s.employeur || '').trim().replace(/\s+/g, ' ');
+  if (!employeur) return { ok: false, error: "Indiquez l'employeur (ou « Indépendant », « Étudiant »...)." };
+  if (employeur.length > 120) return { ok: false, error: "Le nom de l'employeur est trop long (120 caractères au plus)." };
+  if (!dateISOValideRetraite(s.dateDebut)) return { ok: false, error: 'La date de début est obligatoire et doit être une vraie date.' };
+  if (!dateISOValideRetraite(s.dateFin)) return { ok: false, error: 'La date de fin est obligatoire et doit être une vraie date.' };
+  if (s.dateFin < s.dateDebut) return { ok: false, error: 'La date de fin est avant la date de début.' };
+  if (s.dateFin > toISODate(maintenant || new Date())) return { ok: false, error: 'Cette période doit être terminée : la date de fin ne peut pas être dans le futur.' };
+  return { ok: true, periode: { id: s.id || generateId('car'), employeur, dateDebut: s.dateDebut, dateFin: s.dateFin, commentaire: String(s.commentaire || '').trim().slice(0, 300) } };
 }
 
 function daysBetween(a, b) {

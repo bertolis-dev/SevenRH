@@ -504,6 +504,8 @@ const NAV_ITEMS = [
   // documents (GERER_UTILISATEURS, voir canManageDocumentsFor) y trouve désormais aussi de quoi
   // diffuser un document à tout un périmètre, plus une vue d'ensemble "qui a lu" des diffusions en
   // cours — jamais un second écran séparé pour ça.
+  // Retour du 21/10/2026 : repères retraite et carrière (indicatif, renvoi vers les services officiels). Rattaché au module « rh », comme les documents.
+  { key: 'retraite', label: 'Ma retraite', icon: ICONS.hourglass, roles: Object.values(ROLES), group: 'personnel', module: 'rh' },
   { key: 'mes-documents', label: 'Documents', icon: ICONS.folder, roles: Object.values(ROLES), group: 'personnel', module: 'rh' },
   // Phase 2 sprint amélioration RH (§16-17) : accès ouvert à tous les rôles — tout salarié peut
   // avoir besoin de demander de l'aide, pas seulement les rôles ayant déjà un accès "Équipe".
@@ -6514,6 +6516,10 @@ function renderInner() {
       root.innerHTML = renderPriseEnMain();
       bindPriseEnMainEvents();
       break;
+    case 'retraite':
+      root.innerHTML = renderRetraite();
+      bindRetraiteEvents();
+      break;
     case 'organigramme':
       root.innerHTML = renderOrganigramme();
       bindOrganigrammeEvents();
@@ -8439,6 +8445,114 @@ function bindSortableHeadersGlobalDelegation() {
  * "Salarié" (voir renderTableauCompteurs) : trier par un solde précis se heurterait à Infinity
  * (compteur illimité, déjà exclu des totaux ci-dessous) sans bénéfice clair pour l'usage réel de cet
  * écran. */
+// ---------------------------------------------------------------------------
+// Ma retraite (retour du 21/10/2026) : repères et renvois vers les services officiels. Nexus n'est pas une caisse de retraite.
+// ---------------------------------------------------------------------------
+
+function formatDureeEnMois(mois) {
+  const annees = Math.floor(mois / 12);
+  const reste = mois % 12;
+  const partieAnnees = annees ? `${annees} an${annees > 1 ? 's' : ''}` : '';
+  const partieMois = reste ? `${reste} mois` : '';
+  return [partieAnnees, partieMois].filter(Boolean).join(' et ') || '0 mois';
+}
+
+function renderRetraite() {
+  const user = authRepository.getCurrentUser();
+  const employee = employeeRepository.getById(user.id) || user;
+  const resume = resumerCarriere(employee, new Date());
+  const age = ageLegalDepartRetraite(employee.dateNaissance);
+  const externes = Array.isArray(employee.carriereExterne) ? employee.carriereExterne.slice().sort((a, b) => a.dateDebut.localeCompare(b.dateDebut)) : [];
+  const lien = (url, texte) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(texte)}</a>`;
+  return `
+    <div class="view-header">
+      <h1>Ma retraite</h1>
+      <p class="view-subtitle">Des repères sur votre carrière et votre départ à la retraite. Ces informations sont indicatives et ne remplacent pas les caisses de retraite : Nexus n'est pas la caisse de retraite et ne calcule ni votre pension ni vos trimestres validés (ils dépendent de vos salaires).</p>
+    </div>
+
+    <div class="card">
+      <h2>Votre carrière dans l'entreprise</h2>
+      ${resume.dansEntreprise.periodes.length ? `
+        <p>Durée d'emploi dans l'entreprise : <strong>${formatDureeEnMois(resume.dansEntreprise.mois)}</strong>${employee.dateEmbauche ? ` (embauche le ${formatDate(employee.dateEmbauche)})` : ''}.</p>
+        <div class="mini-list">
+          ${resume.dansEntreprise.periodes.map(p => `<div class="mini-list-item"><span>${formatDate(p.debut)} au ${formatDate(p.fin)}${p.type ? ` · ${escapeHtml(p.type)}` : ''}</span></div>`).join('')}
+        </div>
+      ` : '<p class="text-muted">Aucune période d\'emploi renseignée sur votre fiche pour l\'instant.</p>'}
+    </div>
+
+    <div class="card" style="margin-top: 14px;">
+      <h2>Votre carrière avant l'entreprise</h2>
+      <p class="text-muted">Ajoutez vos périodes d'emploi précédentes pour avoir votre parcours complet au même endroit. Seul le relevé de carrière officiel fait foi : voir plus bas pour l'obtenir.</p>
+      ${externes.length ? `
+        <div class="mini-list">
+          ${externes.map(p => `
+            <div class="mini-list-item">
+              <span>${formatDate(p.dateDebut)} au ${formatDate(p.dateFin)} · ${escapeHtml(p.employeur)}${p.commentaire ? ` · ${escapeHtml(p.commentaire)}` : ''}</span>
+              <button type="button" class="btn-link btn-link-danger" data-ret-supprimer="${escapeHtml(p.id)}">Retirer</button>
+            </div>`).join('')}
+        </div>
+        <p>Durée hors entreprise (sans double compte) : <strong>${formatDureeEnMois(resume.horsEntreprise.mois)}</strong>.</p>
+      ` : '<p class="text-muted">Aucune période ajoutée.</p>'}
+      <form id="retraite-periode-form" style="margin-top: 12px;">
+        <div class="form-grid">
+          <div class="form-field"><label for="f-ret-employeur">Employeur</label><input class="input" type="text" id="f-ret-employeur" maxlength="120" placeholder="Ex. Société X, Indépendant" required></div>
+          <div class="form-field"><label for="f-ret-debut">Du</label><input class="input" type="date" id="f-ret-debut" required></div>
+          <div class="form-field"><label for="f-ret-fin">Au</label><input class="input" type="date" id="f-ret-fin" required></div>
+          <div class="form-field"><label for="f-ret-commentaire">Commentaire (facultatif)</label><input class="input" type="text" id="f-ret-commentaire" maxlength="300"></div>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 8px;">Ajouter cette période</button>
+      </form>
+      ${resume.totalMois ? `<p style="margin-top: 12px;">Au total, <strong>${formatDureeEnMois(resume.totalMois)}</strong> d'activité connue, soit au plus ${resume.maxTrimestres} trimestres (un trimestre au maximum par période de trois mois ; le nombre réellement validé dépend de vos salaires).</p>` : ''}
+    </div>
+
+    <div class="card" style="margin-top: 14px;">
+      <h2>Âge légal de départ (repère)</h2>
+      ${age ? `
+        <p>D'après votre date de naissance (${formatDate(employee.dateNaissance)}), l'âge légal de départ est de <strong>${age.annees} ans${age.mois ? ` et ${age.mois} mois` : ''}</strong>, soit à partir du <strong>${formatDate(age.date)}</strong>, et la durée d'assurance requise pour le taux plein est de <strong>${age.trimestres} trimestres</strong>.</p>
+        <p class="text-muted">Repère issu de la réforme de 2023, à vérifier sur ${lien('https://www.info-retraite.fr', 'info-retraite.fr')}. Des dispositifs (carrière longue, handicap, inaptitude, pénibilité) permettent de partir plus tôt, et le taux plein est automatique à 67 ans.</p>
+      ` : `<p class="text-muted">Votre date de naissance n'est pas renseignée sur votre fiche : demandez à votre RH de la compléter pour afficher ce repère.</p>`}
+    </div>
+
+    <div class="card" style="margin-top: 14px;">
+      <h2>Les services officiels</h2>
+      <ul style="margin: 0; padding-left: 20px;">
+        <li>${lien('https://www.info-retraite.fr', 'info-retraite.fr')} : le portail commun à tous les régimes. Vous y trouvez votre <strong>relevé de carrière</strong> complet (tous employeurs, tous régimes), une estimation de votre pension et de votre date de départ, et la possibilité de demander la correction d'une période manquante.</li>
+        <li>${lien('https://www.lassuranceretraite.fr', 'lassuranceretraite.fr')} : le site de l'Assurance retraite, pour les salariés du secteur privé.</li>
+      </ul>
+      <p class="text-muted" style="margin-top: 10px;">Pour avoir votre historique de carrière complet ici : téléchargez votre relevé officiel sur info-retraite.fr, puis conservez-le dans vos ${hasModule('rh') ? '<a href="#" id="retraite-lien-documents">documents</a>' : 'documents'}. Nexus ne se connecte pas à ces services : aucune donnée de retraite ne sort de l'application.</p>
+    </div>
+  `;
+}
+
+function bindRetraiteEvents() {
+  const user = authRepository.getCurrentUser();
+  const form = document.getElementById('retraite-periode-form');
+  if (form) form.addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const controle = validerPeriodeCarriere({
+      employeur: document.getElementById('f-ret-employeur').value,
+      dateDebut: document.getElementById('f-ret-debut').value,
+      dateFin: document.getElementById('f-ret-fin').value,
+      commentaire: document.getElementById('f-ret-commentaire').value
+    }, new Date());
+    if (!controle.ok) { showToast(controle.error, 'error'); return; }
+    const existantes = (employeeRepository.getById(user.id).carriereExterne || []);
+    const resultat = employeeRepository.majMaCarriere(user.id, [...existantes, controle.periode]);
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    showToast('Période ajoutée.');
+    render();
+  });
+  document.querySelectorAll('[data-ret-supprimer]').forEach(btn => btn.addEventListener('click', () => {
+    const existantes = (employeeRepository.getById(user.id).carriereExterne || []);
+    const resultat = employeeRepository.majMaCarriere(user.id, existantes.filter(p => p.id !== btn.dataset.retSupprimer));
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    showToast('Période retirée.');
+    render();
+  }));
+  const lienDocuments = document.getElementById('retraite-lien-documents');
+  if (lienDocuments) lienDocuments.addEventListener('click', (evt) => { evt.preventDefault(); navigateTo('mes-documents'); });
+}
+
 // ---------------------------------------------------------------------------
 // Prise en main (retour du 21/10/2026) : le parcours, dans l'ordre, pour bien renseigner les données de départ d'une entreprise qui
 // arrive sur Nexus. Chaque étape dit pourquoi, où aller, et si elle est déjà faite d'après les vraies données.
