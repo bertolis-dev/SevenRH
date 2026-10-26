@@ -4338,3 +4338,60 @@ textarea.input { resize: vertical; font-family: inherit; }
   margin: 10mm;
 }
 .print-landscape { page: paysage; }
+
+
+/* ---------------------------------------------------------------------------
+   Guide de l'application, visite guidée et astuces (retour du 26/10/2026)
+   --------------------------------------------------------------------------- */
+.modal-xlarge { max-width: 980px; width: 100%; }
+.guide-modal .modal-body { padding: 0; }
+.guide-version { margin-left: 8px; font-size: 11px; vertical-align: middle; }
+.guide-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 420px; max-height: 66vh; }
+.guide-toc { border-right: 1px solid var(--color-border); padding: 14px 12px; overflow-y: auto; }
+.guide-search { margin-bottom: 12px; }
+.guide-toc-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-muted); margin: 12px 8px 4px; }
+.guide-toc-item { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: var(--radius-sm, 6px); padding: 7px 10px; font: inherit; font-size: 14px; color: var(--color-text); cursor: pointer; }
+.guide-toc-item:hover { background: var(--color-border-soft); }
+.guide-toc-item.active { background: var(--color-primary); color: #fff; font-weight: 600; }
+.guide-toc-item[hidden], .guide-toc-group[hidden] { display: none; }
+.guide-content { padding: 18px 22px; overflow-y: auto; outline: none; }
+.guide-title { margin: 0 0 10px; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+.guide-title-icon { display: inline-flex; color: var(--landing-gold-500); }
+.guide-resume { font-weight: 600; color: var(--color-text); margin: 0 0 12px; }
+.guide-content p { margin: 0 0 10px; line-height: 1.55; }
+.guide-steps { padding-left: 20px; margin: 0 0 12px; }
+.guide-steps li { margin-bottom: 8px; line-height: 1.5; }
+.guide-defs dt { font-weight: 700; margin-top: 12px; }
+.guide-defs dd { margin: 2px 0 0; line-height: 1.5; color: var(--color-text); }
+.guide-tips-list { padding-left: 20px; margin: 0; }
+.guide-tips-list li { margin-bottom: 10px; line-height: 1.5; }
+.guide-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .guide-layout { grid-template-columns: 1fr; max-height: 70vh; overflow-y: auto; }
+  .guide-toc { border-right: 0; border-bottom: 1px solid var(--color-border); max-height: 190px; }
+  .guide-content { overflow-y: visible; padding: 14px 16px; }
+}
+
+.user-menu-item-guide { font-weight: 600; color: var(--color-primary); }
+.user-menu-version { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--color-border-soft); font-size: 12px; color: var(--color-text-muted); }
+
+/* Visite guidée : un halo autour de l'élément expliqué, et une carte à côté. */
+#tour-root { position: fixed; inset: 0; z-index: 90; }
+#tour-root.tour-centered { background: rgba(10, 18, 36, 0.6); display: flex; align-items: center; justify-content: center; }
+.tour-spot { position: fixed; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(10, 18, 36, 0.6); outline: 2px solid var(--landing-gold-500); pointer-events: none; transition: all 0.2s ease; }
+.tour-card { position: fixed; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-lg); padding: 16px 18px; max-width: calc(100vw - 24px); }
+#tour-root.tour-centered .tour-card { position: relative; top: auto !important; left: auto !important; width: min(380px, calc(100vw - 24px)) !important; }
+.tour-card h3 { margin: 4px 0 6px; font-size: 17px; }
+.tour-card p { margin: 0 0 14px; line-height: 1.5; font-size: 14px; }
+.tour-step-count { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--landing-gold-500); }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-actions-main { display: inline-flex; gap: 8px; margin-left: auto; }
+
+/* Astuce affichée une fois par écran. */
+.screen-tip { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 14px; border: 1px solid var(--landing-gold-300); border-left: 4px solid var(--landing-gold-500); border-radius: var(--radius-md, 10px); background: var(--landing-gold-soft); color: #2a2418; }
+.screen-tip-icon { display: inline-flex; color: var(--landing-gold-500); flex-shrink: 0; }
+.screen-tip-text { flex: 1; font-size: 14px; line-height: 1.45; }
+.screen-tip .btn { flex-shrink: 0; }
+@media (max-width: 600px) { .screen-tip { flex-wrap: wrap; } .screen-tip .btn { margin-left: auto; } }
+:root[data-theme="dark"] .screen-tip { background: rgba(201, 154, 84, 0.12); color: var(--color-text); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .screen-tip { background: rgba(201, 154, 84, 0.12); color: var(--color-text); } }

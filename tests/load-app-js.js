@@ -234,6 +234,16 @@ globalThis.__renderParametresModelesDocuments = renderParametresModelesDocuments
 globalThis.__renderMesTickets = renderMesTickets;
 globalThis.__renderMesDocuments = renderMesDocuments;
 globalThis.__renderFormation = renderFormation;
+globalThis.__APP_VERSION = APP_VERSION;
+globalThis.__CHANGELOG_ENTRIES = CHANGELOG_ENTRIES;
+globalThis.__guideSections = guideSections;
+globalThis.__tourStepsForUser = tourStepsForUser;
+globalThis.__SCREEN_TIPS = SCREEN_TIPS;
+globalThis.__GUIDE_RESUMES = GUIDE_RESUMES;
+globalThis.__openGuideModal = openGuideModal;
+globalThis.__startTour = startTour;
+globalThis.__insertScreenTip = insertScreenTip;
+globalThis.__navItemsForRole = navItemsForRole;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
 globalThis.__teleworkRepository = teleworkRepository;
 globalThis.__findTeleworkWeekOverQuota = findTeleworkWeekOverQuota;
@@ -884,6 +894,16 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     genererDocumentFormation: sandbox.__genererDocumentFormation,
     peutDeciderFormation: sandbox.__peutDeciderFormation,
     renderFormation: sandbox.__renderFormation,
+    APP_VERSION: sandbox.__APP_VERSION,
+    CHANGELOG_ENTRIES: sandbox.__CHANGELOG_ENTRIES,
+    guideSections: sandbox.__guideSections,
+    tourStepsForUser: sandbox.__tourStepsForUser,
+    SCREEN_TIPS: sandbox.__SCREEN_TIPS,
+    GUIDE_RESUMES: sandbox.__GUIDE_RESUMES,
+    openGuideModal: sandbox.__openGuideModal,
+    startTour: sandbox.__startTour,
+    insertScreenTip: sandbox.__insertScreenTip,
+    navItemsForRole: sandbox.__navItemsForRole,
   };
 }
 

@@ -2472,7 +2472,24 @@ function openAboutModal() {
 /** Historique réel des évolutions (résumé côté utilisateur des vrais changements livrés, pas une
  * liste marketing inventée) — regroupé par mois plutôt que jour par jour, la plupart de ces
  * changements ayant été livrés sur une courte période. */
+/** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
+ * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
+ * restent alignés. */
+const APP_VERSION = '2026.10.26';
+
 const CHANGELOG_ENTRIES = [
+  {
+    date: 'Octobre 2026',
+    version: APP_VERSION,
+    items: [
+      "Nouveau guide de l'application : cliquez sur le rond en haut à droite, puis « Guide de l'application ». Il explique chaque écran auquel vous avez accès, avec une recherche intégrée.",
+      "Visite guidée au premier lancement, et petites astuces affichées une seule fois sur chaque écran.",
+      "Le numéro de version de l'application est affiché dans le menu de votre compte.",
+      "Nouvel écran Formation : demandez une formation financée par l'entreprise ou avec votre compte personnel de formation (CPF), suivez la décision de votre manager ou des RH et préparez les courriers à imprimer.",
+      "Les entretiens, tickets d'aide, idées et licences ne sont plus recopiés dans les données partagées de l'entreprise : leur confidentialité est renforcée.",
+      "Nouvel écran « Ma retraite » : vos repères de carrière et de départ à la retraite, à titre indicatif."
+    ]
+  },
   {
     date: 'Septembre 2026',
     items: [
@@ -2508,7 +2525,7 @@ function openChangelogModal() {
       <div class="modal-body">
         ${CHANGELOG_ENTRIES.map(entry => `
           <div class="changelog-entry">
-            <h3>${escapeHtml(entry.date)}</h3>
+            <h3>${escapeHtml(entry.date)}${entry.version ? ` <span class="badge badge-muted">Version ${escapeHtml(entry.version)}</span>` : ''}</h3>
             <ul>${entry.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
           </div>
         `).join('')}
@@ -3130,6 +3147,8 @@ function showApp() {
   handleCheckoutReturn();
   const currentUser = authRepository.getCurrentUser();
   if (currentUser && currentUser.mustChangePassword) openForcedPasswordChangeModal();
+  // Visite guidée à la première connexion de ce compte sur cet appareil (jamais par-dessus une fenêtre déjà ouverte) : laisse l'écran d'accueil s'afficher d'abord.
+  else setTimeout(() => startTour(), 900);
   // §retour QA du 26/08/2026 (point 2.6) : rejoue toute écriture restée en attente d'une session
   // précédente sur ce navigateur (fermeture pendant une coupure réseau, par ex.) — fire-and-forget,
   // ne bloque jamais l'affichage de l'app elle-même.
@@ -4202,6 +4221,8 @@ function renderUserMenuPanel() {
       ).join('')}
     </div>
     <div class="user-menu-divider"></div>
+    <button type="button" class="user-menu-item user-menu-item-guide" id="btn-user-menu-guide">${icon(ICONS.helpCircle, 14)} Guide de l'application</button>
+    <div class="user-menu-divider"></div>
     ${otherAccounts.length ? `
       <div class="user-menu-section-label">Autres comptes</div>
       ${otherAccounts.map(a => `
@@ -4228,6 +4249,7 @@ function renderUserMenuPanel() {
     <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
     <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter${otherAccounts.length ? ' de ce compte' : ''}</button>
+    <div class="user-menu-version"><span>Nexus · version ${escapeHtml(APP_VERSION)}</span><button type="button" class="btn-link" id="btn-user-menu-nouveautes">Nouveautés</button></div>
   `;
 
   document.querySelectorAll('[data-switch-account]').forEach(row => {
@@ -4310,6 +4332,14 @@ function renderUserMenuPanel() {
       openCalendarSyncModal(hasTeamScope);
     });
   }
+  document.getElementById('btn-user-menu-guide').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    openGuideModal();
+  });
+  document.getElementById('btn-user-menu-nouveautes').addEventListener('click', () => {
+    document.getElementById('user-menu-panel').classList.remove('open');
+    openChangelogModal();
+  });
   document.getElementById('btn-user-menu-support').addEventListener('click', () => {
     document.getElementById('user-menu-panel').classList.remove('open');
     openSupportTicketModal();
@@ -4759,6 +4789,47 @@ const HELP_CONTENT = {
     ],
     bonnesPratiques: ['Passez par le Centre d\'action plutôt que par la recherche pour traiter vos demandes en attente : les filtres sont déjà appliqués.', 'Consultez la Préparation de paie depuis son raccourci ici avant chaque export, pas seulement le jour de la paie.']
   },
+  'mes-entretiens': {
+    title: 'Mes entretiens',
+    body: `<p>Vos propres entretiens avec votre manager (professionnel, annuel...). Vous voyez la date prévue, préparez votre auto-évaluation avant l'entretien, puis consultez le retour de votre manager. Si l'entreprise utilise une trame, ses questions s'affichent en haut de l'entretien.</p>
+           <p>Les besoins de formation évoqués lors d'un entretien peuvent ensuite faire l'objet d'une demande dans l'écran <strong>Formation</strong>.</p>`,
+    faq: [{ q: 'Je ne peux plus modifier mon auto-évaluation ?', r: 'Elle se verrouille une fois l\'entretien clôturé par les RH, pour garder une trace fidèle de ce qui a été échangé ce jour-là.' }],
+    bonnesPratiques: ['Remplissez votre auto-évaluation quelques jours avant la date : cela rend l\'échange plus utile pour vous et pour votre manager.']
+  },
+  formation: {
+    title: 'Formation',
+    body: `<p>Faites une <strong>demande de formation</strong> : indiquez l'intitulé, l'organisme, les dates, la durée et le coût estimé, et choisissez le financement : par l'entreprise, ou avec votre compte personnel de formation (CPF). Votre manager ou les RH l'acceptent ou la refusent (avec un motif), puis marquent la formation comme réalisée.</p>
+           <p>Vous pouvez corriger ou annuler votre demande tant qu'elle n'est pas traitée. Le bouton <strong>Lettres</strong> prépare les courriers à imprimer : la demande de formation, l'autorisation d'absence pour une formation CPF pendant le temps de travail, et la réponse à la demande.</p>
+           <p>Un manager ou un RH voit en plus les demandes de son équipe, dans « Demandes de l'équipe ».</p>`,
+    faq: [
+      { q: 'Puis-je accepter ma propre demande ?', r: 'Non : une demande est toujours décidée par une autre personne que son auteur (manager ou RH).' },
+      { q: 'Quel délai pour une formation CPF pendant le temps de travail ?', r: 'Le formulaire indique le délai de prévenance à respecter d\'après la durée de la formation et vous signale s\'il n\'est pas tenu. Il ne bloque jamais l\'envoi de la demande.' }
+    ],
+    bonnesPratiques: ['Indiquez les dates dès que vous les connaissez : le délai de prévenance CPF se calcule à partir d\'elles.', 'Ajoutez un lien vers le programme : votre manager décide plus vite avec le détail sous les yeux.']
+  },
+  'ma-fiche': {
+    title: 'Ma fiche',
+    body: `<p>Votre fiche personnelle, telle que l'entreprise l'a enregistrée. Les onglets affichés (Fiche, Contrat, Congés et absences, Notes de frais, Accès et droits, Documents, Parcours) dépendent de ce que votre rôle permet de voir.</p>`,
+    faq: [{ q: 'Une information est fausse, que faire ?', r: 'Ce que vous pouvez modifier dépend de vos droits. Pour le reste, signalez l\'erreur à votre RH.' }]
+  },
+  retraite: {
+    title: 'Ma retraite',
+    body: `<p>Des repères sur votre carrière : durée d'emploi dans l'entreprise, périodes d'emploi précédentes que vous ajoutez vous-même, et âge légal de départ indicatif d'après votre date de naissance. Des liens renvoient vers les services officiels de la retraite.</p>
+           <p>Ces informations sont <strong>indicatives</strong> : Nexus n'est pas une caisse de retraite, et seul le relevé de carrière officiel fait foi.</p>`,
+    faq: [{ q: 'Pourquoi ajouter mes anciens emplois ?', r: 'Pour avoir votre parcours complet au même endroit. Les périodes qui se recouvrent ne sont comptées qu\'une fois.' }]
+  },
+  pointeuse: {
+    title: 'Pointeuse',
+    body: `<p>Pointez votre <strong>arrivée</strong> puis votre <strong>départ</strong> avec « Scanner le QR », en scannant le QR code affiché sur votre lieu de travail. Votre historique du mois s'affiche en dessous, avec la navigation mois par mois.</p>
+           <p>Les RH et les managers peuvent afficher le QR code de chaque établissement, suivre les pointages de l'équipe, repérer les écarts et régulariser un oubli.</p>`,
+    faq: [{ q: 'J\'ai oublié de pointer ?', r: 'Prévenez votre manager ou les RH : ils peuvent régulariser le pointage.' }]
+  },
+  'prise-en-main': {
+    title: 'Prise en main',
+    body: `<p>Le parcours guidé pour renseigner vos données de départ dans le bon ordre : salariés, types de congés, soldes et historique. Chaque étape explique pourquoi elle compte, où la faire, et indique si elle est faite.</p>
+           <p>L'écran rappelle aussi comment Nexus calcule un solde de congés : acquis + ajustement - pris - en attente.</p>`,
+    bonnesPratiques: ['Suivez les étapes dans l\'ordre : l\'écran indique la prochaine à faire.']
+  },
   employees: {
     title: 'Salariés',
     body: `<p>Liste des salariés visibles selon votre périmètre (toute l'entreprise pour RH/Propriétaire, votre équipe pour un manager). Filtrez par établissement/service/statut, cliquez une ligne pour ouvrir la fiche complète (coordonnées, contrat, documents, compteurs de congés, historique).</p>`,
@@ -4886,6 +4957,480 @@ const HELP_CONTENT = {
 function updateHelpButtonVisibility() {
   const btn = document.getElementById('btn-help');
   if (btn) btn.style.display = HELP_CONTENT[state.view] ? '' : 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Guide de l'application, visite guidée et astuces (retour du 26/10/2026)
+// ---------------------------------------------------------------------------
+
+/** Contenu du guide pour chaque écran du menu : « à quoi ça sert », en une phrase. Le détail (fonctionnement, FAQ, bonnes pratiques)
+ * vient de HELP_CONTENT, le même texte que le bouton « ? » de l'écran : une seule source, jamais deux explications qui divergent. */
+const GUIDE_RESUMES = {
+  dashboard: "Votre page d'accueil : ce qui demande votre attention aujourd'hui, en un coup d'œil.",
+  planning: "Qui est présent ou absent, jour par jour, et les horaires de travail.",
+  calendrier: "Le calendrier de vos congés, absences et jours de télétravail (et celui de l'équipe si vous en encadrez une).",
+  absences: "Poser et suivre vos congés, absences et jours de télétravail ; valider ceux de votre équipe si vous en êtes responsable.",
+  frais: "Déclarer vos dépenses professionnelles et suivre leur remboursement.",
+  'ma-fiche': "Vos informations personnelles et professionnelles, telles que l'entreprise les a enregistrées.",
+  retraite: "Des repères sur votre carrière et votre départ à la retraite.",
+  'mes-documents': "Retrouver vos documents RH (contrat, attestations...) et télécharger vos données personnelles.",
+  'mes-tickets': "Contacter l'équipe de Nexus : un bug, une question, une idée d'amélioration.",
+  'mes-entretiens': "Préparer et suivre vos entretiens avec votre manager.",
+  formation: "Demander une formation, financée par l'entreprise ou avec votre compte personnel de formation (CPF).",
+  idees: "Proposer des idées pour l'entreprise et voter pour celles des autres.",
+  tickets: "Les tickets restaurant du mois, calculés selon les jours réellement travaillés.",
+  pointeuse: "Pointer votre arrivée et votre départ avec un QR code.",
+  entretiens: "Planifier et suivre les entretiens de vos équipes.",
+  employees: "La liste des salariés et leurs fiches complètes.",
+  'tableau-compteurs': "Le solde de congés de chaque salarié, type par type.",
+  'prise-en-main': "Les étapes pour renseigner vos données de départ dans le bon ordre.",
+  organigramme: "Qui travaille avec qui : l'arbre hiérarchique de l'entreprise.",
+  'export-paie': "Préparer la paie du mois : contrôler les anomalies, puis exporter les variables.",
+  remuneration: "Salaires, heures supplémentaires et repos compensateur.",
+  embauche: "Gérer vos recrutements : postes ouverts et candidatures reçues.",
+  parametres: "Régler l'entreprise : établissements, services, types d'absences, listes, abonnement."
+};
+
+const GUIDE_ROLE_TEXTS = {
+  salarie: "Vous gérez vos propres démarches : congés et absences, télétravail, notes de frais, documents, entretiens et demandes de formation.",
+  manager: "En plus de vos propres démarches, vous suivez votre équipe et validez ses demandes (congés, télétravail, notes de frais), et vous menez ses entretiens.",
+  rh: "Vous gérez l'ensemble des salariés : fiches, validations, documents, entretiens, paie et paramètres de l'entreprise, selon les droits que l'entreprise vous a donnés.",
+  comptabilite: "Vous avez accès aux éléments utiles à la paie et aux notes de frais, selon les droits que l'entreprise vous a donnés, ainsi qu'à vos propres démarches.",
+  proprietaire: "Vous avez accès à tout, y compris l'abonnement et le transfert de la propriété du compte."
+};
+
+/** Sections d'introduction du guide, communes à tous les rôles. */
+function guideIntroSections(user) {
+  const roleLabel = ROLE_LABELS[user.role] || user.role;
+  return [
+    {
+      id: 'bienvenue', groupe: 'Premiers pas', titre: 'Bienvenue sur Nexus',
+      html: `
+        <p class="guide-resume">Nexus regroupe au même endroit la gestion des ressources humaines de votre entreprise : congés, planning, notes de frais, documents, entretiens, formation et paie.</p>
+        <p>Vous voyez uniquement ce qui correspond à votre rôle et aux modules souscrits par votre entreprise. Ce guide s'adapte donc à vous : il ne décrit que les écrans auxquels vous avez accès.</p>
+        <ol class="guide-steps">
+          <li><strong>Repérez-vous</strong> avec la section « Se repérer » : le menu, la recherche, les notifications et votre compte.</li>
+          <li><strong>Découvrez vos écrans</strong> un par un dans la liste à gauche : à quoi ils servent et comment les utiliser.</li>
+          <li><strong>Retrouvez de l'aide</strong> à tout moment : le bouton « ? » en haut explique l'écran affiché, et ce guide est toujours disponible dans le menu de votre compte.</li>
+        </ol>
+        <div class="guide-actions"><button type="button" class="btn btn-primary btn-sm" data-guide-start-tour>Lancer la visite guidée</button></div>`
+    },
+    {
+      id: 'reperes', groupe: 'Premiers pas', titre: 'Se repérer dans l\'application',
+      html: `
+        <p class="guide-resume">Cinq éléments toujours présents. Une fois repérés, vous savez utiliser tout le reste.</p>
+        <dl class="guide-defs">
+          <dt>Le menu à gauche</dt>
+          <dd>Il liste vos écrans. « Personnel » regroupe vos propres démarches ; « Équipe » (si vous encadrez des personnes ou gérez les RH) regroupe la gestion. Sur téléphone, il s'ouvre avec le bouton ☰ en haut à gauche.</dd>
+          <dt>La barre de recherche (Ctrl+K)</dt>
+          <dd>Tapez un nom de salarié, une demande ou une note de frais pour l'ouvrir directement. Elle lance aussi des actions : ajouter un salarié, poser un congé, déclarer du télétravail...</dd>
+          <dt>Le bouton « ? »</dt>
+          <dd>Il explique l'écran que vous êtes en train de regarder : fonctionnement, questions fréquentes et bonnes pratiques.</dd>
+          <dt>La cloche</dt>
+          <dd>Vos notifications : demandes à valider, décisions prises sur vos demandes, rappels. Un clic sur une notification ouvre l'écran concerné.</dd>
+          <dt>Le rond avec vos initiales</dt>
+          <dd>Votre compte : ce guide, le thème clair ou sombre, vos paramètres, l'aide, le changement de mot de passe, le téléchargement de vos données et la déconnexion. Le numéro de version de l'application est affiché en bas de ce menu.</dd>
+        </dl>`
+    },
+    {
+      id: 'role', groupe: 'Premiers pas', titre: `Votre rôle : ${roleLabel}`,
+      html: `
+        <p class="guide-resume">${escapeHtml(GUIDE_ROLE_TEXTS[user.role] || '')}</p>
+        <p>Les droits exacts peuvent être ajustés par votre entreprise (certains écrans peuvent donc manquer, ou être en plus de ceux décrits ici). Si un écran vous semble absent, demandez à votre RH ou au propriétaire du compte.</p>`
+    }
+  ];
+}
+
+/** Sections de fin : astuces et aide. */
+function guideOutroSections() {
+  return [
+    {
+      id: 'astuces', groupe: 'Aide', titre: 'Astuces et raccourcis',
+      html: `
+        <ul class="guide-tips-list">
+          <li><strong>Ctrl+K</strong> (ou ⌘K sur Mac) ouvre la recherche depuis n'importe quel écran.</li>
+          <li><strong>Thème sombre :</strong> dans le menu de votre compte, choisissez Clair, Sombre ou Système.</li>
+          <li><strong>Installer Nexus :</strong> sur ordinateur, téléphone ou tablette, utilisez l'option « Installer l'application » de votre navigateur pour l'ouvrir comme une vraie application.</li>
+          <li><strong>Après une mise à jour :</strong> le bouton de rechargement en haut à droite charge la dernière version. Le numéro de version est affiché dans le menu de votre compte.</li>
+          <li><strong>Plusieurs comptes :</strong> « Ajouter un compte » dans le menu du compte permet de passer d'une entreprise à l'autre sans vous déconnecter.</li>
+          <li><strong>Une explication par écran :</strong> le bouton « ? » en haut de chaque écran donne son mode d'emploi détaillé.</li>
+        </ul>`
+    },
+    {
+      id: 'aide', groupe: 'Aide', titre: 'Besoin d\'aide ?',
+      html: `
+        <p class="guide-resume">Une question, un bug, une idée : l'équipe de Nexus vous répond.</p>
+        <p>Ouvrez « Aide et support » pour envoyer une demande, puis suivez ses réponses et son statut au même endroit. Pour une idée d'amélioration, la boîte à idées permet aussi de voter pour celles des autres.</p>
+        <div class="guide-actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-guide-open-view="mes-tickets">Ouvrir « Aide et support »</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-guide-changelog>Voir les nouveautés</button>
+        </div>`
+    }
+  ];
+}
+
+function guideScreenSection(item, groupe) {
+  const help = HELP_CONTENT[item.key];
+  const resume = GUIDE_RESUMES[item.key];
+  const faq = help && help.faq && help.faq.length
+    ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Questions fréquentes</div>${help.faq.map(f => `<p><strong>${escapeHtml(f.q)}</strong><br>${escapeHtml(f.r)}</p>`).join('')}</div>` : '';
+  const pratiques = help && help.bonnesPratiques && help.bonnesPratiques.length
+    ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Bonnes pratiques</div><ul class="help-tips">${help.bonnesPratiques.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
+  return {
+    id: 'ecran-' + item.key, groupe, titre: item.label, icone: item.icon, navKey: item.key,
+    html: `
+      ${resume ? `<p class="guide-resume">${escapeHtml(resume)}</p>` : ''}
+      ${help ? help.body : ''}
+      ${faq}${pratiques}
+      <div class="guide-actions"><button type="button" class="btn btn-primary btn-sm" data-guide-open-view="${escapeHtml(item.key)}">Ouvrir « ${escapeHtml(item.label)} »</button></div>`
+  };
+}
+
+/** Toutes les sections du guide pour l'utilisateur courant : introduction, un écran par entrée de menu accessible, aide. */
+function guideSections(user) {
+  const sections = guideIntroSections(user);
+  const vus = new Set();
+  navItemsForRole(user).forEach(item => {
+    if (vus.has(item.key) || item.key === 'boussole') return;
+    vus.add(item.key);
+    const groupe = item.key === 'dashboard' ? 'Écrans' : item.key === 'parametres' ? 'Administration' : item.group === 'equipe' ? 'Équipe' : 'Personnel';
+    // "Mon compte" et "Abonnement" partagent la clé 'parametres' avec "Paramètres" : un seul chapitre, au nom de l'écran principal.
+    const libelle = item.key === 'parametres' ? 'Paramètres' : item.label;
+    sections.push(guideScreenSection({ ...item, label: libelle }, groupe));
+  });
+  return sections.concat(guideOutroSections()).map(s => ({ ...s, texte: (s.titre + ' ' + s.html.replace(/<[^>]+>/g, ' ')).toLowerCase() }));
+}
+
+function openGuideModal(sectionId) {
+  const user = authRepository.getCurrentUser();
+  if (!user) return;
+  const sections = guideSections(user);
+  const courant = sections.find(s => s.id === sectionId) || sections[0];
+  const groupes = [];
+  sections.forEach(s => { if (!groupes.includes(s.groupe)) groupes.push(s.groupe); });
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = `
+    <div class="modal modal-xlarge guide-modal">
+      <div class="modal-header">
+        <h2>${icon(ICONS.helpCircle, 18)} Guide de Nexus <span class="badge badge-muted guide-version">Version ${escapeHtml(APP_VERSION)}</span></h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body guide-body">
+        <div class="guide-layout">
+          <nav class="guide-toc" aria-label="Sommaire du guide">
+            <input type="search" class="input guide-search" id="guide-search" placeholder="Rechercher" aria-label="Rechercher dans le guide" autocomplete="off">
+            <div id="guide-toc-list">
+              ${groupes.map(g => `
+                <div class="guide-toc-group" data-guide-group="${escapeHtml(g)}">
+                  <div class="guide-toc-label">${escapeHtml(g)}</div>
+                  ${sections.filter(s => s.groupe === g).map(s => `<button type="button" class="guide-toc-item${s.id === courant.id ? ' active' : ''}" data-guide-section="${escapeHtml(s.id)}">${escapeHtml(s.titre)}</button>`).join('')}
+                </div>`).join('')}
+              <p class="text-muted guide-no-result" id="guide-no-result" hidden>Aucun chapitre ne correspond.</p>
+            </div>
+          </nav>
+          <article class="guide-content" id="guide-content" tabindex="-1" aria-live="polite"></article>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-guide-tour">Relancer la visite guidée</button>
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+      </div>
+    </div>`;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  const afficher = (id) => {
+    const s = sections.find(x => x.id === id);
+    if (!s) return;
+    const zone = document.getElementById('guide-content');
+    zone.innerHTML = `<h3 class="guide-title">${s.icone ? `<span class="guide-title-icon">${icon(s.icone, 18)}</span>` : ''}${escapeHtml(s.titre)}</h3>${s.html}`;
+    zone.scrollTop = 0;
+    document.querySelectorAll('[data-guide-section]').forEach(b => b.classList.toggle('active', b.dataset.guideSection === id));
+    zone.querySelectorAll('[data-guide-open-view]').forEach(btn => btn.addEventListener('click', () => {
+      const cle = btn.dataset.guideOpenView;
+      const entree = NAV_ITEMS.find(i => i.key === cle);
+      closeModal();
+      navigateTo(cle, (entree && entree.navParams) || {});
+    }));
+    zone.querySelectorAll('[data-guide-start-tour]').forEach(btn => btn.addEventListener('click', () => { closeModal(); startTour({ force: true }); }));
+    zone.querySelectorAll('[data-guide-changelog]').forEach(btn => btn.addEventListener('click', () => openChangelogModal()));
+  };
+  document.querySelectorAll('[data-guide-section]').forEach(b => b.addEventListener('click', () => {
+    afficher(b.dataset.guideSection);
+    const toc = document.getElementById('guide-toc-list');
+    if (toc) toc.dataset.last = b.dataset.guideSection;
+  }));
+  document.getElementById('btn-guide-tour').addEventListener('click', () => { closeModal(); startTour({ force: true }); });
+  document.getElementById('guide-search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let trouve = 0;
+    document.querySelectorAll('[data-guide-section]').forEach(b => {
+      const s = sections.find(x => x.id === b.dataset.guideSection);
+      const visible = !q || (s && s.texte.includes(q));
+      b.hidden = !visible;
+      if (visible) trouve++;
+    });
+    document.querySelectorAll('[data-guide-group]').forEach(g => { g.hidden = !g.querySelector('[data-guide-section]:not([hidden])'); });
+    document.getElementById('guide-no-result').hidden = trouve > 0;
+  });
+  afficher(courant.id);
+}
+
+// --- Visite guidée au premier lancement ---
+
+const TOUR_STORAGE_PREFIX = 'nexus_visite_vue_';
+const TIP_STORAGE_PREFIX = 'nexus_astuce_vue_';
+
+function hasSeenTour(user) {
+  try { return localStorage.getItem(TOUR_STORAGE_PREFIX + user.id) === '1'; } catch (e) { return true; }
+}
+
+function markTourSeen(user) {
+  try { localStorage.setItem(TOUR_STORAGE_PREFIX + user.id, '1'); } catch (e) { /* stockage indisponible : la visite ne sera simplement pas mémorisée */ }
+}
+
+/** Étapes de la visite : chaque étape pointe vers un élément réel de l'écran (le premier visible de `cibles`), ou s'affiche au centre. */
+function tourStepsForUser(user) {
+  const peutPriseEnMain = navItemsForRole(user).some(i => i.key === 'prise-en-main');
+  const steps = [
+    {
+      titre: `Bienvenue sur Nexus, ${user.prenom}`,
+      texte: "Une visite de moins d'une minute pour repérer l'essentiel. Vous pouvez la quitter à tout moment, et la relancer depuis le guide."
+    },
+    {
+      cibles: ['#sidebar-nav', '#btn-mobile-nav-toggle'],
+      titre: 'Le menu',
+      texte: "Vos écrans sont ici : « Personnel » pour vos propres démarches, « Équipe » pour la gestion si votre rôle le permet. Sur téléphone, ouvrez-le avec le bouton ☰.",
+      placement: 'right'
+    },
+    {
+      cibles: ['#global-search-input'],
+      titre: 'La recherche',
+      texte: "Retrouvez un salarié, une demande ou une note de frais en tapant son nom. Elle lance aussi des actions comme « poser un congé ». Raccourci : Ctrl+K.",
+      placement: 'bottom'
+    },
+    {
+      cibles: ['#btn-help'],
+      titre: 'L\'aide de l\'écran',
+      texte: "Sur n'importe quel écran, ce bouton « ? » explique à quoi il sert, répond aux questions fréquentes et donne des conseils.",
+      placement: 'bottom'
+    },
+    {
+      cibles: ['#btn-notifications'],
+      titre: 'Les notifications',
+      texte: "Demandes à valider, décisions prises sur vos demandes, rappels : tout ce qui vous concerne arrive ici. Un clic ouvre l'écran concerné.",
+      placement: 'bottom'
+    },
+    {
+      cibles: ['#btn-user-menu'],
+      titre: 'Votre compte et le guide',
+      texte: "Cliquez sur ce rond pour ouvrir le Guide de Nexus, qui explique chaque écran en détail, changer de thème, régler votre compte ou vous déconnecter. Le numéro de version y est affiché.",
+      placement: 'bottom-end'
+    },
+    {
+      titre: 'Vous êtes prêt',
+      texte: peutPriseEnMain
+        ? "Pour bien démarrer, ouvrez « Prise en main » dans le menu : elle liste, dans l'ordre, les données de départ à renseigner. Le guide reste disponible à tout moment depuis le rond en haut à droite."
+        : "Le guide reste disponible à tout moment depuis le rond en haut à droite. Bon travail !"
+    }
+  ];
+  return steps;
+}
+
+function tourTargetFor(step) {
+  if (!step.cibles) return null;
+  for (const selecteur of step.cibles) {
+    const el = document.querySelector(selecteur);
+    if (!el || typeof el.getBoundingClientRect !== 'function') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return { el, rect: r };
+  }
+  return undefined;
+}
+
+let tourState = null;
+
+/** Lance la visite guidée. `force` : relance volontaire (depuis le guide), sans tenir compte du « déjà vue ». Sans `force`, ne se lance qu'à la
+ * première connexion de ce compte sur cet appareil, et jamais par-dessus une fenêtre déjà ouverte. */
+function startTour({ force = false } = {}) {
+  try {
+    const user = authRepository.getCurrentUser();
+    if (!user || tourState) return false;
+    const racine = document.getElementById('app-shell');
+    if (!racine || typeof racine.getBoundingClientRect !== 'function' || typeof document.createElement('div').appendChild !== 'function') return false;
+    if (!force) {
+      if (hasSeenTour(user)) return false;
+      const modale = document.getElementById('modal-root');
+      if (modale && modale.classList.contains('open')) return false;
+    }
+    const brutes = tourStepsForUser(user);
+    const steps = brutes.filter(s => !s.cibles || tourTargetFor(s));
+    if (steps.length === 0) return false;
+    const panneau = document.getElementById('user-menu-panel');
+    if (panneau) panneau.classList.remove('open');
+    const root = document.createElement('div');
+    root.id = 'tour-root';
+    root.innerHTML = '<div class="tour-spot" id="tour-spot"></div><div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title"></div>';
+    document.body.appendChild(root);
+    tourState = { user, steps, index: 0, root, onKey: null, onResize: null };
+    tourState.onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); endTour(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); tourGo(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); tourGo(-1); }
+    };
+    tourState.onResize = () => tourRender();
+    document.addEventListener('keydown', tourState.onKey);
+    window.addEventListener('resize', tourState.onResize);
+    tourRender();
+    return true;
+  } catch (err) {
+    console.error('startTour : visite guidée impossible', err);
+    tourState = null;
+    return false;
+  }
+}
+
+function tourGo(delta) {
+  if (!tourState) return;
+  const suivant = tourState.index + delta;
+  if (suivant < 0) return;
+  if (suivant >= tourState.steps.length) { endTour(); return; }
+  tourState.index = suivant;
+  tourRender();
+}
+
+function endTour() {
+  if (!tourState) return;
+  const { user, root, onKey, onResize } = tourState;
+  document.removeEventListener('keydown', onKey);
+  window.removeEventListener('resize', onResize);
+  if (root && root.parentNode) root.parentNode.removeChild(root);
+  tourState = null;
+  markTourSeen(user);
+}
+
+function tourRender() {
+  if (!tourState) return;
+  const { steps, index, root } = tourState;
+  const step = steps[index];
+  const carte = root.querySelector('#tour-card');
+  const spot = root.querySelector('#tour-spot');
+  const cible = tourTargetFor(step);
+  const dernier = index === steps.length - 1;
+  carte.innerHTML = `
+    <div class="tour-step-count">Étape ${index + 1} sur ${steps.length}</div>
+    <h3 id="tour-title">${escapeHtml(step.titre)}</h3>
+    <p>${escapeHtml(step.texte)}</p>
+    <div class="tour-actions">
+      <button type="button" class="btn-link" id="tour-skip">${dernier ? '' : 'Passer la visite'}</button>
+      <span class="tour-actions-main">
+        ${index > 0 ? '<button type="button" class="btn btn-secondary btn-sm" id="tour-prev">Précédent</button>' : ''}
+        <button type="button" class="btn btn-primary btn-sm" id="tour-next">${dernier ? 'Terminer' : 'Suivant'}</button>
+      </span>
+    </div>`;
+  const skip = carte.querySelector('#tour-skip');
+  if (skip) skip.addEventListener('click', endTour);
+  const prev = carte.querySelector('#tour-prev');
+  if (prev) prev.addEventListener('click', () => tourGo(-1));
+  carte.querySelector('#tour-next').addEventListener('click', () => tourGo(1));
+  root.classList.toggle('tour-centered', !cible);
+  if (cible) {
+    const marge = 6;
+    const r = cible.rect;
+    spot.style.display = 'block';
+    spot.style.top = (r.top - marge) + 'px';
+    spot.style.left = (r.left - marge) + 'px';
+    spot.style.width = (r.width + marge * 2) + 'px';
+    spot.style.height = (r.height + marge * 2) + 'px';
+    tourPlaceCard(carte, r, step.placement || 'bottom');
+  } else {
+    spot.style.display = 'none';
+    carte.style.top = '';
+    carte.style.left = '';
+  }
+  const bouton = carte.querySelector('#tour-next');
+  if (bouton && typeof bouton.focus === 'function') bouton.focus();
+}
+
+/** Place la carte à côté de l'élément visé, sans jamais sortir de l'écran. */
+function tourPlaceCard(carte, rect, placement) {
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  const largeur = Math.min(340, vw - 24);
+  carte.style.width = largeur + 'px';
+  const hauteur = carte.offsetHeight || 190;
+  const ecart = 14;
+  let top;
+  let left;
+  if (placement === 'right' && rect.right + ecart + largeur < vw - 12) {
+    left = rect.right + ecart;
+    top = Math.min(Math.max(rect.top + 12, 12), vh - hauteur - 12);
+  } else {
+    top = rect.bottom + ecart;
+    if (top + hauteur > vh - 12) top = Math.max(12, rect.top - hauteur - ecart);
+    left = placement === 'bottom-end' ? rect.right - largeur : rect.left;
+  }
+  left = Math.min(Math.max(left, 12), vw - largeur - 12);
+  carte.style.top = top + 'px';
+  carte.style.left = left + 'px';
+}
+
+// --- Astuces affichées une seule fois par écran ---
+
+/** Une astuce courte par écran, vraie d'après le fonctionnement actuel de l'écran. Fermée par l'utilisateur, elle ne revient plus. */
+const SCREEN_TIPS = {
+  absences: "Cliquez sur « Nouvelle demande » pour poser un congé. Vous suivez son état (en attente, validée, refusée) dans la liste.",
+  calendrier: "Cliquez sur un jour pour voir le détail : qui, quel type d'absence, et son statut.",
+  planning: "Les semaines et les mois montrent les absences de chacun. Un congé validé se déplace en le glissant vers un autre jour de la même personne.",
+  frais: "Gardez le justificatif sous la main : une note standard en demande un, et une note kilométrique calcule l'indemnité toute seule.",
+  'ma-fiche': "Vérifiez vos informations. Si quelque chose est faux, signalez-le à votre RH.",
+  retraite: "Ces repères sont indicatifs : seul le relevé de carrière officiel fait foi.",
+  'mes-documents': "Vos documents sont déposés ici par les RH. Vous pouvez aussi télécharger vos données personnelles.",
+  'mes-entretiens': "Préparez votre auto-évaluation avant la date de l'entretien : elle se verrouille une fois l'entretien clôturé.",
+  formation: "Une demande de formation part à votre manager ou aux RH. Le bouton « Lettres » prépare les courriers à imprimer, dont l'autorisation d'absence CPF.",
+  idees: "Proposez une idée, ou votez pour celle d'un collègue : cliquer à nouveau retire votre vote.",
+  pointeuse: "Appuyez sur « Scanner le QR » en arrivant, puis en partant, pour enregistrer vos horaires.",
+  'mes-tickets': "Décrivez votre problème ou votre idée : vous suivez la réponse de l'équipe Nexus directement ici.",
+  tickets: "Les tickets du mois sont calculés d'après les jours réellement travaillés, congés et télétravail déduits.",
+  entretiens: "Planifiez un entretien : le salarié prépare son auto-évaluation, puis vous ajoutez votre retour.",
+  employees: "Filtrez par établissement ou service avant de chercher un nom, puis cliquez une ligne pour ouvrir la fiche.",
+  'tableau-compteurs': "Le chiffre principal est le solde disponible. Ce qui est « en cours d'acquisition » ne se prend pas encore.",
+  organigramme: "L'arbre suit le champ « Manager » des fiches : pour déplacer quelqu'un, modifiez sa fiche.",
+  'export-paie': "Consultez l'onglet « Préparation & anomalies » avant d'exporter : il signale ce qui bloquerait la paie.",
+  remuneration: "Le détail et les ajustements se font sur la fiche de chaque salarié.",
+  embauche: "Partagez le QR code ou le lien : les candidats postulent sans créer de compte.",
+  parametres: "Les établissements, les services et les types d'absences sont les réglages de base de l'entreprise.",
+  'prise-en-main': "Suivez les étapes dans l'ordre proposé."
+};
+
+function screenTipStorageKey(user, view) {
+  return TIP_STORAGE_PREFIX + user.id + '_' + view;
+}
+
+/** Insère l'astuce de l'écran affiché, sauf si elle a déjà été fermée ou si la visite guidée n'a pas encore été faite (pour ne rien empiler). */
+function insertScreenTip() {
+  const user = authRepository.getCurrentUser();
+  const tip = SCREEN_TIPS[state.view];
+  const root = document.getElementById('view-root');
+  if (!user || !tip || !root || typeof root.insertAdjacentHTML !== 'function' || tourState) return;
+  try {
+    if (!hasSeenTour(user) || localStorage.getItem(screenTipStorageKey(user, state.view)) === '1') return;
+  } catch (e) { return; }
+  root.insertAdjacentHTML('afterbegin', `
+    <div class="screen-tip" id="screen-tip" role="note">
+      <span class="screen-tip-icon">${icon(ICONS.lightbulb, 18)}</span>
+      <div class="screen-tip-text"><strong>Astuce</strong> ${escapeHtml(tip)}</div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-screen-tip-close">J'ai compris</button>
+    </div>`);
+  const fermer = document.getElementById('btn-screen-tip-close');
+  if (!fermer) return;
+  const vue = state.view;
+  fermer.addEventListener('click', () => {
+    try { localStorage.setItem(screenTipStorageKey(user, vue), '1'); } catch (e) { /* astuce simplement non mémorisée */ }
+    const bloc = document.getElementById('screen-tip');
+    if (bloc && bloc.parentNode) bloc.parentNode.removeChild(bloc);
+  });
 }
 
 function openHelpModal() {
@@ -6445,6 +6990,7 @@ function render() {
   try {
     renderInner();
     updateHelpButtonVisibility();
+    insertScreenTip();
     hydrateAvatarImages();
     enhanceScrollableTabs();
   } catch (err) {
