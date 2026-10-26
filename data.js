@@ -8329,7 +8329,8 @@ function genererDocumentFormation({ type, demande, employee, entreprise, decideu
   const periode = demande.dateDebut ? (demande.dateFin ? 'du ' + formatDate(demande.dateDebut) + ' au ' + formatDate(demande.dateFin) : 'à partir du ' + formatDate(demande.dateDebut)) : '';
   const organisme = demande.organisme ? ' dispensée par ' + demande.organisme : '';
   const duree = demande.dureeHeures != null ? ' (' + String(demande.dureeHeures).replace('.', ',') + ' heures)' : '';
-  const formation = '« ' + demande.intitule + ' »' + organisme + (periode ? ', ' + periode : '') + duree;
+  const formationSansPeriode = '« ' + demande.intitule + ' »' + organisme + duree;
+  const formation = formationSansPeriode + (periode ? ', ' + periode : '');
   const entete = [nom + (employee.poste ? ', ' + employee.poste : ''), societe, 'Le ' + jour];
 
   if (type === 'reponse') {
@@ -8364,7 +8365,7 @@ function genererDocumentFormation({ type, demande, employee, entreprise, decideu
         ...entete,
         "Objet : demande d'autorisation d'absence pour une formation suivie au titre du compte personnel de formation",
         'Madame, Monsieur,',
-        'Conformément aux dispositions du code du travail relatives au compte personnel de formation, je vous demande l\'autorisation de m\'absenter pendant mon temps de travail ' + (periode || '(dates à préciser)') + ' pour suivre la formation ' + formation + '.',
+        'Conformément aux dispositions du code du travail relatives au compte personnel de formation, je vous demande l\'autorisation de m\'absenter pendant mon temps de travail ' + (periode || '(dates à préciser)') + ' pour suivre la formation ' + formationSansPeriode + '.',
         delai ? 'Cette demande vous est adressée ' + Math.max(delai.joursAvantDebut, 0) + ' jours avant le début de la formation (délai à respecter : ' + delai.requisJours + ' jours).' : '',
         'Vous disposez de 30 jours calendaires à compter de la réception de cette demande pour me répondre ; à défaut de réponse dans ce délai, votre accord est réputé acquis.',
         demande.motif ? 'Objectif de cette formation : ' + demande.motif : '',

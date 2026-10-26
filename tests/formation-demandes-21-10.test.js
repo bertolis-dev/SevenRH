@@ -82,6 +82,7 @@ function run() {
   const absence = genererDocumentFormation({ type: 'absence-cpf', demande: cpf, employee: salarie, entreprise: DB.getCurrentCompany(), maintenant: new Date(2027, 0, 5) });
   assert.ok(absence.paragraphes.join(' ').includes('30 jours'), 'la lettre d\'absence rappelle le délai de réponse');
   assert.ok(absence.paragraphes.join(' ').includes('60 jours'), 'le délai de prévenance est cité');
+  assert.strictEqual(absence.paragraphes.join(' ').split('01/03/2027').length - 1, 1, 'la période n\'est citée qu\'une fois dans la lettre d\'absence');
   formationRepository.decider(cpf.id, 'refusee', 'Budget épuisé', rh.id);
   const reponse = genererDocumentFormation({ type: 'reponse', demande: formationRepository.getById(cpf.id), employee: salarie, entreprise: DB.getCurrentCompany(), decideur: 'Mme RH', maintenant: new Date(2027, 0, 5) });
   assert.ok(reponse.paragraphes.join(' ').includes('Budget épuisé'));
