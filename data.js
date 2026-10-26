@@ -874,7 +874,7 @@ async function hydrateCurrentCompanyWithMigrations() {
       try {
         const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
           teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-          brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+          brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
         await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
       } catch (err) {
         console.error('seedExampleShifts : échec de synchronisation, retentera à la prochaine connexion.', err);
@@ -935,7 +935,7 @@ async function ensureDefaultLeaveTypesBackfilled(company, currentUser) {
     // d'audit du client).
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
     await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
     // Échec silencieux volontaire (ex. hors ligne) : `company` reste correct EN MÉMOIRE pour cette
@@ -1145,7 +1145,7 @@ async function ensureDocumentTemplatesAttestationCertificatBackfilled(company, c
     // this._companiesCache par `company` — même contrainte que ensureContratsTermineDateDepartAutoDeduite).
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
     await window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
   } catch (err) {
     console.error('ensureDocumentTemplatesAttestationCertificatBackfilled : échec de synchronisation, retentera à la prochaine connexion.', err);
@@ -1866,13 +1866,15 @@ const ID_CLASSIFIED_TABLES = {
 const INSERT_ONLY_TABLES = {
   support_tickets: { getRows: c => c.supportTickets, push: (rows, cid) => window.SupabaseSync.pushSupportTickets(rows, cid) },
   idees: { getRows: c => c.idees, push: (rows, cid) => window.SupabaseSync.pushIdees(rows, cid) },
-  entretiens: { getRows: c => c.entretiens, push: (rows, cid) => window.SupabaseSync.pushEntretiens(rows, cid) }
+  entretiens: { getRows: c => c.entretiens, push: (rows, cid) => window.SupabaseSync.pushEntretiens(rows, cid) },
+  formations: { getRows: c => c.formations, push: (rows, cid) => window.SupabaseSync.pushFormations(rows, cid) }
 };
 
 /** Mises à jour d'objet unique déjà idempotentes par construction (un .update() par id ne fait
  * jamais que reposer les mêmes valeurs) — pas de séparation insert/update à gérer ici. */
 const SINGLE_OBJECT_UPDATE_TABLES = {
-  entretiens: { getRows: c => c.entretiens, push: (obj, cid) => window.SupabaseSync.updateEntretien(obj, cid) }
+  entretiens: { getRows: c => c.entretiens, push: (obj, cid) => window.SupabaseSync.updateEntretien(obj, cid) },
+  formations: { getRows: c => c.formations, push: (obj, cid) => window.SupabaseSync.updateFormation(obj, cid) }
 };
 
 /** Erreur PostgREST/Postgres pour une violation de contrainte d'unicité (id déjà présent) — signe
@@ -2338,7 +2340,7 @@ const DB = {
     if (blobName === 'companyProfile') {
       const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
         teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-        brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+        brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
       return window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData);
     }
     if (blobName === 'settings') return window.SupabaseSync.pushSettings(company.id, company.settings);
@@ -2423,7 +2425,7 @@ const DB = {
     // personne ne relit plus, mais mieux vaut ne jamais l'y remettre du tout.
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData), { kind: 'blob', blob: 'companyProfile', companyId: id });
   },
 
@@ -2739,7 +2741,7 @@ const DB = {
     // §correctif audit du 31/08/2026 : entretiens/idées/tickets support référencent employeeId eux
     // aussi (ajoutés après ce nettoyage — jamais mis à jour depuis) et restaient orphelins, invisibles
     // dans leurs écrans respectifs et potentiellement crashants au rendu (employé introuvable).
-    ['supportTickets', 'entretiens', 'idees'].forEach(key => {
+    ['supportTickets', 'entretiens', 'idees', 'formations'].forEach(key => {
       const before = company[key] || [];
       const removedIds = before.filter(item => item.employeeId === id).map(item => item.id);
       if (!removedIds.length) return;
@@ -3089,7 +3091,7 @@ const DB = {
   _pushCompanyDataBlob(company, options) {
     const { id, raisonSociale, employees, etablissements, services, settings, leaveTypes, leaveRequests,
       teleworkRequests, expenses, documents, schoolHolidays, auditLog, favorites, notifications,
-      brouillons, _currentEmployeeId, abonnement, delegationsRecues, ...companyData } = company;
+      brouillons, _currentEmployeeId, abonnement, delegationsRecues, supportTickets: _exTickets, entretiens: _exEntretiens, idees: _exIdees, moduleLicenses: _exLicences, formations: _exFormations, ...companyData } = company;
     // `options.pointages` : seul savePointages (régularisation) demande l'envoi de la liste des pointages ; partout ailleurs le
     // serveur conserve les siens (voir save_company_profile, 0070).
     this._pushInBackground(window.SupabaseSync.pushCompanyProfile(id, raisonSociale, companyData, Boolean(options && options.pointages)), { kind: 'blob', blob: 'companyProfile', companyId: id });
@@ -4920,6 +4922,111 @@ const DB = {
     return { success: true, entretien };
   },
 
+  // ---- Formation (0075) : demandes de formation, voir validerDemandeFormation ----
+
+  getFormations() {
+    return (this.getCurrentCompany().formations || []).slice();
+  },
+
+  getFormationById(id) {
+    return this.getFormations().find(f => f.id === id) || null;
+  },
+
+  /** Visibles par un salarié donné : les siennes, celles de son équipe s'il est manager, toutes avec gererEntretiens — reflète formations_select (0075). */
+  getFormationsVisibleTo(employee) {
+    const toutes = this.getFormations().sort((a, b) => String(b.dateCreation).localeCompare(String(a.dateCreation)));
+    if (hasPermission(employee, PERMISSIONS.GERER_ENTRETIENS)) return toutes;
+    return toutes.filter(f => {
+      if (f.employeeId === employee.id) return true;
+      const cible = this.getEmployeeById(f.employeeId);
+      return Boolean(cible && (cible.managerIds || []).includes(employee.id));
+    });
+  },
+
+  /** `demande` : résultat de validerDemandeFormation. Statut toujours « demandée » à la création, jamais de décision. */
+  addFormation(employeeId, demande, auteurId) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return null;
+    const auteur = this.getEmployeeById(auteurId || employeeId);
+    const maintenant = new Date().toISOString();
+    const formation = {
+      id: generateId('form'), employeeId, ...demande, statut: 'demandee',
+      decisionPar: null, decisionDate: null, decisionMotif: '',
+      historique: [{ date: maintenant, action: 'Demande déposée' + (auteur && auteur.id !== employeeId ? ' par ' + auteur.prenom + ' ' + auteur.nom : '') }],
+      dateCreation: maintenant, dateModification: maintenant
+    };
+    const company = this.getCurrentCompany();
+    company.formations = [...(company.formations || []), formation];
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.pushFormations([formation], company.id), { kind: 'insertOnly', table: 'formations', companyId: company.id, insertIds: [formation.id] });
+    this.logAudit('Création', 'Demande de formation', employee.prenom + ' ' + employee.nom, formation.intitule);
+    return formation;
+  },
+
+  _majFormation(id, transformation) {
+    const company = this.getCurrentCompany();
+    const formation = (company.formations || []).find(f => f.id === id);
+    if (!formation) return null;
+    const maintenant = new Date().toISOString();
+    transformation(formation, maintenant);
+    formation.dateModification = maintenant;
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.updateFormation(formation, company.id), { kind: 'singleUpdate', table: 'formations', companyId: company.id, id: formation.id });
+    return formation;
+  },
+
+  /** Correction du contenu par le demandeur, tant que la demande n'est pas traitée. */
+  modifierFormation(id, demande) {
+    const formation = this.getFormationById(id);
+    if (!formation) return { success: false, error: 'Demande introuvable.' };
+    if (formation.statut !== 'demandee') return { success: false, error: 'Cette demande a déjà été traitée : elle ne peut plus être modifiée.' };
+    this._majFormation(id, (f, maintenant) => { Object.assign(f, demande); f.historique = [...(f.historique || []), { date: maintenant, action: 'Demande modifiée' }]; });
+    return { success: true };
+  },
+
+  annulerFormation(id) {
+    const formation = this.getFormationById(id);
+    if (!formation) return { success: false, error: 'Demande introuvable.' };
+    if (formation.statut !== 'demandee' && formation.statut !== 'acceptee') return { success: false, error: 'Cette demande ne peut plus être annulée.' };
+    this._majFormation(id, (f, maintenant) => { f.statut = 'annulee'; f.historique = [...(f.historique || []), { date: maintenant, action: 'Demande annulée' }]; });
+    this.logAudit('Annulation', 'Demande de formation', formation.intitule);
+    return { success: true };
+  },
+
+  /** decision : 'acceptee' | 'refusee' (depuis « demandée ») ou 'realisee' (depuis « acceptée »). Un refus exige un motif. */
+  deciderFormation(id, decision, motif, auteurId) {
+    const formation = this.getFormationById(id);
+    if (!formation) return { success: false, error: 'Demande introuvable.' };
+    const texte = String(motif || '').trim();
+    if (decision === 'realisee') {
+      if (formation.statut !== 'acceptee') return { success: false, error: 'Seule une formation acceptée peut être marquée comme réalisée.' };
+    } else if (decision === 'acceptee' || decision === 'refusee') {
+      if (formation.statut !== 'demandee') return { success: false, error: 'Cette demande a déjà été traitée.' };
+      if (decision === 'refusee' && !texte) return { success: false, error: 'Indiquez le motif du refus.' };
+    } else {
+      return { success: false, error: 'Décision invalide.' };
+    }
+    const auteur = this.getEmployeeById(auteurId);
+    this._majFormation(id, (f, maintenant) => {
+      f.statut = decision;
+      if (decision !== 'realisee') { f.decisionPar = auteurId || null; f.decisionDate = maintenant; f.decisionMotif = texte; }
+      f.historique = [...(f.historique || []), { date: maintenant, action: (decision === 'acceptee' ? 'Acceptée' : decision === 'refusee' ? 'Refusée' : 'Marquée comme réalisée') + (auteur ? ' par ' + auteur.prenom + ' ' + auteur.nom : '') + (texte ? ' : ' + texte : '') }];
+    });
+    this.logAudit('Validation', 'Demande de formation', formation.intitule, FORMATION_STATUT_LIBELLES[decision]);
+    return { success: true };
+  },
+
+  supprimerFormation(id) {
+    const company = this.getCurrentCompany();
+    const formation = (company.formations || []).find(f => f.id === id);
+    if (!formation) return { success: false, error: 'Demande introuvable.' };
+    company.formations = company.formations.filter(f => f.id !== id);
+    this.saveCurrentCompany(company);
+    this._pushInBackground(window.SupabaseSync.deleteRow('formations', id, company.id), { kind: 'delete', table: 'formations', companyId: company.id, id });
+    this.logAudit('Suppression', 'Demande de formation', formation.intitule);
+    return { success: true };
+  },
+
   // ---- Trames d'entretien (§retour Betty du 14/09/2026, point 1, "trames paramétrables") ----
 
   getEntretienTrames() {
@@ -5297,7 +5404,7 @@ const DB = {
    * n'importe quelle autre notification (anniversaires, tickets, entretiens...) n'est pas de ce
    * type et reste intouchée. */
   pruneResolvedRequestNotifications(pendingIds) {
-    const STALE_PREFIXES = ['leave-', 'telework-', 'expense-', 'relance-', 'escalade-'];
+    const STALE_PREFIXES = ['leave-', 'telework-', 'expense-', 'relance-', 'escalade-', 'formation-demande-'];
     const list = this.getCurrentCompany().notifications;
     const cleaned = list.filter(n => {
       const prefix = STALE_PREFIXES.find(p => n.sourceKey && n.sourceKey.startsWith(p));
@@ -5874,6 +5981,17 @@ const entretienTrameRepository = {
   getAll: () => DB.getEntretienTrames(),
   creer: (nom, population, questions) => DB.creerTrameEntretien(nom, population, questions),
   delete: (id) => DB.deleteTrameEntretien(id)
+};
+
+const formationRepository = {
+  getAll: () => DB.getFormations(),
+  getById: (id) => DB.getFormationById(id),
+  getVisibleTo: (employee) => DB.getFormationsVisibleTo(employee),
+  creer: (employeeId, demande, auteurId) => DB.addFormation(employeeId, demande, auteurId),
+  modifier: (id, demande) => DB.modifierFormation(id, demande),
+  annuler: (id) => DB.annulerFormation(id),
+  decider: (id, decision, motif, auteurId) => DB.deciderFormation(id, decision, motif, auteurId),
+  supprimer: (id) => DB.supprimerFormation(id)
 };
 
 const entretienCampagneRepository = {
@@ -8134,6 +8252,142 @@ function validerPeriodeCarriere(saisie, maintenant) {
   if (s.dateFin < s.dateDebut) return { ok: false, error: 'La date de fin est avant la date de début.' };
   if (s.dateFin > toISODate(maintenant || new Date())) return { ok: false, error: 'Cette période doit être terminée : la date de fin ne peut pas être dans le futur.' };
   return { ok: true, periode: { id: s.id || generateId('car'), employeur, dateDebut: s.dateDebut, dateFin: s.dateFin, commentaire: String(s.commentaire || '').trim().slice(0, 300) } };
+}
+
+// ---------------------------------------------------------------------------
+// Formation (retour du 21/10/2026) : demandes de formation financées par l'entreprise ou via le CPF, décidées par le manager ou le RH,
+// avec les documents à préparer. Table formations (0075). Les délais CPF ci-dessous sont à faire valider (docs/regles-a-valider.md).
+// ---------------------------------------------------------------------------
+
+const FORMATION_STATUT_LIBELLES = { demandee: 'Demandée', acceptee: 'Acceptée', refusee: 'Refusée', realisee: 'Réalisée', annulee: 'Annulée' };
+const FORMATION_FINANCEMENT_LIBELLES = { entreprise: "Financée par l'entreprise", cpf: 'Compte personnel de formation (CPF)' };
+
+/** Contrôle et normalise la saisie d'une demande de formation. Retourne { ok, demande } ou { ok:false, error } (en français). */
+function validerDemandeFormation(saisie) {
+  const s = saisie || {};
+  const intitule = String(s.intitule || '').trim().replace(/\s+/g, ' ');
+  if (intitule.length < 3) return { ok: false, error: "Indiquez l'intitulé de la formation (3 caractères au moins)." };
+  if (intitule.length > 150) return { ok: false, error: "L'intitulé est trop long (150 caractères au plus)." };
+  const financement = s.financement === 'cpf' ? 'cpf' : (s.financement === 'entreprise' || !s.financement ? 'entreprise' : null);
+  if (!financement) return { ok: false, error: 'Le mode de financement est invalide.' };
+  const organisme = String(s.organisme || '').trim().replace(/\s+/g, ' ');
+  if (organisme.length > 120) return { ok: false, error: "Le nom de l'organisme est trop long (120 caractères au plus)." };
+  const dateDebut = String(s.dateDebut || '').trim();
+  const dateFin = String(s.dateFin || '').trim();
+  if (dateDebut && !dateISOValideRetraite(dateDebut)) return { ok: false, error: 'La date de début n\'est pas une date valide.' };
+  if (dateFin && !dateISOValideRetraite(dateFin)) return { ok: false, error: 'La date de fin n\'est pas une date valide.' };
+  if (dateFin && !dateDebut) return { ok: false, error: 'Indiquez aussi la date de début.' };
+  if (dateDebut && dateFin && dateFin < dateDebut) return { ok: false, error: 'La date de fin est avant la date de début.' };
+  const nombreOuNull = (valeur, libelle, max) => {
+    if (valeur === '' || valeur == null) return { valeur: null };
+    const n = typeof valeur === 'number' ? valeur : parseMontantFR(valeur);
+    if (n === null || !Number.isFinite(n) || n < 0 || n > max) return { erreur: libelle + ' doit être un nombre positif (' + max + ' au plus).' };
+    return { valeur: round2(n) };
+  };
+  const duree = nombreOuNull(s.dureeHeures, 'La durée en heures', 5000);
+  if (duree.erreur) return { ok: false, error: duree.erreur };
+  const cout = nombreOuNull(s.coutEstime, 'Le coût estimé', 1000000);
+  if (cout.erreur) return { ok: false, error: cout.erreur };
+  const lien = String(s.lien || '').trim();
+  if (lien && (!/^https?:\/\/\S+$/i.test(lien) || lien.length > 500)) return { ok: false, error: 'Le lien doit commencer par http:// ou https://.' };
+  const motif = String(s.motif || '').trim();
+  if (motif.length > 1000) return { ok: false, error: 'Le motif est trop long (1000 caractères au plus).' };
+  return { ok: true, demande: { intitule, organisme, financement, pendantTempsTravail: s.pendantTempsTravail !== false, dateDebut, dateFin, dureeHeures: duree.valeur, coutEstime: cout.valeur, lien, motif } };
+}
+
+/** Délai de prévenance d'une formation CPF suivie pendant le temps de travail : la demande d'autorisation d'absence doit parvenir à l'employeur
+ * au moins 60 jours avant le début si la formation dure moins de 6 mois, 120 jours à partir de 6 mois (valeurs à faire valider). Retourne null
+ * sans date de début. */
+function delaiPrevenanceCpf(dateDebut, dateFin, maintenant) {
+  if (!dateISOValideRetraite(dateDebut)) return null;
+  const debut = parseISODateLocal(dateDebut);
+  const aujourdhui = new Date((maintenant || new Date()).getFullYear(), (maintenant || new Date()).getMonth(), (maintenant || new Date()).getDate());
+  let requisJours = 60;
+  if (dateISOValideRetraite(dateFin)) {
+    const finSixMois = new Date(debut.getFullYear(), debut.getMonth() + 6, debut.getDate());
+    if (parseISODateLocal(dateFin) >= finSixMois) requisJours = 120;
+  }
+  const joursAvantDebut = Math.round((debut - aujourdhui) / 86400000);
+  const limite = new Date(debut.getTime()); limite.setDate(limite.getDate() - requisJours);
+  return { requisJours, joursAvantDebut, dateLimite: toISODate(limite), respecte: joursAvantDebut >= requisJours };
+}
+
+/** Droits sur une demande, côté site (le serveur applique les mêmes règles, 0075). */
+function peutDeciderFormation(user, demande, estManagerDuSalarie) {
+  if (!user || !demande) return false;
+  const decideur = hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || Boolean(estManagerDuSalarie);
+  if (!decideur) return false;
+  return demande.employeeId !== user.id || user.role === ROLES.PROPRIETAIRE;
+}
+
+/** Texte d'un document à préparer (lettre) : { titre, paragraphes[] }. type : 'demande' (toute demande), 'absence-cpf' (autorisation
+ * d'absence CPF pendant le temps de travail), 'reponse' (accord ou refus adressé au salarié). */
+function genererDocumentFormation({ type, demande, employee, entreprise, decideur, maintenant }) {
+  const jour = formatDate(toISODate(maintenant || new Date()));
+  const nom = ((employee.prenom || '') + ' ' + (employee.nom || '')).trim();
+  const societe = (entreprise && entreprise.raisonSociale) || "l'entreprise";
+  const periode = demande.dateDebut ? (demande.dateFin ? 'du ' + formatDate(demande.dateDebut) + ' au ' + formatDate(demande.dateFin) : 'à partir du ' + formatDate(demande.dateDebut)) : '';
+  const organisme = demande.organisme ? ' dispensée par ' + demande.organisme : '';
+  const duree = demande.dureeHeures != null ? ' (' + String(demande.dureeHeures).replace('.', ',') + ' heures)' : '';
+  const formation = '« ' + demande.intitule + ' »' + organisme + (periode ? ', ' + periode : '') + duree;
+  const entete = [nom + (employee.poste ? ', ' + employee.poste : ''), societe, 'Le ' + jour];
+
+  if (type === 'reponse') {
+    const accord = demande.statut === 'acceptee' || demande.statut === 'realisee';
+    return {
+      titre: 'Réponse à votre demande de formation',
+      paragraphes: [
+        (decideur || societe),
+        'Le ' + jour,
+        'À l\'attention de ' + nom,
+        'Objet : réponse à votre demande de formation',
+        'Bonjour ' + (employee.prenom || '') + ',',
+        accord
+          ? 'Votre demande de formation ' + formation + ' est acceptée.' + (demande.financement === 'entreprise' && demande.coutEstime != null ? ' Son coût estimé à ' + formatCurrencyFR(demande.coutEstime) + ' sera pris en charge par l\'entreprise.' : '') + (demande.decisionMotif ? ' ' + demande.decisionMotif : '')
+          : 'Nous ne pouvons pas donner une suite favorable à votre demande de formation ' + formation + '.' + (demande.decisionMotif ? ' Motif : ' + demande.decisionMotif + '.' : ''),
+        'Nous restons à votre disposition pour en discuter.',
+        'Cordialement,',
+        decideur || societe
+      ]
+    };
+  }
+
+  const financement = demande.financement === 'cpf'
+    ? 'Je compte la financer avec les droits acquis sur mon compte personnel de formation (CPF).' + (demande.pendantTempsTravail === false ? ' Elle se déroulerait en dehors de mon temps de travail.' : ' Elle se déroulerait pendant mon temps de travail.')
+    : 'Je sollicite sa prise en charge par l\'entreprise' + (demande.coutEstime != null ? ', pour un coût estimé à ' + formatCurrencyFR(demande.coutEstime) : '') + '.';
+
+  if (type === 'absence-cpf') {
+    const delai = delaiPrevenanceCpf(demande.dateDebut, demande.dateFin, maintenant);
+    return {
+      titre: "Demande d'autorisation d'absence (CPF)",
+      paragraphes: [
+        ...entete,
+        "Objet : demande d'autorisation d'absence pour une formation suivie au titre du compte personnel de formation",
+        'Madame, Monsieur,',
+        'Conformément aux dispositions du code du travail relatives au compte personnel de formation, je vous demande l\'autorisation de m\'absenter pendant mon temps de travail ' + (periode || '(dates à préciser)') + ' pour suivre la formation ' + formation + '.',
+        delai ? 'Cette demande vous est adressée ' + Math.max(delai.joursAvantDebut, 0) + ' jours avant le début de la formation (délai à respecter : ' + delai.requisJours + ' jours).' : '',
+        'Vous disposez de 30 jours calendaires à compter de la réception de cette demande pour me répondre ; à défaut de réponse dans ce délai, votre accord est réputé acquis.',
+        demande.motif ? 'Objectif de cette formation : ' + demande.motif : '',
+        'Veuillez agréer, Madame, Monsieur, l\'expression de mes salutations distinguées.',
+        nom
+      ].filter(Boolean)
+    };
+  }
+
+  return {
+    titre: 'Demande de formation',
+    paragraphes: [
+      ...entete,
+      'Objet : demande de formation',
+      'Madame, Monsieur,',
+      'Je souhaite suivre la formation ' + formation + '.',
+      financement,
+      demande.motif ? 'Cette formation répond à l\'objectif suivant : ' + demande.motif : '',
+      'Je reste à votre disposition pour en discuter et vous remercie de votre réponse.',
+      'Veuillez agréer, Madame, Monsieur, l\'expression de mes salutations distinguées.',
+      nom
+    ].filter(Boolean)
+  };
 }
 
 function daysBetween(a, b) {

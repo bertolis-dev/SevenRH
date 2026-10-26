@@ -316,6 +316,20 @@ function entretienFromRow(row) {
   };
 }
 
+/** Demande de formation (0075) : financée par l'entreprise ou via le CPF. */
+function formationFromRow(row) {
+  return {
+    id: row.id, employeeId: row.employee_id, intitule: row.intitule, organisme: row.organisme || '',
+    financement: row.financement || 'entreprise', pendantTempsTravail: row.pendant_temps_travail !== false,
+    dateDebut: row.date_debut || '', dateFin: row.date_fin || '',
+    dureeHeures: row.duree_heures == null ? null : Number(row.duree_heures),
+    coutEstime: row.cout_estime == null ? null : Number(row.cout_estime),
+    lien: row.lien || '', motif: row.motif || '', statut: row.statut || 'demandee',
+    decisionPar: row.decision_par || null, decisionDate: row.decision_date || null, decisionMotif: row.decision_motif || '',
+    historique: row.historique || [], dateCreation: row.created_at, dateModification: row.updated_at
+  };
+}
+
 function ideeFromRow(row) {
   return {
     id: row.id, employeeId: row.employee_id, titre: row.titre, description: row.description || '',
@@ -436,6 +450,19 @@ function ticketToRow(t, companyId) {
       contexte: t.contexte || {}, pieceJointe: t.pieceJointe || null, comments: t.comments || [],
       historique: t.historique || [], aiAnalysis: t.aiAnalysis || null
     }
+  };
+}
+
+function formationToRow(f, companyId) {
+  return {
+    id: f.id, company_id: companyId, employee_id: f.employeeId, intitule: f.intitule, organisme: f.organisme || null,
+    financement: f.financement || 'entreprise', pendant_temps_travail: f.pendantTempsTravail !== false,
+    date_debut: f.dateDebut || null, date_fin: f.dateFin || null,
+    duree_heures: f.dureeHeures == null || f.dureeHeures === '' ? null : Number(f.dureeHeures),
+    cout_estime: f.coutEstime == null || f.coutEstime === '' ? null : Number(f.coutEstime),
+    lien: f.lien || null, motif: f.motif || null, statut: f.statut || 'demandee',
+    decision_par: f.decisionPar || null, decision_date: f.decisionDate || null, decision_motif: f.decisionMotif || null,
+    historique: f.historique || []
   };
 }
 
@@ -814,7 +841,7 @@ async function hydrateCurrentCompany() {
     companyRes, employeesRes, etablissementsRes, servicesRes, leaveTypesRes,
     leaveRequestsRes, leaveCalendarRes, teleworkRequestsRes, teleworkCalendarRes,
     expensesRes, documentsRes, supportTicketsRes, entretiensRes, ideesRes, draftsRes, notificationsRes, favoritesRes,
-    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes, moduleLicensesRes
+    auditLogRes, schoolHolidaysRes, settingsRes, subscriptionRes, subscriptionModulesRes, moduleLicensesRes, formationsRes
   ] = await Promise.all([
     supabase.from('companies').select('*').eq('id', companyId).single(),
     supabase.from('employees').select('*').eq('company_id', companyId),
@@ -857,7 +884,9 @@ async function hydrateCurrentCompany() {
     // mélangée à subscription_modules (quantité ACHETÉE, propriété exclusive de Stripe/service-role)
     // ni au blob companies.data, pour que rien ici ne risque d'écraser l'attribution nominative au
     // prochain resync Stripe.
-    supabase.from('module_licenses').select('*').eq('company_id', companyId)
+    supabase.from('module_licenses').select('*').eq('company_id', companyId),
+    // Demandes de formation (0075) : table absente avant la migration, jamais bloquant.
+    fetchAllRows(() => supabase.from('formations').select('*').eq('company_id', companyId).order('created_at', { ascending: false }))
   ]);
 
   // §correctif audit du 31/08/2026 : companyRes.data était déréférencé (company.id ligne suivante)
@@ -876,8 +905,8 @@ async function hydrateCurrentCompany() {
     ['support_tickets', supportTicketsRes], ['entretiens', entretiensRes], ['idees', ideesRes],
     ['drafts', draftsRes], ['notifications', notificationsRes], ['favorites', favoritesRes],
     ['audit_log', auditLogRes], ['settings', settingsRes], ['subscriptions', subscriptionRes],
-    ['subscription_modules', subscriptionModulesRes], ['module_licenses', moduleLicensesRes]
-  ].forEach(([table, res]) => { if (res && res.error) console.error(`Échec de lecture Supabase (${table}) :`, res.error); });
+    ['subscription_modules', subscriptionModulesRes], ['module_licenses', moduleLicensesRes], ['formations', formationsRes]
+  ].forEach(([table, res]) => { if (res && res.error && !estTableAbsente(res.error)) console.error(`Échec de lecture Supabase (${table}) :`, res.error); });
 
   // §retour Betty du 18/09/2026 : { conges: ['emp1', 'emp2'], frais: ['emp3'] } — regroupe les lignes
   // plates de module_licenses par module, plus simple à lire pour hasModuleLicense (app.js) qu'un
@@ -925,6 +954,7 @@ async function hydrateCurrentCompany() {
     documents: (documentsRes.data || []).map(documentFromRow),
     supportTickets: (supportTicketsRes.data || []).map(ticketFromRow),
     entretiens: (entretiensRes.data || []).map(entretienFromRow),
+    formations: (formationsRes.data || []).map(formationFromRow),
     idees: (ideesRes.data || []).map(ideeFromRow),
     schoolHolidays: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
     auditLog: (auditLogRes.data || []).map(auditLogFromRow),
@@ -988,6 +1018,7 @@ async function fetchFullCompanyExportData(companyId) {
   ].filter(([, res]) => res && res.error);
   if (failed.length) throw new Error('Échec de lecture (' + failed.map(([t]) => t).join(', ') + '), export incomplet, réessayez.');
   const remuneration = await fetchRemuneration(companyId);
+  const formationsExport = await fetchAllRows(() => supabase.from("formations").select("*").eq("company_id", companyId).order("created_at", { ascending: false }));
 
   return {
     exporteLe: new Date().toISOString(),
@@ -1007,6 +1038,7 @@ async function fetchFullCompanyExportData(companyId) {
     documents: (documentsRes.data || []).map(documentFromRow),
     ticketsSupport: (supportTicketsRes.data || []).map(ticketFromRow),
     entretiens: (entretiensRes.data || []).map(entretienFromRow),
+    formations: ((formationsExport && formationsExport.data) || []).map(formationFromRow),
     idees: (ideesRes.data || []).map(ideeFromRow),
     joursFeries: schoolHolidaysRes.data ? schoolHolidaysRes.data.data : null,
     journalAudit: (auditLogRes.data || []).map(auditLogFromRow)
@@ -1383,6 +1415,12 @@ async function updateEntretien(entretien, companyId) {
   await updateRows('entretiens', [entretien], entretienToRow, companyId);
 }
 
+/** Demandes de formation (0075) : insertion par le salarié (ou RH), puis mise à jour par une seule ligne à la fois (décision, correction, annulation). */
+const pushFormations = (rows, companyId) => insertRows('formations', rows, formationToRow, companyId);
+async function updateFormation(formation, companyId) {
+  await updateRows('formations', [formation], formationToRow, companyId);
+}
+
 const pushIdees = (rows, companyId) => insertRows('idees', rows, ideeToRow, companyId);
 async function toggleIdeeVote(ideeId) {
   const { data, error } = await supabase.rpc('toggle_idee_vote', { p_idee_id: ideeId });
@@ -1625,7 +1663,7 @@ window.SupabaseSync = {
   pushTeleworkRequests, pushExpenses, pushDocuments, accuserLectureDocument, echangeShiftAction, pushDrafts, pushNotifications,
   pushFavorites, pushSchoolHolidays, pushSettings, pushCompanyProfile, pushAuditLogEntry, pushClearAuditLog, reportClientErrorToBertolis,
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
-  pushEntretiens, updateEntretien,
+  pushEntretiens, updateEntretien, pushFormations, updateFormation,
   pushIdees, toggleIdeeVote, setIdeeStatut,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
   getCompanyIntegrations, saveCompanyIntegrations, getJournalPaie, saveJournalPaie, deleteJournalPaie, notifySlack, notifyRequestEmail,

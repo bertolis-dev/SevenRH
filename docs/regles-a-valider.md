@@ -87,3 +87,18 @@ dispositions d'adaptation au droit de l'Union européenne, et articles L3141-3 e
 5. Affichage : mention explicite « acquis pendant un arrêt maladie » sur la carte du solde.
 
 À livrer uniquement après validation des cinq éléments ci-dessus.
+
+## Formation : demande CPF pendant le temps de travail (livré le 26/10/2026, à faire valider)
+
+Le module Formation (écran « Formation », table `formations`, migration 0075) prépare les lettres d'une demande de formation. Les
+valeurs ci-dessous sont celles utilisées par `delaiPrevenanceCpf` et la lettre « Autorisation d'absence (CPF) » (data.js). À faire
+confirmer avant toute communication commerciale sur ce point.
+
+| Règle | Valeur utilisée | État |
+|---|---|---|
+| Délai de prévenance de l'employeur pour une formation CPF suivie pendant le temps de travail, durée inférieure à 6 mois | 60 jours avant le début | À confirmer |
+| Même délai, durée de 6 mois ou plus | 120 jours avant le début | À confirmer |
+| Délai de réponse de l'employeur à la demande d'absence | 30 jours calendaires, silence valant accord | À confirmer |
+| Formation CPF hors temps de travail | Aucune autorisation d'absence à demander | À confirmer |
+
+L'application ne bloque jamais une demande dont le délai n'est pas respecté : elle l'indique seulement dans le formulaire.

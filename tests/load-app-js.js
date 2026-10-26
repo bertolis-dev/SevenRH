@@ -137,6 +137,11 @@ globalThis.__ROLES = ROLES;
 globalThis.__seedDocumentTemplatesDefaut = seedDocumentTemplatesDefaut;
 globalThis.__ensureDocumentTemplatesAttestationCertificatBackfilled = ensureDocumentTemplatesAttestationCertificatBackfilled;
 globalThis.__ensureContratsBackfilled = ensureContratsBackfilled;
+globalThis.__formationRepository = formationRepository;
+globalThis.__validerDemandeFormation = validerDemandeFormation;
+globalThis.__delaiPrevenanceCpf = delaiPrevenanceCpf;
+globalThis.__genererDocumentFormation = genererDocumentFormation;
+globalThis.__peutDeciderFormation = peutDeciderFormation;
 `;
   vm.runInContext(dataSource + exposeAfterData, sandbox, { filename: 'data.js' });
 
@@ -228,6 +233,7 @@ globalThis.__renderFrais = renderFrais;
 globalThis.__renderParametresModelesDocuments = renderParametresModelesDocuments;
 globalThis.__renderMesTickets = renderMesTickets;
 globalThis.__renderMesDocuments = renderMesDocuments;
+globalThis.__renderFormation = renderFormation;
 globalThis.__renderAbsencesHub = renderAbsencesHub;
 globalThis.__teleworkRepository = teleworkRepository;
 globalThis.__findTeleworkWeekOverQuota = findTeleworkWeekOverQuota;
@@ -872,6 +878,12 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     QUICK_ADD_LISTS: sandbox.__QUICK_ADD_LISTS,
     SETTINGS_LISTS_RH: sandbox.__SETTINGS_LISTS_RH,
     QUICK_CREATE_TYPES: sandbox.__QUICK_CREATE_TYPES,
+    formationRepository: sandbox.__formationRepository,
+    validerDemandeFormation: sandbox.__validerDemandeFormation,
+    delaiPrevenanceCpf: sandbox.__delaiPrevenanceCpf,
+    genererDocumentFormation: sandbox.__genererDocumentFormation,
+    peutDeciderFormation: sandbox.__peutDeciderFormation,
+    renderFormation: sandbox.__renderFormation,
   };
 }
 

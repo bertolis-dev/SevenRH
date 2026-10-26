@@ -378,6 +378,7 @@ const ICONS = {
   card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>',
   idCard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5.3 16c.4-1.6 1.5-2.5 2.7-2.5s2.3.9 2.7 2.5"/><line x1="14" y1="10" x2="19" y2="10"/><line x1="14" y1="13.5" x2="19" y2="13.5"/></svg>',
   cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7"/><line x1="4" y1="21" x2="20" y2="21"/><path d="M4 17c1.2 0 1.2-1 2.4-1s1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1"/><line x1="12" y1="12" x2="12" y2="8.5"/><path d="M12 8.5c-.8 0-1.4-.7-1.4-1.5S11.2 5.5 12 4.5c.8 1 1.4 1.7 1.4 2.5S12.8 8.5 12 8.5z"/></svg>',
+  graduation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/><line x1="22" y1="9" x2="22" y2="15"/></svg>',
   rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2 4 5.5 4 9 0 2-.5 3.7-1.3 5.2L12 19l-2.7-2.8C8.5 14.7 8 13 8 11c0-3.5 1.5-7 4-9z"/><path d="M9.5 14.5 7 16v3l2.5-1.2"/><path d="M14.5 14.5 17 16v3l-2.5-1.2"/><circle cx="12" cy="10" r="1.3"/></svg>',
   exitDoor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4"/><path d="M16 17l4-5-4-5"/><line x1="20" y1="12" x2="9" y2="12"/></svg>',
   building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><rect x="8" y="7" width="3" height="3"/><rect x="13" y="7" width="3" height="3"/><rect x="8" y="13" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/></svg>',
@@ -528,6 +529,8 @@ const NAV_ITEMS = [
   // un tableau collectif — chacun voit et vote sur les idées de tout le monde (voir idees_select,
   // 0021_idees.sql) ; reste dans le groupe "personnel" côté nav car c'est bien une action à titre
   // individuel (proposer/voter), pas un outil de pilotage d'équipe.
+  // Retour du 21/10/2026 : demandes de formation (entreprise ou CPF). Une seule entrée : le manager/RH y voit aussi les demandes de son équipe. Même module que Entretiens (d'où viennent les besoins de formation).
+  { key: 'formation', label: 'Formation', icon: ICONS.graduation, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'entretiens' },
   { key: 'idees', label: "Boîte à idées", icon: ICONS.lightbulb, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel' },
 
   // ---- Équipe ----
@@ -637,6 +640,7 @@ const SOURCE_KEY_MODULE_RULES = [
   { prefix: 'visite-medicale-', module: 'rh' },
   { prefix: 'document-expiry-', module: 'rh' },
   { prefix: 'entretien-', module: 'entretiens' },
+  { prefix: 'formation-', module: 'entretiens' },
   { prefix: 'ticket-status-', module: null }, // support : fonctionnalité de base, jamais liée à un module à la carte
   { prefix: 'licence-liberee-', module: null }, // §point 8 : concerne la gestion de l'abonnement elle-même, pas le module libéré
 ];
@@ -5898,7 +5902,8 @@ async function syncNotifications() {
   const pendingLeaveRequests = hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente') : [];
   const pendingTeleworkRequests = hasModule('planning') ? teleworkRepository.getAll().filter(r => r.statut === 'En attente') : [];
   const pendingExpenses = hasModule('frais') ? expenseRepository.getAll().filter(n => n.statut === 'En attente') : [];
-  const pendingIds = new Set([...pendingLeaveRequests, ...pendingTeleworkRequests, ...pendingExpenses].map(r => r.id));
+  const pendingFormations = hasModule('entretiens') ? formationRepository.getAll().filter(f => f.statut === 'demandee') : [];
+  const pendingIds = new Set([...pendingLeaveRequests, ...pendingTeleworkRequests, ...pendingExpenses, ...pendingFormations].map(r => r.id));
   notificationRepository.pruneResolvedRequestNotifications(pendingIds);
   // §correctif retour QA du 27/08/2026 (point 2) : retire aussi toute notification déjà en base dont
   // le module n'est plus souscrit (résiliation, ou notification créée avant le correctif de
@@ -5996,6 +6001,19 @@ async function syncNotifications() {
     if (!employee) return;
     candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, ICONS.notepad, 'Entretien planifié',
       `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${e.heurePrevue}` : ''}`, 'entretiens', {}, employee.id));
+  });
+
+  // Formation (retour du 21/10/2026) : une demande à traiter prévient le manager/RH (le salarié concerné en est le sujet), une décision prévient le salarié.
+  if (hasModule('entretiens')) formationRepository.getAll().forEach(f => {
+    const employee = employeeRepository.getById(f.employeeId);
+    if (!employee) return;
+    if (f.statut === 'demandee') {
+      candidates.push(makeNotification(`formation-demande-${f.id}`, ICONS.graduation, 'Demande de formation',
+        `${employee.prenom} ${employee.nom} · ${f.intitule}`, 'formation', {}, employee.id));
+    } else if ((f.statut === 'acceptee' || f.statut === 'refusee') && f.decisionDate) {
+      candidates.push(makeNotification(`formation-decision-${f.id}-${f.statut}`, ICONS.graduation, f.statut === 'acceptee' ? 'Formation acceptée' : 'Formation refusée',
+        `${employee.prenom} ${employee.nom} · ${f.intitule}`, 'formation', {}, employee.id));
+    }
   });
 
   // Infinity : la génération de notifications ne doit jamais plafonner à 5 (contrairement aux
@@ -6532,6 +6550,10 @@ function renderInner() {
     case 'mes-entretiens':
       root.innerHTML = renderEntretiens();
       bindEntretiensEvents();
+      break;
+    case 'formation':
+      root.innerHTML = renderFormation();
+      bindFormationEvents();
       break;
     case 'pointeuse':
       root.innerHTML = renderPointeuse();
@@ -12067,6 +12089,310 @@ function renderIdeeCard(idee, userId) {
       </div>
     </div>
   `;
+}
+
+// ---------------------------------------------------------------------------
+// Formation (retour du 21/10/2026) : demandes de formation financées par l'entreprise ou via le CPF, décidées par le manager ou le RH,
+// avec les lettres à préparer (demande, autorisation d'absence CPF, réponse). Données : table formations (0075).
+// ---------------------------------------------------------------------------
+
+const FORMATION_STATUT_BADGE_CLASS = { demandee: 'warning', acceptee: 'success', refusee: 'danger', realisee: 'info', annulee: 'muted' };
+
+/** Le salarié concerné est-il dans l'équipe de `user` ? (manager direct, comme formations_select côté serveur) */
+function formationDansMonEquipe(user, demande) {
+  return isManagerOfEmployee(user.id, demande.employeeId);
+}
+
+function renderFormationPeriode(f) {
+  if (!f.dateDebut) return '<span class="text-muted">À définir</span>';
+  return f.dateFin ? `${formatDate(f.dateDebut)} → ${formatDate(f.dateFin)}` : `Dès le ${formatDate(f.dateDebut)}`;
+}
+
+function renderFormationLigne(f, user, afficherSalarie) {
+  const salarie = employeeRepository.getById(f.employeeId);
+  const estLeSien = f.employeeId === user.id;
+  const peutDecider = peutDeciderFormation(user, f, formationDansMonEquipe(user, f));
+  const actions = [];
+  if (peutDecider && f.statut === 'demandee') {
+    actions.push(`<button type="button" class="btn btn-primary btn-sm" data-formation-decider="${escapeHtml(f.id)}" data-decision="acceptee">Accepter</button>`);
+    actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-decider="${escapeHtml(f.id)}" data-decision="refusee">Refuser</button>`);
+  }
+  if (peutDecider && f.statut === 'acceptee') actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-decider="${escapeHtml(f.id)}" data-decision="realisee">Marquer réalisée</button>`);
+  actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-document="${escapeHtml(f.id)}">${icon(ICONS.document, 13)} Lettres</button>`);
+  if ((estLeSien || hasPermission(user, PERMISSIONS.GERER_ENTRETIENS)) && f.statut === 'demandee') actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-modifier="${escapeHtml(f.id)}">Modifier</button>`);
+  if (estLeSien && (f.statut === 'demandee' || f.statut === 'acceptee')) actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-annuler="${escapeHtml(f.id)}">Annuler</button>`);
+  if (hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || (estLeSien && f.statut === 'demandee')) actions.push(`<button type="button" class="btn btn-secondary btn-sm" data-formation-supprimer="${escapeHtml(f.id)}">Supprimer</button>`);
+
+  const details = [
+    FORMATION_FINANCEMENT_LIBELLES[f.financement] || f.financement,
+    f.organisme ? escapeHtml(f.organisme) : '',
+    f.dureeHeures != null ? `${String(f.dureeHeures).replace('.', ',')} h` : '',
+    f.coutEstime != null ? formatCurrencyFR(f.coutEstime) : ''
+  ].filter(Boolean).join(' · ');
+  const decision = f.decisionDate && f.decisionPar ? (() => {
+    const auteur = employeeRepository.getById(f.decisionPar);
+    return `<div class="text-muted" style="font-size:12px;">${f.statut === 'refusee' ? 'Refusée' : 'Acceptée'} le ${formatDate(toISODate(new Date(f.decisionDate)))}${auteur ? ' par ' + personNameHtml(auteur) : ''}${f.decisionMotif ? ' : ' + escapeHtml(f.decisionMotif) : ''}</div>`;
+  })() : '';
+
+  return `
+    <tr>
+      ${afficherSalarie ? `<td>${salarie ? personNameHtml(salarie) : '—'}</td>` : ''}
+      <td><strong>${escapeHtml(f.intitule)}</strong><div class="text-muted" style="font-size:12px;">${details}</div>${decision}</td>
+      <td>${renderFormationPeriode(f)}</td>
+      <td><span class="badge badge-${FORMATION_STATUT_BADGE_CLASS[f.statut] || 'muted'}">${escapeHtml(FORMATION_STATUT_LIBELLES[f.statut] || f.statut)}</span></td>
+      <td><div class="badge-row" style="gap:6px; flex-wrap:wrap;">${actions.join('')}</div></td>
+    </tr>`;
+}
+
+function renderFormationTableau(liste, user, afficherSalarie) {
+  return `
+    <div style="overflow-x:auto;">
+      <table class="table">
+        <thead><tr>${afficherSalarie ? '<th>Salarié</th>' : ''}<th>Formation</th><th>Période</th><th>Statut</th><th></th></tr></thead>
+        <tbody>${liste.map(f => renderFormationLigne(f, user, afficherSalarie)).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderFormation() {
+  const user = authRepository.getCurrentUser();
+  const visibles = formationRepository.getVisibleTo(user);
+  const miennes = visibles.filter(f => f.employeeId === user.id);
+  const autres = visibles.filter(f => f.employeeId !== user.id);
+  const aTraiter = autres.filter(f => f.statut === 'demandee' && peutDeciderFormation(user, f, formationDansMonEquipe(user, f))).length;
+  const voitLEquipe = autres.length > 0 || hasPermission(user, PERMISSIONS.GERER_ENTRETIENS) || employeeRepository.getAll().some(e => isManagerOfEmployee(user.id, e.id));
+  return `
+    <div class="view-header view-header-row">
+      <div>
+        <h1>Formation</h1>
+        <p class="view-subtitle">Demandez une formation financée par l'entreprise ou avec votre compte personnel de formation (CPF).${aTraiter ? ` ${aTraiter} demande${aTraiter > 1 ? 's' : ''} à traiter.` : ''}</p>
+      </div>
+      <div class="detail-header-actions">
+        <button class="btn btn-primary" id="btn-formation-nouvelle">+ Nouvelle demande</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Mes demandes</h2>
+      ${miennes.length ? renderFormationTableau(miennes, user, false) : '<p class="text-muted">Vous n\'avez encore fait aucune demande de formation.</p>'}
+    </div>
+    ${voitLEquipe ? `
+      <div class="card">
+        <h2>Demandes de l'équipe</h2>
+        ${autres.length ? renderFormationTableau(autres, user, true) : '<p class="text-muted">Aucune demande de formation dans votre équipe.</p>'}
+      </div>` : ''}
+  `;
+}
+
+function bindFormationEvents() {
+  const nouvelle = document.getElementById('btn-formation-nouvelle');
+  if (nouvelle) nouvelle.addEventListener('click', () => openFormationModal(null));
+  document.querySelectorAll('[data-formation-modifier]').forEach(btn => btn.addEventListener('click', () => openFormationModal(btn.dataset.formationModifier)));
+  document.querySelectorAll('[data-formation-document]').forEach(btn => btn.addEventListener('click', () => openFormationDocumentsModal(btn.dataset.formationDocument)));
+  document.querySelectorAll('[data-formation-decider]').forEach(btn => btn.addEventListener('click', () => openFormationDecisionModal(btn.dataset.formationDecider, btn.dataset.decision)));
+  document.querySelectorAll('[data-formation-annuler]').forEach(btn => btn.addEventListener('click', () => {
+    if (!confirm('Annuler cette demande de formation ?')) return;
+    const r = formationRepository.annuler(btn.dataset.formationAnnuler);
+    if (!r.success) { showToast(r.error, 'error'); return; }
+    showToast('Demande annulée.');
+    render();
+  }));
+  document.querySelectorAll('[data-formation-supprimer]').forEach(btn => btn.addEventListener('click', () => {
+    if (!confirm('Supprimer définitivement cette demande de formation ?')) return;
+    const r = formationRepository.supprimer(btn.dataset.formationSupprimer);
+    if (!r.success) { showToast(r.error, 'error'); return; }
+    showToast('Demande supprimée.');
+    render();
+  }));
+}
+
+/** Formulaire de demande (création ou correction d'une demande non traitée). Le RH peut saisir pour un autre salarié. */
+function openFormationModal(formationId) {
+  const user = authRepository.getCurrentUser();
+  const existante = formationId ? formationRepository.getById(formationId) : null;
+  const f = existante || { employeeId: user.id, financement: 'entreprise', pendantTempsTravail: true };
+  const peutChoisirSalarie = !existante && hasPermission(user, PERMISSIONS.GERER_ENTRETIENS);
+  const salaries = peutChoisirSalarie ? employeeRepository.getAll().filter(e => !e.archive) : [];
+  const valeur = (v) => escapeHtml(v == null ? '' : String(v));
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>${existante ? 'Modifier la demande de formation' : 'Nouvelle demande de formation'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="formation-form">
+        <div class="modal-body">
+          ${peutChoisirSalarie ? `
+            <div class="form-field">
+              <label for="f-formation-salarie">Salarié</label>
+              <select class="input" id="f-formation-salarie">${salaries.map(e => `<option value="${escapeHtml(e.id)}" ${e.id === user.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}</select>
+            </div>` : ''}
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-formation-intitule">Intitulé de la formation *</label>
+            <input class="input" type="text" id="f-formation-intitule" maxlength="150" value="${valeur(f.intitule)}" required>
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-formation-organisme">Organisme de formation</label>
+            <input class="input" type="text" id="f-formation-organisme" maxlength="120" value="${valeur(f.organisme)}">
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-formation-financement">Financement</label>
+            <select class="input" id="f-formation-financement">
+              ${Object.keys(FORMATION_FINANCEMENT_LIBELLES).map(k => `<option value="${k}" ${k === f.financement ? 'selected' : ''}>${escapeHtml(FORMATION_FINANCEMENT_LIBELLES[k])}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field" id="f-formation-temps-bloc" style="margin-top:12px;">
+            <label><input type="checkbox" id="f-formation-temps" ${f.pendantTempsTravail !== false ? 'checked' : ''}> Pendant mon temps de travail</label>
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-top:12px;">
+            <div class="form-field"><label for="f-formation-debut">Début</label><input class="input" type="date" id="f-formation-debut" value="${valeur(f.dateDebut)}"></div>
+            <div class="form-field"><label for="f-formation-fin">Fin</label><input class="input" type="date" id="f-formation-fin" value="${valeur(f.dateFin)}"></div>
+            <div class="form-field"><label for="f-formation-duree">Durée (heures)</label><input class="input" type="text" inputmode="decimal" id="f-formation-duree" value="${valeur(f.dureeHeures == null ? '' : String(f.dureeHeures).replace('.', ','))}"></div>
+            <div class="form-field"><label for="f-formation-cout">Coût estimé (€)</label><input class="input" type="text" inputmode="decimal" id="f-formation-cout" value="${valeur(f.coutEstime == null ? '' : String(f.coutEstime).replace('.', ','))}"></div>
+          </div>
+          <div id="f-formation-delai" class="text-muted" style="font-size:13px; margin-top:8px;"></div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-formation-lien">Lien vers le programme</label>
+            <input class="input" type="url" id="f-formation-lien" placeholder="https://" value="${valeur(f.lien)}">
+          </div>
+          <div class="form-field" style="margin-top:12px;">
+            <label for="f-formation-motif">En quoi cette formation sert votre poste ?</label>
+            <textarea class="input" id="f-formation-motif" rows="3" maxlength="1000">${valeur(f.motif)}</textarea>
+          </div>
+          <div id="f-formation-erreur" class="form-error" role="alert" style="margin-top:8px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">${existante ? 'Enregistrer' : 'Envoyer la demande'}</button>
+        </div>
+      </form>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+  const lire = (id) => document.getElementById(id).value;
+  const majDelai = () => {
+    const cpf = lire('f-formation-financement') === 'cpf';
+    const temps = document.getElementById('f-formation-temps').checked;
+    document.getElementById('f-formation-temps-bloc').style.display = cpf ? '' : 'none';
+    const zone = document.getElementById('f-formation-delai');
+    const delai = cpf && temps ? delaiPrevenanceCpf(lire('f-formation-debut'), lire('f-formation-fin')) : null;
+    zone.textContent = delai
+      ? (delai.respecte
+        ? `Délai de prévenance de ${delai.requisJours} jours respecté (à envoyer avant le ${formatDate(delai.dateLimite)}).`
+        : `Attention : pour une formation CPF pendant le temps de travail, la demande doit être faite ${delai.requisJours} jours avant le début (soit avant le ${formatDate(delai.dateLimite)}).`)
+      : (cpf && temps ? 'Indiquez la date de début pour vérifier le délai de prévenance.' : '');
+  };
+  ['f-formation-financement', 'f-formation-temps', 'f-formation-debut', 'f-formation-fin'].forEach(id => document.getElementById(id).addEventListener('change', majDelai));
+  majDelai();
+
+  document.getElementById('formation-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const cible = peutChoisirSalarie ? lire('f-formation-salarie') : f.employeeId;
+    const cpf = lire('f-formation-financement') === 'cpf';
+    const controle = validerDemandeFormation({
+      intitule: lire('f-formation-intitule'), organisme: lire('f-formation-organisme'), financement: lire('f-formation-financement'),
+      pendantTempsTravail: cpf ? document.getElementById('f-formation-temps').checked : true,
+      dateDebut: lire('f-formation-debut'), dateFin: lire('f-formation-fin'), dureeHeures: lire('f-formation-duree'),
+      coutEstime: lire('f-formation-cout'), lien: lire('f-formation-lien'), motif: lire('f-formation-motif')
+    });
+    if (!controle.ok) { document.getElementById('f-formation-erreur').textContent = controle.error; return; }
+    if (existante) {
+      const r = formationRepository.modifier(existante.id, controle.demande);
+      if (!r.success) { document.getElementById('f-formation-erreur').textContent = r.error; return; }
+      showToast('Demande modifiée.');
+    } else {
+      formationRepository.creer(cible, controle.demande, user.id);
+      showToast('Demande envoyée.');
+    }
+    closeModal();
+    render();
+  });
+}
+
+function openFormationDecisionModal(formationId, decision) {
+  const f = formationRepository.getById(formationId);
+  if (!f) return;
+  const salarie = employeeRepository.getById(f.employeeId);
+  const titres = { acceptee: 'Accepter la demande', refusee: 'Refuser la demande', realisee: 'Marquer la formation comme réalisée' };
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>${escapeHtml(titres[decision] || 'Décision')}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="formation-decision-form">
+        <div class="modal-body">
+          <p>${salarie ? personNameHtml(salarie) + ' · ' : ''}<strong>${escapeHtml(f.intitule)}</strong></p>
+          ${decision === 'realisee' ? '' : `
+            <div class="form-field">
+              <label for="f-formation-decision-motif">${decision === 'refusee' ? 'Motif du refus *' : 'Message au salarié (optionnel)'}</label>
+              <textarea class="input" id="f-formation-decision-motif" rows="3" ${decision === 'refusee' ? 'required' : ''}></textarea>
+            </div>`}
+          <div id="f-formation-decision-erreur" class="form-error" role="alert" style="margin-top:8px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Confirmer</button>
+        </div>
+      </form>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('formation-decision-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const champ = document.getElementById('f-formation-decision-motif');
+    const r = formationRepository.decider(formationId, decision, champ ? champ.value : '', authRepository.getCurrentUser().id);
+    if (!r.success) { document.getElementById('f-formation-decision-erreur').textContent = r.error; return; }
+    closeModal();
+    showToast('Décision enregistrée.');
+    render();
+  });
+}
+
+/** Lettres à préparer pour une demande : toujours recalculées à l'ouverture, jamais enregistrées. */
+function openFormationDocumentsModal(formationId, typeInitial) {
+  const f = formationRepository.getById(formationId);
+  if (!f) return;
+  const employee = employeeRepository.getById(f.employeeId);
+  if (!employee) return;
+  const user = authRepository.getCurrentUser();
+  const types = [{ cle: 'demande', libelle: 'Demande de formation' }];
+  if (f.financement === 'cpf' && f.pendantTempsTravail !== false) types.push({ cle: 'absence-cpf', libelle: "Autorisation d'absence (CPF)" });
+  if (f.statut === 'acceptee' || f.statut === 'refusee' || f.statut === 'realisee') types.push({ cle: 'reponse', libelle: 'Réponse à la demande' });
+  const type = types.some(t => t.cle === typeInitial) ? typeInitial : types[0].cle;
+  const decideur = user.prenom + ' ' + user.nom;
+  const lettre = genererDocumentFormation({ type, demande: f, employee, entreprise: DB.getCurrentCompany(), decideur, maintenant: new Date() });
+  const html = `
+    <div class="modal">
+      <div class="modal-header">
+        <h2>${escapeHtml(lettre.titre)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        ${types.length > 1 ? `<div class="badge-row" style="gap:8px; margin-bottom:12px;">${types.map(t => `<button type="button" class="btn btn-sm ${t.cle === type ? 'btn-primary' : 'btn-secondary'}" data-formation-lettre="${t.cle}">${escapeHtml(t.libelle)}</button>`).join('')}</div>` : ''}
+        <div class="print-area" id="formation-print-area" style="white-space: pre-wrap;">${lettre.paragraphes.map(p => escapeHtml(p)).join('\n\n')}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="btn-print-formation">Imprimer / Export PDF</button>
+      </div>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.querySelectorAll('[data-formation-lettre]').forEach(btn => btn.addEventListener('click', () => openFormationDocumentsModal(formationId, btn.dataset.formationLettre)));
+  document.getElementById('btn-print-formation').addEventListener('click', () => {
+    auditLogRepository.logAudit('Export', 'Lettre de formation', `${lettre.titre} · ${employee.prenom} ${employee.nom}`);
+    window.print();
+  });
 }
 
 // §"Vitrine Idées" (roadmap différenciation du 31/08/2026) : "répond directement au silence actuel
