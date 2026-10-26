@@ -5,6 +5,7 @@
   "scripts": {
     "check": "node --check app.js && node --check data.js && node --check supabase-client.js && node --check qrcode.js && node --check jsqr.js && node tools/check-em-dash.js",
     "test": "node tests/run-all.js",
-    "ci": "npm run check && npm run test"
+    "ci": "npm run check && npm run test",
+    "bump": "node tools/bump-version.js"
   }
 }

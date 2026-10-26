@@ -2475,7 +2475,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.10.26';
+const APP_VERSION = '2026.10.26.1';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2484,7 +2484,7 @@ const CHANGELOG_ENTRIES = [
     items: [
       "Nouveau guide de l'application : cliquez sur le rond en haut à droite, puis « Guide de l'application ». Il explique chaque écran auquel vous avez accès, avec une recherche intégrée.",
       "Visite guidée au premier lancement, et petites astuces affichées une seule fois sur chaque écran.",
-      "Le numéro de version de l'application est affiché dans le menu de votre compte.",
+      "Le numéro de version de l'application est affiché dans le menu de votre compte et change à chaque mise à jour.",
       "Nouvel écran Formation : demandez une formation financée par l'entreprise ou avec votre compte personnel de formation (CPF), suivez la décision de votre manager ou des RH et préparez les courriers à imprimer.",
       "Les entretiens, tickets d'aide, idées et licences ne sont plus recopiés dans les données partagées de l'entreprise : leur confidentialité est renforcée.",
       "Nouvel écran « Ma retraite » : vos repères de carrière et de départ à la retraite, à titre indicatif."

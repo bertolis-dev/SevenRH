@@ -15,12 +15,12 @@ function run() {
   DB.init();
 
   // --- Numéro de version : même valeur dans le code, index.html et les Nouveautés ---
-  assert.ok(/^\d{4}\.\d{2}\.\d{2}$/.test(APP_VERSION), 'format AAAA.MM.JJ');
+  assert.ok(/^\d{4}\.\d{2}\.\d{2}\.\d+$/.test(APP_VERSION), 'format AAAA.MM.JJ.N (N = numéro de la mise en ligne du jour, voir npm run bump)');
   assert.strictEqual(CHANGELOG_ENTRIES[0].version, APP_VERSION, 'la première entrée des Nouveautés porte la version courante');
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  const versions = [...html.matchAll(/\?v=(\d{8})[a-z]?/g)].map(m => m[1]);
+  const versions = [...html.matchAll(/\?v=([0-9A-Za-z.]+)/g)].map(m => m[1]);
   assert.ok(versions.length >= 5, 'les fichiers sont chargés avec un ?v=');
-  assert.ok(versions.every(v => v === APP_VERSION.replace(/\./g, '')), `tous les ?v= d'index.html valent ${APP_VERSION.replace(/\./g, '')} (changer les deux ensemble à chaque mise en ligne)`);
+  assert.ok(versions.every(v => v === APP_VERSION), `tous les ?v= d'index.html valent ${APP_VERSION} (lancer npm run bump à chaque mise en ligne)`);
 
   // --- Le numéro apparaît dans le menu du compte, avec le bouton du guide ---
   const rh = DB.getEmployees().find(e => e.role === 'rh');
