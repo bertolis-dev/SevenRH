@@ -4395,3 +4395,40 @@ textarea.input { resize: vertical; font-family: inherit; }
 @media (max-width: 600px) { .screen-tip { flex-wrap: wrap; } .screen-tip .btn { margin-left: auto; } }
 :root[data-theme="dark"] .screen-tip { background: rgba(201, 154, 84, 0.12); color: var(--color-text); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .screen-tip { background: rgba(201, 154, 84, 0.12); color: var(--color-text); } }
+
+/* Manuel du guide (retour du 28/10/2026) : barre de recherche, résultats, questions repliables. */
+.guide-searchbar { padding: 14px 22px 12px; border-bottom: 1px solid var(--color-border); }
+.guide-searchbar .guide-search { margin: 0; width: 100%; font-size: 15px; }
+.guide-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
+.guide-chip { background: var(--color-border-soft); border: 1px solid var(--color-border); border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 13px; color: var(--color-text); cursor: pointer; }
+.guide-chip:hover { border-color: var(--landing-gold-500); }
+.guide-entries { margin: 14px 0; }
+.guide-entries-label { padding-left: 0; }
+.guide-toolbar { display: flex; gap: 14px; margin: 0 0 8px; font-size: 13px; }
+.guide-entry { border: 1px solid var(--color-border); border-radius: var(--radius-sm, 6px); margin-bottom: 8px; background: var(--color-surface, transparent); }
+.guide-entry summary { cursor: pointer; padding: 10px 14px; font-weight: 600; line-height: 1.4; list-style: none; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.guide-entry summary::-webkit-details-marker { display: none; }
+.guide-entry summary::after { content: '+'; color: var(--landing-gold-500); font-size: 18px; line-height: 1; flex-shrink: 0; }
+.guide-entry[open] summary::after { content: '\2212'; }
+.guide-entry[open] summary { border-bottom: 1px solid var(--color-border-soft); }
+.guide-entry-body { padding: 10px 14px 4px; }
+.guide-entry-body .guide-actions { margin: 4px 0 10px; }
+.guide-entry-flash { animation: guide-entry-flash 1.8s ease-out; }
+@keyframes guide-entry-flash { 0% { box-shadow: 0 0 0 3px var(--landing-gold-500); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.guide-results-count { margin: 0 0 10px; }
+.guide-results-count .btn-link { margin-left: 10px; }
+.guide-results-note { margin: 0 0 10px; }
+.guide-results-list { list-style: none; margin: 0; padding: 0; }
+.guide-result { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm, 6px); padding: 10px 14px; margin-bottom: 8px; font: inherit; color: var(--color-text); cursor: pointer; }
+.guide-result:hover, .guide-result:focus-visible { border-color: var(--landing-gold-500); background: var(--color-border-soft); }
+.guide-result-chap { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-text-muted); }
+.guide-result-titre { font-weight: 600; }
+.guide-result-extrait { font-size: 13px; color: var(--color-text-muted); line-height: 1.45; }
+.guide-content mark { background: color-mix(in srgb, var(--landing-gold-500) 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.guide-back { display: inline-block; margin-bottom: 10px; }
+@media (max-width: 760px) {
+  .guide-searchbar { padding: 12px 16px 10px; }
+  .guide-entry summary { padding: 10px 12px; }
+}
+.guide-modal .guide-body { overflow: hidden; }
+.guide-modal .guide-layout { min-height: 300px; max-height: calc(66vh - 70px); }

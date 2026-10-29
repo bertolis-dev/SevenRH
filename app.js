@@ -2475,13 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.10.26.1';
+const APP_VERSION = '2026.10.29.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Octobre 2026',
     version: APP_VERSION,
     items: [
+      "Le guide est devenu un vrai mode d'emploi : plus de 140 réponses (« comment faire ? », dépannage, glossaire) adaptées à votre rôle, avec une recherche qui comprend les mots de tous les jours (« mdp », « vacances », « CPF »...) et vous mène directement à la bonne réponse.",
       "Nouveau guide de l'application : cliquez sur le rond en haut à droite, puis « Guide de l'application ». Il explique chaque écran auquel vous avez accès, avec une recherche intégrée.",
       "Visite guidée au premier lancement, et petites astuces affichées une seule fois sur chaque écran.",
       "Le numéro de version de l'application est affiché dans le menu de votre compte et change à chaque mise à jour.",
@@ -5069,26 +5070,546 @@ function guideOutroSections() {
   ];
 }
 
-function guideScreenSection(item, groupe) {
-  const help = HELP_CONTENT[item.key];
-  const resume = GUIDE_RESUMES[item.key];
-  const faq = help && help.faq && help.faq.length
-    ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Questions fréquentes</div>${help.faq.map(f => `<p><strong>${escapeHtml(f.q)}</strong><br>${escapeHtml(f.r)}</p>`).join('')}</div>` : '';
-  const pratiques = help && help.bonnesPratiques && help.bonnesPratiques.length
-    ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Bonnes pratiques</div><ul class="help-tips">${help.bonnesPratiques.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
+// ---------------------------------------------------------------------------
+// Manuel du guide (retour du 28/10/2026) : « il faut que le mode d'emploi soit le plus complet possible, avec toutes les réponses possibles,
+// et qu'on puisse rechercher pour trouver ce que l'on cherche ». Chaque réponse est une entrée (question, réponse, mots proches) rangée dans un
+// thème. Un thème ou une entrée ne s'affiche que si la personne a le rôle voulu (`pour`) et si le module est souscrit (`module`, voir hasModule) :
+// le guide ne décrit jamais ce que l'on ne peut pas faire. La recherche (guideRechercher) parcourt chaque entrée, pas seulement les chapitres.
+// ---------------------------------------------------------------------------
+
+const GUIDE_EQUIPE = ['manager', 'rh', 'proprietaire'];
+const GUIDE_GESTION = ['rh', 'proprietaire'];
+
+const gP = (texte) => `<p>${texte}</p>`;
+const gEtapes = (...etapes) => `<ol class="guide-steps">${etapes.map(e => `<li>${e}</li>`).join('')}</ol>`;
+const gListe = (...points) => `<ul class="guide-tips-list">${points.map(p => `<li>${p}</li>`).join('')}</ul>`;
+
+const GUIDE_THEMES = [
+  {
+    id: 'faire-conges', titre: 'Congés et absences', icone: ICONS.sun, module: 'conges',
+    intro: gP(`Poser, suivre, annuler, valider : tout ce qui concerne les congés payés, les RTT et les autres absences.`),
+    entrees: [
+      { id: 'c-poser', q: 'Comment poser un congé ?', vue: 'absences', mots: 'demander vacances congés payés cp rtt nouvelle demande formulaire jours prendre',
+        r: gEtapes(
+          `Ouvrez <strong>Congés &amp; absences</strong> dans le menu (ou tapez « poser un congé » dans la recherche du haut, raccourci Ctrl+K).`,
+          `Restez sur l'onglet <strong>Congés</strong> et cliquez sur <strong>+ Nouvelle demande</strong>.`,
+          `Choisissez le type de congé (congés payés, RTT...), la date de début et la date de fin.`,
+          `Ajoutez un commentaire si vous le souhaitez, puis validez : la demande part à la personne chargée de la valider.`
+        ) + gP(`Un message vous prévient si la date choisie est un jour férié ou tombe pendant des vacances scolaires. Vous suivez ensuite la demande dans la liste, et vous recevez une notification quand elle est traitée.`) },
+      { id: 'c-demi', q: 'Comment poser une demi-journée ?', mots: 'matin après-midi moitié demi journée',
+        r: gP(`Dans le formulaire de demande :`) + gListe(
+          `pour <strong>un seul jour</strong>, le champ « Demi-journée » propose Journée complète, Matin ou Après-midi ;`,
+          `pour <strong>plusieurs jours</strong>, « Premier jour » propose Journée complète ou Après-midi seulement, et « Dernier jour » propose Journée complète ou Matin seulement.`) },
+      { id: 'c-brouillon', q: 'Comment enregistrer un brouillon de demande sans l\'envoyer ?', mots: 'brouillon enregistrer plus tard reprendre sauvegarder pas certain dates',
+        r: gP(`Oui : utilisez <strong>Enregistrer comme brouillon</strong> au lieu d'envoyer. Le brouillon apparaît dans le cadre <strong>Mes brouillons</strong>, au-dessus de la liste des demandes, et vous pouvez le reprendre plus tard. C'est pratique quand les dates ne sont pas encore certaines.`) },
+      { id: 'c-suivre', q: 'Comment savoir où en est ma demande ?', mots: 'statut en attente validé refusé annulé historique notification réponse accepté',
+        r: gP(`Chaque demande de la liste porte un statut : <strong>En attente</strong> (pas encore traitée), <strong>Validé</strong>, <strong>Refusé</strong> (avec le motif donné) ou <strong>Annulé</strong>. Vous recevez aussi une notification (la cloche en haut) quand une décision est prise.`) + gP(`Le bouton <strong>Historique</strong> d'une ligne retrace toute sa vie : création, validations, refus et rectifications, avec la personne et la date.`) },
+      { id: 'c-annuler', q: 'Comment annuler une demande de congé ?', vue: 'absences', mots: 'supprimer retirer annulation effacer renoncer',
+        r: gEtapes(
+          `Ouvrez <strong>Congés &amp; absences</strong> et repérez votre demande dans la liste.`,
+          `Utilisez le bouton d'annulation de sa ligne, puis confirmez avec <strong>Annuler la demande</strong>.`
+        ) + gP(`Si ce bouton n'apparaît pas (demande déjà validée, période commencée ou passée), demandez à votre manager ou aux RH de l'annuler ou de la <em>régulariser</em> : l'historique garde la trace de ce qui a été fait et pourquoi.`) },
+      { id: 'c-passe', q: 'Pourquoi ne puis-je pas saisir une période déjà passée ?', mots: 'passé hier rétroactif date déjà commencée impossible erreur début',
+        r: gP(`Un salarié ne peut jamais saisir ni modifier une période déjà commencée : le message « Vous ne pouvez pas saisir une absence dont la date de début est déjà passée » s'affiche. Seuls un manager, les RH ou le propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi. Prévenez-les : ils saisissent la période à votre place.`) },
+      { id: 'c-solde', q: 'Comment lire mon solde de congés ?', mots: 'compteur jours restants acquis pris disponible reste combien droit cp rtt calcul',
+        r: gP(`Le solde se calcule ainsi : <strong>acquis + ajustement − pris − en attente</strong>. Les jours « en attente » sont déjà retirés tant que la demande n'est pas tranchée.`) + gP(`Pour un type qui a une <strong>clôture</strong> (par exemple les congés payés, du 1er juin au 31 mai), le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, que vous pouvez prendre tout de suite. Ce qui est indiqué « en cours d'acquisition » s'accumule sur la période en cours et ne se prend pas encore : ne l'additionnez jamais au disponible.`) + gP(`Vous retrouvez vos soldes sur l'<strong>Accueil</strong> et dans <strong>Ma fiche</strong>, onglet Congés et absences, rubrique « Voir le détail des compteurs ».`) },
+      { id: 'c-solde-faux', q: 'Mon solde ne correspond pas à ce que j\'attendais', mots: 'erreur faux incorrect différent anormal négatif compteur problème solde',
+        r: gEtapes(
+          `Regardez la <strong>période</strong> indiquée sous le chiffre : le solde « disponible » ne concerne que la période déjà close.`,
+          `Vérifiez les demandes <strong>En attente</strong> : elles sont déjà déduites.`,
+          `Vérifiez le <strong>type</strong> concerné (congés payés, RTT...) et sa règle d'acquisition (mensuelle, annuelle, illimitée), réglée par votre entreprise.`,
+          `Si le chiffre reste faux, signalez-le à vos RH : ils peuvent corriger le compteur (avec un motif qui reste tracé).`
+        ) },
+      { id: 'c-types', q: 'Quels types de congés et d\'absences puis-je demander ?', mots: 'type catégorie rtt maladie événement familial sans solde liste absence',
+        r: gP(`La liste dépend de votre entreprise : congés payés, RTT, maladie, événements familiaux et tout autre type qu'elle a créé. Les congés se demandent dans l'onglet <strong>Congés</strong>, les autres absences dans l'onglet <strong>Absences</strong>. Si un type manque, il est peut-être désactivé pour vous : demandez à vos RH de le vérifier sur votre fiche.`) },
+      { id: 'c-ferie', q: 'Que se passe-t-il si je choisis un jour férié ou des vacances scolaires ?', mots: 'férié jour férié vacances scolaires fermeture pont',
+        r: gP(`Le formulaire vous prévient : « est un jour férié » ou « est en période de vacances scolaires ». Les jours fériés et les fermetures sont réglés par votre entreprise.`) },
+      { id: 'c-maladie', q: 'Comment déclarer un arrêt maladie ?', vue: 'absences', mots: 'maladie arrêt de travail accident justificatif certificat médical malade',
+        r: gP(`Dans l'onglet <strong>Absences</strong>, créez une demande avec le type maladie. Le formulaire demande le <strong>type d'arrêt</strong> : maladie ordinaire, accident du travail, accident de trajet ou maladie professionnelle. Joignez l'arrêt de travail dans « Pièce justificative » : il est obligatoire pour les types qui l'exigent.`) + gP(`Si l'arrêt a déjà commencé, prévenez tout de suite votre manager ou vos RH : seuls eux peuvent saisir une période déjà commencée.`) },
+      { id: 'c-prolonger', q: 'Comment prolonger un arrêt maladie ?', pour: GUIDE_GESTION, mots: 'prolongation arrêt maladie allonger date de fin',
+        r: gP(`Sur la ligne de l'arrêt, utilisez <strong>Prolonger</strong> : indiquez la nouvelle date de fin et, si vous l'avez, joignez le nouveau justificatif (facultatif). La prolongation est tracée dans l'historique.`) },
+      { id: 'c-valider', q: 'Comment valider ou refuser une demande ?', pour: GUIDE_EQUIPE, vue: 'absences', mots: 'approuver accepter refuser valider en masse équipe à valider notification motif sélection',
+        r: gEtapes(
+          `Cliquez sur la notification, ou ouvrez <strong>Congés à valider</strong> (menu Équipe).`,
+          `Sur la ligne, choisissez <strong>Valider</strong> ou <strong>Refuser</strong> (le refus demande un motif, que le salarié verra).`
+        ) + gP(`<strong>Plusieurs d'un coup :</strong> cochez les lignes en attente puis cliquez sur <strong>Valider la sélection</strong>. Seules les demandes que vous avez le droit de valider peuvent être cochées. Selon le circuit réglé par votre entreprise, une demande peut passer par plusieurs personnes (manager, puis RH).`) },
+      { id: 'c-regulariser', q: 'Comment corriger une demande déjà validée ?', pour: GUIDE_EQUIPE, mots: 'régulariser modifier corriger changer dates type après validation erreur',
+        r: gP(`Utilisez <strong>Régulariser</strong> sur la ligne plutôt que d'annuler puis de recréer : vous pouvez changer le type, les dates ou la demi-journée, et vous indiquez le <strong>motif de la régularisation</strong>. L'historique conserve l'ancienne version, la nouvelle et le motif.`) },
+      { id: 'c-delegation', q: 'Comment déléguer mes validations pendant mes absences ?', pour: GUIDE_EQUIPE, vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'délégation remplaçant suppléant vacances validation absent remplacer',
+        r: gEtapes(
+          `Ouvrez le menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>).`,
+          `Dans « Délégation de validation », cliquez sur <strong>Déléguer ma validation</strong>, choisissez la personne et la période.`
+        ) + gP(`Pendant cette période, la personne désignée valide les congés et notes de frais de votre équipe à votre place, avec les mêmes droits que vous sur cette équipe, et rien en dehors.`) },
+      { id: 'c-export', q: 'Comment exporter la liste des congés ?', pour: GUIDE_EQUIPE, mots: 'export csv télécharger excel liste demandes extraction',
+        r: gP(`Sur l'écran <strong>Congés &amp; absences</strong>, le bouton <strong>Exporter CSV</strong> télécharge la liste telle qu'elle est filtrée : filtrez d'abord par salarié, type, statut ou mois.`) },
+      { id: 'c-filtrer', q: 'Comment retrouver une demande précise ?', pour: GUIDE_EQUIPE, mots: 'filtre recherche trouver salarié mois statut type',
+        r: gP(`Au-dessus de la liste, tapez un nom dans « Rechercher un salarié » ou utilisez les filtres : salarié, type, statut et mois (les demandes qui chevauchent le mois choisi). Le bouton de filtres se replie pour gagner de la place sur téléphone.`) }
+    ]
+  },
+  {
+    id: 'faire-teletravail', titre: 'Télétravail', icone: ICONS.schedule, module: 'planning',
+    intro: gP(`Déclarer ses jours de télétravail et comprendre le quota de la semaine.`),
+    entrees: [
+      { id: 't-poser', q: 'Comment déclarer du télétravail ?', vue: 'absences', mots: 'télétravail teletravail tt domicile maison remote demande jour',
+        r: gEtapes(
+          `Ouvrez <strong>Congés &amp; absences</strong> puis l'onglet <strong>Télétravail</strong>.`,
+          `Cliquez sur <strong>+ Nouvelle demande</strong>, choisissez le ou les jours, ajoutez un commentaire si besoin, puis envoyez.`
+        ) + gP(`Comme un congé, la demande est « En attente » jusqu'à la décision. Vous pouvez la corriger ou l'annuler depuis la liste tant qu'elle n'est pas traitée.`) },
+      { id: 't-quota', q: 'Pourquoi ma demande de télétravail est-elle refusée ou bloquée ?', mots: 'quota semaine limite nombre de jours maximum télétravail refus règle',
+        r: gP(`Le quota se calcule <strong>par semaine</strong> (du lundi au dimanche) en additionnant toutes les demandes validées ou en attente de cette semaine, pas seulement celle que vous saisissez. Si le total dépasse le quota fixé par votre entreprise, le message indique la règle en cause. Les RH règlent le quota dans Paramètres, onglet « Planning et télétravail ».`) },
+      { id: 't-valider', q: 'Comment valider les demandes de télétravail de mon équipe ?', pour: GUIDE_EQUIPE, vue: 'absences', mots: 'télétravail valider équipe approuver refuser',
+        r: gP(`Dans l'onglet <strong>Télétravail</strong>, utilisez le bouton « Voir les demandes à valider », puis Valider ou Refuser sur chaque ligne, comme pour les congés.`) }
+    ]
+  },
+  {
+    id: 'faire-frais', titre: 'Notes de frais', icone: ICONS.receipt, module: 'frais',
+    intro: gP(`Déclarer une dépense, suivre son remboursement, et la valider quand on est responsable.`),
+    entrees: [
+      { id: 'f-creer', q: 'Comment créer une note de frais ?', vue: 'frais', mots: 'dépense remboursement achat repas déplacement facture note frais nouvelle',
+        r: gEtapes(
+          `Ouvrez <strong>Notes de frais</strong> dans le menu.`,
+          `Cliquez sur <strong>+ Nouvelle note</strong>, puis renseignez la date, la catégorie, le montant et le taux de TVA.`,
+          `Joignez le justificatif (photo ou fichier), puis envoyez.`
+        ) + gP(`La note part en validation. Le total remboursé du mois alimente automatiquement l'export de paie.`) },
+      { id: 'f-km', q: 'Comment déclarer des frais kilométriques ?', mots: 'kilométrique kilomètres km voiture moto indemnité véhicule distance puissance fiscale cv barème trajet',
+        r: gP(`Créez une note de type <strong>kilométrique</strong> : indiquez la distance, le type de véhicule (voiture, moto, cyclomoteur de moins de 50 cm³) et sa puissance fiscale. L'indemnité est <strong>calculée automatiquement</strong> selon le barème : vous n'avez rien à saisir à la main.`) },
+      { id: 'f-justif', q: 'Le justificatif est-il obligatoire ?', mots: 'justificatif facture ticket reçu photo pièce obligatoire manquant',
+        r: gP(`Pour une note standard, oui : joignez-le dès la création. Le libellé du champ indique « obligatoire pour cette catégorie » quand c'est le cas. Une note validée sans justificatif ressort comme anomalie avant l'export de paie, et fait perdre du temps à tout le monde : prenez-le en photo sur place.`) },
+      { id: 'f-suivre', q: 'Comment suivre le remboursement de mes notes ?', mots: 'statut remboursé en attente refusé payé suivi total',
+        r: gP(`La liste affiche le statut de chaque note : <strong>En attente</strong> (soumise), <strong>Remboursé</strong> (validée par le circuit ; la date de paiement s'ajoute quand la comptabilité enregistre le remboursement), <strong>Refusé</strong> ou <strong>Annulé</strong>. Les filtres permettent de les trier par statut ou par période, et les totaux par statut s'affichent en haut.`) },
+      { id: 'f-modifier', q: 'Puis-je corriger une note déjà envoyée ?', mots: 'modifier corriger changer erreur montant note envoyée',
+        r: gP(`Ouvrez la note depuis la liste : si elle est encore modifiable, vous pouvez corriger ses informations. Si elle a déjà été traitée, demandez à la personne qui la valide de la refuser, puis recréez-la correctement.`) },
+      { id: 'f-valider', q: 'Comment valider une note de frais ?', pour: ['manager', 'rh', 'comptabilite', 'proprietaire'], vue: 'frais', mots: 'valider approuver contrôler note frais équipe refuser en masse',
+        r: gP(`Ouvrez <strong>Notes de frais</strong> et utilisez « Voir les demandes à valider ». Contrôlez le montant et le justificatif, puis validez ou refusez avec un motif. Le circuit de validation (manager, contrôle, comptabilité...) est réglé dans Paramètres, onglet « Notes de frais ».`) },
+      { id: 'f-rembourser', q: 'Comment marquer une note comme remboursée ?', pour: ['comptabilite', 'proprietaire'], mots: 'rembourser payer payé paiement virement date de paiement étape finale',
+        r: gP(`C'est l'étape finale du circuit : une note validée (statut « Remboursé ») attend son paiement. Une fois le virement fait, ouvrez la note et enregistrez le paiement pour y inscrire la date. Cette action demande le droit « Marquer une note de frais remboursée ».`) },
+      { id: 'f-export', q: 'Comment exporter les notes de frais ?', pour: ['rh', 'comptabilite', 'proprietaire'], mots: 'export csv excel comptabilité télécharger',
+        r: gP(`Le bouton <strong>Exporter CSV</strong> de l'écran Notes de frais télécharge la liste filtrée. Pour la paie, les notes validées à rembourser sont aussi reprises dans l'export de l'écran <strong>Préparation de paie</strong>.`) }
+    ]
+  },
+  {
+    id: 'faire-formation', titre: 'Formation, entretiens et idées', icone: ICONS.graduation,
+    intro: gP(`Demander une formation, préparer ses entretiens et proposer des idées.`),
+    entrees: [
+      { id: 'e-formation', q: 'Comment demander une formation ?', module: 'entretiens', vue: 'formation', mots: 'formation stage cours organisme cpf compte personnel de formation demande financement',
+        r: gEtapes(
+          `Ouvrez <strong>Formation</strong> dans le menu.`,
+          `Cliquez pour créer une demande : intitulé, organisme, dates, durée et coût estimé. Vous pouvez ajouter un lien vers le programme.`,
+          `Choisissez le financement : <strong>par l'entreprise</strong> ou avec votre <strong>compte personnel de formation (CPF)</strong>.`,
+          `Envoyez : votre manager ou les RH acceptent ou refusent (avec un motif), puis marquent la formation comme réalisée.`
+        ) + gP(`Vous pouvez corriger ou annuler votre demande tant qu'elle n'est pas traitée.`) },
+      { id: 'e-cpf', q: 'Quel délai prévoir pour une formation CPF pendant le temps de travail ?', module: 'entretiens', mots: 'cpf délai prévenance préavis temps de travail autorisation absence compte personnel',
+        r: gP(`Le formulaire calcule le <strong>délai de prévenance</strong> à respecter d'après la durée de la formation et vous signale s'il n'est pas tenu. Il ne bloque jamais l'envoi de la demande. Renseignez les dates dès que vous les connaissez : le calcul part d'elles.`) },
+      { id: 'e-lettres', q: 'Où trouver les lettres de la demande de formation ?', module: 'entretiens', mots: 'lettre courrier imprimer autorisation absence réponse demande document modèle',
+        r: gP(`Dans l'écran Formation, le bouton <strong>Lettres</strong> prépare les courriers à imprimer : la demande de formation, l'autorisation d'absence pour une formation CPF pendant le temps de travail, et la réponse à la demande.`) },
+      { id: 'e-decider', q: 'Comment accepter ou refuser une demande de formation ?', module: 'entretiens', pour: GUIDE_EQUIPE, vue: 'formation', mots: 'décision accepter refuser formation manager rh motif demandes de l\'équipe réalisée',
+        r: gP(`Dans <strong>Formation</strong>, la rubrique « Demandes de l'équipe » liste les demandes à traiter. Ouvrez-en une et acceptez ou refusez (le refus demande un motif), puis marquez la formation comme réalisée une fois suivie. Une demande est toujours décidée par une autre personne que son auteur : vous ne pouvez pas accepter la vôtre.`) },
+      { id: 'e-mes-entretiens', q: 'Comment préparer mon entretien ?', module: 'entretiens', vue: 'mes-entretiens', mots: 'entretien annuel professionnel auto-évaluation préparer manager bilan trame',
+        r: gP(`Ouvrez <strong>Mes entretiens</strong> : vous voyez la date prévue. Avant l'entretien, remplissez votre <strong>auto-évaluation</strong> (les questions de la trame de l'entreprise s'affichent en haut s'il y en a une). Après l'entretien, vous consultez le retour de votre manager. L'auto-évaluation se verrouille une fois l'entretien clôturé par les RH.`) },
+      { id: 'e-planifier', q: 'Comment planifier un entretien avec un salarié ?', module: 'entretiens', pour: GUIDE_EQUIPE, vue: 'entretiens', mots: 'entretien planifier organiser date participants annuel professionnel rendez-vous',
+        r: gP(`Dans <strong>Entretiens</strong> (menu Équipe), choisissez de planifier un entretien : indiquez le salarié, la date et les participants. Le salarié prépare son auto-évaluation avant la date, vous ajoutez votre retour, puis les RH clôturent.`) },
+      { id: 'e-campagne', q: 'Comment lancer une campagne d\'entretiens pour toute l\'entreprise ?', module: 'entretiens', pour: GUIDE_GESTION, vue: 'entretiens', mots: 'campagne entretiens annuels tous trame questions masse lancer',
+        r: gP(`Dans <strong>Entretiens</strong>, utilisez « Lancer une campagne » pour planifier d'un coup les entretiens d'un groupe de salariés. « Gérer les trames » permet de rédiger les questions posées au salarié et au manager.`) },
+      { id: 'e-bilan6', q: 'Qu\'est-ce que le rappel « bilan à 6 ans » ?', module: 'entretiens', pour: GUIDE_EQUIPE, mots: 'bilan 6 ans entretien professionnel obligation légale rappel état des lieux',
+        r: gP(`C'est une obligation légale qui revient périodiquement pour chaque salarié. Un rappel apparaît automatiquement quand l'échéance approche, pour que vous n'oubliez ni la date ni l'entretien.`) },
+      { id: 'i-idee', q: 'Comment proposer une idée ou voter ?', vue: 'idees', mots: 'idée suggestion proposition boîte à idées vote voter amélioration',
+        r: gP(`Ouvrez la <strong>Boîte à idées</strong> et proposez la vôtre. Chacun voit toutes les idées et peut voter ; cliquer à nouveau sur le vote le retire. Les idées avancent de colonne en colonne (nouvelle, à l'étude, en cours, livrée, non retenue), ce qui permet à tous de suivre leur sort.`) }
+    ]
+  },
+  {
+    id: 'faire-documents', titre: 'Documents et fiche personnelle', icone: ICONS.folder,
+    intro: gP(`Retrouver ses documents, tenir sa fiche à jour et récupérer ses données.`),
+    entrees: [
+      { id: 'd-mes-docs', q: 'Où trouver mes documents (contrat, attestations...) ?', module: 'rh', vue: 'mes-documents', mots: 'document contrat avenant attestation bulletin coffre-fort fichier pdf télécharger',
+        r: gP(`Ouvrez <strong>Documents</strong> : vous y voyez les documents que les RH ont déposés pour vous (contrat, avenants, attestations...) ou diffusés à votre service. Un document qui manque n'a pas été partagé avec vous : demandez-le à vos RH.`) },
+      { id: 'd-rgpd', q: 'Comment télécharger mes données personnelles (RGPD) ?', mots: 'rgpd données personnelles export télécharger droit d\'accès copie',
+        r: gP(`Cliquez sur le rond avec vos initiales (en haut à droite), puis sur <strong>Télécharger mes données (RGPD)</strong> : vous recevez un fichier avec les données que Nexus conserve sur vous.`) },
+      { id: 'd-coordonnees', q: 'Comment modifier mes coordonnées ou corriger ma fiche ?', vue: 'ma-fiche', mots: 'adresse téléphone coordonnées modifier fiche information erreur nom changement',
+        r: gP(`Ouvrez <strong>Ma fiche</strong> : vous voyez vos informations telles que l'entreprise les a enregistrées. Selon vos droits, vous pouvez modifier vos coordonnées (adresse, téléphone...). Pour le reste (nom, contrat, poste...), signalez l'erreur à vos RH.`) },
+      { id: 'd-retraite', q: 'À quoi sert l\'écran « Ma retraite » ?', module: 'rh', vue: 'retraite', mots: 'retraite carrière âge départ emplois précédents ancienneté trimestres relevé',
+        r: gP(`Il rassemble des repères indicatifs : votre durée d'emploi dans l'entreprise, les périodes d'emploi précédentes que vous ajoutez vous-même (celles qui se recouvrent ne sont comptées qu'une fois) et l'âge légal de départ d'après votre date de naissance. Des liens renvoient vers les services officiels. Seul le relevé de carrière officiel fait foi.`) },
+      { id: 'd-ajouter', q: 'Comment ajouter un document au dossier d\'un salarié ?', module: 'rh', pour: GUIDE_GESTION, mots: 'ajouter document dossier salarié déposer fichier contrat attestation téléverser',
+        r: gEtapes(
+          `Ouvrez la fiche du salarié (menu Équipe, <strong>Salariés</strong>), onglet <strong>Documents</strong>.`,
+          `Cliquez sur <strong>+ Ajouter un document</strong>, choisissez le fichier et son type.`
+        ) + gP(`Le salarié le retrouve dans son écran Documents.`) },
+      { id: 'd-diffuser', q: 'Comment diffuser un document à tout un service ?', module: 'rh', pour: GUIDE_GESTION, vue: 'mes-documents', mots: 'diffuser diffusion document tous établissement service catégorie règlement note lu',
+        r: gP(`Dans <strong>Documents</strong>, utilisez la diffusion : choisissez le document puis le périmètre (établissement, service ou catégorie de salariés). Il est déposé chez tous en une seule fois, et vous suivez qui l'a lu.`) }
+    ]
+  },
+  {
+    id: 'faire-compte', titre: 'Mon compte, sécurité et confort', icone: ICONS.gear,
+    intro: gP(`Mot de passe, apparence, notifications, plusieurs comptes : tout ce qui se règle depuis le rond avec vos initiales, en haut à droite.`),
+    entrees: [
+      { id: 'k-mdp', q: 'Comment changer mon mot de passe ?', mots: 'mot de passe mdp changer modifier password sécurité',
+        r: gP(`Cliquez sur le rond avec vos initiales, puis sur <strong>Modifier mon mot de passe</strong>. Choisissez-en un nouveau et confirmez.`) },
+      { id: 'k-mdp-oublie', q: 'J\'ai oublié mon mot de passe', mots: 'oublié perdu mot de passe mdp réinitialiser connexion impossible mail lien',
+        r: gEtapes(
+          `Sur l'écran de connexion, cliquez sur <strong>Mot de passe oublié ?</strong> et saisissez votre adresse e-mail professionnelle.`,
+          `Ouvrez le message reçu (pensez à regarder les courriers indésirables) et suivez le lien pour choisir un nouveau mot de passe.`
+        ) + gP(`Si rien n'arrive, demandez à vos RH : ils peuvent vous attribuer un mot de passe provisoire depuis l'onglet « Accès et droits » de votre fiche.`) },
+      { id: 'k-mdp-premier', q: 'On me demande de changer mon mot de passe à la connexion', mots: 'première connexion mot de passe provisoire obligatoire changer nouveau compte',
+        r: gP(`C'est normal quand vos RH vous ont donné un mot de passe provisoire : Nexus vous demande d'en choisir un personnel avant de continuer. Choisissez-en un que vous n'utilisez nulle part ailleurs.`) },
+      { id: 'k-theme', q: 'Comment passer en mode sombre ?', mots: 'thème sombre clair nuit apparence couleur affichage dark',
+        r: gP(`Dans le menu du rond en haut à droite, choisissez <strong>Système</strong> (suit votre appareil), <strong>Clair</strong> ou <strong>Sombre</strong>. Le choix est mémorisé.`) },
+      { id: 'k-photo', q: 'Comment changer ma photo de profil ?', vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'photo avatar image profil portrait',
+        r: gP(`Ouvrez le menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Photo de profil ». Elle s'affiche ensuite à côté de votre nom partout (planning, listes, en-tête).`) },
+      { id: 'k-notifs', q: 'Où voir mes notifications ?', mots: 'notification cloche alerte rappel message demande à valider décision',
+        r: gP(`La <strong>cloche</strong> en haut de l'écran regroupe tout ce qui vous concerne : demandes à valider, décisions prises sur vos demandes, rappels. Un clic sur une notification ouvre l'écran concerné, et vous pouvez l'archiver une fois lue. Vous ne voyez que les notifications des modules auxquels vous avez accès.`) },
+      { id: 'k-installer', q: 'Comment installer Nexus comme une application ?', mots: 'installer application téléphone mobile tablette écran d\'accueil raccourci pwa icône',
+        r: gP(`Dans votre navigateur, utilisez l'option <strong>Installer l'application</strong> (ou « Ajouter à l'écran d'accueil » sur téléphone). Nexus s'ouvre alors dans sa propre fenêtre, comme une vraie application, sur ordinateur, téléphone ou tablette.`) },
+      { id: 'k-agenda', q: 'Comment voir mes congés dans mon agenda (Outlook, Google...) ?', module: 'conges', mots: 'agenda calendrier synchroniser ical outlook google apple lien abonnement synchronisation',
+        r: gP(`Dans le menu du rond en haut à droite, cliquez sur <strong>Synchroniser mon calendrier</strong>. Choisissez ce que vous voulez voir, puis ajoutez le lien proposé dans votre logiciel de calendrier (Outlook, Google Agenda...). Les congés validés y apparaissent ; la mise à jour se fait ensuite automatiquement, au rythme de votre logiciel de calendrier.`) },
+      { id: 'k-comptes', q: 'Comment passer d\'une entreprise à une autre sans me déconnecter ?', mots: 'plusieurs comptes entreprises changer de compte basculer ajouter un compte multi société retirer',
+        r: gP(`Dans le menu du rond, <strong>Ajouter un compte</strong> vous connecte à une autre entreprise en gardant la première. Les comptes gardés apparaissent ensuite dans « Autres comptes » : un clic pour basculer. La croix à côté d'un compte le retire de cet appareil (sans rien supprimer ailleurs).`) },
+      { id: 'k-recherche', q: 'Comment utiliser la recherche en haut ?', mots: 'recherche ctrl k raccourci trouver salarié action rapide clavier global',
+        r: gP(`La barre de recherche (raccourci <strong>Ctrl+K</strong>, ⌘K sur Mac) retrouve un salarié, une demande ou une note de frais en tapant son nom, et lance des actions : ajouter un salarié, poser un congé, déclarer du télétravail... Elle ne montre que ce que vous avez le droit de voir.`) },
+      { id: 'k-version', q: 'Comment savoir quelle version j\'utilise et ce qui a changé ?', mots: 'version numéro mise à jour nouveautés changements actualiser recharger nouvelle',
+        r: gP(`Le numéro de version est affiché en bas du menu du rond en haut à droite, avec le lien <strong>Nouveautés</strong> qui liste les changements. Après une mise à jour, rechargez la page (bouton de rechargement en haut à droite) pour passer à la dernière version.`) },
+      { id: 'k-support', q: 'Comment signaler un problème ou poser une question ?', vue: 'mes-tickets', mots: 'support aide bug problème erreur question contact ticket signaler assistance',
+        r: gEtapes(
+          `Ouvrez <strong>Aide et support</strong> (ou « Aide / Signaler un problème » dans le menu du rond).`,
+          `Cliquez sur <strong>+ Nouveau ticket</strong> et décrivez le problème : ce que vous faisiez, ce que vous attendiez, ce qui s'est passé.`
+        ) + gP(`Vous suivez la réponse de l'équipe Nexus et le statut au même endroit. Attention : ce n'est pas l'écran des tickets restaurant.`) },
+      { id: 'k-deconnexion', q: 'Comment me déconnecter ?', mots: 'déconnexion quitter sortir fermer session',
+        r: gP(`Menu du rond en haut à droite, puis <strong>Se déconnecter</strong>. Pensez-y sur un ordinateur partagé.`) }
+    ]
+  },
+  {
+    id: 'faire-equipe', titre: 'Suivre mon équipe', icone: ICONS.people, pour: GUIDE_EQUIPE,
+    intro: gP(`Voir qui est là, qui est absent, les soldes de chacun et les horaires.`),
+    entrees: [
+      { id: 'q-equipe', q: 'Comment voir mon équipe et la fiche de chacun ?', vue: 'employees', mots: 'équipe salariés liste fiche collaborateurs membres filtrer établissement service',
+        r: gP(`Dans le menu Équipe, <strong>Salariés</strong> (intitulé « Mon équipe » pour un manager) liste les personnes de votre périmètre. Filtrez par établissement, service, type de contrat ou statut, ou tapez un nom, un poste ou un matricule ; cliquez une ligne pour ouvrir la fiche. Un manager ne voit que son équipe.`) },
+      { id: 'q-calendrier', q: 'Comment voir les absences de mon équipe sur un calendrier ?', module: 'conges', vue: 'calendrier', mots: 'calendrier équipe absences congés qui est absent mois agenda',
+        r: gP(`Dans <strong>Calendrier</strong>, basculez de « Mon calendrier » à <strong>Calendrier équipe</strong>. Les demandes validées apparaissent avec leur icône de type, celles en attente en semi-transparent. Cliquez un jour pour le détail : qui, quel type, quel statut.`) },
+      { id: 'q-planning', q: 'Comment déplacer un congé validé dans le planning ?', module: 'planning', vue: 'planning', mots: 'planning glisser déposer déplacer semaine mois année horaires équipe postes',
+        r: gP(`Dans <strong>Planning</strong>, vues Semaine ou Mois, faites glisser la case d'un congé ou d'un télétravail <strong>déjà validé</strong> vers un autre jour du même salarié : toute la période se déplace. Les mêmes règles qu'à la création s'appliquent (chevauchement, quota de télétravail, période du contrat), et le message indique la règle en cause en cas de refus. Les vues Année et Horaires donnent le total par mois et les heures réelles.`) },
+      { id: 'q-compteurs', q: 'Où voir les soldes de congés de toute mon équipe ?', module: 'conges', vue: 'tableau-compteurs', mots: 'soldes compteurs tableau équipe congés rtt disponible acquisition export',
+        r: gP(`Le <strong>Tableau des compteurs</strong> affiche le solde de chaque salarié type par type. Un type pas encore activé reste affiché, grisé. Filtrez par service avant de comparer ou d'exporter pour une grande équipe.`) },
+      { id: 'q-pointeuse', q: 'Comment suivre les pointages de mon équipe ?', module: 'pointage', vue: 'pointeuse', mots: 'pointeuse pointage horaires arrivée départ qr équipe retard oubli régulariser',
+        r: gP(`Dans <strong>Pointeuse</strong>, la vue équipe montre les pointages, repère les écarts et permet de <strong>régulariser</strong> un oubli. Vous pouvez aussi afficher le QR code de chaque établissement, que les salariés scannent sur le lieu de travail.`) },
+      { id: 'q-organigramme', q: 'Comment lire ou corriger l\'organigramme ?', module: 'rh', vue: 'organigramme', mots: 'organigramme hiérarchie manager rattachement arbre qui dépend de qui',
+        r: gP(`L'arbre suit strictement le champ « Manager(s) » de chaque fiche. Pour déplacer quelqu'un, corrigez ce champ sur sa fiche : l'organigramme se met à jour tout seul. Vous pouvez replier les branches, filtrer et imprimer.`) }
+    ]
+  }
+];
+
+GUIDE_THEMES.push(
+  {
+    id: 'faire-salaries', titre: 'Salariés, contrats et accès', icone: ICONS.personPlus, pour: GUIDE_GESTION,
+    intro: gP(`Créer et importer des salariés, gérer leurs contrats, leurs soldes et leurs accès.`),
+    entrees: [
+      { id: 's-ajouter', q: 'Comment ajouter un salarié ?', vue: 'employees', mots: 'nouveau salarié créer embauche ajouter collaborateur fiche employé arrivée',
+        r: gEtapes(
+          `Ouvrez <strong>Salariés</strong> (menu Équipe) et cliquez sur <strong>+ Nouveau salarié</strong>.`,
+          `Renseignez l'identité (nom, prénom, e-mail), la date d'embauche, puis le poste, le service, le contrat et le ou les managers.`,
+          `Enregistrez : la fiche est créée. Pour qu'il puisse se connecter, vérifiez son accès (création du compte de connexion) dans l'onglet « Accès et droits » de sa fiche.`
+        ) },
+      { id: 's-import', q: 'Comment importer plusieurs salariés depuis Excel ?', vue: 'employees', mots: 'import importer excel xlsx fichier salariés masse colonnes csv chargement reprise',
+        r: gEtapes(
+          `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer Excel</strong>.`,
+          `Choisissez votre fichier (.xlsx). Les colonnes sont reconnues par leur en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance.`,
+          `<strong>Nom, Prénom, Email et Date d'embauche sont obligatoires.</strong> Cochez « Conserver les matricules du fichier » seulement si vous y tenez : sinon ils sont attribués automatiquement (recommandé).`,
+          `Contrôlez l'aperçu affiché, puis cliquez sur <strong>Importer</strong>.`
+        ) },
+      { id: 's-import-soldes', q: 'Comment reprendre les soldes de congés de départ ?', module: 'conges', vue: 'employees', mots: 'import soldes initiaux reprise compteurs congés payés rtt excel départ démarrage ancien logiciel',
+        r: gEtapes(
+          `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer les soldes initiaux</strong>.`,
+          `Préparez un fichier Excel avec une colonne d'identification (Matricule ou Email) et <strong>une colonne par type de congé</strong>, nommée comme le type (« Congés payés », « RTT »...).`,
+          `Dites ce que représentent les chiffres : <strong>le solde à avoir aujourd'hui</strong> (recommandé : Nexus calcule lui-même l'ajustement pour afficher exactement ce solde) ou <strong>des jours à ajouter ou retirer</strong> au solde calculé (cette option remplace l'ajustement précédent du compteur).`,
+          `Vérifiez l'aperçu puis cliquez sur <strong>Importer</strong>.`
+        ) },
+      { id: 's-import-histo', q: 'Comment reprendre l\'historique des congés et absences passés ?', module: 'conges', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'import historique congés absences passés reprise excel demandes anciennes',
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, utilisez <strong>Importer l'historique</strong>. Chaque ligne du fichier crée directement une demande au statut <strong>Validé</strong>, sans passer par une validation : à réserver aux absences déjà passées. Les salariés sont reconnus par leur matricule ou leur e-mail, et les types par leur nom.`) },
+      { id: 's-ajuster', q: 'Comment corriger le compteur de congés d\'un salarié ?', module: 'conges', mots: 'ajuster compteur solde corriger modifier congés payés rtt jours ajout retrait régularisation manuel',
+        r: gEtapes(
+          `Ouvrez la fiche du salarié, onglet <strong>Congés et absences</strong>, puis <strong>Voir le détail des compteurs</strong>.`,
+          `Choisissez le compteur à corriger. Indiquez <strong>le solde que le salarié doit avoir</strong> (Nexus calcule l'ajustement) ou <strong>des jours à ajouter ou retirer</strong>.`,
+          `Saisissez le <strong>motif</strong> et validez : la correction est tracée.`
+        ) + gP(`Pour votre <em>propre</em> fiche, la correction est normalement réservée au propriétaire. Pendant la mise en service de l'outil, le propriétaire peut activer le « mode mise en service » pour que les RH corrigent aussi leurs propres compteurs.`) },
+      { id: 's-contrat', q: 'Comment gérer les contrats et avenants ?', module: 'rh', mots: 'contrat avenant cdi cdd période d\'essai projet de contrat clause renouvellement fin de contrat durée modèle',
+        r: gP(`Sur la fiche du salarié, onglet <strong>Contrat</strong> : <strong>+ Nouveau contrat</strong> crée un contrat, et chaque contrat permet d'ajouter un <strong>avenant</strong>, de le corriger ou de générer un <strong>projet de contrat</strong> à partir de vos modèles et clauses (Paramètres, « Modèles de documents »). Les fins de contrat du mois remontent aussi dans la préparation de paie.`) },
+      { id: 's-acces', q: 'Comment donner un accès à un salarié ou changer ses droits ?', mots: 'accès compte connexion rôle droits permissions menus manager rh comptabilité identifiant créer compte mot de passe provisoire',
+        r: gP(`Sur la fiche du salarié, onglet <strong>Accès et droits</strong> :`) + gListe(
+          `<strong>créer son compte de connexion</strong> ;`,
+          `lui attribuer un <strong>mot de passe provisoire</strong> s'il est bloqué : il devra en choisir un nouveau à la connexion ;`,
+          `<strong>changer son rôle</strong> (salarié, manager, RH, comptabilité) ;`,
+          `ajuster ses <strong>permissions</strong> une par une et les <strong>menus autorisés</strong>, pour un cas particulier.`) + gP(`Une permission réglée sur la fiche passe toujours avant celle du rôle.`) },
+      { id: 's-archiver', q: 'Comment archiver un salarié qui part ?', mots: 'archiver départ démission fin contrat sortie quitte réactiver désactiver offboarding',
+        r: gP(`Sur la fiche, <strong>Archiver</strong> (puis « Réactiver » pour revenir en arrière). Un salarié archivé n'apparaît plus par défaut dans la liste : utilisez le filtre de statut pour le retrouver. Avant de partir, la checklist de départ de l'onglet <strong>Parcours</strong> (« Démarrer le offboarding ») aide à ne rien oublier : matériel, accès, solde de tout compte.`) },
+      { id: 's-documents-rh', q: 'Comment produire une attestation ou un certificat de travail ?', module: 'rh', mots: 'attestation employeur certificat de travail document pdf imprimer générer modèle lettre fiche impression',
+        r: gP(`Depuis la fiche du salarié, les actions de document permettent de générer et d'imprimer une <strong>attestation employeur</strong>, un <strong>certificat de travail</strong> ou un document de vos modèles (Paramètres, « Modèles de documents »). Depuis une demande d'absence, vous pouvez aussi produire l'attestation correspondante, y compris l'attestation de salaire pour un arrêt.`) },
+      { id: 's-registre', q: 'Où trouver le registre du personnel et l\'index égalité professionnelle ?', module: 'rh', mots: 'registre unique du personnel index égalité professionnelle obligation légale 1er mars déclaration',
+        r: gP(`Sur l'écran <strong>Salariés</strong>, les boutons <strong>Registre du personnel</strong> et <strong>Index égalité pro</strong> ouvrent ces documents obligatoires. Si l'index de l'année précédente n'est pas encore déclaré, un rappel s'affiche en haut de l'écran (échéance légale au 1er mars).`) },
+      { id: 's-export', q: 'Comment exporter la liste des salariés ?', mots: 'export excel liste salariés télécharger fichier extraction',
+        r: gP(`Sur l'écran <strong>Salariés</strong>, le bouton <strong>Exporter Excel</strong> télécharge la liste telle qu'elle est filtrée.`) },
+      { id: 's-embauche', q: 'Comment recruter : publier un poste et traiter les candidatures ?', module: 'embauche', vue: 'embauche', mots: 'embauche recrutement candidature candidat poste offre cv qr code lien formulaire entretien embaucher refuser',
+        r: gEtapes(
+          `Ouvrez <strong>Embauche</strong> et créez le poste à pourvoir.`,
+          `Partagez le <strong>QR code ou le lien</strong> de l'offre : le candidat postule avec son CV et sa lettre, sans créer de compte.`,
+          `Traitez chaque candidature : proposer des créneaux d'entretien, ajouter une évaluation, refuser avec un motif, ou cliquer sur <strong>Embaucher</strong>.`
+        ) + gP(`« Embaucher » crée directement la fiche du salarié, préremplie avec les informations de la candidature.`) },
+      { id: 's-prise-en-main', q: 'Par où commencer quand on démarre avec Nexus ?', vue: 'prise-en-main', mots: 'démarrer commencer prise en main premiers pas mise en service paramétrage ordre étapes données de départ',
+        r: gP(`Suivez l'écran <strong>Prise en main</strong> : il liste dans l'ordre les données de départ à renseigner (salariés, types de congés, soldes, historique), explique pourquoi chaque étape compte, où la faire, et indique si elle est faite. Suivez-les dans l'ordre proposé : salariés, types de congés, soldes, puis historique.`) }
+    ]
+  },
+  {
+    id: 'faire-reglages-conges', titre: 'Régler les congés et le planning', icone: ICONS.sun, pour: GUIDE_GESTION, module: 'conges',
+    intro: gP(`Types de congés, règles d'acquisition, jours fériés et fermetures : les réglages qui font fonctionner les soldes.`),
+    entrees: [
+      { id: 'r-type', q: 'Comment créer ou modifier un type de congé ou d\'absence ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'type congé absence créer modifier règle acquisition mensuelle annuelle illimitée justificatif workflow validation rtt maladie nouveau type',
+        r: gEtapes(
+          `Ouvrez <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`,
+          `Cliquez sur <strong>+ Nouveau type</strong> (ou ouvrez un type existant).`,
+          `Réglez le <strong>mode d'acquisition</strong> : <em>Mensuelle</em>, <em>Annuelle</em> ou <em>Illimitée</em> (pas de solde), le nombre de jours par an, l'unité (jours ouvrés ou ouvrables), la date de clôture du compteur, le circuit de validation et le <strong>justificatif obligatoire</strong> si la loi en exige un (arrêt maladie...).`
+        ) + gP(`Vous pouvez aussi cocher « Déduire du compteur RTT/CP » pour qu'un type s'impute en plus sur un compteur, et marquer un type « export paie » pour qu'il apparaisse dans l'export de paie.`) },
+      { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
+        r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
+      { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
+        r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
+      { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
+        r: gP(`Chaque type de congé a une <strong>date de clôture du compteur</strong> (par exemple le 31 mai) : la période d'acquisition court alors du lendemain de la clôture précédente (1er juin) jusqu'à cette date. Au sein d'une période close, le solde est <strong>disponible</strong> ; celle en cours reste « en cours d'acquisition » jusqu'à sa clôture.`) },
+      { id: 'r-anticipation', q: 'Peut-on poser des jours qu\'on n\'a pas encore acquis ?', mots: 'anticipation par anticipation acquis à date dépasser solde négatif autoriser interdit',
+        r: gP(`C'est un choix à valider avec votre accord d'entreprise ou votre convention. Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, « Congés par anticipation » propose trois règles : <em>aucun contrôle</em> (une demande peut dépasser le solde), <em>interdite</em> (seulement le solde disponible) ou <em>autorisée dans la limite des jours acquis à date</em>.`) },
+      { id: 'r-feries', q: 'Comment ajouter un jour férié ou une fermeture de l\'entreprise ?', vue: 'parametres', params: { parametresTab: 'calendrier' }, vueLabel: 'Paramètres', mots: 'jour férié fermeture entreprise pont calendrier ajouter jours chômés vacances scolaires',
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Calendrier</strong> : ajoutez un jour férié ou une fermeture. Les vacances scolaires se règlent dans l'onglet <strong>Congés et absences</strong> (rubrique vacances, avec la possibilité de récupérer les dates officielles).`) },
+      { id: 'r-teletravail', q: 'Comment régler le quota de télétravail ?', module: 'planning', vue: 'parametres', params: { parametresTab: 'planning-teletravail' }, vueLabel: 'Paramètres', mots: 'quota télétravail semaine règle jours maximum planning réglage',
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Planning et télétravail</strong>. Le quota se calcule par semaine, en additionnant les demandes validées et en attente.`) },
+      { id: 'r-workflow', q: 'Qui valide les demandes ?', mots: 'workflow circuit validation étapes manager rh valideur qui valide approbation',
+        r: gP(`Chaque type de congé et le circuit des notes de frais ont leur propre circuit de validation, réglé dans Paramètres. Un manager agit à l'étape qui lui est confiée et uniquement sur son équipe ; les RH et le propriétaire peuvent agir sur toute l'entreprise. Une demande en attente génère des rappels à ceux qui doivent la traiter.`) }
+    ]
+  },
+  {
+    id: 'faire-paie', titre: 'Paie, tickets restaurant et rémunération', icone: ICONS.coin, pour: GUIDE_GESTION,
+    intro: gP(`Préparer la paie du mois sans oubli, et suivre tickets restaurant, heures supplémentaires et rémunération.`),
+    entrees: [
+      { id: 'p-preparer', q: 'Comment préparer la paie du mois ?', module: 'rh', vue: 'export-paie', mots: 'paie export préparation mois csv logiciel de paie sage silae cegid payfit variables anomalies bulletin',
+        r: gEtapes(
+          `Ouvrez <strong>Préparation de paie</strong> et choisissez le mois.`,
+          `Sur l'onglet <strong>Préparation &amp; anomalies</strong>, corrigez ce qui est signalé : soldes négatifs, dates hors contrat, justificatifs manquants, données administratives incomplètes.`,
+          `Saisissez les <strong>variables du mois</strong> (primes...) avec le bouton d'édition de la colonne Variables.`,
+          `Passez sur l'onglet <strong>Export CSV</strong>, choisissez le modèle de votre logiciel de paie puis cliquez sur <strong>Exporter CSV</strong>.`
+        ) + gP(`Vérifiez le fichier avant de l'importer : les modèles fixent une convention courante mais chaque logiciel de paie a son propre format.`) },
+      { id: 'p-anomalies', q: 'Une anomalie « bloquante » empêche-t-elle l\'export ?', module: 'rh', mots: 'anomalie bloquante avertissement information export impossible paie contrôle erreur',
+        r: gP(`Non : le bouton d'export reste actif volontairement (un blocage dur serait risqué un jour de paie). Mais une anomalie <strong>bloquante</strong> doit être corrigée avant de considérer le fichier fiable. Les anomalies sont classées Bloquantes, Avertissements, Informations.`) },
+      { id: 'p-variables', q: 'Où saisir une prime ou un élément variable ?', module: 'rh', mots: 'variable prime élément ponctuel paie montant bonus saisir exceptionnelle',
+        r: gP(`Aucun module ne calcule les primes ou heures supplémentaires automatiquement : dans <strong>Préparation de paie</strong>, utilisez le bouton d'édition de la colonne <strong>Variables</strong> du récapitulatif et saisissez le montant du mois.`) },
+      { id: 'p-nexus-gestion', q: 'Comment envoyer les données vers Nexus Gestion ?', module: 'rh', mots: 'nexus gestion comptabilité export json notes de frais tickets journal de paie',
+        r: gP(`Dans <strong>Préparation de paie</strong>, le bouton <strong>Exporter vers Nexus Gestion</strong> produit un fichier des notes de frais validées, du récapitulatif des tickets restaurant et du journal de paie du mois (s'il est enregistré), à importer dans Nexus Gestion.`) },
+      { id: 'p-tickets', q: 'Comment sont calculés les tickets restaurant ?', module: 'tickets', vue: 'tickets', mots: 'tickets restaurant titres repas nombre jours travaillés calcul mois corriger ajuster',
+        r: gP(`Nexus compte, pour chaque salarié, ses <strong>jours réellement travaillés</strong> dans le mois, congés et télétravail validés déduits. Si un nombre vous semble faux, vérifiez les jours travaillés de la fiche et les congés du mois. Un ajustement manuel ponctuel est possible par salarié (réservé aux RH et au propriétaire), et le bouton d'export télécharge le récapitulatif. Les règles se règlent dans Paramètres, onglet « Tickets restaurant ».`) },
+      { id: 'p-heures-sup', q: 'Comment suivre les heures supplémentaires et le repos compensateur ?', module: 'remuneration', vue: 'remuneration', mots: 'heures supplémentaires heures sup contingent repos compensateur majoration récupération suivi annuel',
+        r: gP(`L'écran <strong>Rémunération</strong> consolide le salaire brut mensuel, les heures supplémentaires saisies par rapport au <strong>contingent annuel</strong> (réglé dans Paramètres) et le solde de repos compensateur. Le détail et l'ajustement se font sur la fiche de chaque salarié. Le taux de conversion des heures en repos n'est pas calculé automatiquement : il dépend de votre effectif et de vos accords, à confirmer avec votre gestionnaire de paie.`) },
+      { id: 'p-radar', q: 'À quoi sert le Radar trésorerie RH ?', module: 'remuneration', mots: 'radar trésorerie masse salariale projection embauches départs 30 60 90 jours prévision',
+        r: gP(`Il projette l'impact des embauches et des départs déjà planifiés sur la masse salariale à 30, 60 et 90 jours, pour anticiper plutôt que découvrir.`) }
+    ]
+  },
+  {
+    id: 'faire-parametres', titre: 'Paramètres de l\'entreprise', icone: ICONS.building, pour: GUIDE_GESTION,
+    intro: gP(`L'écran <strong>Paramètres</strong> (menu du rond en haut à droite) regroupe tous les réglages de l'entreprise.`),
+    entrees: [
+      { id: 'a-onglets', q: 'À quoi servent les onglets de Paramètres ?', vue: 'parametres', mots: 'paramètres réglages onglets configuration entreprise liste tout où régler',
+        r: `<dl class="guide-defs">
+          <dt>Entreprise</dt><dd>Les informations de la société.</dd>
+          <dt>Abonnement</dt><dd>La formule, les modules et le paiement (propriétaire).</dd>
+          <dt>Établissements</dt><dd>Les lieux de travail de l'entreprise.</dd>
+          <dt>Services &amp; équipes</dt><dd>Les services, les équipes et leurs managers.</dd>
+          <dt>Référentiels</dt><dd>Les listes de référence : postes, catégories de frais, catégories de salariés...</dd>
+          <dt>Calendrier</dt><dd>Les jours fériés et les fermetures.</dd>
+          <dt>RH</dt><dd>Les réglages de la gestion du personnel.</dd>
+          <dt>Congés et absences</dt><dd>Les types de congés et d'absences, les règles d'acquisition, l'anticipation, les vacances scolaires, la reprise de l'historique, le mode mise en service.</dd>
+          <dt>Rémunération</dt><dd>Le contingent d'heures supplémentaires et les réglages de masse salariale.</dd>
+          <dt>Planning et télétravail</dt><dd>Les règles du planning et le quota de télétravail.</dd>
+          <dt>Notes de frais</dt><dd>Le circuit de validation et les catégories.</dd>
+          <dt>Tickets restaurant</dt><dd>Les règles de calcul des tickets.</dd>
+          <dt>Intégrations</dt><dd>Les liens avec vos autres outils.</dd>
+          <dt>Modèles de documents</dt><dd>Les modèles de lettres, d'attestations, de contrats et leurs clauses.</dd>
+          <dt>Registre du personnel</dt><dd>Le registre unique du personnel.</dd>
+          <dt>Audit</dt><dd>Le journal qui trace qui a fait quoi, et les contrôles de cohérence.</dd>
+          <dt>Mon compte</dt><dd>Votre photo de profil, votre délégation de validation.</dd>
+        </dl>` + gP(`Les onglets d'un module n'apparaissent que si votre entreprise a souscrit ce module. Un indicateur « x/y » à côté de certains onglets montre l'avancement du paramétrage.`) },
+      { id: 'a-etablissement', q: 'Comment créer un établissement, un service ou une équipe ?', vue: 'parametres', params: { parametresTab: 'etablissements' }, vueLabel: 'Paramètres', mots: 'établissement service équipe créer ajouter site agence département manager équipe responsable',
+        r: gP(`Dans <strong>Paramètres</strong> : onglet <strong>Établissements</strong> puis <strong>+ Nouvel établissement</strong> ; onglet <strong>Services &amp; équipes</strong> puis <strong>+ Nouveau service</strong>, avec les équipes et leurs managers. Créez-les avant d'ajouter les salariés pour pouvoir les y rattacher.`) },
+      { id: 'a-modeles', q: 'Comment créer un modèle de document ou une clause de contrat ?', vue: 'parametres', params: { parametresTab: 'modeles-documents' }, vueLabel: 'Paramètres', mots: 'modèle document lettre attestation contrat clause texte personnaliser variables générer',
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Modèles de documents</strong> : ajoutez un modèle de document, ou une clause de contrat réutilisable. Ils servent ensuite à générer les documents et les projets de contrat depuis la fiche d'un salarié.`) },
+      { id: 'a-audit', q: 'Comment savoir qui a modifié quelque chose ?', vue: 'parametres', params: { parametresTab: 'audit' }, vueLabel: 'Paramètres', mots: 'audit journal historique trace qui a fait modification contrôle suivi export',
+        r: gP(`L'onglet <strong>Audit</strong> de Paramètres garde la trace des actions importantes (qui, quoi, quand) et permet de l'exporter. La fiche d'un salarié et l'historique d'une demande de congé donnent aussi le détail de ce qui les concerne.`) },
+      { id: 'a-integrations', q: 'Peut-on relier Nexus à d\'autres outils ?', vue: 'parametres', params: { parametresTab: 'integrations' }, vueLabel: 'Paramètres', mots: 'intégration lien outil agenda webhook connecter externe synchronisation',
+        r: gP(`Oui, dans l'onglet <strong>Intégrations</strong> de Paramètres. Chaque salarié peut aussi relier ses congés à son agenda avec « Synchroniser mon calendrier », et la paie s'exporte en CSV ou vers Nexus Gestion.`) }
+    ]
+  },
+  {
+    id: 'faire-proprietaire', titre: 'Abonnement et propriété du compte', icone: ICONS.card, pour: ['proprietaire'],
+    intro: gP(`Ce qui est réservé au propriétaire du compte.`),
+    entrees: [
+      { id: 'o-abonnement', q: 'Comment gérer mon abonnement et mes modules ?', vue: 'parametres', params: { parametresTab: 'abonnement' }, vueLabel: 'Abonnement', mots: 'abonnement facture paiement carte stripe formule modules licences offre prix souscrire résilier essai',
+        r: gP(`Ouvrez <strong>Abonnement</strong> dans le menu du rond en haut à droite : vous y voyez votre formule, vos modules et vos licences, et vous gérez le paiement. Pour une formule à la carte, les licences d'un module se répartissent entre les salariés.`) },
+      { id: 'o-transfert', q: 'Comment transférer la propriété du compte ?', mots: 'transférer propriété propriétaire céder changer de propriétaire nouveau responsable compte',
+        r: gP(`Menu du rond en haut à droite, puis <strong>Transférer la propriété</strong> : choisissez la personne qui devient propriétaire. Faites-le avec soin : le propriétaire a accès à tout, y compris l'abonnement.`) },
+      { id: 'o-mise-en-service', q: 'À quoi sert le « mode mise en service » ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'mise en service mode corriger ses propres congés compteurs rh démarrage reprise données temporaire 90 jours',
+        r: gP(`Normalement, personne ne gère sa propre demande de congé ni son propre compteur : seul le propriétaire le peut. Pendant que vous reprenez vos données dans Nexus, ce mode permet à la personne RH qui paramètre l'outil de corriger <strong>ses propres</strong> congés et compteurs.`) + gEtapes(
+          `Ouvrez <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`,
+          `Dans « Mode mise en service », choisissez la durée (de 1 à 90 jours) et cliquez sur <strong>Activer le mode</strong>.`
+        ) + gP(`Le mode s'éteint tout seul à la date choisie (ou plus tôt avec « Désactiver maintenant »), et chaque activation est tracée dans le journal d'audit. Seul le propriétaire peut l'activer.`) },
+      { id: 'o-vue-groupe', q: 'Comment suivre plusieurs entreprises ?', mots: 'groupe plusieurs sociétés vue groupe multi entreprises consolidation holding',
+        r: gP(`Si vous avez plusieurs comptes gardés sur cet appareil, le menu du rond propose <strong>Vue groupe</strong> : un résumé de vos entreprises côte à côte. Ajoutez chaque entreprise avec « Ajouter un compte ».`) }
+    ]
+  },
+  {
+    id: 'depannage', groupe: 'Aide', titre: 'Dépannage : ça ne marche pas', icone: ICONS.helpCircle,
+    intro: gP(`Un écran manque, une modification disparaît, un import échoue : voici les causes les plus fréquentes et quoi faire.`),
+    entrees: [
+      { id: 'x-ecran-absent', q: 'Je ne vois pas un écran ou un bouton dont on me parle', mots: 'manque absent introuvable invisible pas accès menu bouton droits rôle module interdit',
+        r: gP(`Nexus n'affiche que ce que votre rôle permet et ce que votre entreprise a souscrit. Vérifiez :`) + gListe(
+          `votre <strong>rôle</strong> (affiché en haut du menu du rond) : un salarié n'a pas les écrans d'équipe ;`,
+          `les <strong>modules</strong> souscrits par votre entreprise (un module non souscrit n'a ni menu ni bouton) ;`,
+          `vos <strong>permissions</strong> : vos RH peuvent les ajuster individuellement.`) + gP(`Demandez à vos RH ou au propriétaire du compte si un accès vous manque.`) },
+      { id: 'x-modif-disparait', q: 'Ma modification a disparu quand j\'ai rechargé la page', mots: 'disparu perdu pas enregistré modification sauvegarde recharger disparaît annulée refusée droits',
+        r: gP(`Cela arrive quand l'enregistrement a été refusé ou a échoué. Vérifiez :`) + gListe(
+          `si un message d'erreur ou un bandeau signalait un échec d'enregistrement : rechargez la page, vérifiez la donnée et recommencez ;`,
+          `si vous avez le <strong>droit</strong> de faire cette modification. Par exemple, un RH ne corrige pas ses propres congés, sauf pendant le mode mise en service (activé par le propriétaire) ;`,
+          `si votre connexion était coupée.`) + gP(`Si le problème se répète, envoyez un ticket depuis « Aide et support » avec ce que vous avez fait.`) },
+      { id: 'x-page-ancienne', q: 'L\'écran ne montre pas les nouveautés ou semble figé', mots: 'ancienne version cache actualiser recharger mise à jour bug figé écran ne change pas rafraîchir',
+        r: gListe(
+          `Cliquez sur le bouton de rechargement en haut à droite, ou rechargez la page (Ctrl+F5).`,
+          `Comparez le numéro de version (bas du menu du rond) avec celui annoncé dans « Nouveautés ».`,
+          `Si vous avez installé Nexus comme application, fermez-la complètement puis rouvrez-la.`) },
+      { id: 'x-import', q: 'Mon import Excel échoue ou saute des lignes', module: null, pour: GUIDE_GESTION, mots: 'import excel échec erreur lignes ignorées colonnes fichier format xlsx en-têtes date matricule',
+        r: gListe(
+          `Utilisez un fichier <strong>.xlsx</strong> (ou .csv) avec une <strong>ligne d'en-têtes</strong> : les colonnes sont reconnues par leur titre exact (Matricule, Nom, Prénom, Email...).`,
+          `Remplissez les colonnes <strong>obligatoires</strong> (pour les salariés : Nom, Prénom, Email, Date d'embauche). Une ligne incomplète est signalée dans l'aperçu.`,
+          `Vérifiez le format des <strong>dates</strong> et l'orthographe des <strong>types de congé</strong> : le nom de la colonne doit correspondre au type.`,
+          `Lisez l'aperçu avant de cliquer sur Importer : il indique les lignes qui poseront problème.`) },
+      { id: 'x-attente', q: 'Ma demande reste « En attente » depuis longtemps', mots: 'attente bloquée pas de réponse validation longue relance manager valide pas rappel',
+        r: gP(`La demande attend la décision de la personne chargée de la valider. Nexus lui envoie des rappels ; vous pouvez aussi la prévenir directement. Si elle est absente, un autre valideur (RH, ou un remplaçant désigné par délégation) peut traiter la demande.`) },
+      { id: 'x-qr', q: 'Le QR code de la pointeuse ne se scanne pas', module: 'pointage', mots: 'pointeuse qr code scanner caméra appareil photo autorisation ne marche pas pointage oublié',
+        r: gListe(
+          `Autorisez l'accès à l'<strong>appareil photo</strong> pour Nexus dans votre navigateur.`,
+          `Approchez-vous du QR code, avec assez de lumière, et assurez-vous de scanner celui de <strong>votre établissement</strong>.`,
+          `Si vous avez oublié de pointer, prévenez votre manager ou les RH : ils peuvent régulariser le pointage. Un rapport mensuel erroné peut être contesté depuis la Pointeuse.`) },
+      { id: 'x-solde-neg', q: 'Un compteur est négatif', mots: 'négatif solde négatif compteur moins dépassement anticipation',
+        r: gP(`Le solde est négatif quand les jours demandés dépassent les jours acquis. Selon le réglage « Congés par anticipation » de l'entreprise, c'est autorisé ou non. Un compteur négatif remonte en anomalie dans la préparation de paie : vérifiez les demandes, et corrigez le compteur si une reprise de données est en cause.`) },
+      { id: 'x-pas-mail', q: 'Je n\'ai pas reçu le message de réinitialisation du mot de passe', mots: 'mail email reçu spam courrier indésirable lien réinitialisation expiré',
+        r: gListe(
+          `Regardez dans les <strong>courriers indésirables</strong> et vérifiez l'adresse saisie : c'est celle enregistrée sur votre fiche.`,
+          `Le lien a une durée limitée : redemandez-en un si besoin.`,
+          `Sinon, demandez à vos RH de vous attribuer un mot de passe provisoire (onglet « Accès et droits » de votre fiche).`) },
+      { id: 'x-contact', q: 'Je n\'ai pas trouvé ma réponse', vue: 'mes-tickets', mots: 'contact aide support question assistance humain écrire équipe nexus',
+        r: gP(`Écrivez à l'équipe Nexus depuis <strong>Aide et support</strong> : décrivez ce que vous cherchez à faire. Vos questions aident aussi à compléter ce guide.`) }
+    ]
+  },
+  {
+    id: 'glossaire', groupe: 'Aide', titre: 'Glossaire', icone: ICONS.document,
+    intro: gP(`Les mots que Nexus emploie, expliqués simplement.`),
+    entrees: [
+      { id: 'g-cp', q: 'Congés payés (CP)', mots: 'cp conges payes congé vacances jours', r: gP(`Les jours de congé annuels rémunérés. Ils s'acquièrent au fil du temps, sur une période qui se clôt à une date fixée par l'entreprise (souvent le 31 mai).`) },
+      { id: 'g-rtt', q: 'RTT', mots: 'rtt réduction du temps de travail jours de repos', r: gP(`Jours de repos accordés en contrepartie d'un temps de travail supérieur à la durée légale, selon l'accord de votre entreprise. Ils ont leur propre compteur.`) },
+      { id: 'g-solde', q: 'Solde', mots: 'solde compteur jours restants disponible', r: gP(`Le nombre de jours qu'il vous reste à prendre : <strong>acquis + ajustement − pris − en attente</strong>.`) },
+      { id: 'g-acquis', q: 'Acquis, pris, en attente', mots: 'acquis pris en attente jours détail compteur', r: gP(`<strong>Acquis</strong> : jours gagnés depuis le début de la période. <strong>Pris</strong> : jours de congé validés. <strong>En attente</strong> : jours demandés et pas encore tranchés (déjà déduits du solde).`) },
+      { id: 'g-disponible', q: 'Disponible et en cours d\'acquisition', mots: 'disponible en cours d\'acquisition période close clôture compteur', r: gP(`Pour un type à clôture, le <strong>disponible</strong> est le solde de la période déjà close, que vous pouvez prendre tout de suite. Le montant « en cours d\'acquisition » s'accumule sur la période courante et ne se prend pas avant sa clôture. Les deux ne s'additionnent pas.`) },
+      { id: 'g-acquisition', q: 'Mode d\'acquisition (mensuelle, annuelle, illimitée)', mots: 'acquisition mensuelle annuelle illimitée règle gagner jours', r: gP(`La façon dont les jours s'accumulent : <strong>Mensuelle</strong> (un peu chaque mois), <strong>Annuelle</strong> (progressivement sur l'année) ou <strong>Illimitée</strong> (pas de solde à suivre).`) },
+      { id: 'g-ajustement', q: 'Ajustement', mots: 'ajustement correction compteur manuel reprise motif', r: gP(`Une correction manuelle d'un compteur (en plus ou en moins), toujours accompagnée d'un motif et tracée. Elle sert à reprendre les soldes de départ ou à corriger une erreur.`) },
+      { id: 'g-regularisation', q: 'Régularisation', mots: 'régulariser régularisation corriger demande validée motif', r: gP(`La correction d'une demande déjà validée (type, dates, demi-journée), avec un motif. L'historique conserve l'ancienne version.`) },
+      { id: 'g-brouillon', q: 'Brouillon', mots: 'brouillon demande non envoyée', r: gP(`Une demande enregistrée sans être envoyée, à reprendre plus tard depuis « Mes brouillons ».`) },
+      { id: 'g-workflow', q: 'Circuit de validation (workflow)', mots: 'workflow circuit validation étapes valideur', r: gP(`Les étapes qu'une demande franchit avant d'être définitive (par exemple manager, puis RH). Il se règle par type de congé et pour les notes de frais.`) },
+      { id: 'g-delegation', q: 'Délégation de validation', mots: 'délégation remplaçant suppléant validation absence', r: gP(`Autoriser quelqu'un à valider à votre place, pendant une période, les demandes de votre équipe.`) },
+      { id: 'g-justificatif', q: 'Justificatif', mots: 'justificatif pièce preuve arrêt facture', r: gP(`La pièce jointe qui prouve une demande : arrêt de travail pour une maladie, facture pour une note de frais.`) },
+      { id: 'g-role', q: 'Rôle', mots: 'rôle salarié manager rh comptabilité propriétaire profil', r: gP(`Votre profil dans Nexus : <strong>Salarié</strong>, <strong>Manager</strong>, <strong>RH</strong>, <strong>Comptabilité</strong> ou <strong>Propriétaire</strong>. Il détermine les écrans et actions auxquels vous avez accès.`) },
+      { id: 'g-permission', q: 'Permission', mots: 'permission droit autorisation accès individuel menus autorisés', r: gP(`Un droit précis (valider une absence, voir les compteurs, exporter la paie...). Chaque rôle en a par défaut, et les RH peuvent en ajouter ou en retirer à une personne.`) },
+      { id: 'g-module', q: 'Module', mots: 'module souscrit abonnement fonctionnalité option à la carte licence', r: gP(`Un ensemble de fonctions (congés, planning, notes de frais, tickets restaurant, pointage...) que l'entreprise souscrit. Sans le module, ses écrans et boutons n'apparaissent pas.`) },
+      { id: 'g-mise-en-service', q: 'Mode mise en service', mots: 'mise en service mode temporaire corriger ses propres congés', r: gP(`Un mode temporaire (1 à 90 jours), activé par le propriétaire, qui permet à la personne RH qui paramètre l'outil de corriger ses propres congés et compteurs.`) },
+      { id: 'g-matricule', q: 'Matricule', mots: 'matricule numéro identifiant salarié', r: gP(`Le numéro qui identifie un salarié dans l'entreprise. Il est attribué automatiquement, ou repris d'un fichier lors d'un import.`) },
+      { id: 'g-etablissement', q: 'Établissement, service, équipe', mots: 'établissement service équipe organisation site département', r: gP(`Le <strong>établissement</strong> est un lieu de travail ; le <strong>service</strong> un département ; l'<strong>équipe</strong> un groupe plus petit, avec un ou plusieurs managers.`) },
+      { id: 'g-cpf', q: 'CPF (compte personnel de formation)', mots: 'cpf compte personnel de formation financement droits formation', r: gP(`Un droit à formation attaché à la personne, utilisable avec ou sans l'accord de l'employeur selon que la formation a lieu pendant ou hors du temps de travail. Nexus prépare la demande et les lettres associées.`) },
+      { id: 'g-prevenance', q: 'Délai de prévenance', mots: 'délai prévenance préavis cpf avance demande', r: gP(`Le temps à respecter entre votre demande et le début de la formation. Le formulaire le calcule d'après la durée et vous alerte s'il n'est pas tenu, sans jamais bloquer l'envoi.`) },
+      { id: 'g-entretien-pro', q: 'Entretien professionnel et bilan à 6 ans', mots: 'entretien professionnel annuel bilan 6 ans évaluation obligation', r: gP(`Un échange régulier sur votre parcours et vos besoins de formation, qui se tient tous les deux ans et fait l'objet d'un bilan tous les six ans. Nexus rappelle les échéances.`) },
+      { id: 'g-auto-eval', q: 'Auto-évaluation et trame', mots: 'auto-évaluation trame questions entretien préparer campagne', r: gP(`L'<strong>auto-évaluation</strong> est ce que vous écrivez avant l'entretien. La <strong>trame</strong> est la liste de questions fixée par l'entreprise.`) },
+      { id: 'g-variables', q: 'Variables de paie', mots: 'variables paie prime élément ponctuel', r: gP(`Les éléments qui changent d'un mois à l'autre (primes...), saisis dans la préparation de paie.`) },
+      { id: 'g-heures-sup', q: 'Heures supplémentaires, contingent, repos compensateur', mots: 'heures sup contingent repos compensateur majoration', r: gP(`Les <strong>heures supplémentaires</strong> sont les heures au-delà de la durée normale. Le <strong>contingent</strong> est le plafond annuel fixé pour l'entreprise. Le <strong>repos compensateur</strong> est un temps de repos accordé en remplacement ou en complément.`) },
+      { id: 'g-km', q: 'Frais kilométriques et barème', mots: 'frais kilométriques barème indemnité puissance fiscale', r: gP(`L'indemnité versée pour l'usage d'un véhicule personnel, calculée automatiquement d'après la distance, le type de véhicule et sa puissance fiscale.`) },
+      { id: 'g-tva', q: 'TVA', mots: 'tva taxe taux note de frais', r: gP(`La taxe sur la valeur ajoutée, indiquée sur une note de frais d'après le justificatif. Les taux sont ceux en vigueur en France.`) },
+      { id: 'g-tickets', q: 'Tickets restaurant', mots: 'tickets restaurant titres repas', r: gP(`Les titres-restaurant, calculés d'après les jours réellement travaillés dans le mois. Ne les confondez pas avec « Aide et support », qui sert à contacter l'équipe Nexus.`) },
+      { id: 'g-pointeuse', q: 'Pointeuse et QR code', mots: 'pointeuse pointage qr code arrivée départ badge scanner', r: gP(`Un QR code affiché sur le lieu de travail : vous le scannez à l'arrivée puis au départ pour enregistrer vos horaires.`) },
+      { id: 'g-audit', q: 'Journal d\'audit', mots: 'audit journal trace historique qui a fait quoi', r: gP(`Le registre des actions importantes (qui, quoi, quand), consultable par ceux qui en ont le droit.`) },
+      { id: 'g-rgpd', q: 'RGPD', mots: 'rgpd données personnelles protection droit accès export', r: gP(`Le règlement européen sur la protection des données. Vous pouvez télécharger vos données depuis le menu du rond en haut à droite.`) },
+      { id: 'g-avenant', q: 'Avenant', mots: 'avenant contrat modification', r: gP(`Un document qui modifie un contrat existant (horaires, poste, rémunération...).`) },
+      { id: 'g-offboarding', q: 'Intégration et départ (onboarding, offboarding)', mots: 'onboarding offboarding checklist intégration départ parcours', r: gP(`Deux checklists de la fiche d'un salarié (onglet Parcours) : une pour son arrivée, une pour son départ (matériel, accès, solde de tout compte).`) },
+      { id: 'g-ical', q: 'Synchronisation de calendrier', mots: 'ical agenda calendrier synchroniser outlook google lien', r: gP(`Un lien qui affiche vos congés dans l'agenda que vous utilisez déjà, et se met à jour sans rien refaire.`) },
+      { id: 'g-version', q: 'Numéro de version', mots: 'version numéro mise à jour aaaa.mm.jj nouveautés', r: gP(`Il se lit <strong>année.mois.jour.n°</strong> : par exemple 2026.10.26.1 est la première mise en ligne du 26 octobre 2026. Il est affiché en bas du menu du rond en haut à droite.`) }
+    ]
+  }
+);
+
+// --- Construction des chapitres ---
+
+function guideTexteBrut(html) {
+  return String(html || '').replace(/<\/(p|li|dd|dt|div|h\d|ol|ul|dl|summary|details)>|<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+}
+
+/** Vrai si l'élément (thème ou entrée) concerne la personne : son rôle (`pour`) et les modules souscrits (`module`). Une entrée qui déclare
+ * `module: null` ignore celui de son thème. */
+function guideVisiblePour(item, user, parent) {
+  const pour = item.pour || (parent && parent.pour);
+  if (pour && !pour.includes(user.role)) return false;
+  const module = item.module !== undefined ? item.module : (parent && parent.module);
+  if (module) return (Array.isArray(module) ? module : [module]).some(cle => hasModule(cle));
+  return true;
+}
+
+function guideEntreeHtml(entree, user) {
+  let bouton = '';
+  if (entree.vue && navItemsForRole(user).some(i => i.key === entree.vue)) {
+    const nav = NAV_ITEMS.find(i => i.key === entree.vue);
+    const libelle = entree.vueLabel || (nav && nav.label) || entree.vue;
+    bouton = `<div class="guide-actions"><button type="button" class="btn btn-secondary btn-sm" data-guide-open-view="${escapeHtml(entree.vue)}"${entree.params ? ` data-guide-params="${escapeHtml(JSON.stringify(entree.params))}"` : ''}>Ouvrir « ${escapeHtml(libelle)} »</button></div>`;
+  }
+  return `<details class="guide-entry" id="guide-e-${escapeHtml(entree.id)}" data-guide-entry="${escapeHtml(entree.id)}"><summary>${escapeHtml(entree.q)}</summary><div class="guide-entry-body">${entree.r}${bouton}</div></details>`;
+}
+
+/** Un chapitre du guide : un texte d'introduction, une liste de questions repliables (chacune retrouvable par la recherche) et un pied. */
+function guideSection(def, user) {
+  const entrees = (def.entrees || []).map(e => ({ ...e, html: guideEntreeHtml(e, user) }));
+  const barre = entrees.length > 2
+    ? '<div class="guide-toolbar"><button type="button" class="btn-link" data-guide-expand="1">Tout déplier</button><button type="button" class="btn-link" data-guide-expand="0">Tout replier</button></div>' : '';
+  const etiquette = def.entreesTitre ? `<div class="search-section-label guide-entries-label">${escapeHtml(def.entreesTitre)}</div>` : '';
+  const liste = entrees.length ? `<div class="guide-entries">${etiquette}${barre}${entrees.map(e => e.html).join('')}</div>` : '';
+  const html = `${def.intro || ''}${liste}${def.pied || ''}`;
   return {
-    id: 'ecran-' + item.key, groupe, titre: item.label, icone: item.icon, navKey: item.key,
-    html: `
-      ${resume ? `<p class="guide-resume">${escapeHtml(resume)}</p>` : ''}
-      ${help ? help.body : ''}
-      ${faq}${pratiques}
-      <div class="guide-actions"><button type="button" class="btn btn-primary btn-sm" data-guide-open-view="${escapeHtml(item.key)}">Ouvrir « ${escapeHtml(item.label)} »</button></div>`
+    id: def.id, groupe: def.groupe, titre: def.titre, icone: def.icone, navKey: def.navKey, mots: def.mots || '',
+    html, entrees, corpsBrut: guideTexteBrut(`${def.intro || ''} ${def.pied || ''}`),
+    texte: guideNormaliser(`${def.titre} ${guideTexteBrut(html)}`)
   };
 }
 
-/** Toutes les sections du guide pour l'utilisateur courant : introduction, un écran par entrée de menu accessible, aide. */
+function guideScreenSection(item, groupe, user) {
+  const help = HELP_CONTENT[item.key];
+  const resume = GUIDE_RESUMES[item.key];
+  const entrees = ((help && help.faq) || []).map((f, i) => ({ id: `ecran-${item.key}-faq-${i}`, q: f.q, r: `<p>${escapeHtml(f.r)}</p>`, mots: '' }));
+  const pratiques = help && help.bonnesPratiques && help.bonnesPratiques.length
+    ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Bonnes pratiques</div><ul class="help-tips">${help.bonnesPratiques.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
+  return guideSection({
+    id: 'ecran-' + item.key, groupe, titre: item.label, icone: item.icon, navKey: item.key,
+    intro: `${resume ? `<p class="guide-resume">${escapeHtml(resume)}</p>` : ''}${help ? help.body : ''}`,
+    entreesTitre: 'Questions fréquentes', entrees,
+    pied: `${pratiques}<div class="guide-actions"><button type="button" class="btn btn-primary btn-sm" data-guide-open-view="${escapeHtml(item.key)}">Ouvrir « ${escapeHtml(item.label)} »</button></div>`
+  }, user);
+}
+
+/** Un thème « Comment faire ? » : seules les entrées visibles pour la personne sont gardées ; sans aucune entrée, le thème disparaît. */
+function guideThemeSection(theme, user) {
+  if (!guideVisiblePour(theme, user)) return null;
+  const entrees = theme.entrees.filter(e => guideVisiblePour(e, user, theme));
+  if (!entrees.length) return null;
+  return guideSection({ id: theme.id, groupe: theme.groupe || 'Comment faire ?', titre: theme.titre, icone: theme.icone, intro: theme.intro, entrees }, user);
+}
+
+/** Toutes les sections du guide pour l'utilisateur courant : introduction, les « Comment faire ? », un écran par entrée de menu accessible, dépannage, glossaire, aide. */
 function guideSections(user) {
-  const sections = guideIntroSections(user);
+  const sections = guideIntroSections(user).map(s => guideSection({ ...s, intro: s.html }, user));
+  const themes = GUIDE_THEMES.map(t => guideThemeSection(t, user)).filter(Boolean);
+  themes.filter(s => s.groupe !== 'Aide').forEach(s => sections.push(s));
   const vus = new Set();
   navItemsForRole(user).forEach(item => {
     if (vus.has(item.key) || item.key === 'boussole') return;
@@ -5096,18 +5617,192 @@ function guideSections(user) {
     const groupe = item.key === 'dashboard' ? 'Écrans' : item.key === 'parametres' ? 'Administration' : item.group === 'equipe' ? 'Équipe' : 'Personnel';
     // "Mon compte" et "Abonnement" partagent la clé 'parametres' avec "Paramètres" : un seul chapitre, au nom de l'écran principal.
     const libelle = item.key === 'parametres' ? 'Paramètres' : item.label;
-    sections.push(guideScreenSection({ ...item, label: libelle }, groupe));
+    sections.push(guideScreenSection({ ...item, label: libelle }, groupe, user));
   });
-  return sections.concat(guideOutroSections()).map(s => ({ ...s, texte: (s.titre + ' ' + s.html.replace(/<[^>]+>/g, ' ')).toLowerCase() }));
+  themes.filter(s => s.groupe === 'Aide').forEach(s => sections.push(s));
+  guideOutroSections().forEach(s => sections.push(guideSection({ ...s, intro: s.html }, user)));
+  return sections;
 }
 
-function openGuideModal(sectionId) {
+// --- Recherche ---
+
+const GUIDE_MOTS_VIDES = new Set(('le la les l un une des du de d et ou a au aux en dans sur pour par avec sans je tu il elle on nous vous ils mon ma mes ton ta tes son sa ses '
+  + 'leur leurs ce cet cette ces que qui quoi comment est sont suis etre ai as avons ont peut peux peuvent puis faire fait c n s qu y ne pas se si ca cela mais donc car ni quel quelle quels quelles').split(' '));
+
+/** Minuscules, sans accents ni ponctuation : « Congés payés ! » et « conges payes » deviennent identiques. */
+function guideNormaliser(texte) {
+  return String(texte || '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** Racine grossière d'un mot : « congés », « congé » et « conge » se rejoignent ; « poser » et « posez » restent proches. */
+function guideRacine(mot) {
+  let r = mot;
+  if (r.length > 3 && /[sx]$/.test(r)) r = r.slice(0, -1);
+  if (r.length >= 6 && /(er|ir|ez)$/.test(r)) r = r.slice(0, -2);
+  else if (r.length >= 5 && /e$/.test(r)) r = r.slice(0, -1);
+  return r;
+}
+
+/** Mots que l'on tape à la place de ceux du guide : chacun est ajouté comme équivalent du mot cherché. */
+const GUIDE_SYNONYMES = (() => {
+  const brut = {
+    cp: ['conge'], vacances: ['conge'], vacance: ['conge'], arret: ['maladie'], maladie: ['arret'],
+    mdp: ['mot de passe'], password: ['mot de passe'], identifiant: ['connexion'], login: ['connexion'], connecter: ['connexion'], connexion: ['connecter'],
+    teletravail: ['tt', 'domicile'], tt: ['teletravail'], home: ['teletravail'], remote: ['teletravail'],
+    salarie: ['employe', 'collaborateur'], employe: ['salarie'], collaborateur: ['salarie'],
+    solde: ['compteur'], compteur: ['solde'], supprimer: ['annul', 'archiv'], effacer: ['supprim', 'annul'],
+    telecharger: ['export'], exporter: ['telecharg'], excel: ['xlsx'], photo: ['avatar', 'profil'], prime: ['variable'], bulletin: ['paie'],
+    ticket: ['support'], aide: ['support'], bug: ['probleme', 'support'], erreur: ['probleme']
+  };
+  const map = {};
+  Object.keys(brut).forEach(cle => { map[guideRacine(guideNormaliser(cle))] = brut[cle].map(guideNormaliser); });
+  return map;
+})();
+
+/** Découpe la recherche en mots utiles (sans les petits mots comme « comment », « je », « de »), avec leur racine et leurs équivalents. */
+function guideTermes(requete) {
+  const tous = guideNormaliser(requete).split(' ').filter(Boolean);
+  const utiles = tous.filter(t => !GUIDE_MOTS_VIDES.has(t) && (t.length > 1 || /\d/.test(t)));
+  const retenus = utiles.length ? utiles : tous.filter(t => t.length > 1);
+  return retenus.map(t => {
+    const racine = guideRacine(t);
+    return { brut: t, racine, alts: GUIDE_SYNONYMES[racine] || [] };
+  });
+}
+
+function guideContient(texte, motif) {
+  if (!motif) return false;
+  const court = motif.length <= 3 && !motif.includes(' ');
+  return court ? (' ' + texte + ' ').includes(' ' + motif + ' ') : (' ' + texte).includes(' ' + motif);
+}
+
+function guideCorrespond(texte, terme) {
+  return guideContient(texte, terme.racine) || terme.alts.some(a => guideContient(texte, a));
+}
+
+/** Une « unité » de recherche par chapitre (son introduction) et par question : c'est ce qui permet d'arriver directement à la bonne réponse. */
+function guideIndex(sections) {
+  const unites = [];
+  sections.forEach(s => {
+    unites.push({ sectionId: s.id, sectionTitre: s.titre, entreeId: null, titre: s.titre, brut: s.corpsBrut, titreNorm: guideNormaliser(s.titre), motsNorm: guideNormaliser(s.mots), corps: guideNormaliser(s.corpsBrut) });
+    // Le glossaire définit un mot ; à égalité, la réponse « comment faire » passe avant sa définition.
+    const malus = s.id === 'glossaire' ? 1 : 0;
+    (s.entrees || []).forEach(e => {
+      const brut = guideTexteBrut(e.r);
+      unites.push({ malus, sectionId: s.id, sectionTitre: s.titre, entreeId: e.id, titre: e.q, brut, titreNorm: guideNormaliser(e.q), motsNorm: guideNormaliser(e.mots), corps: guideNormaliser(brut) });
+    });
+  });
+  return unites;
+}
+
+function guideNoter(unite, termes) {
+  let score = 0;
+  let trouves = 0;
+  let dansTitre = 0;
+  termes.forEach(t => {
+    if (guideCorrespond(unite.titreNorm, t)) { score += 10; trouves++; dansTitre++; }
+    else if (guideCorrespond(unite.motsNorm, t)) { score += 6; trouves++; }
+    else if (guideCorrespond(unite.corps, t)) { score += 2; trouves++; }
+  });
+  if (termes.length > 1 && dansTitre === termes.length) score += 8;
+  return { score: score - (unite.malus || 0), trouves };
+}
+
+/** Cherche `requete` dans tout le guide visible par la personne. Tous les mots doivent être présents ; si aucun résultat, repli sur « au moins la moitié des mots »
+ * (`approchant: true`). Résultats classés : un mot dans le titre compte plus que dans les mots proches, eux-mêmes plus que dans le texte. */
+function guideRechercher(sections, requete, { max = 30 } = {}) {
+  const termes = guideTermes(requete);
+  if (!termes.length) return { termes, resultats: [], approchant: false };
+  if (!sections.index) sections.index = guideIndex(sections);
+  const notes = sections.index.map((unite, ordre) => ({ unite, ordre, ...guideNoter(unite, termes) }));
+  const tri = (a, b) => b.score - a.score || a.ordre - b.ordre;
+  let resultats = notes.filter(n => n.trouves === termes.length).sort(tri);
+  let approchant = false;
+  if (!resultats.length && termes.length > 1) {
+    const seuil = Math.ceil(termes.length / 2);
+    resultats = notes.filter(n => n.trouves >= seuil).sort((a, b) => b.trouves - a.trouves || tri(a, b));
+    approchant = resultats.length > 0;
+  }
+  return { termes, resultats: resultats.slice(0, max).map(n => ({ ...n.unite, score: n.score })), approchant };
+}
+
+const GUIDE_ACCENTS = { a: 'aàâä', c: 'cç', e: 'eéèêë', i: 'iîï', o: 'oôö', u: 'uùûü', y: 'yÿ' };
+
+/** Met en évidence les mots cherchés dans un texte (accents ignorés), en échappant le reste. */
+function guideSurligner(texte, termes) {
+  const brut = String(texte || '');
+  const plages = [];
+  termes.forEach(t => {
+    const motif = t.racine.split('').map(ch => (GUIDE_ACCENTS[ch] ? `[${GUIDE_ACCENTS[ch]}]` : ch)).join('');
+    if (!motif) return;
+    const lettre = 'A-Za-zÀ-ÿ0-9';
+    const re = new RegExp(`(^|[^${lettre}])(${motif}${t.racine.length <= 3 ? `(?![${lettre}])` : `[${lettre}]*`})`, 'gi');
+    let m;
+    while ((m = re.exec(brut)) !== null) {
+      const debut = m.index + m[1].length;
+      plages.push([debut, debut + m[2].length]);
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  });
+  plages.sort((a, b) => a[0] - b[0]);
+  const fusion = [];
+  plages.forEach(p => {
+    const dernier = fusion[fusion.length - 1];
+    if (dernier && p[0] <= dernier[1]) dernier[1] = Math.max(dernier[1], p[1]);
+    else fusion.push([p[0], p[1]]);
+  });
+  let sortie = '';
+  let curseur = 0;
+  fusion.forEach(([d, f]) => {
+    sortie += escapeHtml(brut.slice(curseur, d)) + '<mark>' + escapeHtml(brut.slice(d, f)) + '</mark>';
+    curseur = f;
+  });
+  return sortie + escapeHtml(brut.slice(curseur));
+}
+
+function guideExtrait(brut, longueur = 150) {
+  const t = String(brut || '').replace(/\s+/g, ' ').trim();
+  return t.length > longueur ? t.slice(0, longueur).replace(/\s+\S*$/, '') + '…' : t;
+}
+
+function guideResultatsHtml(recherche, requete) {
+  const { termes, resultats, approchant } = recherche;
+  if (!resultats.length) {
+    return `<div class="guide-results">
+      <p class="guide-results-count"><strong>Aucun résultat</strong> pour « ${escapeHtml(requete)} ».</p>
+      <ul class="guide-tips-list">
+        <li>Essayez un seul mot-clé, par exemple « congé », « solde » ou « frais ».</li>
+        <li>Vérifiez l'orthographe, ou cherchez un mot plus courant.</li>
+        <li>Parcourez le sommaire à gauche : les chapitres sont rangés par thème.</li>
+      </ul>
+      <div class="guide-actions"><button type="button" class="btn btn-secondary btn-sm" data-guide-open-view="mes-tickets">Poser la question à l'équipe Nexus</button></div>
+    </div>`;
+  }
+  return `<div class="guide-results">
+    <p class="guide-results-count"><strong>${resultats.length}</strong> résultat${resultats.length > 1 ? 's' : ''} pour « ${escapeHtml(requete)} »
+      <button type="button" class="btn-link" data-guide-clear>Effacer la recherche</button></p>
+    ${approchant ? '<p class="text-muted guide-results-note">Aucune réponse ne contient tous vos mots : voici les plus proches.</p>' : ''}
+    <ul class="guide-results-list">
+      ${resultats.map(r => `<li><button type="button" class="guide-result" data-guide-go="${escapeHtml(r.sectionId)}"${r.entreeId ? ` data-guide-go-entry="${escapeHtml(r.entreeId)}"` : ''}>
+        <span class="guide-result-chap">${escapeHtml(r.sectionTitre)}</span>
+        <span class="guide-result-titre">${guideSurligner(r.titre, termes)}</span>
+        <span class="guide-result-extrait">${guideSurligner(guideExtrait(r.brut), termes)}</span>
+      </button></li>`).join('')}
+    </ul>
+  </div>`;
+}
+
+const GUIDE_SUGGESTIONS = ['Poser un congé', 'Mon solde de congés', 'Note de frais', 'Mot de passe', 'Formation CPF', 'Télétravail', 'Importer des salariés', 'Préparer la paie', 'Arrêt maladie'];
+
+function openGuideModal(sectionId, entreeId) {
   const user = authRepository.getCurrentUser();
   if (!user) return;
   const sections = guideSections(user);
-  const courant = sections.find(s => s.id === sectionId) || sections[0];
+  let courant = sections.find(s => s.id === sectionId) || sections[0];
   const groupes = [];
   sections.forEach(s => { if (!groupes.includes(s.groupe)) groupes.push(s.groupe); });
+  const suggestions = GUIDE_SUGGESTIONS.filter(q => guideRechercher(sections, q).resultats.length > 0).slice(0, 6);
   const modalRoot = document.getElementById('modal-root');
   modalRoot.innerHTML = `
     <div class="modal modal-xlarge guide-modal">
@@ -5116,16 +5811,18 @@ function openGuideModal(sectionId) {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body guide-body">
+        <div class="guide-searchbar">
+          <input type="search" class="input guide-search" id="guide-search" placeholder="Que cherchez-vous ? Par exemple : poser un congé, mot de passe, CPF..." aria-label="Rechercher dans le guide" autocomplete="off">
+          ${suggestions.length ? `<div class="guide-suggestions"><span class="text-muted">Essayez :</span>${suggestions.map(q => `<button type="button" class="guide-chip" data-guide-suggestion="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('')}</div>` : ''}
+        </div>
         <div class="guide-layout">
           <nav class="guide-toc" aria-label="Sommaire du guide">
-            <input type="search" class="input guide-search" id="guide-search" placeholder="Rechercher" aria-label="Rechercher dans le guide" autocomplete="off">
             <div id="guide-toc-list">
               ${groupes.map(g => `
                 <div class="guide-toc-group" data-guide-group="${escapeHtml(g)}">
                   <div class="guide-toc-label">${escapeHtml(g)}</div>
                   ${sections.filter(s => s.groupe === g).map(s => `<button type="button" class="guide-toc-item${s.id === courant.id ? ' active' : ''}" data-guide-section="${escapeHtml(s.id)}">${escapeHtml(s.titre)}</button>`).join('')}
                 </div>`).join('')}
-              <p class="text-muted guide-no-result" id="guide-no-result" hidden>Aucun chapitre ne correspond.</p>
             </div>
           </nav>
           <article class="guide-content" id="guide-content" tabindex="-1" aria-live="polite"></article>
@@ -5139,43 +5836,80 @@ function openGuideModal(sectionId) {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const champ = document.getElementById('guide-search');
+  const zone = document.getElementById('guide-content');
 
-  const afficher = (id) => {
-    const s = sections.find(x => x.id === id);
-    if (!s) return;
-    const zone = document.getElementById('guide-content');
-    zone.innerHTML = `<h3 class="guide-title">${s.icone ? `<span class="guide-title-icon">${icon(s.icone, 18)}</span>` : ''}${escapeHtml(s.titre)}</h3>${s.html}`;
-    zone.scrollTop = 0;
-    document.querySelectorAll('[data-guide-section]').forEach(b => b.classList.toggle('active', b.dataset.guideSection === id));
+  const brancherActions = () => {
     zone.querySelectorAll('[data-guide-open-view]').forEach(btn => btn.addEventListener('click', () => {
       const cle = btn.dataset.guideOpenView;
       const entree = NAV_ITEMS.find(i => i.key === cle);
+      let params = (entree && entree.navParams) || {};
+      if (btn.dataset.guideParams) { try { params = JSON.parse(btn.dataset.guideParams); } catch (e) { /* paramètres illisibles : on ouvre l'écran sans préréglage */ } }
       closeModal();
-      navigateTo(cle, (entree && entree.navParams) || {});
+      navigateTo(cle, params);
     }));
     zone.querySelectorAll('[data-guide-start-tour]').forEach(btn => btn.addEventListener('click', () => { closeModal(); startTour({ force: true }); }));
     zone.querySelectorAll('[data-guide-changelog]').forEach(btn => btn.addEventListener('click', () => openChangelogModal()));
+    zone.querySelectorAll('[data-guide-expand]').forEach(btn => btn.addEventListener('click', () => {
+      zone.querySelectorAll('details.guide-entry').forEach(d => { d.open = btn.dataset.guideExpand === '1'; });
+    }));
   };
+
+  /** Affiche un chapitre ; avec `entreeId`, ouvre la question demandée et y fait défiler. `depuisRecherche` ajoute le lien de retour aux résultats. */
+  const afficher = (id, entreeId, depuisRecherche) => {
+    const s = sections.find(x => x.id === id);
+    if (!s) return;
+    courant = s;
+    const retour = depuisRecherche ? '<button type="button" class="btn-link guide-back" data-guide-back>← Retour aux résultats</button>' : '';
+    zone.innerHTML = `${retour}<h3 class="guide-title">${s.icone ? `<span class="guide-title-icon">${icon(s.icone, 18)}</span>` : ''}${escapeHtml(s.titre)}</h3>${s.html}`;
+    zone.scrollTop = 0;
+    document.querySelectorAll('[data-guide-section]').forEach(b => b.classList.toggle('active', b.dataset.guideSection === id));
+    brancherActions();
+    const retourBtn = zone.querySelector('[data-guide-back]');
+    if (retourBtn) retourBtn.addEventListener('click', () => afficherResultats(champ.value));
+    if (entreeId) {
+      const cible = zone.querySelector(`details[data-guide-entry="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(entreeId) : entreeId}"]`);
+      if (cible) {
+        cible.open = true;
+        // Défilement du seul volet de droite : scrollIntoView ferait aussi remonter la barre de recherche hors de la fenêtre.
+        zone.scrollTop = Math.max(0, cible.getBoundingClientRect().top - zone.getBoundingClientRect().top + zone.scrollTop - 8);
+        cible.classList.add('guide-entry-flash');
+        setTimeout(() => cible.classList.remove('guide-entry-flash'), 1800);
+      }
+    }
+  };
+
+  const afficherResultats = (requete) => {
+    const q = String(requete || '').trim();
+    if (!q) { afficher(courant.id); return; }
+    const recherche = guideRechercher(sections, q);
+    zone.innerHTML = guideResultatsHtml(recherche, q);
+    zone.scrollTop = 0;
+    document.querySelectorAll('[data-guide-section]').forEach(b => b.classList.remove('active'));
+    brancherActions();
+    zone.querySelectorAll('[data-guide-go]').forEach(b => b.addEventListener('click', () => afficher(b.dataset.guideGo, b.dataset.guideGoEntry, true)));
+    const effacer = zone.querySelector('[data-guide-clear]');
+    if (effacer) effacer.addEventListener('click', () => { champ.value = ''; afficher(courant.id); champ.focus(); });
+  };
+
   document.querySelectorAll('[data-guide-section]').forEach(b => b.addEventListener('click', () => {
+    champ.value = '';
     afficher(b.dataset.guideSection);
-    const toc = document.getElementById('guide-toc-list');
-    if (toc) toc.dataset.last = b.dataset.guideSection;
   }));
-  document.getElementById('btn-guide-tour').addEventListener('click', () => { closeModal(); startTour({ force: true }); });
-  document.getElementById('guide-search').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    let trouve = 0;
-    document.querySelectorAll('[data-guide-section]').forEach(b => {
-      const s = sections.find(x => x.id === b.dataset.guideSection);
-      const visible = !q || (s && s.texte.includes(q));
-      b.hidden = !visible;
-      if (visible) trouve++;
-    });
-    document.querySelectorAll('[data-guide-group]').forEach(g => { g.hidden = !g.querySelector('[data-guide-section]:not([hidden])'); });
-    document.getElementById('guide-no-result').hidden = trouve > 0;
+  document.querySelectorAll('[data-guide-suggestion]').forEach(b => b.addEventListener('click', () => {
+    champ.value = b.dataset.guideSuggestion;
+    afficherResultats(champ.value);
+  }));
+  champ.addEventListener('input', () => afficherResultats(champ.value));
+  champ.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && champ.value) { e.preventDefault(); e.stopPropagation(); champ.value = ''; afficher(courant.id); }
+    else if (e.key === 'Enter') { const premier = zone.querySelector('[data-guide-go]'); if (premier) { e.preventDefault(); premier.click(); } }
   });
-  afficher(courant.id);
+  document.getElementById('btn-guide-tour').addEventListener('click', () => { closeModal(); startTour({ force: true }); });
+  afficher(courant.id, entreeId);
+  if (window.innerWidth > 760 && typeof champ.focus === 'function') champ.focus();
 }
+
 
 // --- Visite guidée au premier lancement ---
 

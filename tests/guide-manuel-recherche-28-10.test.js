@@ -1,0 +1,127 @@
+/**
+ * Seven RH — retour du 28/10/2026 : « il faut que le mode d'emploi soit le plus complet possible, avec toutes les réponses possibles, et qu'on
+ * puisse rechercher pour trouver ce que l'on cherche ». Vérifie que chaque entrée du manuel est bien formée, qu'un rôle ne voit que ce qui le
+ * concerne, que la recherche ignore accents/casse/petits mots, comprend les abréviations courantes et mène à la bonne réponse.
+ */
+const assert = require('assert');
+const { loadAppJs } = require('./load-app-js');
+
+function run() {
+  const api = loadAppJs();
+  const { DB, sandbox, guideSections, guideRechercher, guideNormaliser, guideSurligner, GUIDE_THEMES, NAV_ITEMS, authRepository } = api;
+  sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  DB.init();
+
+  const pour = (role) => {
+    const emp = DB.getEmployees().find(e => e.role === role);
+    if (!emp) return null;
+    DB._currentEmployeeId = emp.id;
+    return authRepository.getCurrentUser();
+  };
+
+  // --- Normalisation ---
+  assert.strictEqual(guideNormaliser('Congés payés !'), 'conges payes');
+  assert.strictEqual(guideNormaliser('  Œuvre, ÉCOLE  '), 'oeuvre ecole');
+
+  // --- Les entrées du manuel sont bien formées (toutes, indépendamment du rôle) ---
+  const ids = new Set();
+  const navKeys = new Set(NAV_ITEMS.map(i => i.key));
+  let total = 0;
+  GUIDE_THEMES.forEach(t => {
+    assert.ok(t.id && t.titre && t.intro, `thème ${t.id} : id, titre et introduction`);
+    assert.ok(!ids.has(t.id), `identifiant de thème en double : ${t.id}`);
+    ids.add(t.id);
+    t.entrees.forEach(e => {
+      total++;
+      assert.ok(e.id && e.q && e.r && e.r.length > 40, `entrée ${e.id} : question et réponse non vides`);
+      assert.ok(!ids.has(e.id), `identifiant d'entrée en double : ${e.id}`);
+      ids.add(e.id);
+      assert.ok(e.mots === undefined || typeof e.mots === 'string', `entrée ${e.id} : mots proches en texte`);
+      if (e.vue) assert.ok(navKeys.has(e.vue), `entrée ${e.id} : l'écran « ${e.vue} » existe dans le menu`);
+      assert.ok(!/\$\{|undefined|\[object/.test(e.r), `entrée ${e.id} : pas de texte non résolu dans la réponse`);
+    });
+  });
+  assert.ok(total >= 100, `le manuel doit rester complet (au moins 100 réponses, ${total} trouvées)`);
+
+  // --- Chaque rôle : identifiants uniques, thèmes adaptés, aucune réponse vide ---
+  const parRole = {};
+  ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'].forEach(role => {
+    const user = pour(role);
+    if (!user) return;
+    const sections = guideSections(user);
+    parRole[role] = sections;
+    const vus = new Set();
+    sections.forEach(s => {
+      assert.ok(!vus.has(s.id), `${role} : chapitre en double ${s.id}`);
+      vus.add(s.id);
+      (s.entrees || []).forEach(e => {
+        assert.ok(!vus.has(e.id), `${role} : question en double ${e.id}`);
+        vus.add(e.id);
+        assert.ok(s.html.includes(`data-guide-entry="${e.id}"`), `${role} : la question ${e.id} est dans le chapitre ${s.id}`);
+      });
+    });
+    ['depannage', 'glossaire', 'faire-compte', 'faire-conges'].forEach(id => assert.ok(sections.some(s => s.id === id), `${role} : chapitre ${id}`));
+  });
+  const ids2 = (role) => new Set((parRole[role] || []).map(s => s.id));
+  assert.ok(!ids2('salarie').has('faire-salaries'), 'un salarié ne voit pas les chapitres de gestion RH');
+  assert.ok(!ids2('salarie').has('faire-paie'), 'un salarié ne voit pas la paie');
+  assert.ok(!ids2('salarie').has('faire-proprietaire'), 'un salarié ne voit pas la propriété du compte');
+  assert.ok(ids2('rh').has('faire-salaries') && ids2('rh').has('faire-paie') && ids2('rh').has('faire-parametres'), 'les RH voient la gestion');
+  assert.ok(!ids2('rh').has('faire-proprietaire'), 'les RH ne voient pas le chapitre réservé au propriétaire');
+  assert.ok(ids2('proprietaire').has('faire-proprietaire'), 'le propriétaire voit son chapitre');
+  assert.ok(ids2('manager').has('faire-equipe') && !ids2('salarie').has('faire-equipe'), 'le suivi d\'équipe est réservé aux rôles d\'équipe');
+  const entreesSalarie = new Set((parRole.salarie || []).flatMap(s => (s.entrees || []).map(e => e.id)));
+  assert.ok(entreesSalarie.has('c-poser') && !entreesSalarie.has('c-valider'), 'un salarié voit « poser un congé » mais pas « valider une demande »');
+  const entreesManager = new Set((parRole.manager || []).flatMap(s => (s.entrees || []).map(e => e.id)));
+  assert.ok(entreesManager.has('c-valider') && !entreesManager.has('s-ajouter'), 'un manager valide mais n\'ajoute pas de salarié');
+
+  // --- Recherche : on trouve la bonne réponse en tête, avec les mots de tous les jours ---
+  const rh = parRole.rh;
+  const premier = (sections, requete) => {
+    const { resultats } = guideRechercher(sections, requete);
+    return resultats[0] && (resultats[0].entreeId || resultats[0].sectionId);
+  };
+  const sal = parRole.salarie;
+  assert.strictEqual(premier(sal, 'poser un congé'), 'c-poser');
+  assert.strictEqual(premier(sal, 'comment poser un conge ?'), 'c-poser', 'accents et petits mots ignorés');
+  assert.strictEqual(premier(sal, 'POSER CONGÉ'), 'c-poser', 'majuscules ignorées');
+  assert.strictEqual(premier(sal, 'mot de passe oublié'), 'k-mdp-oublie');
+  assert.strictEqual(premier(sal, 'mdp'), 'k-mdp', 'abréviation « mdp »');
+  assert.strictEqual(premier(sal, 'changer mon mot de passe'), 'k-mdp');
+  assert.strictEqual(premier(sal, 'kilométrique'), 'f-km');
+  assert.strictEqual(premier(sal, 'brouillon'), 'c-brouillon');
+  assert.strictEqual(premier(sal, 'mode sombre'), 'k-theme');
+  assert.strictEqual(premier(sal, 'rgpd'), 'd-rgpd');
+  assert.strictEqual(premier(rh, 'importer des salariés'), 's-import');
+  assert.strictEqual(premier(rh, 'soldes initiaux'), 's-import-soldes');
+  assert.strictEqual(premier(rh, 'mise en service'), 'g-mise-en-service', 'les RH voient la définition, pas le mode d\x27emploi réservé au propriétaire');
+  assert.strictEqual(premier(parRole.proprietaire, 'mise en service'), 'o-mise-en-service');
+  const cpf = guideRechercher(sal, 'cpf').resultats.map(r => r.entreeId);
+  assert.ok(cpf.includes('e-cpf') && cpf.includes('g-cpf'), 'cpf trouve la formation et le glossaire');
+  assert.ok(guideRechercher(sal, 'cp').resultats.some(r => r.entreeId === 'g-cp'), '« cp » = congés payés (mot exact, pas « cpf »)');
+  assert.ok(guideRechercher(sal, 'vacances').resultats.some(r => r.entreeId === 'c-poser'), 'synonyme « vacances » mène à poser un congé');
+  assert.ok(guideRechercher(sal, 'teletravail').resultats.length > 0 && guideRechercher(sal, 'télétravail').resultats.length > 0, 'avec ou sans accent');
+
+  // --- Résultats propres au rôle : un salarié ne se voit pas proposer la paie ---
+  assert.ok(!guideRechercher(sal, 'export csv paie').resultats.some(r => r.entreeId === 'p-preparer'), 'la préparation de paie reste invisible pour un salarié');
+  assert.ok(guideRechercher(rh, 'préparer la paie').resultats.some(r => r.entreeId === 'p-preparer'), 'les RH la trouvent');
+
+  // --- Cas limites ---
+  assert.strictEqual(guideRechercher(sal, '').resultats.length, 0, 'recherche vide');
+  assert.strictEqual(guideRechercher(sal, '   ').resultats.length, 0, 'recherche d\'espaces');
+  assert.strictEqual(guideRechercher(sal, 'xyzqwvk').resultats.length, 0, 'mot inconnu : aucun résultat');
+  assert.strictEqual(guideRechercher(sal, 'comment je').resultats.length >= 0, true, 'que des petits mots : pas de plantage');
+  const approchant = guideRechercher(sal, 'poser congé xyzqwvk');
+  assert.ok(approchant.approchant && approchant.resultats.length > 0, 'si aucun résultat ne contient tous les mots, repli sur les plus proches');
+  assert.ok(guideRechercher(sal, 'congé', { max: 5 }).resultats.length <= 5, 'limite de résultats');
+  assert.doesNotThrow(() => guideRechercher(sal, '<script>alert(1)</script> (a+b)* [x'), 'caractères spéciaux sans effet');
+
+  // --- Mise en évidence : accents ignorés, HTML échappé ---
+  const { termes } = guideRechercher(sal, 'conge');
+  assert.strictEqual(guideSurligner('Poser un congé payé', termes), 'Poser un <mark>congé</mark> payé');
+  assert.ok(guideSurligner('<b>congé</b> & co', termes).includes('&lt;b&gt;<mark>congé</mark>'), 'le texte est échappé avant affichage');
+
+  console.log(`OK — guide-manuel-recherche-28-10.test.js (${total} réponses, recherche tolérante aux accents, abréviations, rôles)`);
+}
+
+try { run(); } catch (err) { console.error('ÉCHEC — guide-manuel-recherche-28-10.test.js'); console.error(err.stack || err.message); process.exitCode = 1; }

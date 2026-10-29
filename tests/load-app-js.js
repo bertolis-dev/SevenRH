@@ -237,6 +237,10 @@ globalThis.__renderFormation = renderFormation;
 globalThis.__APP_VERSION = APP_VERSION;
 globalThis.__CHANGELOG_ENTRIES = CHANGELOG_ENTRIES;
 globalThis.__guideSections = guideSections;
+globalThis.__guideRechercher = guideRechercher;
+globalThis.__guideNormaliser = guideNormaliser;
+globalThis.__guideSurligner = guideSurligner;
+globalThis.__GUIDE_THEMES = GUIDE_THEMES;
 globalThis.__tourStepsForUser = tourStepsForUser;
 globalThis.__SCREEN_TIPS = SCREEN_TIPS;
 globalThis.__GUIDE_RESUMES = GUIDE_RESUMES;
@@ -897,6 +901,10 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     APP_VERSION: sandbox.__APP_VERSION,
     CHANGELOG_ENTRIES: sandbox.__CHANGELOG_ENTRIES,
     guideSections: sandbox.__guideSections,
+    guideRechercher: sandbox.__guideRechercher,
+    guideNormaliser: sandbox.__guideNormaliser,
+    guideSurligner: sandbox.__guideSurligner,
+    GUIDE_THEMES: sandbox.__GUIDE_THEMES,
     tourStepsForUser: sandbox.__tourStepsForUser,
     SCREEN_TIPS: sandbox.__SCREEN_TIPS,
     GUIDE_RESUMES: sandbox.__GUIDE_RESUMES,
