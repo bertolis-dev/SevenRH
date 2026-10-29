@@ -4432,3 +4432,9 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .guide-modal .guide-body { overflow: hidden; }
 .guide-modal .guide-layout { min-height: 300px; max-height: calc(66vh - 70px); }
+/* Défilement du guide : le sommaire et le texte défilent chacun dans leur volet (la ligne de la grille avait la hauteur du texte, qui était coupé). */
+.guide-modal .guide-body { overflow-y: auto; }
+@media (min-width: 761px) {
+  .guide-modal .guide-layout { height: calc(66vh - 70px); max-height: none; grid-template-rows: minmax(0, 1fr); }
+  .guide-modal .guide-toc, .guide-modal .guide-content { min-height: 0; overflow-y: auto; }
+}
