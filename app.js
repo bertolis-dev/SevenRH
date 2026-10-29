@@ -2475,13 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.10.29.3';
+const APP_VERSION = '2026.10.29.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Octobre 2026',
     version: APP_VERSION,
     items: [
+      "Le guide montre maintenant de vraies captures de l'application (accueil, congés, calendrier, notes de frais, formation, salariés, compteurs, paie, menu du compte...), prises sur des données de démonstration. Un clic sur une image l'agrandit.",
       "Le guide s'illustre : des schémas clairs expliquent les repères de l'écran, le calcul du solde, les périodes de congés, la vie d'une demande, les droits par rôle, les fichiers Excel d'import et la préparation de la paie. Ils suivent le thème clair ou sombre.",
       "Le guide est devenu un vrai mode d'emploi : plus de 140 réponses (« comment faire ? », dépannage, glossaire) adaptées à votre rôle, avec une recherche qui comprend les mots de tous les jours (« mdp », « vacances », « CPF »...) et vous mène directement à la bonne réponse.",
       "Nouveau guide de l'application : cliquez sur le rond en haut à droite, puis « Guide de l'application ». Il explique chaque écran auquel vous avez accès, avec une recherche intégrée.",
@@ -5272,6 +5273,24 @@ const gFig = {
     'Une colonne d\'identification (Matricule ou Email), puis une colonne par type de congé, nommée comme le type.')
 };
 
+/** Une vraie capture de l'application (dossier guide-images, prises sur les données de démonstration : jamais de données réelles). Un clic l'agrandit. */
+const gShot = (fichier, alt, legende = 'Exemple avec des données de démonstration. Cliquez pour agrandir.') =>
+  `<figure class="guide-figure guide-shot"><img class="guide-shot-img" src="guide-images/${fichier}.jpg" alt="${escapeHtml(alt)}" width="800" height="500" loading="lazy" tabindex="0" role="button"><figcaption>${legende}</figcaption></figure>`;
+
+/** Capture de chaque écran du menu pour le chapitre qui l'explique. `pour` : rôles pour qui la capture est fidèle (sinon aucune). */
+const GUIDE_CAPTURES = {
+  dashboard: (user) => (user.role === 'salarie'
+    ? { fichier: 'accueil-salarie', alt: "Écran d'accueil d'un salarié : statut du jour, demandes en attente et soldes de congés" }
+    : { fichier: 'accueil', alt: "Écran d'accueil d'un RH : centre d'action et indicateurs de l'entreprise" }),
+  absences: (user) => (GUIDE_EQUIPE.includes(user.role) ? { fichier: 'conges-liste', alt: "Écran Congés et absences : liste des demandes avec leur statut et les boutons Valider ou Refuser" } : null),
+  calendrier: (user) => (GUIDE_EQUIPE.includes(user.role) ? { fichier: 'calendrier-equipe', alt: "Calendrier de l'équipe pour un mois, avec les congés et le télétravail de chacun" } : null),
+  frais: () => ({ fichier: 'notes-de-frais', alt: "Écran Notes de frais : liste des notes avec leur montant et leur statut" }),
+  formation: () => ({ fichier: 'formation', alt: "Écran Formation : demandes de formation de l'équipe avec les boutons Accepter, Refuser et Lettres" }),
+  employees: () => ({ fichier: 'salaries', alt: "Écran Salariés : liste, filtres et boutons d'import, d'export et d'ajout" }),
+  'tableau-compteurs': () => ({ fichier: 'tableau-compteurs', alt: "Tableau des compteurs : solde de congés de chaque salarié, avec la période disponible et celle en cours d'acquisition" }),
+  'export-paie': () => ({ fichier: 'preparation-paie', alt: "Écran Préparation de paie : anomalies du mois et récapitulatif par salarié" })
+};
+
 const GUIDE_EQUIPE = ['manager', 'rh', 'proprietaire'];
 const GUIDE_GESTION = ['rh', 'proprietaire'];
 
@@ -5285,7 +5304,7 @@ const GUIDE_THEMES = [
     intro: gP(`Poser, suivre, annuler, valider : tout ce qui concerne les congés payés, les RTT et les autres absences.`),
     entrees: [
       { id: 'c-poser', q: 'Comment poser un congé ?', vue: 'absences', mots: 'demander vacances congés payés cp rtt nouvelle demande formulaire jours prendre',
-        r: gEtapes(
+        r: gShot('conges-nouvelle-demande', "Fenêtre « Nouvelle demande de congé » avec le salarié, le type, les dates, un commentaire et les boutons Enregistrer comme brouillon et Envoyer la demande") + gEtapes(
           `Ouvrez <strong>Congés &amp; absences</strong> dans le menu (ou tapez « poser un congé » dans la recherche du haut, raccourci Ctrl+K).`,
           `Restez sur l'onglet <strong>Congés</strong> et cliquez sur <strong>+ Nouvelle demande</strong>.`,
           `Choisissez le type de congé (congés payés, RTT...), la date de début et la date de fin.`,
@@ -5307,7 +5326,7 @@ const GUIDE_THEMES = [
       { id: 'c-passe', q: 'Pourquoi ne puis-je pas saisir une période déjà passée ?', mots: 'passé hier rétroactif date déjà commencée impossible erreur début',
         r: gP(`Un salarié ne peut jamais saisir ni modifier une période déjà commencée : le message « Vous ne pouvez pas saisir une absence dont la date de début est déjà passée » s'affiche. Seuls un manager, les RH ou le propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi. Prévenez-les : ils saisissent la période à votre place.`) },
       { id: 'c-solde', q: 'Comment lire mon solde de congés ?', mots: 'compteur jours restants acquis pris disponible reste combien droit cp rtt calcul',
-        r: gFig.solde() + gP(`Le solde se calcule ainsi : <strong>acquis + ajustement − pris − en attente</strong>. Les jours « en attente » sont déjà retirés tant que la demande n'est pas tranchée.`) + gP(`Pour un type qui a une <strong>clôture</strong> (par exemple les congés payés, du 1er juin au 31 mai), le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, que vous pouvez prendre tout de suite. Ce qui est indiqué « en cours d'acquisition » s'accumule sur la période en cours et ne se prend pas encore : ne l'additionnez jamais au disponible.`) + gFig.cloture() + gP(`Vous retrouvez vos soldes sur l'<strong>Accueil</strong> et dans <strong>Ma fiche</strong>, onglet Congés et absences, rubrique « Voir le détail des compteurs ».`) },
+        r: gShot('accueil-salarie', "Accueil d'un salarié avec ses soldes de congés : disponible, en attente et en cours d'acquisition") + gFig.solde() + gP(`Le solde se calcule ainsi : <strong>acquis + ajustement − pris − en attente</strong>. Les jours « en attente » sont déjà retirés tant que la demande n'est pas tranchée.`) + gP(`Pour un type qui a une <strong>clôture</strong> (par exemple les congés payés, du 1er juin au 31 mai), le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, que vous pouvez prendre tout de suite. Ce qui est indiqué « en cours d'acquisition » s'accumule sur la période en cours et ne se prend pas encore : ne l'additionnez jamais au disponible.`) + gFig.cloture() + gP(`Vous retrouvez vos soldes sur l'<strong>Accueil</strong> et dans <strong>Ma fiche</strong>, onglet Congés et absences, rubrique « Voir le détail des compteurs ».`) },
       { id: 'c-solde-faux', q: 'Mon solde ne correspond pas à ce que j\'attendais', mots: 'erreur faux incorrect différent anormal négatif compteur problème solde',
         r: gEtapes(
           `Regardez la <strong>période</strong> indiquée sous le chiffre : le solde « disponible » ne concerne que la période déjà close.`,
@@ -5361,7 +5380,7 @@ const GUIDE_THEMES = [
     intro: gP(`Déclarer une dépense, suivre son remboursement, et la valider quand on est responsable.`),
     entrees: [
       { id: 'f-creer', q: 'Comment créer une note de frais ?', vue: 'frais', mots: 'dépense remboursement achat repas déplacement facture note frais nouvelle',
-        r: gEtapes(
+        r: gShot('note-de-frais-nouvelle', "Fenêtre « Nouvelle note de frais » avec la catégorie, la date, le libellé, le montant, la TVA et le justificatif") + gEtapes(
           `Ouvrez <strong>Notes de frais</strong> dans le menu.`,
           `Cliquez sur <strong>+ Nouvelle note</strong>, puis renseignez la date, la catégorie, le montant et le taux de TVA.`,
           `Joignez le justificatif (photo ou fichier), puis envoyez.`
@@ -5387,7 +5406,7 @@ const GUIDE_THEMES = [
     intro: gP(`Demander une formation, préparer ses entretiens et proposer des idées.`),
     entrees: [
       { id: 'e-formation', q: 'Comment demander une formation ?', module: 'entretiens', vue: 'formation', mots: 'formation stage cours organisme cpf compte personnel de formation demande financement',
-        r: gFig.formation() + gEtapes(
+        r: gShot('formation-nouvelle-demande', "Fenêtre « Nouvelle demande de formation » avec l'intitulé, l'organisme, le financement, les dates, la durée et le coût") + gFig.formation() + gEtapes(
           `Ouvrez <strong>Formation</strong> dans le menu.`,
           `Cliquez pour créer une demande : intitulé, organisme, dates, durée et coût estimé. Vous pouvez ajouter un lien vers le programme.`,
           `Choisissez le financement : <strong>par l'entreprise</strong> ou avec votre <strong>compte personnel de formation (CPF)</strong>.`,
@@ -5420,7 +5439,7 @@ const GUIDE_THEMES = [
       { id: 'd-rgpd', q: 'Comment télécharger mes données personnelles (RGPD) ?', mots: 'rgpd données personnelles export télécharger droit d\'accès copie',
         r: gP(`Cliquez sur le rond avec vos initiales (en haut à droite), puis sur <strong>Télécharger mes données (RGPD)</strong> : vous recevez un fichier avec les données que Nexus conserve sur vous.`) },
       { id: 'd-coordonnees', q: 'Comment modifier mes coordonnées ou corriger ma fiche ?', vue: 'ma-fiche', mots: 'adresse téléphone coordonnées modifier fiche information erreur nom changement',
-        r: gP(`Ouvrez <strong>Ma fiche</strong> : vous voyez vos informations telles que l'entreprise les a enregistrées. Selon vos droits, vous pouvez modifier vos coordonnées (adresse, téléphone...). Pour le reste (nom, contrat, poste...), signalez l'erreur à vos RH.`) },
+        r: gShot('ma-fiche', "Écran Ma fiche : identité, contrat et poste, avec les onglets Fiche, Contrat, Congés et absences, Notes de frais et Documents") + gP(`Ouvrez <strong>Ma fiche</strong> : vous voyez vos informations telles que l'entreprise les a enregistrées. Selon vos droits, vous pouvez modifier vos coordonnées (adresse, téléphone...). Pour le reste (nom, contrat, poste...), signalez l'erreur à vos RH.`) },
       { id: 'd-retraite', q: 'À quoi sert l\'écran « Ma retraite » ?', module: 'rh', vue: 'retraite', mots: 'retraite carrière âge départ emplois précédents ancienneté trimestres relevé',
         r: gP(`Il rassemble des repères indicatifs : votre durée d'emploi dans l'entreprise, les périodes d'emploi précédentes que vous ajoutez vous-même (celles qui se recouvrent ne sont comptées qu'une fois) et l'âge légal de départ d'après votre date de naissance. Des liens renvoient vers les services officiels. Seul le relevé de carrière officiel fait foi.`) },
       { id: 'd-ajouter', q: 'Comment ajouter un document au dossier d\'un salarié ?', module: 'rh', pour: GUIDE_GESTION, mots: 'ajouter document dossier salarié déposer fichier contrat attestation téléverser',
@@ -5437,7 +5456,7 @@ const GUIDE_THEMES = [
     intro: gP(`Mot de passe, apparence, notifications, plusieurs comptes : tout ce qui se règle depuis le rond avec vos initiales, en haut à droite.`),
     entrees: [
       { id: 'k-mdp', q: 'Comment changer mon mot de passe ?', mots: 'mot de passe mdp changer modifier password sécurité',
-        r: gP(`Cliquez sur le rond avec vos initiales, puis sur <strong>Modifier mon mot de passe</strong>. Choisissez-en un nouveau et confirmez.`) },
+        r: gShot('menu-compte', "Menu du rond avec les initiales : thème, guide, comptes, paramètres, mot de passe, données personnelles, déconnexion et numéro de version") + gP(`Cliquez sur le rond avec vos initiales, puis sur <strong>Modifier mon mot de passe</strong>. Choisissez-en un nouveau et confirmez.`) },
       { id: 'k-mdp-oublie', q: 'J\'ai oublié mon mot de passe', mots: 'oublié perdu mot de passe mdp réinitialiser connexion impossible mail lien',
         r: gEtapes(
           `Sur l'écran de connexion, cliquez sur <strong>Mot de passe oublié ?</strong> et saisissez votre adresse e-mail professionnelle.`,
@@ -5450,7 +5469,7 @@ const GUIDE_THEMES = [
       { id: 'k-photo', q: 'Comment changer ma photo de profil ?', vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'photo avatar image profil portrait',
         r: gP(`Ouvrez le menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Photo de profil ». Elle s'affiche ensuite à côté de votre nom partout (planning, listes, en-tête).`) },
       { id: 'k-notifs', q: 'Où voir mes notifications ?', mots: 'notification cloche alerte rappel message demande à valider décision',
-        r: gP(`La <strong>cloche</strong> en haut de l'écran regroupe tout ce qui vous concerne : demandes à valider, décisions prises sur vos demandes, rappels. Un clic sur une notification ouvre l'écran concerné, et vous pouvez l'archiver une fois lue. Vous ne voyez que les notifications des modules auxquels vous avez accès.`) },
+        r: gShot('notifications', "Liste des notifications ouverte depuis la cloche, avec les onglets Non lues, Toutes et Archivées") + gP(`La <strong>cloche</strong> en haut de l'écran regroupe tout ce qui vous concerne : demandes à valider, décisions prises sur vos demandes, rappels. Un clic sur une notification ouvre l'écran concerné, et vous pouvez l'archiver une fois lue. Vous ne voyez que les notifications des modules auxquels vous avez accès.`) },
       { id: 'k-installer', q: 'Comment installer Nexus comme une application ?', mots: 'installer application téléphone mobile tablette écran d\'accueil raccourci pwa icône',
         r: gP(`Dans votre navigateur, utilisez l'option <strong>Installer l'application</strong> (ou « Ajouter à l'écran d'accueil » sur téléphone). Nexus s'ouvre alors dans sa propre fenêtre, comme une vraie application, sur ordinateur, téléphone ou tablette.`) },
       { id: 'k-agenda', q: 'Comment voir mes congés dans mon agenda (Outlook, Google...) ?', module: 'conges', mots: 'agenda calendrier synchroniser ical outlook google apple lien abonnement synchronisation',
@@ -5502,14 +5521,14 @@ GUIDE_THEMES.push(
           `Enregistrez : la fiche est créée. Pour qu'il puisse se connecter, vérifiez son accès (création du compte de connexion) dans l'onglet « Accès et droits » de sa fiche.`
         ) },
       { id: 's-import', q: 'Comment importer plusieurs salariés depuis Excel ?', vue: 'employees', mots: 'import importer excel xlsx fichier salariés masse colonnes csv chargement reprise',
-        r: gFig.importSalaries() + gEtapes(
+        r: gShot('import-salaries', "Fenêtre « Importer des salariés (Excel) » qui liste les colonnes reconnues et propose de choisir un fichier") + gFig.importSalaries() + gEtapes(
           `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer Excel</strong>.`,
           `Choisissez votre fichier (.xlsx). Les colonnes sont reconnues par leur en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance.`,
           `<strong>Nom, Prénom, Email et Date d'embauche sont obligatoires.</strong> Cochez « Conserver les matricules du fichier » seulement si vous y tenez : sinon ils sont attribués automatiquement (recommandé).`,
           `Contrôlez l'aperçu affiché, puis cliquez sur <strong>Importer</strong>.`
         ) },
       { id: 's-import-soldes', q: 'Comment reprendre les soldes de congés de départ ?', module: 'conges', vue: 'employees', mots: 'import soldes initiaux reprise compteurs congés payés rtt excel départ démarrage ancien logiciel',
-        r: gFig.importSoldes() + gEtapes(
+        r: gShot('import-soldes', "Fenêtre « Importer les soldes initiaux » avec le choix entre le solde à avoir aujourd'hui et des jours à ajouter ou retirer") + gFig.importSoldes() + gEtapes(
           `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer les soldes initiaux</strong>.`,
           `Préparez un fichier Excel avec une colonne d'identification (Matricule ou Email) et <strong>une colonne par type de congé</strong>, nommée comme le type (« Congés payés », « RTT »...).`,
           `Dites ce que représentent les chiffres : <strong>le solde à avoir aujourd'hui</strong> (recommandé : Nexus calcule lui-même l'ajustement pour afficher exactement ce solde) ou <strong>des jours à ajouter ou retirer</strong> au solde calculé (cette option remplace l'ajustement précédent du compteur).`,
@@ -5566,7 +5585,7 @@ GUIDE_THEMES.push(
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
         r: gFig.cloture() + gP(`Chaque type de congé a une <strong>date de clôture du compteur</strong> (par exemple le 31 mai) : la période d'acquisition court alors du lendemain de la clôture précédente (1er juin) jusqu'à cette date. Au sein d'une période close, le solde est <strong>disponible</strong> ; celle en cours reste « en cours d'acquisition » jusqu'à sa clôture.`) },
       { id: 'r-anticipation', q: 'Peut-on poser des jours qu\'on n\'a pas encore acquis ?', mots: 'anticipation par anticipation acquis à date dépasser solde négatif autoriser interdit',
-        r: gP(`C'est un choix à valider avec votre accord d'entreprise ou votre convention. Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, « Congés par anticipation » propose trois règles : <em>aucun contrôle</em> (une demande peut dépasser le solde), <em>interdite</em> (seulement le solde disponible) ou <em>autorisée dans la limite des jours acquis à date</em>.`) },
+        r: gShot('parametres-conges', "Paramètres, onglet Congés et absences : règle de congés par anticipation, maintien de salaire en cas d'arrêt maladie et rappels avant perte de congés") + gP(`C'est un choix à valider avec votre accord d'entreprise ou votre convention. Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, « Congés par anticipation » propose trois règles : <em>aucun contrôle</em> (une demande peut dépasser le solde), <em>interdite</em> (seulement le solde disponible) ou <em>autorisée dans la limite des jours acquis à date</em>.`) },
       { id: 'r-feries', q: 'Comment ajouter un jour férié ou une fermeture de l\'entreprise ?', vue: 'parametres', params: { parametresTab: 'calendrier' }, vueLabel: 'Paramètres', mots: 'jour férié fermeture entreprise pont calendrier ajouter jours chômés vacances scolaires',
         r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Calendrier</strong> : ajoutez un jour férié ou une fermeture. Les vacances scolaires se règlent dans l'onglet <strong>Congés et absences</strong> (rubrique vacances, avec la possibilité de récupérer les dates officielles).`) },
       { id: 'r-teletravail', q: 'Comment régler le quota de télétravail ?', module: 'planning', vue: 'parametres', params: { parametresTab: 'planning-teletravail' }, vueLabel: 'Paramètres', mots: 'quota télétravail semaine règle jours maximum planning réglage',
@@ -5786,7 +5805,7 @@ function guideScreenSection(item, groupe, user) {
     ? `<div class="help-section"><div class="search-section-label" style="padding-left: 0;">Bonnes pratiques</div><ul class="help-tips">${help.bonnesPratiques.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul></div>` : '';
   return guideSection({
     id: 'ecran-' + item.key, groupe, titre: item.label, icone: item.icon, navKey: item.key,
-    intro: `${resume ? `<p class="guide-resume">${escapeHtml(resume)}</p>` : ''}${help ? help.body : ''}`,
+    intro: `${resume ? `<p class="guide-resume">${escapeHtml(resume)}</p>` : ''}${(() => { const c = GUIDE_CAPTURES[item.key] && GUIDE_CAPTURES[item.key](user); return c ? gShot(c.fichier, c.alt) : ''; })()}${help ? help.body : ''}`,
     entreesTitre: 'Questions fréquentes', entrees,
     pied: `${pratiques}<div class="guide-actions"><button type="button" class="btn btn-primary btn-sm" data-guide-open-view="${escapeHtml(item.key)}">Ouvrir « ${escapeHtml(item.label)} »</button></div>`
   }, user);
@@ -5990,6 +6009,24 @@ function guideResultatsHtml(recherche, requete) {
 
 const GUIDE_SUGGESTIONS = ['Poser un congé', 'Mon solde de congés', 'Note de frais', 'Mot de passe', 'Formation CPF', 'Télétravail', 'Importer des salariés', 'Préparer la paie', 'Arrêt maladie'];
 
+/** Affiche une capture en grand par-dessus le guide ; un clic ou Échap la ferme (sans fermer le guide). */
+function guideAgrandirImage(img) {
+  if (document.getElementById('guide-lightbox')) return;
+  const voile = document.createElement('div');
+  voile.id = 'guide-lightbox';
+  voile.className = 'guide-lightbox';
+  voile.setAttribute('role', 'dialog');
+  voile.setAttribute('aria-label', img.alt || 'Capture agrandie');
+  voile.innerHTML = `<img src="${escapeHtml(img.getAttribute('src'))}" alt="${escapeHtml(img.alt || '')}"><button type="button" class="btn btn-secondary btn-sm" aria-label="Fermer l'image">Fermer</button>`;
+  const fermer = () => { document.removeEventListener('keydown', surEchap, true); voile.remove(); };
+  const surEchap = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fermer(); } };
+  voile.addEventListener('click', fermer);
+  document.addEventListener('keydown', surEchap, true);
+  document.body.appendChild(voile);
+  const bouton = voile.querySelector('button');
+  if (bouton && typeof bouton.focus === 'function') bouton.focus();
+}
+
 function openGuideModal(sectionId, entreeId) {
   const user = authRepository.getCurrentUser();
   if (!user) return;
@@ -6043,6 +6080,11 @@ function openGuideModal(sectionId, entreeId) {
       closeModal();
       navigateTo(cle, params);
     }));
+    zone.querySelectorAll('img.guide-shot-img').forEach(img => {
+      const agrandir = () => guideAgrandirImage(img);
+      img.addEventListener('click', agrandir);
+      img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); agrandir(); } });
+    });
     zone.querySelectorAll('[data-guide-start-tour]').forEach(btn => btn.addEventListener('click', () => { closeModal(); startTour({ force: true }); }));
     zone.querySelectorAll('[data-guide-changelog]').forEach(btn => btn.addEventListener('click', () => openChangelogModal()));
     zone.querySelectorAll('[data-guide-expand]').forEach(btn => btn.addEventListener('click', () => {

@@ -139,6 +139,32 @@ function run() {
   ['c-solde', 'c-suivre', 't-quota', 'f-km', 'e-formation', 's-import', 's-import-soldes', 'p-preparer', 'r-cloture'].forEach(id => assert.ok(idsAvecSchema.has(id), `schéma attendu dans ${id}`));
   guideRechercher(sal, 'solde').resultats.forEach(r => assert.ok(!/Acquis \+|Ajustement −|En attente Validé/.test(r.brut), "l'extrait ne reprend pas le texte d'un schéma"));
 
+  // --- Captures réelles (retour du 29/10/2026) : chaque image existe, a un texte alternatif, reste légère ---
+  const path = require("path");
+  const fs = require("fs");
+  const dossier = path.join(__dirname, "..", "guide-images");
+  const sources = new Set();
+  const lire = (html) => (String(html).match(/<img class="guide-shot-img"[^>]*>/g) || []).forEach(t => { sources.add(t); });
+  GUIDE_THEMES.forEach(t => t.entrees.forEach(e => lire(e.r)));
+  Object.values(parRole).forEach(secs => secs.forEach(x => lire(x.html)));
+  assert.ok(sources.size >= 16, "au moins 16 captures différentes dans le guide (" + sources.size + ")");
+  sources.forEach(tag => {
+    const src = (tag.match(/src="guide-images\/([a-z0-9-]+\.jpg)"/) || [])[1];
+    assert.ok(src, "source d'image valide : " + tag.slice(0, 80));
+    const chemin = path.join(dossier, src);
+    assert.ok(fs.existsSync(chemin), "fichier de capture présent : " + src);
+    const taille = fs.statSync(chemin).size;
+    assert.ok(taille > 8000 && taille < 300000, "taille raisonnable pour " + src + " (" + taille + " octets)");
+    const octets = fs.readFileSync(chemin);
+    assert.ok(octets[0] === 0xff && octets[1] === 0xd8, src + " est bien une image JPEG");
+    assert.ok(/alt="[^"]{25,}"/.test(tag), "texte alternatif descriptif pour " + src);
+  });
+  assert.ok(fs.readdirSync(dossier).every(n => [...sources].some(t => t.includes("guide-images/" + n))), "aucune capture inutilisée dans le dossier");
+  assert.ok((parRole.salarie.find(x => x.id === "ecran-dashboard").html).includes("accueil-salarie.jpg"), "un salarié voit sa propre page d'accueil");
+  assert.ok((parRole.rh.find(x => x.id === "ecran-dashboard").html).includes("guide-images/accueil.jpg"), "un RH voit l'accueil RH");
+  assert.ok(!(parRole.salarie.find(x => x.id === "ecran-calendrier").html).includes("calendrier-equipe"), "pas de calendrier d'équipe pour un salarié");
+  assert.ok((parRole.manager.find(x => x.id === "ecran-calendrier").html).includes("calendrier-equipe"), "calendrier d'équipe pour un manager");
+
   console.log(`OK — guide-manuel-recherche-28-10.test.js (${total} réponses, recherche tolérante aux accents, abréviations, rôles)`);
 }
 

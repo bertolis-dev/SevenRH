@@ -4459,3 +4459,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 .gv-grid { stroke: var(--color-border-soft); stroke-width: 1; }
 .gv-yes { fill: var(--landing-gold-500); }
 .gv-ring { fill: none; stroke: var(--landing-gold-500); stroke-width: 2.5; }
+
+/* Vraies captures dans le guide (retour du 29/10/2026) : cliquables pour agrandir. */
+.guide-shot { padding: 8px; }
+.guide-shot-img { display: block; width: 100%; max-width: 680px; height: auto; margin: 0 auto; border: 1px solid var(--color-border); border-radius: 6px; cursor: zoom-in; background: #fff; }
+.guide-shot-img:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
+.guide-lightbox { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; background: rgba(10, 16, 30, 0.82); cursor: zoom-out; }
+.guide-lightbox img { max-width: min(96vw, 1200px); max-height: calc(100vh - 90px); width: auto; height: auto; border-radius: 8px; background: #fff; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
