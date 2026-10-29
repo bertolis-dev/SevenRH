@@ -121,6 +121,24 @@ function run() {
   assert.strictEqual(guideSurligner('Poser un congé payé', termes), 'Poser un <mark>congé</mark> payé');
   assert.ok(guideSurligner('<b>congé</b> & co', termes).includes('&lt;b&gt;<mark>congé</mark>'), 'le texte est échappé avant affichage');
 
+  // --- Schémas (retour du 29/10/2026) : bien formés, accessibles, jamais dans les extraits de recherche ---
+  const figures = [];
+  const collecte = (html, ou) => { (String(html).match(/<figure class="guide-figure">[\s\S]*?<\/figure>/g) || []).forEach(h => figures.push({ ou, h })); };
+  GUIDE_THEMES.forEach(t => t.entrees.forEach(e => collecte(e.r, e.id)));
+  ['rh', 'salarie'].forEach(role => (parRole[role] || []).filter(x => ['reperes', 'role'].includes(x.id)).forEach(x => collecte(x.html, `${role}:${x.id}`)));
+  assert.ok(figures.length >= 14, `au moins 14 schémas dans le guide (${figures.length} trouvés)`);
+  figures.forEach(({ ou, h }) => {
+    assert.ok(/<svg viewBox="0 0 560 \d+" role="img" aria-label="[^"]{15,}"/.test(h), `${ou} : le schéma a un titre lisible par les lecteurs d'écran`);
+    assert.ok(!/NaN|undefined|Infinity|\[object/.test(h), `${ou} : aucune valeur de dessin invalide`);
+    assert.ok((h.match(/<(rect|text|line|polygon|circle|path)\b/g) || []).length >= 3, `${ou} : le schéma contient des éléments`);
+    assert.strictEqual((h.match(/<text\b/g) || []).length, (h.match(/<\/text>/g) || []).length, `${ou} : balises text équilibrées`);
+    assert.strictEqual((h.match(/<svg\b/g) || []).length, 1, `${ou} : un seul dessin par schéma`);
+    assert.ok(h.includes('</svg>'), `${ou} : dessin fermé`);
+  });
+  const idsAvecSchema = new Set(figures.map(x => x.ou));
+  ['c-solde', 'c-suivre', 't-quota', 'f-km', 'e-formation', 's-import', 's-import-soldes', 'p-preparer', 'r-cloture'].forEach(id => assert.ok(idsAvecSchema.has(id), `schéma attendu dans ${id}`));
+  guideRechercher(sal, 'solde').resultats.forEach(r => assert.ok(!/Acquis \+|Ajustement −|En attente Validé/.test(r.brut), "l'extrait ne reprend pas le texte d'un schéma"));
+
   console.log(`OK — guide-manuel-recherche-28-10.test.js (${total} réponses, recherche tolérante aux accents, abréviations, rôles)`);
 }
 

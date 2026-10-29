@@ -2475,13 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.10.29.2';
+const APP_VERSION = '2026.10.29.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Octobre 2026',
     version: APP_VERSION,
     items: [
+      "Le guide s'illustre : des schémas clairs expliquent les repères de l'écran, le calcul du solde, les périodes de congés, la vie d'une demande, les droits par rôle, les fichiers Excel d'import et la préparation de la paie. Ils suivent le thème clair ou sombre.",
       "Le guide est devenu un vrai mode d'emploi : plus de 140 réponses (« comment faire ? », dépannage, glossaire) adaptées à votre rôle, avec une recherche qui comprend les mots de tous les jours (« mdp », « vacances », « CPF »...) et vous mène directement à la bonne réponse.",
       "Nouveau guide de l'application : cliquez sur le rond en haut à droite, puis « Guide de l'application ». Il explique chaque écran auquel vous avez accès, avec une recherche intégrée.",
       "Visite guidée au premier lancement, et petites astuces affichées une seule fois sur chaque écran.",
@@ -5020,6 +5021,7 @@ function guideIntroSections(user) {
       id: 'reperes', groupe: 'Premiers pas', titre: 'Se repérer dans l\'application',
       html: `
         <p class="guide-resume">Cinq éléments toujours présents. Une fois repérés, vous savez utiliser tout le reste.</p>
+        ${gFig.reperes()}
         <dl class="guide-defs">
           <dt>Le menu à gauche</dt>
           <dd>Il liste vos écrans. « Personnel » regroupe vos propres démarches ; « Équipe » (si vous encadrez des personnes ou gérez les RH) regroupe la gestion. Sur téléphone, il s'ouvre avec le bouton ☰ en haut à gauche.</dd>
@@ -5037,6 +5039,7 @@ function guideIntroSections(user) {
       id: 'role', groupe: 'Premiers pas', titre: `Votre rôle : ${roleLabel}`,
       html: `
         <p class="guide-resume">${escapeHtml(GUIDE_ROLE_TEXTS[user.role] || '')}</p>
+        ${gFig.roles()}
         <p>Les droits exacts peuvent être ajustés par votre entreprise (certains écrans peuvent donc manquer, ou être en plus de ceux décrits ici). Si un écran vous semble absent, demandez à votre RH ou au propriétaire du compte.</p>`
     }
   ];
@@ -5077,6 +5080,198 @@ function guideOutroSections() {
 // le guide ne décrit jamais ce que l'on ne peut pas faire. La recherche (guideRechercher) parcourt chaque entrée, pas seulement les chapitres.
 // ---------------------------------------------------------------------------
 
+// --- Schémas du guide (retour du 29/10/2026 : « ajouter des visuels dans le guide ») ---
+// Des dessins vectoriels légers, générés ici plutôt que des captures d'écran : ils restent nets sur téléphone, suivent le thème clair ou sombre
+// (couleurs en variables CSS, voir .gv-* dans style.css), ne périment pas quand l'écran change de détail, et ne contiennent aucune donnée réelle.
+// Palette : marine et or uniquement (voir la règle de palette), le reste en gris neutre.
+
+const GV_LARGEUR = 560;
+
+/** Texte centré (ou aligné), plusieurs lignes séparées par \n. */
+const gT = (x, y, texte, classe = 'gv-t', ancre = 'middle') => String(texte).split('\n').map((ligne, i, tout) =>
+  `<text class="${classe}" x="${x}" y="${y + (i - (tout.length - 1) / 2) * 15}" text-anchor="${ancre}" dominant-baseline="central">${escapeHtml(ligne)}</text>`).join('');
+
+/** Boîte arrondie avec son texte. `style` : '' (neutre), 'gv-accent' (contour or) ou 'gv-navy' (plein marine, texte blanc). */
+const gBoite = (x, y, w, h, texte, style = '') =>
+  `<rect class="gv-box ${style}" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/>${gT(x + w / 2, y + h / 2, texte, style.includes('gv-navy') ? 'gv-w' : 'gv-t')}`;
+
+/** Flèche de (x1,y1) vers (x2,y2), pointe incluse. */
+const gFleche = (x1, y1, x2, y2) => {
+  const a = Math.atan2(y2 - y1, x2 - x1);
+  const bx = x2 - 9 * Math.cos(a);
+  const by = y2 - 9 * Math.sin(a);
+  const dx = -4.5 * Math.sin(a);
+  const dy = 4.5 * Math.cos(a);
+  const f = (n) => Math.round(n * 10) / 10;
+  return `<line class="gv-line" x1="${f(x1)}" y1="${f(y1)}" x2="${f(bx)}" y2="${f(by)}"/><polygon class="gv-head" points="${f(x2)},${f(y2)} ${f(bx + dx)},${f(by + dy)} ${f(bx - dx)},${f(by - dy)}"/>`;
+};
+
+/** Pastille numérotée marine. */
+const gPastille = (cx, cy, n) => `<circle class="gv-dot" cx="${cx}" cy="${cy}" r="11"/>${gT(cx, cy, String(n), 'gv-w')}`;
+
+/** Un schéma complet : titre (lu par les lecteurs d'écran), dessin, légende. */
+const gFigure = (titre, dessin, legende = '') =>
+  `<figure class="guide-figure"><svg viewBox="0 0 ${GV_LARGEUR} ${dessin.h}" role="img" aria-label="${escapeHtml(titre)}" xmlns="http://www.w3.org/2000/svg">${dessin.corps}</svg>${legende ? `<figcaption>${legende}</figcaption>` : ''}</figure>`;
+
+/** Étapes alignées reliées par des flèches. Chaque étape : 'Texte' ou { t, s } (s = précision en dessous, ex. qui agit). `accent` : rang de l'étape mise en avant. */
+const gFlux = (etapes, accent = -1) => {
+  const n = etapes.length;
+  const ecart = 30;
+  const w = (GV_LARGEUR - 8 - (n - 1) * ecart) / n;
+  const h = 58;
+  let corps = '';
+  etapes.forEach((e, i) => {
+    const x = 4 + i * (w + ecart);
+    const t = typeof e === 'string' ? e : e.t;
+    corps += gBoite(x, 6, w, h, t, i === accent ? 'gv-accent' : '');
+    if (e.s) corps += gT(x + w / 2, h + 24, e.s, 'gv-m');
+    if (i < n - 1) corps += gFleche(x + w + 3, 6 + h / 2, x + w + ecart - 3, 6 + h / 2);
+  });
+  return { h: etapes.some(e => e.s) ? h + 40 : h + 14, corps };
+};
+
+/** Formule : cases et opérateurs (+ − × =) sur une ligne. Élément : { t } ou { op }. `accent` : rang de la dernière case mise en avant. */
+const gFormule = (items) => {
+  const ops = items.filter(i => i.op).length;
+  const cases = items.length - ops;
+  const wOp = 28;
+  const w = (GV_LARGEUR - 8 - ops * wOp) / cases;
+  let x = 4;
+  let corps = '';
+  items.forEach((it, i) => {
+    if (it.op) { corps += gT(x + wOp / 2, 36, it.op, 'gv-op'); x += wOp; return; }
+    corps += gBoite(x, 8, w, 56, it.t, i === items.length - 1 ? 'gv-accent' : '');
+    x += w;
+  });
+  return { h: 72, corps };
+};
+
+/** Tableau d'exemple (feuille Excel). Les colonnes se terminant par * sont obligatoires. */
+const gTableau = (colonnes, largeurs, lignes) => {
+  const hl = 30;
+  let corps = '';
+  let x = 4;
+  colonnes.forEach((c, i) => {
+    corps += `<rect class="gv-navy" x="${x}" y="6" width="${largeurs[i]}" height="${hl}"/>${gT(x + largeurs[i] / 2, 6 + hl / 2, c, 'gv-w')}`;
+    x += largeurs[i];
+  });
+  lignes.forEach((ligne, r) => {
+    x = 4;
+    ligne.forEach((cellule, i) => {
+      corps += `<rect class="gv-cell" x="${x}" y="${6 + hl * (r + 1)}" width="${largeurs[i]}" height="${hl}"/>${gT(x + largeurs[i] / 2, 6 + hl * (r + 1) + hl / 2, cellule === '' ? '(vide)' : cellule, cellule === '' ? 'gv-m' : 'gv-c')}`;
+      x += largeurs[i];
+    });
+  });
+  return { h: hl * (lignes.length + 1) + 14, corps };
+};
+
+const gFig = {
+  /** Les cinq repères de l'écran : menu, recherche, « ? », cloche, rond du compte. */
+  reperes: () => {
+    const lignes = ['Accueil', 'Congés & absences', 'Notes de frais', 'Formation'];
+    let c = `<rect class="gv-box" x="1" y="1" width="558" height="238" rx="10"/><rect class="gv-soft" x="8" y="8" width="122" height="224" rx="6"/>`;
+    lignes.forEach((l, i) => { c += `<rect class="gv-box${i === 0 ? ' gv-accent' : ''}" x="16" y="${40 + i * 34}" width="106" height="24" rx="5"/>${gT(24, 52 + i * 34, l, 'gv-c', 'start')}`; });
+    c += `<rect class="gv-box" x="146" y="14" width="236" height="28" rx="14"/>${gT(162, 28, 'Rechercher...  (Ctrl+K)', 'gv-m', 'start')}`;
+    c += `<circle class="gv-box" cx="412" cy="28" r="13"/>${gT(412, 28, '?')}`;
+    c += `<circle class="gv-box" cx="454" cy="28" r="13"/><path class="gv-line" d="M448 33h12l-2-3v-5a4 4 0 0 0-8 0v5z"/>`;
+    c += `<circle class="gv-dot" cx="504" cy="28" r="14"/>${gT(504, 28, 'CL', 'gv-w')}`;
+    c += `<rect class="gv-cell" x="146" y="86" width="196" height="64" rx="6"/><rect class="gv-cell" x="352" y="86" width="196" height="64" rx="6"/><rect class="gv-cell" x="146" y="162" width="402" height="62" rx="6"/>`;
+    c += gPastille(72, 196, 1) + gPastille(264, 62, 2) + gPastille(412, 62, 3) + gPastille(454, 62, 4) + gPastille(504, 62, 5);
+    return gFigure('Les cinq repères de l\'écran : menu, recherche, bouton point d\'interrogation, cloche et rond du compte', { h: 240, corps: c },
+      '<strong>1</strong> Menu · <strong>2</strong> Recherche · <strong>3</strong> Bouton « ? » · <strong>4</strong> Cloche · <strong>5</strong> Votre compte et le guide');
+  },
+
+  /** Qui peut faire quoi, par défaut. ● oui, ○ pour son équipe seulement. */
+  roles: () => {
+    const cols = ['Salarié', 'Manager', 'RH', 'Compta', 'Proprio.'];
+    const centres = cols.map((_, i) => 262 + i * 64);
+    const lignes = [
+      ['Poser congés, frais, formation', [1, 1, 1, 1, 1]],
+      ['Valider les demandes', [0, 2, 1, 0, 1]],
+      ['Notes de frais : contrôle, paiement', [0, 2, 1, 1, 1]],
+      ['Gérer salariés et paramètres', [0, 0, 1, 0, 1]],
+      ['Préparer la paie', [0, 0, 1, 0, 1]],
+      ['Abonnement du compte', [0, 0, 0, 0, 1]]
+    ];
+    let c = '';
+    cols.forEach((t, i) => { c += gT(centres[i], 16, t, 'gv-m'); });
+    lignes.forEach(([libelle, vals], r) => {
+      const y = 48 + r * 32;
+      c += `<line class="gv-grid" x1="4" y1="${y - 16}" x2="556" y2="${y - 16}"/>${gT(8, y, libelle, 'gv-t', 'start')}`;
+      vals.forEach((v, i) => {
+        if (v === 1) c += `<circle class="gv-yes" cx="${centres[i]}" cy="${y}" r="7"/>`;
+        else if (v === 2) c += `<circle class="gv-ring" cx="${centres[i]}" cy="${y}" r="6"/>`;
+      });
+    });
+    return gFigure('Droits par défaut de chaque rôle', { h: 48 + lignes.length * 32 - 6, corps: c },
+      '● oui · ○ seulement pour son équipe. Réglage par défaut : les RH peuvent ajuster les droits d\'une personne, et certains écrans dépendent des modules souscrits.');
+  },
+
+  solde: () => gFigure('Calcul du solde : acquis plus ajustement moins pris moins en attente',
+    gFormule([{ t: 'Acquis' }, { op: '+' }, { t: 'Ajustement' }, { op: '−' }, { t: 'Pris' }, { op: '−' }, { t: 'En attente' }, { op: '=' }, { t: 'Solde' }])),
+
+  cloture: () => {
+    let c = gBoite(4, 44, 262, 48, 'Période close\nDISPONIBLE : se prend tout de suite', 'gv-accent');
+    c += gBoite(294, 44, 262, 48, 'Période en cours\nEN COURS D\'ACQUISITION', '');
+    c += `<line class="gv-line" x1="280" y1="22" x2="280" y2="116"/>${gT(280, 12, 'Clôture (ex. 31 mai)', 'gv-m')}`;
+    c += gT(135, 108, 'du 1er juin au 31 mai', 'gv-m') + gT(425, 108, 'du 1er juin au 31 mai suivant', 'gv-m');
+    return gFigure('Deux périodes de congés : la période close est disponible, la période en cours est en cours d\'acquisition', { h: 124, corps: c },
+      'Les jours de la période en cours ne se prennent qu\'après sa clôture. Ne les additionnez pas au disponible.');
+  },
+
+  cycleDemande: () => {
+    let c = `<rect class="gv-box gv-dash" x="4" y="72" width="104" height="48" rx="8"/>${gT(56, 96, 'Brouillon', 'gv-m')}`;
+    c += gBoite(162, 72, 120, 48, 'En attente', 'gv-accent');
+    c += gFleche(110, 96, 160, 96);
+    c += gBoite(366, 6, 120, 44, 'Validé') + gBoite(366, 74, 120, 44, 'Refusé') + gBoite(366, 142, 120, 44, 'Annulé');
+    c += gFleche(284, 88, 364, 30) + gFleche(284, 96, 364, 96) + gFleche(284, 104, 364, 164);
+    return gFigure('Vie d\'une demande : brouillon, en attente, puis validée, refusée ou annulée', { h: 196, corps: c },
+      'Un brouillon n\'est envoyé à personne. Une demande validée peut ensuite être régularisée : l\'historique garde la trace.');
+  },
+
+  semaineTeletravail: () => {
+    const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    let c = '';
+    jours.forEach((j, i) => { c += gBoite(4 + i * 79, 8, 70, 50, j + (i === 0 || i === 2 ? '\ntélétravail' : ''), i === 0 || i === 2 ? 'gv-accent' : ''); });
+    c += gT(280, 82, 'Exemple : quota de 2 jours par semaine (du lundi au dimanche)', 'gv-m');
+    return gFigure('Une semaine de télétravail avec un quota de deux jours', { h: 96, corps: c },
+      'Le quota compte toutes les demandes validées ou en attente de la semaine, pas seulement celle que vous saisissez.');
+  },
+
+  kilometrique: () => gFigure('Indemnité kilométrique : distance multipliée par le barème',
+    gFormule([{ t: 'Distance\n(km)' }, { op: '×' }, { t: 'Barème\n(véhicule, puissance)' }, { op: '=' }, { t: 'Indemnité' }]),
+    'Le calcul est automatique : vous saisissez seulement la distance, le type de véhicule et sa puissance fiscale.'),
+
+  noteDeFrais: () => gFigure('Parcours d\'une note de frais', gFlux([
+    { t: 'Note envoyée\n+ justificatif', s: 'vous' }, { t: 'Contrôle et\nvalidation', s: 'manager, RH...' }, { t: 'Statut\n« Remboursé »', s: 'validée' }, { t: 'Paiement\nenregistré', s: 'comptabilité' }], 2),
+    'Le circuit exact se règle dans Paramètres, onglet « Notes de frais ».'),
+
+  formation: () => gFigure('Parcours d\'une demande de formation', gFlux([
+    { t: 'Votre demande', s: 'vous' }, { t: 'Décision', s: 'manager ou RH' }, { t: 'Formation suivie', s: 'marquée réalisée' }, { t: 'Lettres\nà imprimer', s: 'bouton « Lettres »' }], 1),
+    'Une demande est toujours décidée par une autre personne que son auteur.'),
+
+  circuit: () => gFigure('Exemple de circuit de validation', gFlux([
+    { t: 'Demande', s: 'salarié' }, { t: 'Étape 1', s: 'manager' }, { t: 'Étape 2', s: 'RH' }, { t: 'Décision finale', s: 'validé ou refusé' }], 3),
+    'Exemple : le circuit réel se règle par type de congé et pour les notes de frais, dans Paramètres.'),
+
+  paie: () => gFigure('Préparer la paie en quatre étapes', gFlux([
+    { t: '1. Corriger\nles anomalies' }, { t: '2. Saisir les\nvariables' }, { t: '3. Choisir le\nmodèle d\'export' }, { t: '4. Exporter\nle CSV' }], 3),
+    'Vérifiez toujours le fichier avant de l\'importer dans votre logiciel de paie.'),
+
+  pointage: () => gFigure('Pointer à l\'arrivée et au départ', gFlux([
+    { t: 'Scanner le QR', s: 'à l\'arrivée' }, { t: 'Journée\nde travail' }, { t: 'Scanner le QR', s: 'au départ' }, { t: 'Historique\ndu mois' }], -1)),
+
+  importSalaries: () => gFigure('Exemple de fichier Excel pour importer des salariés',
+    gTableau(['Matricule', 'Nom*', 'Prénom*', 'Email*', 'Date d\'embauche*', 'Service'], [70, 78, 78, 134, 112, 84],
+      [['', 'Dupont', 'Claire', 'c.dupont@exemple.fr', '01/09/2024', 'Ventes'], ['', 'Martin', 'Paul', 'p.martin@exemple.fr', '15/01/2025', 'Comptabilité']]),
+    '* colonne obligatoire. Une ligne d\'en-têtes sur la première ligne ; le matricule vide est attribué automatiquement.'),
+
+  importSoldes: () => gFigure('Exemple de fichier Excel pour reprendre les soldes de départ',
+    gTableau(['Email', 'Congés payés', 'RTT'], [250, 150, 144],
+      [['c.dupont@exemple.fr', '12', '5'], ['p.martin@exemple.fr', '25', '0']]),
+    'Une colonne d\'identification (Matricule ou Email), puis une colonne par type de congé, nommée comme le type.')
+};
+
 const GUIDE_EQUIPE = ['manager', 'rh', 'proprietaire'];
 const GUIDE_GESTION = ['rh', 'proprietaire'];
 
@@ -5103,7 +5298,7 @@ const GUIDE_THEMES = [
       { id: 'c-brouillon', q: 'Comment enregistrer un brouillon de demande sans l\'envoyer ?', mots: 'brouillon enregistrer plus tard reprendre sauvegarder pas certain dates',
         r: gP(`Oui : utilisez <strong>Enregistrer comme brouillon</strong> au lieu d'envoyer. Le brouillon apparaît dans le cadre <strong>Mes brouillons</strong>, au-dessus de la liste des demandes, et vous pouvez le reprendre plus tard. C'est pratique quand les dates ne sont pas encore certaines.`) },
       { id: 'c-suivre', q: 'Comment savoir où en est ma demande ?', mots: 'statut en attente validé refusé annulé historique notification réponse accepté',
-        r: gP(`Chaque demande de la liste porte un statut : <strong>En attente</strong> (pas encore traitée), <strong>Validé</strong>, <strong>Refusé</strong> (avec le motif donné) ou <strong>Annulé</strong>. Vous recevez aussi une notification (la cloche en haut) quand une décision est prise.`) + gP(`Le bouton <strong>Historique</strong> d'une ligne retrace toute sa vie : création, validations, refus et rectifications, avec la personne et la date.`) },
+        r: gFig.cycleDemande() + gP(`Chaque demande de la liste porte un statut : <strong>En attente</strong> (pas encore traitée), <strong>Validé</strong>, <strong>Refusé</strong> (avec le motif donné) ou <strong>Annulé</strong>. Vous recevez aussi une notification (la cloche en haut) quand une décision est prise.`) + gP(`Le bouton <strong>Historique</strong> d'une ligne retrace toute sa vie : création, validations, refus et rectifications, avec la personne et la date.`) },
       { id: 'c-annuler', q: 'Comment annuler une demande de congé ?', vue: 'absences', mots: 'supprimer retirer annulation effacer renoncer',
         r: gEtapes(
           `Ouvrez <strong>Congés &amp; absences</strong> et repérez votre demande dans la liste.`,
@@ -5112,7 +5307,7 @@ const GUIDE_THEMES = [
       { id: 'c-passe', q: 'Pourquoi ne puis-je pas saisir une période déjà passée ?', mots: 'passé hier rétroactif date déjà commencée impossible erreur début',
         r: gP(`Un salarié ne peut jamais saisir ni modifier une période déjà commencée : le message « Vous ne pouvez pas saisir une absence dont la date de début est déjà passée » s'affiche. Seuls un manager, les RH ou le propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi. Prévenez-les : ils saisissent la période à votre place.`) },
       { id: 'c-solde', q: 'Comment lire mon solde de congés ?', mots: 'compteur jours restants acquis pris disponible reste combien droit cp rtt calcul',
-        r: gP(`Le solde se calcule ainsi : <strong>acquis + ajustement − pris − en attente</strong>. Les jours « en attente » sont déjà retirés tant que la demande n'est pas tranchée.`) + gP(`Pour un type qui a une <strong>clôture</strong> (par exemple les congés payés, du 1er juin au 31 mai), le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, que vous pouvez prendre tout de suite. Ce qui est indiqué « en cours d'acquisition » s'accumule sur la période en cours et ne se prend pas encore : ne l'additionnez jamais au disponible.`) + gP(`Vous retrouvez vos soldes sur l'<strong>Accueil</strong> et dans <strong>Ma fiche</strong>, onglet Congés et absences, rubrique « Voir le détail des compteurs ».`) },
+        r: gFig.solde() + gP(`Le solde se calcule ainsi : <strong>acquis + ajustement − pris − en attente</strong>. Les jours « en attente » sont déjà retirés tant que la demande n'est pas tranchée.`) + gP(`Pour un type qui a une <strong>clôture</strong> (par exemple les congés payés, du 1er juin au 31 mai), le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, que vous pouvez prendre tout de suite. Ce qui est indiqué « en cours d'acquisition » s'accumule sur la période en cours et ne se prend pas encore : ne l'additionnez jamais au disponible.`) + gFig.cloture() + gP(`Vous retrouvez vos soldes sur l'<strong>Accueil</strong> et dans <strong>Ma fiche</strong>, onglet Congés et absences, rubrique « Voir le détail des compteurs ».`) },
       { id: 'c-solde-faux', q: 'Mon solde ne correspond pas à ce que j\'attendais', mots: 'erreur faux incorrect différent anormal négatif compteur problème solde',
         r: gEtapes(
           `Regardez la <strong>période</strong> indiquée sous le chiffre : le solde « disponible » ne concerne que la période déjà close.`,
@@ -5156,7 +5351,7 @@ const GUIDE_THEMES = [
           `Cliquez sur <strong>+ Nouvelle demande</strong>, choisissez le ou les jours, ajoutez un commentaire si besoin, puis envoyez.`
         ) + gP(`Comme un congé, la demande est « En attente » jusqu'à la décision. Vous pouvez la corriger ou l'annuler depuis la liste tant qu'elle n'est pas traitée.`) },
       { id: 't-quota', q: 'Pourquoi ma demande de télétravail est-elle refusée ou bloquée ?', mots: 'quota semaine limite nombre de jours maximum télétravail refus règle',
-        r: gP(`Le quota se calcule <strong>par semaine</strong> (du lundi au dimanche) en additionnant toutes les demandes validées ou en attente de cette semaine, pas seulement celle que vous saisissez. Si le total dépasse le quota fixé par votre entreprise, le message indique la règle en cause. Les RH règlent le quota dans Paramètres, onglet « Planning et télétravail ».`) },
+        r: gFig.semaineTeletravail() + gP(`Le quota se calcule <strong>par semaine</strong> (du lundi au dimanche) en additionnant toutes les demandes validées ou en attente de cette semaine, pas seulement celle que vous saisissez. Si le total dépasse le quota fixé par votre entreprise, le message indique la règle en cause. Les RH règlent le quota dans Paramètres, onglet « Planning et télétravail ».`) },
       { id: 't-valider', q: 'Comment valider les demandes de télétravail de mon équipe ?', pour: GUIDE_EQUIPE, vue: 'absences', mots: 'télétravail valider équipe approuver refuser',
         r: gP(`Dans l'onglet <strong>Télétravail</strong>, utilisez le bouton « Voir les demandes à valider », puis Valider ou Refuser sur chaque ligne, comme pour les congés.`) }
     ]
@@ -5172,11 +5367,11 @@ const GUIDE_THEMES = [
           `Joignez le justificatif (photo ou fichier), puis envoyez.`
         ) + gP(`La note part en validation. Le total remboursé du mois alimente automatiquement l'export de paie.`) },
       { id: 'f-km', q: 'Comment déclarer des frais kilométriques ?', mots: 'kilométrique kilomètres km voiture moto indemnité véhicule distance puissance fiscale cv barème trajet',
-        r: gP(`Créez une note de type <strong>kilométrique</strong> : indiquez la distance, le type de véhicule (voiture, moto, cyclomoteur de moins de 50 cm³) et sa puissance fiscale. L'indemnité est <strong>calculée automatiquement</strong> selon le barème : vous n'avez rien à saisir à la main.`) },
+        r: gFig.kilometrique() + gP(`Créez une note de type <strong>kilométrique</strong> : indiquez la distance, le type de véhicule (voiture, moto, cyclomoteur de moins de 50 cm³) et sa puissance fiscale. L'indemnité est <strong>calculée automatiquement</strong> selon le barème : vous n'avez rien à saisir à la main.`) },
       { id: 'f-justif', q: 'Le justificatif est-il obligatoire ?', mots: 'justificatif facture ticket reçu photo pièce obligatoire manquant',
         r: gP(`Pour une note standard, oui : joignez-le dès la création. Le libellé du champ indique « obligatoire pour cette catégorie » quand c'est le cas. Une note validée sans justificatif ressort comme anomalie avant l'export de paie, et fait perdre du temps à tout le monde : prenez-le en photo sur place.`) },
       { id: 'f-suivre', q: 'Comment suivre le remboursement de mes notes ?', mots: 'statut remboursé en attente refusé payé suivi total',
-        r: gP(`La liste affiche le statut de chaque note : <strong>En attente</strong> (soumise), <strong>Remboursé</strong> (validée par le circuit ; la date de paiement s'ajoute quand la comptabilité enregistre le remboursement), <strong>Refusé</strong> ou <strong>Annulé</strong>. Les filtres permettent de les trier par statut ou par période, et les totaux par statut s'affichent en haut.`) },
+        r: gFig.noteDeFrais() + gP(`La liste affiche le statut de chaque note : <strong>En attente</strong> (soumise), <strong>Remboursé</strong> (validée par le circuit ; la date de paiement s'ajoute quand la comptabilité enregistre le remboursement), <strong>Refusé</strong> ou <strong>Annulé</strong>. Les filtres permettent de les trier par statut ou par période, et les totaux par statut s'affichent en haut.`) },
       { id: 'f-modifier', q: 'Puis-je corriger une note déjà envoyée ?', mots: 'modifier corriger changer erreur montant note envoyée',
         r: gP(`Ouvrez la note depuis la liste : si elle est encore modifiable, vous pouvez corriger ses informations. Si elle a déjà été traitée, demandez à la personne qui la valide de la refuser, puis recréez-la correctement.`) },
       { id: 'f-valider', q: 'Comment valider une note de frais ?', pour: ['manager', 'rh', 'comptabilite', 'proprietaire'], vue: 'frais', mots: 'valider approuver contrôler note frais équipe refuser en masse',
@@ -5192,7 +5387,7 @@ const GUIDE_THEMES = [
     intro: gP(`Demander une formation, préparer ses entretiens et proposer des idées.`),
     entrees: [
       { id: 'e-formation', q: 'Comment demander une formation ?', module: 'entretiens', vue: 'formation', mots: 'formation stage cours organisme cpf compte personnel de formation demande financement',
-        r: gEtapes(
+        r: gFig.formation() + gEtapes(
           `Ouvrez <strong>Formation</strong> dans le menu.`,
           `Cliquez pour créer une demande : intitulé, organisme, dates, durée et coût estimé. Vous pouvez ajouter un lien vers le programme.`,
           `Choisissez le financement : <strong>par l'entreprise</strong> ou avec votre <strong>compte personnel de formation (CPF)</strong>.`,
@@ -5307,14 +5502,14 @@ GUIDE_THEMES.push(
           `Enregistrez : la fiche est créée. Pour qu'il puisse se connecter, vérifiez son accès (création du compte de connexion) dans l'onglet « Accès et droits » de sa fiche.`
         ) },
       { id: 's-import', q: 'Comment importer plusieurs salariés depuis Excel ?', vue: 'employees', mots: 'import importer excel xlsx fichier salariés masse colonnes csv chargement reprise',
-        r: gEtapes(
+        r: gFig.importSalaries() + gEtapes(
           `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer Excel</strong>.`,
           `Choisissez votre fichier (.xlsx). Les colonnes sont reconnues par leur en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance.`,
           `<strong>Nom, Prénom, Email et Date d'embauche sont obligatoires.</strong> Cochez « Conserver les matricules du fichier » seulement si vous y tenez : sinon ils sont attribués automatiquement (recommandé).`,
           `Contrôlez l'aperçu affiché, puis cliquez sur <strong>Importer</strong>.`
         ) },
       { id: 's-import-soldes', q: 'Comment reprendre les soldes de congés de départ ?', module: 'conges', vue: 'employees', mots: 'import soldes initiaux reprise compteurs congés payés rtt excel départ démarrage ancien logiciel',
-        r: gEtapes(
+        r: gFig.importSoldes() + gEtapes(
           `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer les soldes initiaux</strong>.`,
           `Préparez un fichier Excel avec une colonne d'identification (Matricule ou Email) et <strong>une colonne par type de congé</strong>, nommée comme le type (« Congés payés », « RTT »...).`,
           `Dites ce que représentent les chiffres : <strong>le solde à avoir aujourd'hui</strong> (recommandé : Nexus calcule lui-même l'ajustement pour afficher exactement ce solde) ou <strong>des jours à ajouter ou retirer</strong> au solde calculé (cette option remplace l'ajustement précédent du compteur).`,
@@ -5369,7 +5564,7 @@ GUIDE_THEMES.push(
       { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
         r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
-        r: gP(`Chaque type de congé a une <strong>date de clôture du compteur</strong> (par exemple le 31 mai) : la période d'acquisition court alors du lendemain de la clôture précédente (1er juin) jusqu'à cette date. Au sein d'une période close, le solde est <strong>disponible</strong> ; celle en cours reste « en cours d'acquisition » jusqu'à sa clôture.`) },
+        r: gFig.cloture() + gP(`Chaque type de congé a une <strong>date de clôture du compteur</strong> (par exemple le 31 mai) : la période d'acquisition court alors du lendemain de la clôture précédente (1er juin) jusqu'à cette date. Au sein d'une période close, le solde est <strong>disponible</strong> ; celle en cours reste « en cours d'acquisition » jusqu'à sa clôture.`) },
       { id: 'r-anticipation', q: 'Peut-on poser des jours qu\'on n\'a pas encore acquis ?', mots: 'anticipation par anticipation acquis à date dépasser solde négatif autoriser interdit',
         r: gP(`C'est un choix à valider avec votre accord d'entreprise ou votre convention. Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, « Congés par anticipation » propose trois règles : <em>aucun contrôle</em> (une demande peut dépasser le solde), <em>interdite</em> (seulement le solde disponible) ou <em>autorisée dans la limite des jours acquis à date</em>.`) },
       { id: 'r-feries', q: 'Comment ajouter un jour férié ou une fermeture de l\'entreprise ?', vue: 'parametres', params: { parametresTab: 'calendrier' }, vueLabel: 'Paramètres', mots: 'jour férié fermeture entreprise pont calendrier ajouter jours chômés vacances scolaires',
@@ -5377,7 +5572,7 @@ GUIDE_THEMES.push(
       { id: 'r-teletravail', q: 'Comment régler le quota de télétravail ?', module: 'planning', vue: 'parametres', params: { parametresTab: 'planning-teletravail' }, vueLabel: 'Paramètres', mots: 'quota télétravail semaine règle jours maximum planning réglage',
         r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Planning et télétravail</strong>. Le quota se calcule par semaine, en additionnant les demandes validées et en attente.`) },
       { id: 'r-workflow', q: 'Qui valide les demandes ?', mots: 'workflow circuit validation étapes manager rh valideur qui valide approbation',
-        r: gP(`Chaque type de congé et le circuit des notes de frais ont leur propre circuit de validation, réglé dans Paramètres. Un manager agit à l'étape qui lui est confiée et uniquement sur son équipe ; les RH et le propriétaire peuvent agir sur toute l'entreprise. Une demande en attente génère des rappels à ceux qui doivent la traiter.`) }
+        r: gFig.circuit() + gP(`Chaque type de congé et le circuit des notes de frais ont leur propre circuit de validation, réglé dans Paramètres. Un manager agit à l'étape qui lui est confiée et uniquement sur son équipe ; les RH et le propriétaire peuvent agir sur toute l'entreprise. Une demande en attente génère des rappels à ceux qui doivent la traiter.`) }
     ]
   },
   {
@@ -5385,7 +5580,7 @@ GUIDE_THEMES.push(
     intro: gP(`Préparer la paie du mois sans oubli, et suivre tickets restaurant, heures supplémentaires et rémunération.`),
     entrees: [
       { id: 'p-preparer', q: 'Comment préparer la paie du mois ?', module: 'rh', vue: 'export-paie', mots: 'paie export préparation mois csv logiciel de paie sage silae cegid payfit variables anomalies bulletin',
-        r: gEtapes(
+        r: gFig.paie() + gEtapes(
           `Ouvrez <strong>Préparation de paie</strong> et choisissez le mois.`,
           `Sur l'onglet <strong>Préparation &amp; anomalies</strong>, corrigez ce qui est signalé : soldes négatifs, dates hors contrat, justificatifs manquants, données administratives incomplètes.`,
           `Saisissez les <strong>variables du mois</strong> (primes...) avec le bouton d'édition de la colonne Variables.`,
@@ -5505,9 +5700,9 @@ GUIDE_THEMES.push(
     entrees: [
       { id: 'g-cp', q: 'Congés payés (CP)', mots: 'cp conges payes congé vacances jours', r: gP(`Les jours de congé annuels rémunérés. Ils s'acquièrent au fil du temps, sur une période qui se clôt à une date fixée par l'entreprise (souvent le 31 mai).`) },
       { id: 'g-rtt', q: 'RTT', mots: 'rtt réduction du temps de travail jours de repos', r: gP(`Jours de repos accordés en contrepartie d'un temps de travail supérieur à la durée légale, selon l'accord de votre entreprise. Ils ont leur propre compteur.`) },
-      { id: 'g-solde', q: 'Solde', mots: 'solde compteur jours restants disponible', r: gP(`Le nombre de jours qu'il vous reste à prendre : <strong>acquis + ajustement − pris − en attente</strong>.`) },
+      { id: 'g-solde', q: 'Solde', mots: 'solde compteur jours restants disponible', r: gFig.solde() + gP(`Le nombre de jours qu'il vous reste à prendre : <strong>acquis + ajustement − pris − en attente</strong>.`) },
       { id: 'g-acquis', q: 'Acquis, pris, en attente', mots: 'acquis pris en attente jours détail compteur', r: gP(`<strong>Acquis</strong> : jours gagnés depuis le début de la période. <strong>Pris</strong> : jours de congé validés. <strong>En attente</strong> : jours demandés et pas encore tranchés (déjà déduits du solde).`) },
-      { id: 'g-disponible', q: 'Disponible et en cours d\'acquisition', mots: 'disponible en cours d\'acquisition période close clôture compteur', r: gP(`Pour un type à clôture, le <strong>disponible</strong> est le solde de la période déjà close, que vous pouvez prendre tout de suite. Le montant « en cours d\'acquisition » s'accumule sur la période courante et ne se prend pas avant sa clôture. Les deux ne s'additionnent pas.`) },
+      { id: 'g-disponible', q: 'Disponible et en cours d\'acquisition', mots: 'disponible en cours d\'acquisition période close clôture compteur', r: gFig.cloture() + gP(`Pour un type à clôture, le <strong>disponible</strong> est le solde de la période déjà close, que vous pouvez prendre tout de suite. Le montant « en cours d\'acquisition » s'accumule sur la période courante et ne se prend pas avant sa clôture. Les deux ne s'additionnent pas.`) },
       { id: 'g-acquisition', q: 'Mode d\'acquisition (mensuelle, annuelle, illimitée)', mots: 'acquisition mensuelle annuelle illimitée règle gagner jours', r: gP(`La façon dont les jours s'accumulent : <strong>Mensuelle</strong> (un peu chaque mois), <strong>Annuelle</strong> (progressivement sur l'année) ou <strong>Illimitée</strong> (pas de solde à suivre).`) },
       { id: 'g-ajustement', q: 'Ajustement', mots: 'ajustement correction compteur manuel reprise motif', r: gP(`Une correction manuelle d'un compteur (en plus ou en moins), toujours accompagnée d'un motif et tracée. Elle sert à reprendre les soldes de départ ou à corriger une erreur.`) },
       { id: 'g-regularisation', q: 'Régularisation', mots: 'régulariser régularisation corriger demande validée motif', r: gP(`La correction d'une demande déjà validée (type, dates, demi-journée), avec un motif. L'historique conserve l'ancienne version.`) },
@@ -5530,7 +5725,7 @@ GUIDE_THEMES.push(
       { id: 'g-km', q: 'Frais kilométriques et barème', mots: 'frais kilométriques barème indemnité puissance fiscale', r: gP(`L'indemnité versée pour l'usage d'un véhicule personnel, calculée automatiquement d'après la distance, le type de véhicule et sa puissance fiscale.`) },
       { id: 'g-tva', q: 'TVA', mots: 'tva taxe taux note de frais', r: gP(`La taxe sur la valeur ajoutée, indiquée sur une note de frais d'après le justificatif. Les taux sont ceux en vigueur en France.`) },
       { id: 'g-tickets', q: 'Tickets restaurant', mots: 'tickets restaurant titres repas', r: gP(`Les titres-restaurant, calculés d'après les jours réellement travaillés dans le mois. Ne les confondez pas avec « Aide et support », qui sert à contacter l'équipe Nexus.`) },
-      { id: 'g-pointeuse', q: 'Pointeuse et QR code', mots: 'pointeuse pointage qr code arrivée départ badge scanner', r: gP(`Un QR code affiché sur le lieu de travail : vous le scannez à l'arrivée puis au départ pour enregistrer vos horaires.`) },
+      { id: 'g-pointeuse', q: 'Pointeuse et QR code', mots: 'pointeuse pointage qr code arrivée départ badge scanner', r: gFig.pointage() + gP(`Un QR code affiché sur le lieu de travail : vous le scannez à l'arrivée puis au départ pour enregistrer vos horaires.`) },
       { id: 'g-audit', q: 'Journal d\'audit', mots: 'audit journal trace historique qui a fait quoi', r: gP(`Le registre des actions importantes (qui, quoi, quand), consultable par ceux qui en ont le droit.`) },
       { id: 'g-rgpd', q: 'RGPD', mots: 'rgpd données personnelles protection droit accès export', r: gP(`Le règlement européen sur la protection des données. Vous pouvez télécharger vos données depuis le menu du rond en haut à droite.`) },
       { id: 'g-avenant', q: 'Avenant', mots: 'avenant contrat modification', r: gP(`Un document qui modifie un contrat existant (horaires, poste, rémunération...).`) },
@@ -5544,7 +5739,7 @@ GUIDE_THEMES.push(
 // --- Construction des chapitres ---
 
 function guideTexteBrut(html) {
-  return String(html || '').replace(/<\/(p|li|dd|dt|div|h\d|ol|ul|dl|summary|details)>|<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  return String(html || '').replace(/<figure[\s\S]*?<\/figure>/gi, ' ').replace(/<\/(p|li|dd|dt|div|h\d|ol|ul|dl|summary|details)>|<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 }
 
