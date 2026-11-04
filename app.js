@@ -2475,13 +2475,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.04.1';
+const APP_VERSION = '2026.11.04.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Plusieurs textes d'aide renvoyaient vers un onglet de Paramètres qui n'existe plus ou qui n'héberge pas le réglage (durée de référence, seuil de visite de reprise, durée de conservation, taux de charges patronales, types de congés) : ils indiquent maintenant le bon onglet.",
+      "Types de congé : l'unité de décompte n'est plus coupée dans la liste, le mode d'acquisition (mensuelle, annuelle, illimitée) est expliqué, et les paliers d'ancienneté précisent qu'ils donnent un total de jours par an.",
       "Types de congé : en acquisition mensuelle, le nombre saisi est bien un total par an (les jours s'acquièrent par douzièmes). Le formulaire l'indique maintenant clairement et calcule le rythme mensuel (par exemple 12 par an = 1 jour par mois), et la liste affiche les deux repères."
     ]
   },
@@ -4853,7 +4855,7 @@ const HELP_CONTENT = {
   absences: {
     title: 'Congés & absences',
     body: `<p>3 onglets : <strong>Congés</strong> (congés payés, RTT, ancienneté...), <strong>Absences</strong> (maladie, événements familiaux, et tout autre type paramétrable), <strong>Télétravail</strong> (demandes + planning hebdomadaire). Dans Congés/Absences, créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
-           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...), à savoir les règles d'acquisition, le workflow de validation et le justificatif obligatoire, se fait désormais uniquement dans Paramètres > Types d'absences.</p>`,
+           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...), à savoir les règles d'acquisition, le workflow de validation et le justificatif obligatoire, se fait désormais uniquement dans Paramètres > Congés et absences.</p>`,
     faq: [
       { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée : seuls Manager/RH/Propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
       { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer : l\'historique garde la trace de la correction et le motif.' },
@@ -4898,7 +4900,7 @@ const HELP_CONTENT = {
            <p>Onglet <strong>Export CSV</strong> : génère le fichier consolidé (congés, télétravail, tickets, notes de frais, variables) au format de votre logiciel de paie.</p>`,
     faq: [
       { q: 'Une anomalie "Bloquante" empêche-t-elle l\'export ?', r: 'Non, le bouton "Exporter CSV" reste actif volontairement (un blocage technique dur serait risqué un jour de paie), mais une anomalie bloquante doit être corrigée avant de considérer l\'export fiable.' },
-      { q: 'Que signifie "comptabilisé dans les congés" pour un type ?', r: 'Défini sur le type dans Paramètres > Types d\'absences (case "Déduire du compteur RTT/CP") : les jours de ce type viennent en plus s\'imputer sur le compteur RTT ou congés payés du salarié.' },
+      { q: 'Que signifie "comptabilisé dans les congés" pour un type ?', r: 'Défini sur le type dans Paramètres > Congés et absences (case "Déduire du compteur RTT/CP") : les jours de ce type viennent en plus s\'imputer sur le compteur RTT ou congés payés du salarié.' },
       { q: 'D\'où viennent les "Variables" ?', r: 'Aucun module ne les calcule automatiquement (primes, heures supplémentaires...) : saisissez le montant du mois via le bouton d\'édition sur la colonne Variables du récapitulatif.' }
     ],
     bonnesPratiques: ['Ouvrez cet écran systématiquement avant l\'export, pas seulement quand une anomalie est suspectée : l\'onglet par défaut est volontairement "Préparation" et non "Export".']
@@ -4919,7 +4921,7 @@ const HELP_CONTENT = {
     body: `<p>Solde de chaque salarié pour chaque type de congé (colonnes). Les types <strong>inactifs</strong> (ex. RTT non encore activé) restent affichés, grisés, pour ne jamais laisser croire qu'un type n'est pas géré par l'outil.</p>
            <p>Pour un type à <strong>clôture</strong> (ex. congés payés, période du 1er juin au 31 mai) : le chiffre principal est le solde <strong>disponible</strong>, celui de la période déjà close, immédiatement consommable, avec ses dates affichées en dessous. En petit, le détail acquis/pris/en attente/report ; et si un montant apparaît en "+ ... en cours d'acquisition", c'est ce qui s'accumule sur la période EN COURS, jamais consommable avant sa propre clôture. Ne l'additionnez jamais au disponible : ce sont deux compteurs distincts.</p>`,
     faq: [
-      { q: 'Pourquoi je ne vois pas les RTT ?', r: 'Le type existe mais est grisé "non activé" si personne ne l\'a encore activé dans Paramètres > Types d\'absences : pas une fonctionnalité manquante.' },
+      { q: 'Pourquoi je ne vois pas les RTT ?', r: 'Le type existe mais est grisé "non activé" si personne ne l\'a encore activé dans Paramètres > Congés et absences : pas une fonctionnalité manquante.' },
       { q: 'Le solde ne correspond pas à ce que j\'attendais ?', r: 'Vérifiez d\'abord la période affichée sous le chiffre : un solde "disponible" ne concerne que la période close, jamais celle en cours d\'acquisition.' }
     ],
     bonnesPratiques: ['Filtrez par service avant d\'exporter/comparer les soldes d\'une grande équipe.']
@@ -9590,7 +9592,7 @@ function renderVisitesRepriseCard(visitesReprise) {
   return `
     <div class="card">
       <h2>${icon(ICONS.warningTriangle, 15)} Visites de reprise à programmer</h2>
-      <p class="text-muted" style="margin-top: 4px;">Obligatoire (Code du travail) après un arrêt assez long ou une maladie professionnelle, seuil indicatif : voir Paramètres &gt; Référentiels.</p>
+      <p class="text-muted" style="margin-top: 4px;">Obligatoire (Code du travail) après un arrêt assez long ou une maladie professionnelle, seuil indicatif : voir Paramètres &gt; RH.</p>
       <div class="mini-list" style="margin-top: 8px;">
         ${visitesReprise.map(x => `
           <div class="mini-list-item">
@@ -15319,7 +15321,7 @@ function renderEmployeeDetail(id) {
           ${canSeeContractuel ? renderContratBadge(e.typeContrat) : ''}
           ${renderStatutBadge(e.statut)}
           ${canSeeContractuel ? `<span class="badge badge-info">${escapeHtml(e.statutPro)}</span>` : ''}
-          ${e.anonymise ? '<span class="badge badge-muted" title="Données personnelles retirées automatiquement après le départ (durée de conservation, voir Paramètres > Listes)">Anonymisé</span>' : ''}
+          ${e.anonymise ? '<span class="badge badge-muted" title="Données personnelles retirées automatiquement après le départ (durée de conservation, voir Paramètres > RH)">Anonymisé</span>' : ''}
         </div>
         ${e.anonymise ? `<p class="text-muted" style="margin-top: 6px;">Fiche anonymisée le ${formatDate(e.dateAnonymisation)} (durée de conservation dépassée) : coordonnées et informations personnelles retirées (email, téléphone, adresse, numéro de sécurité sociale...). Nom, prénom, sexe, date de naissance, nationalité et dates d'entrée/sortie sont volontairement conservés : le registre unique du personnel doit pouvoir les présenter à un contrôle même après ce délai.</p>` : ''}
         ${selfRhBlocked ? '<p class="text-muted" style="margin-top: 6px;">Seul un Propriétaire peut modifier votre propre fiche.</p>' : ''}
@@ -19040,7 +19042,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
           <fieldset class="form-section">
             <legend>Acquisition des droits</legend>
             <div class="form-grid">
-              ${selectField('acquisition', 'Mode d\'acquisition', ['Mensuelle', 'Annuelle', 'Illimitée'], type.acquisition)}
+              ${selectField('acquisition', 'Mode d\'acquisition', ['Mensuelle', 'Annuelle', 'Illimitée'], type.acquisition, null, 'Mensuelle : un douzième du total acquis à chaque mois écoulé. Annuelle : le total s\'acquiert progressivement, jour après jour sur l\'année. Illimitée : pas de solde à suivre.')}
               <div class="form-field" id="field-nombre-annuel">
                 <label for="f-nombreAnnuel" id="label-nombre-annuel">Nombre de jours par an</label>
                 <input class="input" type="number" step="any" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
@@ -19049,10 +19051,10 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               <div class="form-field">
                 <label for="f-uniteDecompte">Unité de décompte</label>
                 <select class="input" id="f-uniteDecompte" name="uniteDecompte">
-                  <option value="ouvres" ${type.uniteDecompte !== 'ouvrables' ? 'selected' : ''}>Jours ouvrés (rythme réel du salarié)</option>
-                  <option value="ouvrables" ${type.uniteDecompte === 'ouvrables' ? 'selected' : ''}>Jours ouvrables (tous les jours sauf dimanche)</option>
+                  <option value="ouvres" ${type.uniteDecompte !== 'ouvrables' ? 'selected' : ''}>Jours ouvrés</option>
+                  <option value="ouvrables" ${type.uniteDecompte === 'ouvrables' ? 'selected' : ''}>Jours ouvrables</option>
                 </select>
-                <p class="form-hint">Le Code du travail exprime les congés payés en jours ouvrables (30) ; la plupart des conventions comptent en jours ouvrés (25).</p>
+                <p class="form-hint"><strong>Ouvrés</strong> : le rythme réel du salarié (en général du lundi au vendredi). <strong>Ouvrables</strong> : tous les jours sauf le dimanche. Le Code du travail exprime les congés payés en jours ouvrables (30) ; la plupart des conventions comptent en jours ouvrés (25).</p>
               </div>
               <div class="form-field">
                 <label for="f-proratisationTempsPartiel">Effet du temps partiel sur l'acquisition</label>
@@ -19070,7 +19072,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Paliers d'ancienneté (optionnel)</label>
-              <p class="form-hint">Remplace "Nombre de jours par an" ci-dessus par le palier le plus haut atteint (non cumulatif), évite de créer un type par tranche d'ancienneté.</p>
+              <p class="form-hint">Chaque palier donne le total de jours par an à partir de cette ancienneté. Il remplace "Nombre de jours par an" ci-dessus (le palier le plus haut atteint s\'applique, sans cumul), évite de créer un type par tranche d'ancienneté.</p>
               <div id="paliers-anciennete-rows"></div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-add-palier" style="margin-top:8px;">+ Ajouter un palier</button>
             </div>
@@ -19227,7 +19229,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
           <input class="input" type="number" min="0" step="any" data-palier-min="${index}" value="${escapeHtml(p.ancienneteMin ?? 0)}" placeholder="Ancienneté (ans)">
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
-          <input class="input" type="number" min="0" step="any" data-palier-jours="${index}" value="${escapeHtml(p.jours ?? 0)}" placeholder="Jours accordés">
+          <input class="input" type="number" min="0" step="any" data-palier-jours="${index}" value="${escapeHtml(p.jours ?? 0)}" placeholder="Jours par an">
         </div>
         <button type="button" class="btn-icon" data-remove-palier="${index}" aria-label="Retirer" title="Retirer">${icon(ICONS.close, 12)}</button>
       </div>
@@ -29669,7 +29671,7 @@ function renderRemuneration() {
       ${kpiCard('Salaire brut moyen', formatCurrencyFR(moyenne), ICONS.chart)}
       ${kpiCard('Salaire brut médian', formatCurrencyFR(mediane), ICONS.trendingUp)}
     </div>
-    <p class="form-hint">Coût employeur estimé avec un taux de charges patronales de ${Math.round(settings.tauxChargesPatronalesEstime * 100)}% (Paramètres > Entreprise), un ordre de grandeur, à affiner avec votre gestionnaire de paie. <button type="button" class="btn-link" id="btn-variables-paie-remuneration">Éléments variables du mois →</button></p>
+    <p class="form-hint">Coût employeur estimé avec un taux de charges patronales de ${Math.round(settings.tauxChargesPatronalesEstime * 100)}% (Paramètres > Rémunération), un ordre de grandeur, à affiner avec votre gestionnaire de paie. <button type="button" class="btn-link" id="btn-variables-paie-remuneration">Éléments variables du mois →</button></p>
     ${renderRevisionSalarialeCard()}
     ${renderRadarTresorerieCard(getRadarTresorerieRH(employees, new Date()))}
     <div class="card table-card">
@@ -31303,7 +31305,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               <div class="form-field" id="field-pourcentage-activite" ${!isEdit && tempsTravailAffichage.pourcentageVisible ? '' : 'hidden'}>
                 <label for="f-pourcentageActivite">Pourcentage d'activité</label>
                 <input class="input" type="number" id="f-pourcentageActivite" name="pourcentageActivite" value="${escapeHtml(tempsTravailAffichage.pourcentage)}" readonly>
-                <p class="form-hint">Calculé automatiquement à partir des heures hebdomadaires ci-contre et de la durée de référence de l'entreprise (Paramètres &gt; Listes &gt; Salariés).</p>
+                <p class="form-hint">Calculé automatiquement à partir des heures hebdomadaires ci-contre et de la durée de référence de l'entreprise (Paramètres &gt; RH).</p>
               </div>
               ${!isEdit ? `
               <div class="form-field" id="field-horaires-hebdo" ${tempsTravailAffichage.horairesVisible ? '' : 'hidden'}>
@@ -31327,7 +31329,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
               </div>
               ${!isEdit ? selectField('forfait', 'Forfait', settings.forfaits, employee.forfait, null, 'Mode de décompte du temps de travail, distinct du Temps plein/partiel ci-dessus : "Forfait jours" compte en jours travaillés dans l\'année (cadres autonomes, pas d\'horaire précis à suivre), "Forfait heures" en heures sur une période donnée.', 'forfaits') : ''}
               ${isEdit ? `<p class="form-hint">Temps de travail, forfait, heures hebdomadaires : voir et modifier depuis l'onglet <strong>Contrat</strong> de la fiche.</p>` : ''}
-              ${selectField('regimeRTT', 'Régime RTT', null, employee.regimeRTT || 'aucun', REGIME_RTT_OPTIONS, 'Jours de repos accordés en compensation d\'un temps de travail au-delà de la durée de référence. "Acquisition au réel" utilise le compteur RTT standard (Paramètres &gt; Types de congés) ; les deux autres options sont propres à ce salarié.')}
+              ${selectField('regimeRTT', 'Régime RTT', null, employee.regimeRTT || 'aucun', REGIME_RTT_OPTIONS, 'Jours de repos accordés en compensation d\'un temps de travail au-delà de la durée de référence. "Acquisition au réel" utilise le compteur RTT standard (Paramètres &gt; Congés et absences) ; les deux autres options sont propres à ce salarié.')}
               <div class="form-field" id="field-nombre-jours-rtt-annuel" ${employee.regimeRTT === 'forfait_annuel' ? '' : 'hidden'}>
                 <label for="f-nombreJoursRTTAnnuel">Nombre de jours RTT par an</label>
                 <input class="input" type="number" id="f-nombreJoursRTTAnnuel" name="nombreJoursRTTAnnuel" min="0" value="${escapeHtml(employee.nombreJoursRTTAnnuel != null ? employee.nombreJoursRTTAnnuel : '')}">
