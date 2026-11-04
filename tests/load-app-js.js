@@ -237,6 +237,7 @@ globalThis.__renderFormation = renderFormation;
 globalThis.__APP_VERSION = APP_VERSION;
 globalThis.__CHANGELOG_ENTRIES = CHANGELOG_ENTRIES;
 globalThis.__guideSections = guideSections;
+globalThis.__renderLeaveTypeRow = renderLeaveTypeRow;
 globalThis.__guideRechercher = guideRechercher;
 globalThis.__guideNormaliser = guideNormaliser;
 globalThis.__guideSurligner = guideSurligner;
@@ -519,6 +520,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
     getLeaveBalance: sandbox.__getLeaveBalance,
     calculateAcquisition: sandbox.__calculateAcquisition,
+    renderLeaveTypeRow: sandbox.__renderLeaveTypeRow,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     makeEmptyContrat: sandbox.__makeEmptyContrat,
     MOTIFS_RECOURS_CDD: sandbox.__MOTIFS_RECOURS_CDD,

@@ -2475,12 +2475,18 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.10.29.4';
+const APP_VERSION = '2026.11.04.1';
 
 const CHANGELOG_ENTRIES = [
   {
-    date: 'Octobre 2026',
+    date: 'Novembre 2026',
     version: APP_VERSION,
+    items: [
+      "Types de congé : en acquisition mensuelle, le nombre saisi est bien un total par an (les jours s'acquièrent par douzièmes). Le formulaire l'indique maintenant clairement et calcule le rythme mensuel (par exemple 12 par an = 1 jour par mois), et la liste affiche les deux repères."
+    ]
+  },
+  {
+    date: 'Octobre 2026',
     items: [
       "Le guide montre maintenant de vraies captures de l'application (accueil, congés, calendrier, notes de frais, formation, salariés, compteurs, paie, menu du compte...), prises sur des données de démonstration. Un clic sur une image l'agrandit.",
       "Le guide s'illustre : des schémas clairs expliquent les repères de l'écran, le calcul du solde, les périodes de congés, la vie d'une demande, les droits par rôle, les fichiers Excel d'import et la préparation de la paie. Ils suivent le thème clair ou sombre.",
@@ -5577,7 +5583,7 @@ GUIDE_THEMES.push(
           `Ouvrez <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`,
           `Cliquez sur <strong>+ Nouveau type</strong> (ou ouvrez un type existant).`,
           `Réglez le <strong>mode d'acquisition</strong> : <em>Mensuelle</em>, <em>Annuelle</em> ou <em>Illimitée</em> (pas de solde), le nombre de jours par an, l'unité (jours ouvrés ou ouvrables), la date de clôture du compteur, le circuit de validation et le <strong>justificatif obligatoire</strong> si la loi en exige un (arrêt maladie...).`
-        ) + gP(`Vous pouvez aussi cocher « Déduire du compteur RTT/CP » pour qu'un type s'impute en plus sur un compteur, et marquer un type « export paie » pour qu'il apparaisse dans l'export de paie.`) },
+        ) + gP(`En acquisition <em>Mensuelle</em>, le nombre saisi reste un <strong>total par an</strong> : les jours s'acquièrent par douzièmes. Pour 1 jour par mois, saisissez 12. Vous pouvez aussi cocher « Déduire du compteur RTT/CP » pour qu'un type s'impute en plus sur un compteur, et marquer un type « export paie » pour qu'il apparaisse dans l'export de paie.`) },
       { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
         r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
       { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
@@ -18915,7 +18921,10 @@ function workflowSelectField(name, label, presets, currentWorkflow) {
 
 function renderLeaveTypeRow(t) {
   const validationLabel = describeWorkflow(t.workflow, t.workflowValidatorOverrides);
-  const acquisitionLabel = t.illimite ? 'Illimitée' : `${t.acquisition} · ${formatDurationFR(t.nombreAnnuel)}/an`;
+  // Le nombre saisi est toujours un total ANNUEL, même en acquisition mensuelle (les jours s'acquièrent par douzièmes) : la liste donne aussi le rythme mensuel.
+  const acquisitionLabel = t.illimite ? 'Illimitée'
+    : t.acquisition === 'Mensuelle' ? `Mensuelle · ${formatDurationFR(t.nombreAnnuel)}/an (soit ${formatDurationFR((Number(t.nombreAnnuel) || 0) / 12)}/mois)`
+    : `${t.acquisition} · ${formatDurationFR(t.nombreAnnuel)}/an`;
 
   return `
     <tr>
@@ -19035,6 +19044,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               <div class="form-field" id="field-nombre-annuel">
                 <label for="f-nombreAnnuel" id="label-nombre-annuel">Nombre de jours par an</label>
                 <input class="input" type="number" step="any" id="f-nombreAnnuel" name="nombreAnnuel" value="${escapeHtml(type.nombreAnnuel)}">
+                <p class="form-hint" id="hint-nombre-annuel"></p>
               </div>
               <div class="form-field">
                 <label for="f-uniteDecompte">Unité de décompte</label>
@@ -19191,9 +19201,20 @@ function openLeaveTypeModal(id, categorie = 'conge') {
       field.style.display = 'none';
     } else {
       field.style.display = '';
-      label.textContent = mode === 'Mensuelle' ? 'Nombre de jours par mois' : 'Nombre de jours par an';
+      // Le nombre est toujours un total par an (le calcul acquiert un douzième chaque mois en mode Mensuelle) : on l'écrit clairement et on montre le rythme mensuel qui en découle.
+      label.textContent = mode === 'Mensuelle' ? 'Nombre de jours par an (acquis mois par mois)' : 'Nombre de jours par an';
+    }
+    const hint = document.getElementById('hint-nombre-annuel');
+    if (hint) {
+      const total = Number(document.getElementById('f-nombreAnnuel').value);
+      hint.textContent = mode === 'Mensuelle'
+        ? (Number.isFinite(total) && total > 0
+          ? `Soit ${formatDurationFR(total / 12)} acquis chaque mois. Pour 1 jour par mois, saisissez 12.`
+          : 'Saisissez le total de l\'année : pour 1 jour par mois, saisissez 12.')
+        : '';
     }
   };
+  document.getElementById('f-nombreAnnuel').addEventListener('input', updateAcquisitionUI);
   document.getElementById('f-acquisition').addEventListener('change', updateAcquisitionUI);
   updateAcquisitionUI();
 
