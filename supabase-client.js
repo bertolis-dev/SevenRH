@@ -573,20 +573,46 @@ async function insertRows(tableName, rows, toRowFn, companyId) {
   }
 }
 
+/** Erreur de refus de droits (RLS) : marquée pour que data.js prévienne l'utilisateur sans remettre indéfiniment en file une écriture qui échouera toujours. */
+function refusDroits(message) {
+  return Object.assign(new Error(message), { refusDroits: true });
+}
+
+/** Vrai si la ligne est lisible sur le serveur. Sert à départager, après une modification ou une suppression qui n'a touché aucune ligne, un vrai refus de droits
+ * (la ligne est bien là) d'une ligne simplement absente (déjà supprimée, jamais envoyée) — cette dernière ne doit jamais bloquer la file de synchronisation. */
+async function ligneExisteSurServeur(tableName, id, companyId) {
+  const { data, error } = await supabase.from(tableName).select('id').eq('id', id).eq('company_id', companyId).limit(1);
+  if (error) return false;
+  return Array.isArray(data) && data.length > 0;
+}
+
 async function updateRows(tableName, rows, toRowFn, companyId) {
   if (rows.length === 0) return;
-  const results = await Promise.all(rows.map(r => {
+  // .select('id') : sans lui, une modification refusée par une politique de sécurité (RLS) renvoie 0 ligne SANS aucune erreur, et l'écran affichait un succès
+  // alors que rien n'était enregistré (observé le 28/10/2026 : un RH qui corrigeait ses propres congés).
+  const results = await Promise.all(rows.map(async r => {
     const row = toRowFn(r, companyId);
     const { id, company_id, ...patch } = row;
-    return supabase.from(tableName).update(patch).eq('id', id).eq('company_id', company_id);
+    const res = await supabase.from(tableName).update(patch).eq('id', id).eq('company_id', company_id).select('id');
+    return { res, id, company_id };
   }));
-  const failed = results.find(res => res.error);
-  if (failed) throw failed.error;
+  const failed = results.find(x => x.res.error);
+  if (failed) throw failed.res.error;
+  const sansEffet = results.filter(x => Array.isArray(x.res.data) && x.res.data.length === 0);
+  const refusees = [];
+  for (const x of sansEffet) {
+    if (await ligneExisteSurServeur(tableName, x.id, x.company_id)) refusees.push(x.id);
+  }
+  if (refusees.length) throw refusDroits(refusees.length === 1 ? `Modification refusée par le serveur (${tableName}) : vos droits ne le permettent pas.` : `${refusees.length} modifications refusées par le serveur (${tableName}) : vos droits ne le permettent pas.`);
 }
 
 async function deleteRow(tableName, id, companyId) {
-  const { error } = await supabase.from(tableName).delete().eq('id', id).eq('company_id', companyId);
+  const { data, error } = await supabase.from(tableName).delete().eq('id', id).eq('company_id', companyId).select('id');
   if (error) throw error;
+  // Même raison que updateRows : 0 ligne supprimée sans erreur. Une ligne déjà absente est un succès ; une ligne toujours présente est un refus de droits.
+  if (Array.isArray(data) && data.length === 0 && await ligneExisteSurServeur(tableName, id, companyId)) {
+    throw refusDroits(`Suppression refusée par le serveur (${tableName}) : vos droits ne le permettent pas.`);
+  }
 }
 
 /** §retour Betty du 18/09/2026 (point 8, licences par module) : module_licenses (0059) a une clé

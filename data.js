@@ -2143,6 +2143,11 @@ const DB = {
       if (this.onSaveSuccess) this.onSaveSuccess();
     }).catch(err => {
       console.error('Échec de synchronisation Supabase :', err);
+      // Refus de droits (RLS) : la remise en file ne servirait à rien (l'écriture échouera toujours) et bloquerait l'avertissement indéfiniment. On prévient, une fois.
+      if (err && err.refusDroits) {
+        if (this.onSaveError) this.onSaveError('Modification non enregistrée : vos droits ne permettent pas de la faire sur le serveur. Elle n\'apparaît que dans ce navigateur : rechargez la page pour retrouver l\'état réel, ou demandez à un responsable de la faire.');
+        return;
+      }
       if (descriptor && sectionKey) this._markPendingSync(descriptor.companyId, sectionKey, existing => this._mergeDescriptor(existing, descriptor), err);
       if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.');
     });

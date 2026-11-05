@@ -2475,13 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.05.1';
+const APP_VERSION = '2026.11.05.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Fiabilité : quand le serveur refuse une modification ou une suppression parce que vos droits ne le permettent pas, l'application vous en prévient au lieu d'afficher un succès, puis la modification disparaissait au rechargement.",
       "Le guide explique comment donner un nombre de RTT différent aux cadres et aux non-cadres (un type de RTT par catégorie, réservé par une règle d'éligibilité).",
       "Plusieurs textes d'aide renvoyaient vers un onglet de Paramètres qui n'existe plus ou qui n'héberge pas le réglage (durée de référence, seuil de visite de reprise, durée de conservation, taux de charges patronales, types de congés) : ils indiquent maintenant le bon onglet.",
       "Types de congé : l'unité de décompte n'est plus coupée dans la liste, le mode d'acquisition (mensuelle, annuelle, illimitée) est expliqué, et les paliers d'ancienneté précisent qu'ils donnent un total de jours par an.",
