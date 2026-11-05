@@ -2475,13 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.04.2';
+const APP_VERSION = '2026.11.05.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Le guide explique comment donner un nombre de RTT différent aux cadres et aux non-cadres (un type de RTT par catégorie, réservé par une règle d'éligibilité).",
       "Plusieurs textes d'aide renvoyaient vers un onglet de Paramètres qui n'existe plus ou qui n'héberge pas le réglage (durée de référence, seuil de visite de reprise, durée de conservation, taux de charges patronales, types de congés) : ils indiquent maintenant le bon onglet.",
       "Types de congé : l'unité de décompte n'est plus coupée dans la liste, le mode d'acquisition (mensuelle, annuelle, illimitée) est expliqué, et les paliers d'ancienneté précisent qu'ils donnent un total de jours par an.",
       "Types de congé : en acquisition mensuelle, le nombre saisi est bien un total par an (les jours s'acquièrent par douzièmes). Le formulaire l'indique maintenant clairement et calcule le rythme mensuel (par exemple 12 par an = 1 jour par mois), et la liste affiche les deux repères."
@@ -5588,6 +5589,13 @@ GUIDE_THEMES.push(
         ) + gP(`En acquisition <em>Mensuelle</em>, le nombre saisi reste un <strong>total par an</strong> : les jours s'acquièrent par douzièmes. Pour 1 jour par mois, saisissez 12. Vous pouvez aussi cocher « Déduire du compteur RTT/CP » pour qu'un type s'impute en plus sur un compteur, et marquer un type « export paie » pour qu'il apparaisse dans l'export de paie.`) },
       { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
         r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
+      { id: 'r-rtt-categories', q: 'Comment donner un nombre de RTT différent aux cadres et aux non-cadres ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'rtt cadres non-cadres cadre catégorie de salarié nombre de jours différent deux compteurs éligibilité règle dupliquer type',
+        r: gP(`Créez <strong>un type de RTT par catégorie</strong>, chacun avec son nombre de jours, et réservez-le à sa catégorie avec une règle d'éligibilité. Un type ne donne un solde qu'aux salariés qui remplissent ses règles : les autres ont simplement 0 sur ce type.`) + gEtapes(
+          `Vérifiez que les catégories existent : <strong>Paramètres</strong>, onglet <strong>Référentiels</strong> (par exemple « Cadre » et « Non cadre »), et que chaque salarié a la bonne <strong>catégorie de salarié</strong> sur sa fiche.`,
+          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, ouvrez votre type RTT et renommez-le (par exemple « RTT non-cadres »), réglez son nombre de jours par an.`,
+          `Dans « Règles d'éligibilité », cliquez sur <strong>+ Ajouter une règle</strong> : critère « Catégorie de salarié », puis cochez la catégorie concernée.`,
+          `Utilisez <strong>Dupliquer</strong> sur ce type pour créer le second (« RTT cadres »), avec son propre nombre de jours et la règle sur l'autre catégorie.`
+        ) + gP(`Commencez le nom par « RTT » : la préparation de paie et les récapitulatifs reconnaissent alors les deux types comme des RTT. Le nombre saisi reste un total par an, même en acquisition mensuelle (12 par an = 1 jour par mois).`) },
       { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
         r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
