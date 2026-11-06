@@ -121,6 +121,18 @@ function run() {
   assert.strictEqual(resolveAncienneteAcquisAnnuel(ancienPalier, emp('cat_cadre', 11), ref), 26);
   assert.strictEqual(resolveAncienneteAcquisAnnuel({ nombreAnnuel: 24, paliersAnciennete: [] }, emp('cat_cadre', 11), ref), 24, 'sans palier : nombre annuel inchangé');
 
+  // --- Un seul type RTT, en acquisition mensuelle, avec un total annuel différent par catégorie ---
+  const rttBase = DB.getLeaveTypes().find(t => t.nom === 'RTT');
+  const rttMensuel = { ...rttBase, acquisition: 'Mensuelle', nombreAnnuel: 0, natureAcquisition: 'progressive', dateClotureCompteur: '', paliersAnciennete: [
+    { ancienneteMin: 0, jours: 10, categorieSalarieId: '' },
+    { ancienneteMin: 0, jours: 8, categorieSalarieId: 'cat_cadre' }
+  ] };
+  const salarieRtt = (cat) => ({ ...DB.getEmployees().find(e => e.role === 'salarie'), dateEmbauche: '2015-01-05', dateDepart: '', categorieSalarieId: cat, pourcentageActivite: 100 });
+  const finAnnee = new Date(2026, 11, 31);
+  assert.strictEqual(api.calculateAcquisition(salarieRtt('cat_noncadre'), rttMensuel, finAnnee), 10, 'RTT non cadre : 10 jours sur l\'année');
+  assert.strictEqual(api.calculateAcquisition(salarieRtt('cat_cadre'), rttMensuel, finAnnee), 8, 'RTT cadre : 8 jours sur l\'année');
+  assert.strictEqual(api.calculateAcquisition(salarieRtt(''), rttMensuel, finAnnee), 10, 'sans catégorie : palier « toutes catégories »');
+
   console.log('OK — import-demi-journees-paliers-06-11.test.js (demi-journées précises, contrôle du nombre de jours, modèle, paliers par catégorie)');
 }
 

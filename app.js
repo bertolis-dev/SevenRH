@@ -2475,14 +2475,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.06.2';
+const APP_VERSION = '2026.11.06.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
-      "Paliers d'ancienneté (types de congé) : chaque ligne s'écrit maintenant « à partir de X ans d'ancienneté, Y jours par an », avec un exemple, un résumé en direct et une case « Catégorie concernée » pour réserver un palier aux cadres ou aux non-cadres.",
+      "Paliers d'ancienneté (types de congé) : chaque ligne s'écrit maintenant « à partir de X ans d'ancienneté, Y jours par an », avec un exemple, un résumé en direct et une case « Catégorie concernée » pour réserver un palier aux cadres ou aux non-cadres. Pratique pour les RTT : un seul type RTT, avec un nombre de jours par an différent selon la catégorie.",
       "Import de l'historique : les demi-journées sont gérées précisément. Une colonne « Demi-journée » (Matin ou Après-midi pour un seul jour), « Demi-journée début / fin » pour une période, et une colonne « Nombre de jours » qui sert de contrôle : si elle ne correspond pas au calcul, la ligne est refusée avec l'explication au lieu d'être comptée en journée entière. Une colonne de demi-journée non reconnue bloque l'import. Le modèle à télécharger contient des exemples et une feuille d'aide.",
       "Congés : nouveau bouton « Supprimer » sur chaque demande (pour les RH et le propriétaire), pour retirer une erreur de saisie, un doublon ou une ligne importée par erreur. « Annuler » et « Régulariser » restent disponibles.",
       "Import de l'historique des congés : les lignes sont maintenant enregistrées en un seul lot, et l'application attend la réponse du serveur avant d'annoncer le résultat (enregistré, ou échec avec la marche à suivre). Une ligne dont l'envoi échoue n'est plus effacée de la file de nouvelle tentative par le succès d'un autre envoi.",
@@ -5611,12 +5611,12 @@ GUIDE_THEMES.push(
       { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
         r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
       { id: 'r-rtt-categories', q: 'Comment donner un nombre de RTT différent aux cadres et aux non-cadres ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'rtt cadres non-cadres cadre catégorie de salarié nombre de jours différent deux compteurs éligibilité règle dupliquer type',
-        r: gP(`Créez <strong>un type de RTT par catégorie</strong>, chacun avec son nombre de jours, et réservez-le à sa catégorie avec une règle d'éligibilité. Un type ne donne un solde qu'aux salariés qui remplissent ses règles : les autres ont simplement 0 sur ce type.`) + gEtapes(
+        r: gP(`Le plus simple : <strong>un seul type RTT</strong> avec des <strong>paliers par catégorie</strong>, comme pour les congés payés. Chaque salarié garde un seul compteur RTT, et son nombre de jours dépend de sa catégorie (Cadre, Non cadre...).`) + gEtapes(
           `Vérifiez que les catégories existent : <strong>Paramètres</strong>, onglet <strong>Référentiels</strong> (par exemple « Cadre » et « Non cadre »), et que chaque salarié a la bonne <strong>catégorie de salarié</strong> sur sa fiche.`,
-          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, ouvrez votre type RTT et renommez-le (par exemple « RTT non-cadres »), réglez son nombre de jours par an.`,
-          `Dans « Règles d'éligibilité », cliquez sur <strong>+ Ajouter une règle</strong> : critère « Catégorie de salarié », puis cochez la catégorie concernée.`,
-          `Utilisez <strong>Dupliquer</strong> sur ce type pour créer le second (« RTT cadres »), avec son propre nombre de jours et la règle sur l'autre catégorie.`
-        ) + gP(`Commencez le nom par « RTT » : la préparation de paie et les récapitulatifs reconnaissent alors les deux types comme des RTT. Le nombre saisi reste un total par an, même en acquisition mensuelle (12 par an = 1 jour par mois).`) },
+          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, ouvrez le type RTT et descendez jusqu'à « Paliers d'ancienneté ».`,
+          `Ajoutez un palier <strong>« à partir de 0 an »</strong> pour les non-cadres (par exemple 10 jours par an, catégorie « Non cadre »), et un second palier <strong>« à partir de 0 an »</strong> pour les cadres (par exemple 8 jours par an, catégorie « Cadre »).`,
+          `Vérifiez la ligne « Résumé » sous les paliers, puis enregistrez.`
+        ) + gP(`Le nombre de jours est toujours un total par an, même en acquisition mensuelle (12 par an = 1 jour par mois). Un salarié sans catégorie n'a que les paliers « Toutes les catégories » : pensez à renseigner la catégorie de chacun. Vous pouvez aussi ajouter un palier « Toutes les catégories » à 0 an comme valeur par défaut ; à ancienneté égale, le palier de la catégorie du salarié l'emporte.`) + gP(`<strong>Autre méthode :</strong> créer deux types distincts (« RTT cadres » et « RTT non-cadres »), chacun réservé à sa catégorie par une règle d'éligibilité (bouton « Dupliquer » sur le type). Les salariés ont alors deux compteurs RTT portant des noms différents, et il faut commencer chaque nom par « RTT » pour que la paie les reconnaisse.`) },
       { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
         r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
