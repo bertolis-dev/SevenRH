@@ -2475,13 +2475,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.05.2';
+const APP_VERSION = '2026.11.06.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Congés : nouveau bouton « Supprimer » sur chaque demande (pour les RH et le propriétaire), pour retirer une erreur de saisie, un doublon ou une ligne importée par erreur. « Annuler » et « Régulariser » restent disponibles.",
+      "Import de l'historique des congés : les lignes sont maintenant enregistrées en un seul lot, et l'application attend la réponse du serveur avant d'annoncer le résultat (enregistré, ou échec avec la marche à suivre). Une ligne dont l'envoi échoue n'est plus effacée de la file de nouvelle tentative par le succès d'un autre envoi.",
       "Fiabilité : quand le serveur refuse une modification ou une suppression parce que vos droits ne le permettent pas, l'application vous en prévient au lieu d'afficher un succès, puis la modification disparaissait au rechargement.",
       "Le guide explique comment donner un nombre de RTT différent aux cadres et aux non-cadres (un type de RTT par catégorie, réservé par une règle d'éligibilité).",
       "Plusieurs textes d'aide renvoyaient vers un onglet de Paramètres qui n'existe plus ou qui n'héberge pas le réglage (durée de référence, seuil de visite de reprise, durée de conservation, taux de charges patronales, types de congés) : ils indiquent maintenant le bon onglet.",
@@ -5359,6 +5361,17 @@ const GUIDE_THEMES = [
         ) + gP(`<strong>Plusieurs d'un coup :</strong> cochez les lignes en attente puis cliquez sur <strong>Valider la sélection</strong>. Seules les demandes que vous avez le droit de valider peuvent être cochées. Selon le circuit réglé par votre entreprise, une demande peut passer par plusieurs personnes (manager, puis RH).`) },
       { id: 'c-regulariser', q: 'Comment corriger une demande déjà validée ?', pour: GUIDE_EQUIPE, mots: 'régulariser modifier corriger changer dates type après validation erreur',
         r: gP(`Utilisez <strong>Régulariser</strong> sur la ligne plutôt que d'annuler puis de recréer : vous pouvez changer le type, les dates ou la demi-journée, et vous indiquez le <strong>motif de la régularisation</strong>. L'historique conserve l'ancienne version, la nouvelle et le motif.`) },
+      { id: 'c-supprimer', q: 'Comment supprimer une demande de congé ou de RTT ?', pour: GUIDE_GESTION, vue: 'absences', mots: 'supprimer effacer retirer enlever demande congé rtt erreur import doublon changer les dates annuler définitivement',
+        r: gEtapes(
+          `Ouvrez <strong>Congés &amp; absences</strong> et repérez la demande dans la liste (filtrez par salarié, type ou mois si besoin).`,
+          `Cliquez sur <strong>Supprimer</strong> à droite de la ligne, puis confirmez avec <strong>Supprimer définitivement</strong>.`
+        ) + gP(`La demande disparaît de la liste et du compteur, sans historique. Choisissez le bon outil :`) + gListe(
+          `<strong>Supprimer</strong> : à utiliser pour une erreur de saisie, un doublon ou une ligne importée par erreur ;`,
+          `<strong>Annuler</strong> : la demande reste visible avec le statut « Annulé » et les jours sont recrédités, ce qui garde une trace ;`,
+          `<strong>Régulariser</strong> : pour changer le type ou les dates d'une demande validée, avec un motif conservé dans l'historique.`
+        ) + gP(`Vous ne pouvez pas supprimer votre propre demande, sauf si le propriétaire a activé le mode mise en service. Un manager n'a pas ce bouton : il peut annuler ou régulariser les demandes de son équipe.`) },
+      { id: 'c-modifier-dates', q: 'Quelqu\'un veut changer les dates de son congé ou de son RTT : que faire ?', pour: GUIDE_EQUIPE, vue: 'absences', mots: 'modifier changer décaler déplacer dates congé rtt déjà validé nouvelle date corriger',
+        r: gP(`Pour une demande <strong>déjà validée</strong>, ouvrez sa ligne et utilisez <strong>Régulariser</strong> : vous changez le type, les dates ou la demi-journée, avec un motif. L'ancienne version reste dans l'historique et le compteur se recalcule. Si le salarié préfère tout recommencer, <strong>Annuler</strong> puis une nouvelle demande fonctionne aussi. Pour une demande encore <strong>en attente</strong>, le salarié peut l'annuler lui-même tant qu'aucune étape de validation n'a eu lieu.`) },
       { id: 'c-delegation', q: 'Comment déléguer mes validations pendant mes absences ?', pour: GUIDE_EQUIPE, vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'délégation remplaçant suppléant vacances validation absent remplacer',
         r: gEtapes(
           `Ouvrez le menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>).`,
@@ -5545,7 +5558,7 @@ GUIDE_THEMES.push(
           `Vérifiez l'aperçu puis cliquez sur <strong>Importer</strong>.`
         ) },
       { id: 's-import-histo', q: 'Comment reprendre l\'historique des congés et absences passés ?', module: 'conges', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'import historique congés absences passés reprise excel demandes anciennes',
-        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, utilisez <strong>Importer l'historique</strong>. Chaque ligne du fichier crée directement une demande au statut <strong>Validé</strong>, sans passer par une validation : à réserver aux absences déjà passées. Les salariés sont reconnus par leur matricule ou leur e-mail, et les types par leur nom.`) },
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, utilisez <strong>Importer l'historique</strong>. Chaque ligne du fichier crée directement une demande au statut <strong>Validé</strong>, sans passer par une validation : à réserver aux absences déjà passées. Les salariés sont reconnus par leur matricule ou leur e-mail, et les types par leur nom.`) + gP(`À la fin, le message vous dit si les demandes sont <strong>enregistrées sur le serveur</strong>. S'il indique que l'enregistrement a échoué, ne fermez pas la page : utilisez « Réessayer maintenant » dans le bandeau rouge en haut. Pour retirer des lignes importées par erreur, utilisez <strong>Supprimer</strong> sur chaque demande (voir « Comment supprimer une demande ? »).`) },
       { id: 's-ajuster', q: 'Comment corriger le compteur de congés d\'un salarié ?', module: 'conges', mots: 'ajuster compteur solde corriger modifier congés payés rtt jours ajout retrait régularisation manuel',
         r: gEtapes(
           `Ouvrez la fiche du salarié, onglet <strong>Congés et absences</strong>, puis <strong>Voir le détail des compteurs</strong>.`,
@@ -11178,24 +11191,21 @@ function describeDemiJourneeImport(r) {
   return '';
 }
 
+/** Crée toutes les lignes prêtes en UN seul lot (une sauvegarde, un envoi). `envoi` : promesse vraie quand tout est enregistré sur le serveur, fausse sinon. */
 function importAbsencesRows(previewRows) {
-  const results = { created: 0, errors: 0 };
-  previewRows.filter(r => r.status === 'ok').forEach(r => {
-    leaveRepository.importerHistorique({
-      employeeId: r.employee.id,
-      typeId: r.type.id,
-      dateDebut: r.dateDebut,
-      dateFin: r.dateFin,
-      demiJournee: r.demiJournee,
-      demiJourneeDebut: r.demiJourneeDebut,
-      demiJourneeFin: r.demiJourneeFin,
-      nbJours: r.nbJours,
-      commentaire: r.commentaire
-    });
-    results.created++;
-  });
-  results.errors = previewRows.filter(r => r.status === 'error').length;
-  return results;
+  const lignes = previewRows.filter(r => r.status === 'ok').map(r => ({
+    employeeId: r.employee.id,
+    typeId: r.type.id,
+    dateDebut: r.dateDebut,
+    dateFin: r.dateFin,
+    demiJournee: r.demiJournee,
+    demiJourneeDebut: r.demiJourneeDebut,
+    demiJourneeFin: r.demiJourneeFin,
+    nbJours: r.nbJours,
+    commentaire: r.commentaire
+  }));
+  const { requests, envoi } = leaveRepository.importerHistoriqueLot(lignes);
+  return { created: requests.length, errors: previewRows.filter(r => r.status === 'error').length, envoi };
 }
 
 /** §retour Betty du 18/09/2026 (import historique, points 2-3) : modèle téléchargeable, colonnes déjà
@@ -11331,10 +11341,19 @@ function openImportAbsencesHistoriqueModal(categorie) {
     `;
     const confirmBtn = document.getElementById('btn-confirm-import');
     confirmBtn.style.display = okCount > 0 ? '' : 'none';
-    confirmBtn.onclick = () => {
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Import en cours...';
       const results = importAbsencesRows(currentPreview);
+      const enregistre = await results.envoi;
+      auditLogRepository.logAudit('Création', categorie === 'conge' ? 'Congés (import historique)' : 'Absences (import historique)', `${results.created} ligne${results.created > 1 ? 's' : ''} importée${results.created > 1 ? 's' : ''}`, auditDetailsForActor());
       closeModal();
-      showToast(`${results.created} absence${results.created > 1 ? 's' : ''} importée${results.created > 1 ? 's' : ''}${results.errors ? ` (${results.errors} ligne${results.errors > 1 ? 's' : ''} ignorée${results.errors > 1 ? 's' : ''})` : ''}.`);
+      const ignorees = results.errors ? ` (${results.errors} ligne${results.errors > 1 ? 's' : ''} ignorée${results.errors > 1 ? 's' : ''})` : '';
+      if (enregistre) {
+        showToast(`${results.created} absence${results.created > 1 ? 's' : ''} importée${results.created > 1 ? 's' : ''} et enregistrée${results.created > 1 ? 's' : ''} sur le serveur${ignorees}.`);
+      } else {
+        showToast(`${results.created} absence${results.created > 1 ? 's' : ''} importée${results.created > 1 ? 's' : ''} dans ce navigateur, mais l'enregistrement sur le serveur a échoué${ignorees}. Ne fermez pas la page : utilisez « Réessayer maintenant » dans le bandeau rouge en haut.`, 'error');
+      }
       render();
     };
   }
@@ -17582,15 +17601,49 @@ function canSelfCancelPendingRequest(request, user) {
   return Boolean(user) && request.employeeId === user.id && request.statut === 'En attente' && request.etapeIndex === 0;
 }
 
+/** Aligné sur les politiques du serveur (leave_requests_delete, migration 0076) : il faut gérer les utilisateurs, les paramètres ou les absences, et jamais sa propre demande
+ * hors mode mise en service. Un manager sans ces droits n'a donc pas le bouton (le serveur refuserait). */
+function canDeleteLeaveRequest(request) {
+  const user = authRepository.getCurrentUser();
+  if (!user) return false;
+  if (request.employeeId === user.id && !miseEnServiceActive()) return false;
+  return [PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.GERER_PARAMETRES, PERMISSIONS.VALIDER_ABSENCE, PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.ANNULER_ABSENCE]
+    .some(p => hasPermission(user, p));
+}
+
+function handleDeleteLeaveRequest(id) {
+  const request = leaveRepository.getById(id);
+  if (!request || !canDeleteLeaveRequest(request)) { showToast('Action non autorisée.', 'error'); return; }
+  const employee = employeeRepository.getById(request.employeeId);
+  const type = leaveTypeRepository.getLeaveTypeById(request.typeId);
+  const periode = `${formatDate(request.dateDebut)}${request.dateFin !== request.dateDebut ? ' → ' + formatDate(request.dateFin) : ''}`;
+  openConfirm({
+    title: 'Supprimer cette demande ?',
+    message: `${employee ? employee.prenom + ' ' + employee.nom + ' · ' : ''}${type ? type.nom + ' · ' : ''}${periode}. La demande disparaît définitivement de la liste et du compteur, sans historique. Pour garder une trace, utilisez plutôt « Annuler » ; pour changer des dates, « Régulariser ».`,
+    confirmLabel: 'Supprimer définitivement',
+    danger: true,
+    onConfirm: async () => {
+      const resultat = leaveRepository.supprimer(id);
+      auditLogRepository.logAudit('Suppression', 'Demande de congé', auditLabelForEmployee(request.employeeId), `${type ? type.nom : ''} ${periode}`);
+      render();
+      const enregistre = resultat ? await resultat.envoi : true;
+      if (enregistre) showToast('Demande supprimée.');
+      else showToast('Demande retirée de cet écran, mais la suppression n\'a pas pu être enregistrée sur le serveur. Rechargez la page pour retrouver l\'état réel.', 'error');
+    }
+  });
+}
+
 function renderRequestActions(r, type) {
   const user = authRepository.getCurrentUser();
   const historyBtn = `<button class="btn-link" data-history="${r.id}">Historique</button>`;
+  const supprimerBtn = canDeleteLeaveRequest(r) ? `<button class="btn-link btn-link-danger" data-delete-leave="${r.id}">Supprimer</button>` : '';
   if (r.statut === 'En attente') {
     return `
       ${historyBtn}
       ${canSelfCancelPendingRequest(r, user) ? `<button class="btn-link btn-link-danger" data-self-cancel="${r.id}">Annuler</button>` : ''}
       ${canActOnRequestFor(r) ? `<button class="btn-link" data-approve="${r.id}">Valider</button>` : ''}
       ${canRefuserRequestFor(r) ? `<button class="btn-link btn-link-danger" data-refuse="${r.id}">Refuser</button>` : ''}
+      ${supprimerBtn}
     `;
   }
   if (r.statut === 'Validé') {
@@ -17604,9 +17657,10 @@ function renderRequestActions(r, type) {
       ${canProlonger ? `<button class="btn-link" data-prolonger="${r.id}">Prolonger</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link" data-regulariser="${r.id}">Régulariser</button>` : ''}
       ${canManageRequestFor(r.employeeId) ? `<button class="btn-link btn-link-danger" data-cancel="${r.id}">Annuler</button>` : ''}
+      ${supprimerBtn}
     `;
   }
-  return historyBtn;
+  return `${historyBtn}${supprimerBtn}`;
 }
 
 /** Sprint SIRH premium §11 : Historique — fusionne `historique` (création/étapes de validation du
@@ -17899,6 +17953,9 @@ function bindCongesDemandesEvents(categorie = 'conge') {
   });
   document.querySelectorAll('[data-self-cancel]').forEach(btn => {
     btn.addEventListener('click', () => handleSelfCancelLeaveRequest(btn.dataset.selfCancel));
+  });
+  document.querySelectorAll('[data-delete-leave]').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteLeaveRequest(btn.dataset.deleteLeave));
   });
   document.querySelectorAll('[data-attestation]').forEach(btn => {
     btn.addEventListener('click', () => openLeaveAttestationModal(btn.dataset.attestation));

@@ -559,11 +559,24 @@ async function syncTable(tableName, rows, toRowFn, companyId) {
  * salve, alors qu'elles n'avaient rien à se reprocher. Les erreurs sont collectées puis relancées
  * ensemble, pour que le message remonté à l'utilisateur (voir _pushInBackground, data.js) reflète
  * tout ce qui a échoué, pas seulement la première ligne fautive. */
+/** Exécute `fn` sur chaque élément, `limite` à la fois : un import de plusieurs centaines de lignes lançait autant de requêtes simultanées, que le serveur
+ * pouvait en partie refuser (trop de connexions) — des lignes perdues sans que personne ne le voie. */
+async function mapAvecLimite(elements, limite, fn) {
+  const sorties = new Array(elements.length);
+  let prochain = 0;
+  const travailleurs = Array.from({ length: Math.min(limite, elements.length) }, async () => {
+    while (prochain < elements.length) {
+      const rang = prochain++;
+      sorties[rang] = await fn(elements[rang]);
+    }
+  });
+  await Promise.all(travailleurs);
+  return sorties;
+}
+
 async function insertRows(tableName, rows, toRowFn, companyId) {
   if (rows.length === 0) return;
-  const results = await Promise.all(
-    rows.map(r => supabase.from(tableName).insert(toRowFn(r, companyId)))
-  );
+  const results = await mapAvecLimite(rows, 6, r => supabase.from(tableName).insert(toRowFn(r, companyId)));
   const errors = results.map(res => res.error).filter(Boolean);
   if (errors.length) {
     const first = errors[0];
@@ -590,12 +603,12 @@ async function updateRows(tableName, rows, toRowFn, companyId) {
   if (rows.length === 0) return;
   // .select('id') : sans lui, une modification refusée par une politique de sécurité (RLS) renvoie 0 ligne SANS aucune erreur, et l'écran affichait un succès
   // alors que rien n'était enregistré (observé le 28/10/2026 : un RH qui corrigeait ses propres congés).
-  const results = await Promise.all(rows.map(async r => {
+  const results = await mapAvecLimite(rows, 6, async r => {
     const row = toRowFn(r, companyId);
     const { id, company_id, ...patch } = row;
     const res = await supabase.from(tableName).update(patch).eq('id', id).eq('company_id', company_id).select('id');
     return { res, id, company_id };
-  }));
+  });
   const failed = results.find(x => x.res.error);
   if (failed) throw failed.res.error;
   const sansEffet = results.filter(x => Array.isArray(x.res.data) && x.res.data.length === 0);

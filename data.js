@@ -2138,15 +2138,16 @@ const DB = {
    * serveur, jamais l'inverse. */
   _pushInBackground(promise, descriptor) {
     const sectionKey = descriptor && this._sectionKeyFor(descriptor);
-    promise.then(() => {
-      if (descriptor && sectionKey) this._clearPendingSync(descriptor.companyId, sectionKey);
+    return promise.then(() => {
+      if (descriptor && sectionKey) this._clearPendingSync(descriptor.companyId, sectionKey, descriptor);
       if (this.onSaveSuccess) this.onSaveSuccess();
+      return true;
     }).catch(err => {
       console.error('Échec de synchronisation Supabase :', err);
       // Refus de droits (RLS) : la remise en file ne servirait à rien (l'écriture échouera toujours) et bloquerait l'avertissement indéfiniment. On prévient, une fois.
       if (err && err.refusDroits) {
         if (this.onSaveError) this.onSaveError('Modification non enregistrée : vos droits ne permettent pas de la faire sur le serveur. Elle n\'apparaît que dans ce navigateur : rechargez la page pour retrouver l\'état réel, ou demandez à un responsable de la faire.');
-        return;
+        return false;
       }
       if (descriptor && sectionKey) this._markPendingSync(descriptor.companyId, sectionKey, existing => this._mergeDescriptor(existing, descriptor), err);
       if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.');
@@ -2222,8 +2223,17 @@ const DB = {
     this._savePendingSync();
   },
 
-  _clearPendingSync(companyId, sectionKey) {
+  /** Avec `descriptor` (idClassified, insertOnly), ne retire de la file que les lignes de CET envoi : plusieurs envois partagent la même clé (par exemple 200 demandes
+   * importées une à une), et le succès de l'un ne doit jamais effacer l'échec d'un autre — la ligne échouée ne serait alors jamais renvoyée et disparaîtrait au rechargement. */
+  _clearPendingSync(companyId, sectionKey, descriptor) {
     if (!this._pendingSync || !this._pendingSync[companyId]) return;
+    const entree = this._pendingSync[companyId][sectionKey];
+    if (entree && descriptor && (descriptor.kind === 'idClassified' || descriptor.kind === 'insertOnly')) {
+      const faits = new Set([...(descriptor.insertIds || []), ...(descriptor.updateIds || [])]);
+      entree.insertIds = (entree.insertIds || []).filter(id => !faits.has(id));
+      if (descriptor.kind === 'idClassified') entree.updateIds = (entree.updateIds || []).filter(id => !faits.has(id));
+      if ((entree.insertIds || []).length + (entree.updateIds || []).length > 0) { this._savePendingSync(); return; }
+    }
     delete this._pendingSync[companyId][sectionKey];
     if (Object.keys(this._pendingSync[companyId]).length === 0) delete this._pendingSync[companyId];
     this._savePendingSync();
@@ -3738,10 +3748,13 @@ const DB = {
       return old && JSON.stringify(old) !== JSON.stringify(r);
     });
     const removedIds = previous.filter(p => !p._redacted && !list.some(r => r.id === p.id)).map(p => p.id);
-    if (added.length || modified.length) this._pushInBackground(window.SupabaseSync.pushLeaveRequests({ added, modified }, company.id),
-      { kind: 'idClassified', table: 'leave_requests', companyId: company.id, insertIds: added.map(r => r.id), updateIds: modified.map(r => r.id) });
-    removedIds.forEach(id => this._pushInBackground(window.SupabaseSync.deleteRow('leave_requests', id, company.id),
-      { kind: 'delete', table: 'leave_requests', companyId: company.id, id }));
+    const envois = [];
+    if (added.length || modified.length) envois.push(this._pushInBackground(window.SupabaseSync.pushLeaveRequests({ added, modified }, company.id),
+      { kind: 'idClassified', table: 'leave_requests', companyId: company.id, insertIds: added.map(r => r.id), updateIds: modified.map(r => r.id) }));
+    removedIds.forEach(id => envois.push(this._pushInBackground(window.SupabaseSync.deleteRow('leave_requests', id, company.id),
+      { kind: 'delete', table: 'leave_requests', companyId: company.id, id })));
+    // Vrai quand tout est enregistré sur le serveur : lu par l'import de l'historique pour dire la vérité à l'utilisateur.
+    return Promise.all(envois).then(resultats => resultats.every(Boolean));
   },
 
   getLeaveRequestById(id) {
@@ -3832,6 +3845,36 @@ const DB = {
     list.push(request);
     this.saveLeaveRequests(list);
     return request;
+  },
+
+  /** Import de l'historique en un seul lot : une seule sauvegarde et un seul envoi au serveur, au lieu d'un par ligne. Rend `envoi` : promesse vraie quand tout est
+   * enregistré sur le serveur (faux sinon), pour que l'écran annonce le vrai résultat. */
+  importerAbsencesHistoriqueLot(lignes) {
+    const list = this.getLeaveRequests().slice();
+    const now = new Date().toISOString();
+    const creees = lignes.map(data => Object.assign(makeEmptyLeaveRequest(), data, {
+      id: generateId('lr'),
+      workflow: [],
+      workflowValidatorOverrides: {},
+      etapeIndex: -1,
+      statut: 'Validé',
+      historique: [{ date: now, action: 'Import historique (absence antérieure à l\'utilisation de Nexus)' }],
+      dateCreation: now,
+      dateModification: now
+    }));
+    creees.forEach(r => list.push(r));
+    const envoi = creees.length ? this.saveLeaveRequests(list) : Promise.resolve(true);
+    return { requests: creees, envoi };
+  },
+
+  /** Supprime définitivement une demande (le serveur n'autorise que qui gère les utilisateurs, les paramètres ou les absences, et jamais sa propre demande hors mode
+   * mise en service). Rend { request, envoi } ou null si elle n'existe pas. */
+  supprimerLeaveRequest(id) {
+    const list = this.getLeaveRequests();
+    const request = list.find(r => r.id === id);
+    if (!request) return null;
+    const envoi = this.saveLeaveRequests(list.filter(r => r.id !== id));
+    return { request, envoi };
   },
 
   updateLeaveRequest(id, patch) {
@@ -5860,6 +5903,8 @@ const leaveRepository = {
   getForEmployee: (employeeId) => DB.getLeaveRequestsForEmployee(employeeId),
   create: (data) => DB.addLeaveRequest(data),
   importerHistorique: (data) => DB.importerAbsenceHistorique(data),
+  importerHistoriqueLot: (lignes) => DB.importerAbsencesHistoriqueLot(lignes),
+  supprimer: (id) => DB.supprimerLeaveRequest(id),
   update: (id, patch) => DB.updateLeaveRequest(id, patch),
   prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif),
   regulariser: (id, patch) => DB.regulariserDemande(id, patch),

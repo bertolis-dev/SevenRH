@@ -237,6 +237,8 @@ globalThis.__renderFormation = renderFormation;
 globalThis.__APP_VERSION = APP_VERSION;
 globalThis.__CHANGELOG_ENTRIES = CHANGELOG_ENTRIES;
 globalThis.__guideSections = guideSections;
+globalThis.__canDeleteLeaveRequest = canDeleteLeaveRequest;
+globalThis.__importAbsencesRows = importAbsencesRows;
 globalThis.__renderLeaveTypeRow = renderLeaveTypeRow;
 globalThis.__guideRechercher = guideRechercher;
 globalThis.__guideNormaliser = guideNormaliser;
@@ -903,6 +905,8 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     APP_VERSION: sandbox.__APP_VERSION,
     CHANGELOG_ENTRIES: sandbox.__CHANGELOG_ENTRIES,
     guideSections: sandbox.__guideSections,
+    canDeleteLeaveRequest: sandbox.__canDeleteLeaveRequest,
+    importAbsencesRows: sandbox.__importAbsencesRows,
     guideRechercher: sandbox.__guideRechercher,
     guideNormaliser: sandbox.__guideNormaliser,
     guideSurligner: sandbox.__guideSurligner,
