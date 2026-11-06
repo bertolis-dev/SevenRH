@@ -8509,7 +8509,12 @@ function resolveAncienneteAcquisAnnuel(leaveType, employee, refDate) {
   const paliers = leaveType.paliersAnciennete || [];
   if (!paliers.length) return Number(leaveType.nombreAnnuel) || 0;
   const years = calculateAncienneteYears(employee, refDate);
-  const atteints = paliers.filter(p => years >= Number(p.ancienneteMin)).sort((a, b) => b.ancienneteMin - a.ancienneteMin);
+  // Un palier peut être réservé à une catégorie de salarié (Cadre, Non cadre...) : sans catégorie (vide), il concerne tout le monde.
+  const categorieId = getEffectiveCategorieSalarieId(employee, DB.getSettings().categoriesSalarie);
+  const applicables = paliers.filter(p => !p.categorieSalarieId || p.categorieSalarieId === categorieId);
+  // Le palier le plus élevé ATTEINT s'applique ; à ancienneté égale, celui propre à la catégorie du salarié passe avant celui de « toutes les catégories ».
+  const atteints = applicables.filter(p => years >= Number(p.ancienneteMin))
+    .sort((a, b) => (Number(b.ancienneteMin) - Number(a.ancienneteMin)) || (Number(Boolean(b.categorieSalarieId)) - Number(Boolean(a.categorieSalarieId))));
   return atteints.length ? Number(atteints[0].jours) || 0 : 0;
 }
 

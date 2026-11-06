@@ -2475,13 +2475,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.06.1';
+const APP_VERSION = '2026.11.06.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paliers d'ancienneté (types de congé) : chaque ligne s'écrit maintenant « à partir de X ans d'ancienneté, Y jours par an », avec un exemple, un résumé en direct et une case « Catégorie concernée » pour réserver un palier aux cadres ou aux non-cadres.",
+      "Import de l'historique : les demi-journées sont gérées précisément. Une colonne « Demi-journée » (Matin ou Après-midi pour un seul jour), « Demi-journée début / fin » pour une période, et une colonne « Nombre de jours » qui sert de contrôle : si elle ne correspond pas au calcul, la ligne est refusée avec l'explication au lieu d'être comptée en journée entière. Une colonne de demi-journée non reconnue bloque l'import. Le modèle à télécharger contient des exemples et une feuille d'aide.",
       "Congés : nouveau bouton « Supprimer » sur chaque demande (pour les RH et le propriétaire), pour retirer une erreur de saisie, un doublon ou une ligne importée par erreur. « Annuler » et « Régulariser » restent disponibles.",
       "Import de l'historique des congés : les lignes sont maintenant enregistrées en un seul lot, et l'application attend la réponse du serveur avant d'annoncer le résultat (enregistré, ou échec avec la marche à suivre). Une ligne dont l'envoi échoue n'est plus effacée de la file de nouvelle tentative par le succès d'un autre envoi.",
       "Fiabilité : quand le serveur refuse une modification ou une suppression parce que vos droits ne le permettent pas, l'application vous en prévient au lieu d'afficher un succès, puis la modification disparaissait au rechargement.",
@@ -5558,7 +5560,12 @@ GUIDE_THEMES.push(
           `Vérifiez l'aperçu puis cliquez sur <strong>Importer</strong>.`
         ) },
       { id: 's-import-histo', q: 'Comment reprendre l\'historique des congés et absences passés ?', module: 'conges', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'import historique congés absences passés reprise excel demandes anciennes',
-        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, utilisez <strong>Importer l'historique</strong>. Chaque ligne du fichier crée directement une demande au statut <strong>Validé</strong>, sans passer par une validation : à réserver aux absences déjà passées. Les salariés sont reconnus par leur matricule ou leur e-mail, et les types par leur nom.`) + gP(`À la fin, le message vous dit si les demandes sont <strong>enregistrées sur le serveur</strong>. S'il indique que l'enregistrement a échoué, ne fermez pas la page : utilisez « Réessayer maintenant » dans le bandeau rouge en haut. Pour retirer des lignes importées par erreur, utilisez <strong>Supprimer</strong> sur chaque demande (voir « Comment supprimer une demande ? »).`) },
+        r: gP(`Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, utilisez <strong>Importer l'historique</strong>. Chaque ligne du fichier crée directement une demande au statut <strong>Validé</strong>, sans passer par une validation : à réserver aux absences déjà passées. Les salariés sont reconnus par leur matricule ou leur e-mail, et les types par leur nom.`) + gP(`Téléchargez le <strong>modèle</strong> : il contient des lignes d'exemple pour chaque cas et une feuille « Aide ». Colonnes :`) + gListe(
+          `<strong>Matricule</strong>, <strong>Type</strong> (nom exact), <strong>Date début</strong> et <strong>Date fin</strong> (JJ/MM/AAAA ; pour un seul jour, laissez Date fin vide) ;`,
+          `<strong>Demi-journée</strong> : pour UN seul jour, écrivez <em>Matin</em> ou <em>Après-midi</em> (vide = journée complète) ;`,
+          `<strong>Demi-journée début</strong> / <strong>Demi-journée fin</strong> : pour une période de plusieurs jours qui commence l'<em>Après-midi</em> et/ou finit le <em>Matin</em> ;`,
+          `<strong>Nombre de jours</strong> (facultatif, recommandé) : sert de contrôle. S'il ne correspond pas au calcul de l'application (week-ends, jours fériés, demi-journées), la ligne est refusée avec l'explication, au lieu d'être comptée en journée entière sans vous prévenir.`
+        ) + gP(`Une colonne dont le nom parle de demi-journée sans être reconnue bloque l'import. L'aperçu affiche pour chaque ligne la période, la demi-journée et le nombre de jours : vérifiez-le avant de cliquer sur Importer.`) + gP(`À la fin, le message vous dit si les demandes sont <strong>enregistrées sur le serveur</strong>. S'il indique que l'enregistrement a échoué, ne fermez pas la page : utilisez « Réessayer maintenant » dans le bandeau rouge en haut. Pour retirer des lignes importées par erreur, utilisez <strong>Supprimer</strong> sur chaque demande (voir « Comment supprimer une demande ? »).`) },
       { id: 's-ajuster', q: 'Comment corriger le compteur de congés d\'un salarié ?', module: 'conges', mots: 'ajuster compteur solde corriger modifier congés payés rtt jours ajout retrait régularisation manuel',
         r: gEtapes(
           `Ouvrez la fiche du salarié, onglet <strong>Congés et absences</strong>, puis <strong>Voir le détail des compteurs</strong>.`,
@@ -5614,6 +5621,13 @@ GUIDE_THEMES.push(
         r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
         r: gFig.cloture() + gP(`Chaque type de congé a une <strong>date de clôture du compteur</strong> (par exemple le 31 mai) : la période d'acquisition court alors du lendemain de la clôture précédente (1er juin) jusqu'à cette date. Au sein d'une période close, le solde est <strong>disponible</strong> ; celle en cours reste « en cours d'acquisition » jusqu'à sa clôture.`) },
+      { id: 'r-paliers', q: 'Comment régler les paliers d\'ancienneté (par exemple 20 ans) ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'palier paliers ancienneté années 20 ans cadre non cadre catégorie jours supplémentaires congés payés nombre de jours selon ancienneté',
+        r: gP(`Les paliers servent à donner un nombre de jours <strong>différent selon l'ancienneté</strong>. Chaque ligne se lit : « à partir de <strong>X ans</strong> d'ancienneté, <strong>Y jours par an</strong> ». Y est le <strong>total de l'année</strong>, pas un supplément.`) + gEtapes(
+          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, ouvrez le type (par exemple « Congés payés ») et descendez jusqu'à « Paliers d'ancienneté ».`,
+          `Cliquez sur <strong>+ Ajouter un palier</strong>. Renseignez « À partir de » (le nombre d'années d'ancienneté, par exemple 20), « Jours par an (total) » (par exemple 27) et « Catégorie concernée ».`,
+          `Pour distinguer cadres et non-cadres, choisissez « Cadre » ou « Non cadre » dans « Catégorie concernée » : la ligne ne s'applique alors qu'à cette catégorie. « Toutes les catégories » s'applique à tout le monde.`,
+          `Vérifiez la ligne « Résumé » sous les paliers, puis enregistrez.`
+        ) + gP(`<strong>Exemple :</strong> 0 an → 25 jours (toutes catégories) ; 20 ans → 27 jours (Cadre) ; 20 ans → 28 jours (Non cadre). Ajoutez toujours une ligne à <strong>0 an</strong> pour le droit de départ : sans elle, un salarié qui n'a pas encore atteint le premier palier n'acquiert rien. Le palier le plus élevé atteint s'applique ; à ancienneté égale, celui de la catégorie du salarié passe avant « toutes les catégories ». Les catégories se créent dans <strong>Paramètres > Référentiels</strong> et se choisissent sur la fiche du salarié.`) },
       { id: 'r-anticipation', q: 'Peut-on poser des jours qu\'on n\'a pas encore acquis ?', mots: 'anticipation par anticipation acquis à date dépasser solde négatif autoriser interdit',
         r: gShot('parametres-conges', "Paramètres, onglet Congés et absences : règle de congés par anticipation, maintien de salaire en cas d'arrêt maladie et rappels avant perte de congés") + gP(`C'est un choix à valider avec votre accord d'entreprise ou votre convention. Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, « Congés par anticipation » propose trois règles : <em>aucun contrôle</em> (une demande peut dépasser le solde), <em>interdite</em> (seulement le solde disponible) ou <em>autorisée dans la limite des jours acquis à date</em>.`) },
       { id: 'r-feries', q: 'Comment ajouter un jour férié ou une fermeture de l\'entreprise ?', vue: 'parametres', params: { parametresTab: 'calendrier' }, vueLabel: 'Paramètres', mots: 'jour férié fermeture entreprise pont calendrier ajouter jours chômés vacances scolaires',
@@ -5725,6 +5739,11 @@ GUIDE_THEMES.push(
           `Remplissez les colonnes <strong>obligatoires</strong> (pour les salariés : Nom, Prénom, Email, Date d'embauche). Une ligne incomplète est signalée dans l'aperçu.`,
           `Vérifiez le format des <strong>dates</strong> et l'orthographe des <strong>types de congé</strong> : le nom de la colonne doit correspondre au type.`,
           `Lisez l'aperçu avant de cliquer sur Importer : il indique les lignes qui poseront problème.`) },
+      { id: 'x-import-demi', q: 'Mon import a compté une journée entière au lieu d\'une demi-journée', module: 'conges', pour: GUIDE_GESTION, mots: 'import demi-journée journée entière compte une journée matin après-midi 0,5 erreur historique colonne demi',
+        r: gP(`Dans l'import de l'historique, une demi-journée s'écrit dans une colonne précise :`) + gListe(
+          `un <strong>seul jour</strong> : colonne « Demi-journée » avec <em>Matin</em> ou <em>Après-midi</em> ;`,
+          `une <strong>période</strong> : colonne « Demi-journée début » (<em>Après-midi</em> si elle commence l'après-midi) et/ou « Demi-journée fin » (<em>Matin</em> si elle finit le matin).`
+        ) + gP(`Téléchargez le modèle de l'import (feuilles « Modèle » et « Aide ») pour reprendre les noms exacts des colonnes. Ajoutez la colonne « Nombre de jours » (0,5 pour une demi-journée) : si elle ne correspond pas au calcul, la ligne est refusée avec l'explication au lieu d'être comptée en journée entière. Pour corriger des lignes déjà importées, utilisez <strong>Régulariser</strong> (changer la demi-journée) ou <strong>Supprimer</strong> puis réimportez.`) },
       { id: 'x-attente', q: 'Ma demande reste « En attente » depuis longtemps', mots: 'attente bloquée pas de réponse validation longue relance manager valide pas rappel',
         r: gP(`La demande attend la décision de la personne chargée de la valider. Nexus lui envoie des rappels ; vous pouvez aussi la prévenir directement. Si elle est absente, un autre valideur (RH, ou un remplaçant désigné par délégation) peut traiter la demande.`) },
       { id: 'x-qr', q: 'Le QR code de la pointeuse ne se scanne pas', module: 'pointage', mots: 'pointeuse qr code scanner caméra appareil photo autorisation ne marche pas pointage oublié',
@@ -11068,40 +11087,71 @@ function guessAbsencesColumnMapping(headers, leaveTypes) {
   const typeAliases = ['type', 'type de conge', 'type de congé', "type d'absence"];
   const dateDebutAliases = ['date debut', 'date début', 'debut', 'début', 'date de debut', 'date de début'];
   const dateFinAliases = ['date fin', 'fin', 'date de fin'];
-  // §retour Betty du 18/09/2026 (import historique, point 1) : deux colonnes plutôt qu'une, pour
-  // couvrir à la fois un jour unique (une seule des deux sera renseignée, voir buildAbsencesPreviewRows)
-  // et une demande de plusieurs jours qui commence et/ou finit sur une demi-journée (ex. Véronique
-  // BORGE, du 02/10 après-midi au 07/10 matin = 3,5 jours) — même vocabulaire que le formulaire
-  // manuel (openLeaveRequestModal : "Après-midi seulement" au premier jour, "Matin seulement" au
-  // dernier), jamais un texte libre.
+  // Demi-journées (retour du 06/11/2026 : « ça met une journée quand on veut une demi-journée »). Trois colonnes possibles :
+  // « Demi-journée » (un seul jour : Matin ou Après-midi), « Demi-journée début » (la période commence l'après-midi) et « Demi-journée fin »
+  // (elle finit le matin) — même vocabulaire que le formulaire manuel. Une colonne dont l'en-tête parle de demi-journée sans être reconnue est
+  // refusée (voir `suspectes`) plutôt qu'ignorée : sinon la ligne repasse en journée complète sans que personne ne le voie.
+  const demiJourneeAliases = ['demi-journee', 'demi journee', 'demi-journée', 'demi journée', 'matin ou apres-midi', 'matin / apres-midi'];
   const demiJourneeDebutAliases = ['demi-journee debut', 'demi journee debut', 'demi-journée début', 'demi journée début', 'demi journee de debut'];
   const demiJourneeFinAliases = ['demi-journee fin', 'demi journee fin', 'demi-journée fin', 'demi journée fin', 'demi journee de fin'];
+  // « Nombre de jours » : facultatif, sert de CONTRÔLE (le fichier dit 0,5, l'application compte 1 : la ligne est refusée avec l'explication).
+  const nbJoursAliases = ['nombre de jours', 'nb de jours', 'nb jours', 'nombre jours', 'jours', 'duree', 'durée'];
   const commentaireAliases = ['commentaire', 'motif', 'note', 'notes'];
-  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, demiJourneeDebut: undefined, demiJourneeFin: undefined, commentaire: undefined, ignorees: [] };
+  const mapping = { identifiant: undefined, type: undefined, dateDebut: undefined, dateFin: undefined, demiJournee: undefined, demiJourneeDebut: undefined, demiJourneeFin: undefined, nbJours: undefined, commentaire: undefined, ignorees: [], suspectes: [] };
+  const correspond = (aliases, norm) => aliases.some(a => normaliserEnteteImport(a) === norm);
   headers.forEach((h, i) => {
     const norm = normaliserEnteteImport(h);
     if (mapping.identifiant === undefined && ['matricule', 'id', 'identifiant'].some(a => normaliserEnteteImport(a) === norm)) { mapping.identifiant = { field: 'matricule', index: i }; return; }
     if (mapping.identifiant === undefined && ['email', 'e-mail', 'mail'].some(a => normaliserEnteteImport(a) === norm)) { mapping.identifiant = { field: 'email', index: i }; return; }
-    if (mapping.type === undefined && typeAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.type = i; return; }
-    if (mapping.dateDebut === undefined && dateDebutAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.dateDebut = i; return; }
-    if (mapping.dateFin === undefined && dateFinAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.dateFin = i; return; }
-    if (mapping.demiJourneeDebut === undefined && demiJourneeDebutAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.demiJourneeDebut = i; return; }
-    if (mapping.demiJourneeFin === undefined && demiJourneeFinAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.demiJourneeFin = i; return; }
-    if (mapping.commentaire === undefined && commentaireAliases.some(a => normaliserEnteteImport(a) === norm)) { mapping.commentaire = i; return; }
-    if (norm) mapping.ignorees.push(String(h).trim());
+    if (mapping.type === undefined && correspond(typeAliases, norm)) { mapping.type = i; return; }
+    if (mapping.dateDebut === undefined && correspond(dateDebutAliases, norm)) { mapping.dateDebut = i; return; }
+    if (mapping.dateFin === undefined && correspond(dateFinAliases, norm)) { mapping.dateFin = i; return; }
+    if (mapping.demiJourneeDebut === undefined && correspond(demiJourneeDebutAliases, norm)) { mapping.demiJourneeDebut = i; return; }
+    if (mapping.demiJourneeFin === undefined && correspond(demiJourneeFinAliases, norm)) { mapping.demiJourneeFin = i; return; }
+    if (mapping.demiJournee === undefined && correspond(demiJourneeAliases, norm)) { mapping.demiJournee = i; return; }
+    if (mapping.nbJours === undefined && correspond(nbJoursAliases, norm)) { mapping.nbJours = i; return; }
+    if (mapping.commentaire === undefined && correspond(commentaireAliases, norm)) { mapping.commentaire = i; return; }
+    // En-tête voisin d'une demi-journée mais écrit autrement (« Demi-journée (matin/après-midi) », « Demi journée de début »...) : on le rattache à la bonne colonne.
+    if (norm.includes('demi')) {
+      if (norm.includes('debut') && mapping.demiJourneeDebut === undefined) { mapping.demiJourneeDebut = i; return; }
+      if (norm.includes('fin') && mapping.demiJourneeFin === undefined) { mapping.demiJourneeFin = i; return; }
+      if (!norm.includes('debut') && !norm.includes('fin') && mapping.demiJournee === undefined) { mapping.demiJournee = i; return; }
+    }
+    if (norm) {
+      mapping.ignorees.push(String(h).trim());
+      if (/demi|matin|midi/.test(norm)) mapping.suspectes.push(String(h).trim());
+    }
   });
   return mapping;
+}
+
+/** Lit une cellule de demi-journée : { valeur: null } si vide, { valeur: 'matin' | 'apres-midi' | 'complete' }, ou { invalide: true }. Tolère la casse, les accents,
+ * les tirets et les abréviations courantes (AM, PM, matinée, après midi, après-midi seulement, journée complète...). */
+function lireDemiJourneeImport(valeur) {
+  const brut = String(valeur == null ? '' : valeur).trim();
+  if (!brut) return { valeur: null };
+  const lettres = normalizeForSearch(brut).replace(/[^a-z]/g, '');
+  if (lettres.startsWith('matin') || lettres === 'am') return { valeur: 'matin' };
+  if (lettres.startsWith('apresmid') || ['pm', 'aprem', 'apm'].includes(lettres)) return { valeur: 'apres-midi' };
+  if (['journeecomplete', 'journeeentiere', 'complete', 'entiere', 'jc', 'journee', 'jour', 'jourentier', 'jourcomplet'].includes(lettres)) return { valeur: 'complete' };
+  return { invalide: true };
+}
+
+/** Nombre de jours d'une cellule (« 0,5 », « 0.5 », « 3,5 », « 1/2 ») : null si vide, NaN si illisible. */
+function lireNombreJoursImport(valeur) {
+  const brut = String(valeur == null ? '' : valeur).trim();
+  if (!brut) return null;
+  const fraction = brut.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (fraction && Number(fraction[2]) !== 0) return Number(fraction[1]) / Number(fraction[2]);
+  const nombre = Number(brut.replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(nombre) && nombre >= 0 ? nombre : NaN;
 }
 
 function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const settings = settingsRepository.getSettings();
-  // §retour audit du 16/09/2026 : les autres chemins de création (submitLeaveRequestForm) passent
-  // TOUJOURS par hasActiveRequestOverlap avant d'enregistrer — l'import en masse l'avait oublié,
-  // laissant deux lignes chevauchantes (entre elles, ou avec une demande déjà existante) toutes les
-  // deux passer en Validé, fausser getQuotasForEmployee par double comptage. Même helper, jamais
-  // dupliqué/réécrit différemment ici.
+  // Même contrôle de chevauchement que la saisie manuelle (hasActiveRequestOverlap), entre les lignes du fichier et avec les demandes existantes.
   const existingActive = leaveRepository.getAll().filter(r => r.statut !== 'Refusé' && r.statut !== 'Annulé');
   const acceptedInFile = [];
   const findEmployee = (value) => {
@@ -11111,21 +11161,9 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   };
   const findType = (value) => {
     if (!value) return null;
-    const norm = normalizeForSearch(value);
     return leaveTypes.find(t => normaliserEnteteImport(t.nom) === normaliserEnteteImport(value)) || null;
   };
-  // §retour Betty du 18/09/2026 (import historique, point 1) : seules deux valeurs ont un sens (voir
-  // le commentaire de guessAbsencesColumnMapping) — n'importe quel autre texte est une vraie erreur
-  // de saisie, jamais silencieusement ignoré (c'est précisément ce qui produirait les 10,5 jours en
-  // trop signalés : une case mal remplie qui repasse en journée complète sans avertir personne).
-  const parseDemiJourneeDebut = (value) => {
-    if (!value) return null;
-    return normalizeForSearch(value) === normalizeForSearch('Après-midi') ? 'apres-midi' : 'invalide';
-  };
-  const parseDemiJourneeFin = (value) => {
-    if (!value) return null;
-    return normalizeForSearch(value) === normalizeForSearch('Matin') ? 'matin' : 'invalide';
-  };
+  const jours = (n) => String(Math.round(n * 100) / 100).replace('.', ',');
   return dataRows.map((cells, i) => {
     const get = (index) => (index !== undefined ? (cells[index] || '').trim() : '');
     const idValue = get(mapping.identifiant && mapping.identifiant.index);
@@ -11133,18 +11171,18 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     const typeValue = get(mapping.type);
     const type = findType(typeValue);
     const dateDebut = parseImportDate(get(mapping.dateDebut));
-    // §correctif audit du 16/09/2026 : une cellule Date fin VIDE reste un raccourci valide pour une
-    // absence d'un seul jour (repli sur dateDebut) — mais une cellule NON vide qui échoue à parser
-    // (typo, format non reconnu) doit rester une vraie erreur, jamais silencieusement confondue avec
-    // le cas "vide" par un simple `|| dateDebut` qui ne distinguait pas les deux.
+    // Une cellule Date fin VIDE reste un raccourci valide pour une absence d'un seul jour (repli sur dateDebut) ; une cellule NON vide illisible est une vraie erreur.
     const dateFinRaw = get(mapping.dateFin);
     const dateFinParsed = parseImportDate(dateFinRaw);
     const dateFin = dateFinRaw ? dateFinParsed : dateDebut;
     const commentaire = get(mapping.commentaire);
-    const demiDebutRaw = get(mapping.demiJourneeDebut);
-    const demiFinRaw = get(mapping.demiJourneeFin);
-    const demiDebutParsed = parseDemiJourneeDebut(demiDebutRaw);
-    const demiFinParsed = parseDemiJourneeFin(demiFinRaw);
+    const demiUnique = lireDemiJourneeImport(get(mapping.demiJournee));
+    const demiDebut = lireDemiJourneeImport(get(mapping.demiJourneeDebut));
+    const demiFin = lireDemiJourneeImport(get(mapping.demiJourneeFin));
+    const nbFichierRaw = get(mapping.nbJours);
+    const nbFichier = lireNombreJoursImport(nbFichierRaw);
+    const unJour = Boolean(dateDebut) && dateDebut === dateFin;
+    const uniqueDemi = demiUnique.valeur === 'matin' || demiUnique.valeur === 'apres-midi';
     let status = 'ok', message = '', nbJours = 0;
     let demiJournee = null, demiJourneeDebut = null, demiJourneeFin = null;
     if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
@@ -11155,22 +11193,29 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     else if (dateFinRaw && !dateFinParsed) { status = 'error'; message = 'Date de fin invalide (format non reconnu).'; }
     else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
     else if (dateFin < dateDebut) { status = 'error'; message = 'La date de fin est avant la date de début.'; }
-    else if (demiDebutParsed === 'invalide') { status = 'error'; message = `Demi-journée début "${demiDebutRaw}" non reconnue (seule valeur acceptée : "Après-midi", sinon laisser vide).`; }
-    else if (demiFinParsed === 'invalide') { status = 'error'; message = `Demi-journée fin "${demiFinRaw}" non reconnue (seule valeur acceptée : "Matin", sinon laisser vide).`; }
-    else if (dateDebut === dateFin && demiDebutParsed && demiFinParsed) { status = 'error'; message = 'Sur un seul jour, ne renseignez qu\'une seule des deux colonnes demi-journée (début OU fin), jamais les deux.'; }
+    else if (demiUnique.invalide) { status = 'error'; message = `Demi-journée "${get(mapping.demiJournee)}" non reconnue : écrivez Matin ou Après-midi (ou laissez vide pour une journée complète).`; }
+    else if (demiDebut.invalide) { status = 'error'; message = `Demi-journée début "${get(mapping.demiJourneeDebut)}" non reconnue : écrivez Après-midi (ou laissez vide).`; }
+    else if (demiFin.invalide) { status = 'error'; message = `Demi-journée fin "${get(mapping.demiJourneeFin)}" non reconnue : écrivez Matin (ou laissez vide).`; }
+    else if (demiDebut.valeur === 'matin') { status = 'error'; message = 'Demi-journée début « Matin » : une période qui commence le matin est une journée complète, laissez vide. Pour UNE demi-journée, utilisez la colonne « Demi-journée ».'; }
+    else if (demiFin.valeur === 'apres-midi') { status = 'error'; message = 'Demi-journée fin « Après-midi » : une période qui finit l\'après-midi est une journée complète, laissez vide. Pour UNE demi-journée, utilisez la colonne « Demi-journée ».'; }
+    else if (uniqueDemi && !unJour) { status = 'error'; message = 'La colonne « Demi-journée » ne s\'applique qu\'à un seul jour. Pour une période, utilisez « Demi-journée début » et « Demi-journée fin ».'; }
+    else if (uniqueDemi && (demiDebut.valeur === 'apres-midi' || demiFin.valeur === 'matin')) { status = 'error'; message = 'Renseignez soit « Demi-journée », soit « Demi-journée début / fin », jamais les deux sur la même ligne.'; }
+    else if (unJour && demiDebut.valeur === 'apres-midi' && demiFin.valeur === 'matin') { status = 'error'; message = 'Sur un seul jour, ne renseignez qu\'une seule des deux colonnes demi-journée (début OU fin), jamais les deux.'; }
+    else if (Number.isNaN(nbFichier)) { status = 'error'; message = `Nombre de jours "${nbFichierRaw}" non reconnu (exemples : 1, 0,5, 3,5).`; }
     else {
-      // Jour unique : la case remplie (début OU fin, jamais les deux, voir juste au-dessus) donne
-      // directement la demi-journée du seul jour concerné — même champ que la saisie manuelle
-      // (demiJournee). Plusieurs jours : chaque case reste indépendante (demiJourneeDebut/Fin),
-      // exactement le cas Véronique BORGE (après-midi au premier jour ET matin au dernier).
-      if (dateDebut === dateFin) {
-        demiJournee = demiDebutParsed === 'apres-midi' ? 'apres-midi' : (demiFinParsed === 'matin' ? 'matin' : null);
+      if (unJour) {
+        demiJournee = uniqueDemi ? demiUnique.valeur : (demiDebut.valeur === 'apres-midi' ? 'apres-midi' : (demiFin.valeur === 'matin' ? 'matin' : null));
       } else {
-        demiJourneeDebut = demiDebutParsed === 'apres-midi' ? 'apres-midi' : null;
-        demiJourneeFin = demiFinParsed === 'matin' ? 'matin' : null;
+        demiJourneeDebut = demiDebut.valeur === 'apres-midi' ? 'apres-midi' : null;
+        demiJourneeFin = demiFin.valeur === 'matin' ? 'matin' : null;
       }
       nbJours = computeWorkingDays(dateDebut, dateFin, Boolean(demiJournee), employee, settings, type.uniteDecompte, demiJourneeDebut, demiJourneeFin);
       if (!nbJours) { status = 'error'; message = 'Aucun jour ouvré sur cette période (jours fériés/week-end uniquement).'; }
+      else if (nbFichier !== null && Math.abs(nbFichier - nbJours) > 0.001) {
+        status = 'error';
+        message = `Le fichier indique ${jours(nbFichier)} jour${nbFichier > 1 ? 's' : ''}, l'application en compte ${jours(nbJours)} (week-ends, jours fériés et demi-journées pris en compte).`
+          + (unJour && !demiJournee && nbFichier === 0.5 ? ' Précisez Matin ou Après-midi dans la colonne « Demi-journée ».' : ' Vérifiez les dates et les demi-journées.');
+      }
       else if (hasActiveRequestOverlap(existingActive, employee.id, dateDebut, dateFin) || hasActiveRequestOverlap(acceptedInFile, employee.id, dateDebut, dateFin)) {
         status = 'error';
         message = 'Chevauche une absence déjà existante ou une autre ligne de ce fichier pour ce salarié.';
@@ -11208,17 +11253,32 @@ function importAbsencesRows(previewRows) {
   return { created: requests.length, errors: previewRows.filter(r => r.status === 'error').length, envoi };
 }
 
-/** §retour Betty du 18/09/2026 (import historique, points 2-3) : modèle téléchargeable, colonnes déjà
- * nommées correctement, avec une ligne d'exemple montrant le format attendu pour les deux colonnes
- * demi-journée (voir buildAbsencesPreviewRows) — et deux onglets de référence recopiés depuis
- * l'entreprise au moment du téléchargement (salariés actifs + leur matricule, types existants de
- * cette catégorie), pour que le fichier se remplisse sans jamais revenir consulter l'application. */
+/** Modèle téléchargeable de l'import de l'historique : colonnes déjà nommées, lignes d'exemple pour chaque cas (demi-journée seule, plusieurs jours, début l'après-midi et
+ * fin le matin), une feuille d'aide qui dit exactement quoi écrire, et deux onglets de référence recopiés depuis l'entreprise (salariés actifs et leur matricule, types
+ * existants) pour remplir le fichier sans revenir consulter l'application. */
 function buildAbsencesImportTemplateWorkbook(categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie && t.actif);
-  const modeleHeaders = ['Matricule', 'Type', 'Date début', 'Date fin', 'Demi-journée début', 'Demi-journée fin', 'Commentaire'];
+  const nomType = leaveTypes[0] ? leaveTypes[0].nom : 'Congés payés';
+  const modeleHeaders = ['Matricule', 'Type', 'Date début', 'Date fin', 'Demi-journée', 'Demi-journée début', 'Demi-journée fin', 'Nombre de jours', 'Commentaire'];
+  const exemple = 'EXEMPLE (à supprimer)';
   const modeleRows = [
-    ['EXEMPLE, à remplacer', leaveTypes[0] ? leaveTypes[0].nom : 'Congés payés', '02/10/2026', '07/10/2026', 'Après-midi', 'Matin', 'Ligne d\'exemple : à supprimer avant import']
+    [exemple, nomType, '05/10/2026', '', 'Matin', '', '', '0,5', 'Une seule demi-journée : le matin'],
+    [exemple, nomType, '06/10/2026', '', 'Après-midi', '', '', '0,5', 'Une seule demi-journée : l\'après-midi'],
+    [exemple, nomType, '07/10/2026', '', '', '', '', '1', 'Une journée complète (Date fin vide)'],
+    [exemple, nomType, '12/10/2026', '16/10/2026', '', 'Après-midi', 'Matin', '4', 'Du lundi après-midi au vendredi matin'],
+    [exemple, nomType, '19/10/2026', '23/10/2026', '', '', '', '5', 'Cinq journées complètes']
+  ];
+  const aideRows = [
+    ['Matricule (ou Email)', 'Obligatoire. Le matricule du salarié, comme dans l\'onglet « Salariés ». Une colonne « Email » est acceptée à la place.'],
+    ['Type', 'Obligatoire. Le nom EXACT du type, comme dans l\'onglet des types.'],
+    ['Date début / Date fin', 'Obligatoires, au format JJ/MM/AAAA. Pour un seul jour, laissez « Date fin » vide.'],
+    ['Demi-journée', 'Pour UN SEUL jour : écrivez Matin ou Après-midi. Vide = journée complète. Ne pas utiliser pour une période de plusieurs jours.'],
+    ['Demi-journée début', 'Pour une PÉRIODE qui commence l\'après-midi : écrivez Après-midi. Vide = commence le matin.'],
+    ['Demi-journée fin', 'Pour une PÉRIODE qui finit le matin : écrivez Matin. Vide = finit le soir.'],
+    ['Nombre de jours', 'Facultatif mais recommandé : sert de contrôle. Si le nombre ne correspond pas au calcul de l\'application (week-ends, jours fériés, demi-journées), la ligne est refusée avec l\'explication.'],
+    ['Commentaire', 'Facultatif.'],
+    ['Important', 'Supprimez les lignes EXEMPLE avant d\'importer. Une colonne dont le nom parle de demi-journée sans être reconnue bloque l\'import, pour éviter qu\'une demi-journée soit comptée comme une journée entière.']
   ];
   const salariesRows = employees
     .slice()
@@ -11227,6 +11287,7 @@ function buildAbsencesImportTemplateWorkbook(categorie) {
   const typesRows = leaveTypes.map(t => [t.nom]);
   return buildMultiSheetExcelXmlWorkbook([
     { name: 'Modèle', headers: modeleHeaders, rows: modeleRows },
+    { name: 'Aide', headers: ['Colonne', 'Ce qu\'il faut écrire'], rows: aideRows },
     { name: 'Salariés', headers: ['Matricule', 'Nom', 'Prénom'], rows: salariesRows },
     { name: categorie === 'conge' ? 'Types de congés' : "Types d'absences", headers: ['Libellé exact à utiliser'], rows: typesRows }
   ]);
@@ -11301,6 +11362,11 @@ function openImportAbsencesHistoriqueModal(categorie) {
       }
       const [headerRow, ...dataRows] = rows;
       const mapping = guessAbsencesColumnMapping(headerRow, leaveTypes);
+      if (mapping.suspectes.length) {
+        // Une colonne qui parle de demi-journée sans être reconnue serait ignorée : les demi-journées passeraient en journées entières sans avertissement.
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">${icon(ICONS.warningTriangle, 14)} Colonne${mapping.suspectes.length > 1 ? 's' : ''} non reconnue${mapping.suspectes.length > 1 ? 's' : ''} : ${mapping.suspectes.map(h => `« ${escapeHtml(h)} »`).join(', ')}. Renommez-la « Demi-journée » (un seul jour : Matin ou Après-midi), « Demi-journée début » ou « Demi-journée fin » (voir le modèle téléchargeable et sa feuille Aide). Sans cela, vos demi-journées seraient comptées comme des journées entières : l'import est bloqué.</p>`;
+        return;
+      }
       if (!mapping.identifiant) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne d'identification reconnue (attendu : « Matricule » ou « Email »).</p>`;
         return;
@@ -19138,8 +19204,10 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Paliers d'ancienneté (optionnel)</label>
-              <p class="form-hint">Chaque palier donne le total de jours par an à partir de cette ancienneté. Il remplace "Nombre de jours par an" ci-dessus (le palier le plus haut atteint s\'applique, sans cumul), évite de créer un type par tranche d'ancienneté.</p>
+              <p class="form-hint">Pour donner un nombre de jours différent selon l'ancienneté. Chaque ligne se lit : <strong>« à partir de X ans d'ancienneté, Y jours par an »</strong>. Y est le <strong>total de l'année</strong>, pas un supplément, et il remplace « Nombre de jours par an » ci-dessus.</p>
+              <p class="form-hint"><strong>Exemple :</strong> 0 an → 25 jours, puis 20 ans → 27 jours. Ajoutez une ligne à <strong>0 an</strong> pour le droit de départ : sans elle, un salarié qui n'a pas encore atteint le premier palier n'acquiert rien. Le palier le plus élevé atteint s'applique. Avec une catégorie (Cadre, Non cadre...), la ligne ne concerne qu'elle ; « Toutes les catégories » concerne tout le monde.</p>
               <div id="paliers-anciennete-rows"></div>
+              <p class="form-hint" id="paliers-resume" style="margin-top:8px;"></p>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-add-palier" style="margin-top:8px;">+ Ajouter un palier</button>
             </div>
             <div class="form-grid" style="margin-top:14px;">
@@ -19288,23 +19356,61 @@ function openLeaveTypeModal(id, categorie = 'conge') {
 
   // §7.18 : mêmes principes que le constructeur de règles (#3 plus bas) — état local re-rendu dans
   // son propre conteneur, jamais toute la modale.
+  /** Phrase de résumé des paliers, par catégorie : « Toutes les catégories : dès 0 an 25 j/an ; dès 20 ans 27 j/an ». */
+  function resumePaliers() {
+    const nombreCourt = (n) => String(Math.round(Number(n) * 100) / 100).replace('.', ',');
+    const categories = categorieSalarieRepository.getAll();
+    const groupes = new Map();
+    currentPaliers.filter(p => p.ancienneteMin || p.jours).forEach(p => {
+      const cle = p.categorieSalarieId || '';
+      if (!groupes.has(cle)) groupes.set(cle, []);
+      groupes.get(cle).push(p);
+    });
+    if (!groupes.size) return '';
+    const lignes = [...groupes.entries()].map(([cle, liste]) => {
+      const nom = cle ? ((categories.find(c => c.id === cle) || {}).nom || 'Catégorie supprimée') : 'Toutes les catégories';
+      const etapes = liste.slice().sort((a, b) => a.ancienneteMin - b.ancienneteMin)
+        .map(p => `dès ${nombreCourt(p.ancienneteMin)} an${Number(p.ancienneteMin) >= 2 ? 's' : ''} : ${nombreCourt(p.jours)} j/an`).join(' ; ');
+      return `<strong>${escapeHtml(nom)}</strong> : ${escapeHtml(etapes)}`;
+    });
+    return 'Résumé : ' + lignes.join(' &nbsp;|&nbsp; ') + '.';
+  }
   function renderPaliersRows() {
+    const categories = categorieSalarieRepository.getAll();
     document.getElementById('paliers-anciennete-rows').innerHTML = currentPaliers.map((p, index) => `
-      <div class="form-grid" style="grid-template-columns: 1fr 1fr auto; align-items:start; margin-top:8px;">
-        <div style="display:flex; align-items:center; gap:6px;">
-          <input class="input" type="number" min="0" step="any" data-palier-min="${index}" value="${escapeHtml(p.ancienneteMin ?? 0)}" placeholder="Ancienneté (ans)">
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-top:8px;">
+        <div class="form-field" style="margin:0; flex:1 1 150px; min-width:0;">
+          <label for="palier-min-${index}">À partir de (années d'ancienneté)</label>
+          <input class="input" type="number" min="0" step="any" id="palier-min-${index}" data-palier-min="${index}" value="${escapeHtml(p.ancienneteMin ?? 0)}" placeholder="Ex. 20">
         </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <input class="input" type="number" min="0" step="any" data-palier-jours="${index}" value="${escapeHtml(p.jours ?? 0)}" placeholder="Jours par an">
+        <div class="form-field" style="margin:0; flex:1 1 150px; min-width:0;">
+          <label for="palier-jours-${index}">Jours par an (total)</label>
+          <input class="input" type="number" min="0" step="any" id="palier-jours-${index}" data-palier-jours="${index}" value="${escapeHtml(p.jours ?? 0)}" placeholder="Ex. 27">
         </div>
-        <button type="button" class="btn-icon" data-remove-palier="${index}" aria-label="Retirer" title="Retirer">${icon(ICONS.close, 12)}</button>
+        <div class="form-field" style="margin:0; flex:1.3 1 190px; min-width:0;">
+          <label for="palier-cat-${index}">Catégorie concernée</label>
+          <select class="input" id="palier-cat-${index}" data-palier-cat="${index}">
+            <option value="">Toutes les catégories</option>
+            ${categories.map(c => `<option value="${escapeHtml(c.id)}" ${p.categorieSalarieId === c.id ? 'selected' : ''}>${escapeHtml(c.nom)}</option>`).join('')}
+            ${p.categorieSalarieId && !categories.some(c => c.id === p.categorieSalarieId) ? `<option value="${escapeHtml(p.categorieSalarieId)}" selected>Catégorie supprimée</option>` : ''}
+          </select>
+        </div>
+        <button type="button" class="btn-icon" style="flex:0 0 auto; margin-bottom:6px;" data-remove-palier="${index}" aria-label="Retirer ce palier" title="Retirer ce palier">${icon(ICONS.close, 12)}</button>
       </div>
-    `).join('');
-    document.querySelectorAll('[data-palier-min]').forEach(el => el.addEventListener('change', (e) => {
+    `).join('') + (categories.length ? '' : '<p class="form-hint">Aucune catégorie de salarié n\'est créée : créez « Cadre » et « Non cadre » dans Paramètres > Référentiels pour les proposer ici.</p>');
+    const majResume = () => { const el = document.getElementById('paliers-resume'); if (el) el.innerHTML = resumePaliers(); };
+    majResume();
+    document.querySelectorAll('[data-palier-min]').forEach(el => el.addEventListener('input', (e) => {
       currentPaliers[Number(e.target.dataset.palierMin)].ancienneteMin = Number(e.target.value) || 0;
+      majResume();
     }));
-    document.querySelectorAll('[data-palier-jours]').forEach(el => el.addEventListener('change', (e) => {
+    document.querySelectorAll('[data-palier-jours]').forEach(el => el.addEventListener('input', (e) => {
       currentPaliers[Number(e.target.dataset.palierJours)].jours = Number(e.target.value) || 0;
+      majResume();
+    }));
+    document.querySelectorAll('[data-palier-cat]').forEach(el => el.addEventListener('change', (e) => {
+      currentPaliers[Number(e.target.dataset.palierCat)].categorieSalarieId = e.target.value;
+      majResume();
     }));
     document.querySelectorAll('[data-remove-palier]').forEach(btn => btn.addEventListener('click', () => {
       currentPaliers.splice(Number(btn.dataset.removePalier), 1);
@@ -19313,7 +19419,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
     }));
   }
   document.getElementById('btn-add-palier').addEventListener('click', () => {
-    currentPaliers.push({ ancienneteMin: 0, jours: 0 });
+    currentPaliers.push({ ancienneteMin: 0, jours: 0, categorieSalarieId: '' });
     renderPaliersRows();
     updateAcquisitionUI();
   });
@@ -19458,6 +19564,13 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersA
 
   const acquisition = formData.get('acquisition');
   const paliersConfigures = paliersAnciennete.some(p => p.ancienneteMin || p.jours);
+  const clesPaliers = new Set();
+  for (const p of paliersAnciennete.filter(x => x.ancienneteMin || x.jours)) {
+    if (p.ancienneteMin < 0 || p.jours < 0) { showToast('Un palier ne peut pas avoir d\'ancienneté ni de jours négatifs.', 'error'); return; }
+    const cle = `${p.ancienneteMin}|${p.categorieSalarieId || ''}`;
+    if (clesPaliers.has(cle)) { showToast(`Deux paliers ont la même ancienneté (${p.ancienneteMin} an${p.ancienneteMin >= 2 ? 's' : ''}) pour la même catégorie : gardez-en un seul.`, 'error'); return; }
+    clesPaliers.add(cle);
+  }
   // #4 : Illimitée masque le champ mais un <input> masqué reste dans FormData — on force explicitement
   // à 0 plutôt que de conserver une valeur périmée qui n'a plus aucun effet sur le calcul mais
   // resterait trompeuse dans les exports/imports. §7.18 : même principe si des paliers d'ancienneté
@@ -19501,7 +19614,7 @@ function submitLeaveTypeForm(evt, id, categorie = 'conge', regles = [], paliersA
     ),
     compteurPartageAvecId: formData.get('compteurPartageAvecId') || null,
     regles: regles.filter(r => r.critere), // ligne ajoutée puis jamais configurée = ignorée plutôt que sauvegardée à moitié
-    paliersAnciennete: paliersAnciennete.filter(p => p.ancienneteMin || p.jours).sort((a, b) => a.ancienneteMin - b.ancienneteMin),
+    paliersAnciennete: paliersAnciennete.filter(p => p.ancienneteMin || p.jours).map(p => ({ ancienneteMin: p.ancienneteMin, jours: p.jours, categorieSalarieId: p.categorieSalarieId || '' })).sort((a, b) => a.ancienneteMin - b.ancienneteMin),
     dateClotureCompteur,
     reportCompteur,
     reportLimiteJours,

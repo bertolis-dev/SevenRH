@@ -103,6 +103,7 @@ globalThis.__calculateTicketsRestaurant = calculateTicketsRestaurant;
 globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
 globalThis.__getLeaveBalance = getLeaveBalance;
 globalThis.__calculateAcquisition = calculateAcquisition;
+globalThis.__resolveAncienneteAcquisAnnuel = resolveAncienneteAcquisAnnuel;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;
 globalThis.__makeEmptyContrat = makeEmptyContrat;
 globalThis.__MOTIFS_RECOURS_CDD = MOTIFS_RECOURS_CDD;
@@ -522,6 +523,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     calculerEcartRegularisationTickets: sandbox.__calculerEcartRegularisationTickets,
     getLeaveBalance: sandbox.__getLeaveBalance,
     calculateAcquisition: sandbox.__calculateAcquisition,
+    resolveAncienneteAcquisAnnuel: sandbox.__resolveAncienneteAcquisAnnuel,
     renderLeaveTypeRow: sandbox.__renderLeaveTypeRow,
     CHAMPS_FUSION_MODELE: sandbox.__CHAMPS_FUSION_MODELE,
     makeEmptyContrat: sandbox.__makeEmptyContrat,
