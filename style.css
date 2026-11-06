@@ -2159,6 +2159,12 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .absence-cal-bar-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; text-align: center; }
 .absence-cal-bar-edge { flex-shrink: 0; font-weight: 700; opacity: 0.9; }
+/* Demi-journée (06/11/2026) : case coupée en diagonale, la moitié pleine = la demi-journée posée,
+   l'autre moitié reste une case vide (bordure normale) — lisible sans survol. */
+.absence-cal-half-cell { border-color: var(--color-border) !important; }
+.absence-cal-bar-half { padding: 2px 3px; justify-content: flex-start; align-items: flex-start; }
+.absence-cal-half-apres-midi { justify-content: flex-end; align-items: flex-end; }
+.absence-cal-half-mark { font-size: 11px; font-weight: 700; line-height: 1; }
 .absence-cal-bar-telework { background: var(--color-primary); }
 .absence-cal-bar-pending { opacity: 0.55; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 6px, transparent 6px 12px); }
 

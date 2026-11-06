@@ -2475,13 +2475,16 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.06.3';
+const APP_VERSION = '2026.11.06.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
+      "Fiche salarié : un type d'absence décoché dans « Types d'absences autorisés » (ex. RTT pour un cadre à temps partiel) n'apparaît plus dans ses compteurs (sauf s'il a déjà des demandes dessus).",
+      "Import de l'historique : une ligne dont le salarié n'a pas de licence « Congés » est signalée dans l'aperçu (le serveur la refuserait). Le bandeau rouge de synchronisation explique maintenant la cause probable d'un refus de sécurité.",
       "Paliers d'ancienneté (types de congé) : chaque ligne s'écrit maintenant « à partir de X ans d'ancienneté, Y jours par an », avec un exemple, un résumé en direct et une case « Catégorie concernée » pour réserver un palier aux cadres ou aux non-cadres. Pratique pour les RTT : un seul type RTT, avec un nombre de jours par an différent selon la catégorie.",
       "Import de l'historique : les demi-journées sont gérées précisément. Une colonne « Demi-journée » (Matin ou Après-midi pour un seul jour), « Demi-journée début / fin » pour une période, et une colonne « Nombre de jours » qui sert de contrôle : si elle ne correspond pas au calcul, la ligne est refusée avec l'explication au lieu d'être comptée en journée entière. Une colonne de demi-journée non reconnue bloque l'import. Le modèle à télécharger contient des exemples et une feuille d'aide.",
       "Congés : nouveau bouton « Supprimer » sur chaque demande (pour les RH et le propriétaire), pour retirer une erreur de saisie, un doublon ou une ligne importée par erreur. « Annuler » et « Régulariser » restent disponibles.",
@@ -3251,6 +3254,16 @@ function openForcedPasswordChangeModal() {
  * DB._syncFailureCount (un simple compteur en mémoire, jamais vraiment rejoué). Le bouton
  * "Réessayer" appelle DB.retryPendingSyncNow directement — même mécanisme que la reprise
  * automatique au chargement/à la reconnexion (voir bindGlobalEvents). */
+/** Traduit un refus de sécurité du serveur (RLS) en cause probable, pour qu'on sache quoi faire sans lire du jargon technique. */
+function explicationRefusSynchro(message) {
+  const texte = String(message || '');
+  if (!/row-level security/i.test(texte)) return '';
+  if (/leave_requests/.test(texte)) {
+    return "Cause probable : le serveur refuse d'enregistrer des congés pour un salarié qui n'a pas de licence « Congés » (Abonnement > Gérer les accès), ou que vous n'avez pas le droit de saisir. Attribuez la licence, puis « Réessayer maintenant ».";
+  }
+  return "Le serveur a refusé cette modification pour des raisons de droits. Vérifiez vos droits sur cette donnée, puis « Réessayer maintenant ».";
+}
+
 function renderSyncFailureBanner() {
   const banner = document.getElementById('sync-failure-banner');
   if (!banner) return;
@@ -3272,6 +3285,7 @@ function renderSyncFailureBanner() {
     <div>
       <span>${icon(ICONS.warningTriangle, 14)} ${count} modification${count > 1 ? 's' : ''} non synchronisée${count > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
       ${firstError ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">Détail : ${escapeHtml(firstError)}</div>` : ''}
+      ${explicationRefusSynchro(firstError) ? `<div style="font-size: 12px; margin-top: 4px;">${escapeHtml(explicationRefusSynchro(firstError))}</div>` : ''}
     </div>
     <button type="button" class="btn btn-sm" id="btn-retry-sync">Réessayer maintenant</button>
   `;
@@ -11189,6 +11203,8 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
     else if (!typeValue) { status = 'error'; message = 'Type de congé manquant.'; }
     else if (!type) { status = 'error'; message = `Type "${typeValue}" introuvable parmi les types existants.`; }
+    // Le serveur refuse tout congé d'un salarié sans licence « Congés » (offre à la carte) : on le dit ici, avant l'envoi, au lieu de laisser l'import échouer en silence.
+    else if (!hasModuleLicense(employee, 'conges')) { status = 'error'; message = 'Ce salarié n\'a pas de licence « Congés » (Abonnement > Gérer les accès) : le serveur refuserait l\'enregistrement.'; }
     else if (!dateDebut) { status = 'error'; message = 'Date de début manquante ou invalide.'; }
     else if (dateFinRaw && !dateFinParsed) { status = 'error'; message = 'Date de fin invalide (format non reconnu).'; }
     else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
@@ -16448,10 +16464,16 @@ function renderEmployeeBalances(employee, canAdjust = false) {
   // Liste complète (pas seulement les types actifs/visibles ci-dessous) : getLeaveBalance en a besoin
   // pour retrouver les types "deduireRTT/CP" même désactivés depuis, sans re-fetch à chaque type.
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
-  const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie);
+  const requests = leaveRepository.getAll();
+  // §retour Betty du 06/11/2026 : un type décoché dans « Types d'absences autorisés » de la fiche
+  // (typesAbsenceDesactives) ne doit plus apparaître dans les compteurs du salarié — sinon on voit un
+  // solde (ex. RTT) que la personne n'a pas le droit de demander. Exception : si elle a déjà des
+  // demandes sur ce type, on le garde, pour ne jamais cacher un historique réel.
+  const desactives = new Set(employee.typesAbsenceDesactives || []);
+  const aDesDemandes = (t) => requests.some(r => r.employeeId === employee.id && r.typeId === t.id);
+  const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie && !(desactives.has(t.id) && !aDesDemandes(t)));
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
-  const requests = leaveRepository.getAll();
   return `
     <div class="balance-grid">
       ${types.map(t => {
@@ -20092,7 +20114,31 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
       const titleSuffix = multiDay
         ? `, du ${startDay}${startHalf ? ` (${halfDayLabel(startHalf)})` : ''} au ${endDay}${endHalf ? ` (${halfDayLabel(endHalf)})` : ''}`
         : startHalf ? `, ${halfDayLabel(startHalf)}` : '';
-      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pending ? ' absence-cal-bar-pending' : ''}" style="background:${escapeHtml(type ? type.couleur : 'var(--color-text-muted)')}" title="${escapeHtml(type ? type.nom : 'Congé')}${escapeHtml(titleSuffix)}${pending ? ' (en attente)' : ''}">
+      // §demande Betty du 06/11/2026 : une demi-journée doit se voir au premier coup d'œil — la case
+      // est coupée en deux par la diagonale (matin = triangle en haut à gauche, après-midi = triangle
+      // en bas à droite). Sur une période, seule l'extrémité concernée est taillée en biais (début
+      // l'après-midi = bord gauche oblique, fin le matin = bord droit oblique).
+      const couleurFond = escapeHtml(type ? type.couleur : 'var(--color-text-muted)');
+      const titre = `${escapeHtml(type ? type.nom : 'Congé')}${escapeHtml(titleSuffix)}${pending ? ' (en attente)' : ''}`;
+      const pendingCls = pending ? ' absence-cal-bar-pending' : '';
+      if (!multiDay && startHalf) {
+        const clip = startHalf === 'matin' ? 'polygon(0 0, 100% 0, 0 100%)' : 'polygon(100% 0, 100% 100%, 0 100%)';
+        return `<td class="absence-cal-bar-cell absence-cal-half-cell"><div class="absence-cal-bar absence-cal-bar-half absence-cal-half-${startHalf === 'matin' ? 'matin' : 'apres-midi'}${pendingCls}" style="background:${couleurFond};clip-path:${clip}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}"><span class="absence-cal-half-mark" aria-label="${escapeHtml(label)}">½</span></div></td>`;
+      }
+      const largeurJour = 100 / seg.days.length;
+      const biais = multiDay && (startHalf === 'apres-midi' || endHalf === 'matin');
+      let clipPeriode = '';
+      let paddings = '';
+      if (biais) {
+        const pct = n => `${Math.round(n * 100) / 100}%`;
+        const hautGauche = startHalf === 'apres-midi' ? `${pct(largeurJour)} 0` : '0 0';
+        const basDroite = endHalf === 'matin' ? `${pct(100 - largeurJour)} 100%` : '100% 100%';
+        clipPeriode = `clip-path:polygon(${hautGauche}, 100% 0, ${basDroite}, 0 100%);`;
+        // Les quantièmes d'extrémité restent dans la partie pleine, pas sous le biseau.
+        if (startHalf === 'apres-midi') paddings += `padding-left:calc(${pct(largeurJour / 2)} + 4px);`;
+        if (endHalf === 'matin') paddings += `padding-right:calc(${pct(largeurJour / 2)} + 4px);`;
+      }
+      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pendingCls}" style="background:${couleurFond};${clipPeriode}${paddings}" title="${titre}">
         ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}${startHalf ? '<sup>½</sup>' : ''}</span>` : ''}
         <span class="absence-cal-bar-label">${escapeHtml(label)}</span>
         ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}${endHalf ? '<sup>½</sup>' : ''}</span>` : ''}
