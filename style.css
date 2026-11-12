@@ -1915,6 +1915,9 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .planning-shift-leave { background: var(--color-success-soft); }
 .planning-shift-remote { background: var(--color-primary-soft); }
+/* Demi-journée de congé : case coupée en diagonale, moitié colorée = la demi-journée posée. */
+.planning-shift-leave.planning-shift-half-matin { background: linear-gradient(to bottom right, var(--color-success-soft) 50%, var(--color-surface) 50%); }
+.planning-shift-leave.planning-shift-half-apres-midi { background: linear-gradient(to bottom right, var(--color-surface) 50%, var(--color-success-soft) 50%); }
 .planning-shift-office { background: var(--color-info-soft); }
 .planning-shift-pending { opacity: 0.6; }
 /* Repos hebdomadaire (§retour du 10/09/2026) : même case pleine que les autres statuts (tous

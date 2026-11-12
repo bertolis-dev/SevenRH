@@ -352,6 +352,7 @@ globalThis.__getStatusForDate = getStatusForDate;
 globalThis.__getHalfDayForDate = getHalfDayForDate;
 globalThis.__computeAbsenceCalendarSegments = computeAbsenceCalendarSegments;
 globalThis.__renderAbsenceCalendarRow = renderAbsenceCalendarRow;
+globalThis.__renderPlanningStatusCell = renderPlanningStatusCell;
 globalThis.__renderAbsenceCalendarBoard = renderAbsenceCalendarBoard;
 globalThis.__leaveTypeRepository = leaveTypeRepository;
 globalThis.__openLeaveRequestModal = openLeaveRequestModal;
@@ -820,6 +821,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getHalfDayForDate: sandbox.__getHalfDayForDate,
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,
     renderAbsenceCalendarRow: sandbox.__renderAbsenceCalendarRow,
+    renderPlanningStatusCell: sandbox.__renderPlanningStatusCell,
     renderAbsenceCalendarBoard: sandbox.__renderAbsenceCalendarBoard,
     leaveTypeRepository: sandbox.__leaveTypeRepository,
     openLeaveRequestModal: sandbox.__openLeaveRequestModal,

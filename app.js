@@ -2475,7 +2475,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.06.4';
+const APP_VERSION = '2026.11.12.1';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2483,6 +2483,7 @@ const CHANGELOG_ENTRIES = [
     version: APP_VERSION,
     items: [
       "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
+      "Planning : une demi-journée de congé est aussi coupée en diagonale (matin ou après-midi), en vue semaine comme en vue mois.",
       "Fiche salarié : un type d'absence décoché dans « Types d'absences autorisés » (ex. RTT pour un cadre à temps partiel) n'apparaît plus dans ses compteurs (sauf s'il a déjà des demandes dessus).",
       "Import de l'historique : une ligne dont le salarié n'a pas de licence « Congés » est signalée dans l'aperçu (le serveur la refuserait). Le bandeau rouge de synchronisation explique maintenant la cause probable d'un refus de sécurité.",
       "Paliers d'ancienneté (types de congé) : chaque ligne s'écrit maintenant « à partir de X ans d'ancienneté, Y jours par an », avec un exemple, un résumé en direct et une case « Catégorie concernée » pour réserver un palier aux cadres ou aux non-cadres. Pratique pour les RTT : un seul type RTT, avec un nombre de jours par an différent selon la catégorie.",
@@ -24611,7 +24612,7 @@ function getStatusForDate(employee, dateStr, leaveRequests, teleworkRequests) {
     const pending = onLeave.statut !== 'Validé';
     const halfDay = getHalfDayForDate(onLeave, dateStr);
     const halfDaySuffix = halfDay ? ` (${halfDay === 'matin' ? 'matin' : 'après-midi'})` : '';
-    return { icon: type ? type.icone : ICONS.sun, level: 'leave', title: `${type ? type.nom : 'Congé'}${halfDaySuffix}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave' };
+    return { icon: type ? type.icone : ICONS.sun, level: 'leave', title: `${type ? type.nom : 'Congé'}${halfDaySuffix}${pending ? ' (en attente)' : ''}`, pending, requestId: onLeave.id, requestType: 'leave', halfDay };
   }
 
   const onTelework = teleworkRequests.find(r => r.employeeId === employee.id && dateStr >= r.dateDebut && dateStr <= r.dateFin);
@@ -24771,14 +24772,16 @@ function renderPlanningStatusCell(employee, dateStr, leaveRequests, teleworkRequ
   // détail matin/après-midi complet reste disponible au survol (title), jamais perdu.
   const subtext = showHoraires && (status.level === 'office' || status.level === 'remote') ? formatHorairesRangeCourt(employee) : '';
   const subtextTitle = subtext ? ` title="${escapeHtml(formatHorairesRange(employee))}"` : '';
+  // Demi-journée de congé : la case est coupée en diagonale (matin = moitié haut-gauche colorée, après-midi = moitié bas-droite).
+  const demiClasse = status.halfDay ? ` planning-shift-half-${status.halfDay === 'matin' ? 'matin' : 'apres-midi'}` : '';
   const card = showHoraires ? `
-    <div class="planning-shift-card planning-shift-${status.level}${status.pending ? ' planning-shift-pending' : ''}">
+    <div class="planning-shift-card planning-shift-${status.level}${demiClasse}${status.pending ? ' planning-shift-pending' : ''}">
       <div class="planning-shift-caption">${escapeHtml(status.title)}</div>
       ${subtext ? `<div class="planning-shift-subtext"${subtextTitle}>${escapeHtml(subtext)}</div>` : ''}
       <span class="planning-shift-corner-icon">${escapeIcon(status.icon)}</span>
     </div>
   ` : `
-    <div class="planning-shift-card planning-shift-${status.level} planning-shift-icon-only${status.pending ? ' planning-shift-pending' : ''}">
+    <div class="planning-shift-card planning-shift-${status.level}${demiClasse} planning-shift-icon-only${status.pending ? ' planning-shift-pending' : ''}">
       <div class="planning-shift-icon">${escapeIcon(status.icon)}</div>
     </div>
   `;

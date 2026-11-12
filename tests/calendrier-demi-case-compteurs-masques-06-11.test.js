@@ -84,3 +84,20 @@ run();
   }
   console.log('OK — licence Congés signalée à l\'aperçu d\'import, bandeau explicatif');
 })();
+
+// --- Planning : demi-journée en diagonale ---
+(function planningDemiJournee() {
+  const api = setup();
+  const e = api.DB.getEmployees()[0];
+  const cp = api.DB.getLeaveTypes().find(t => /congés payés/i.test(t.nom));
+  const jour = '2026-09-14'; // lundi
+  e.joursTravailles = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven'];
+  const req = (extra) => [{ id: 'p', employeeId: e.id, typeId: cp.id, dateDebut: jour, dateFin: jour, statut: 'Validé', ...extra }];
+  const m = api.renderPlanningStatusCell(e, jour, req({ demiJournee: 'matin' }), [], true);
+  const a = api.renderPlanningStatusCell(e, jour, req({ demiJournee: 'apres-midi' }), [], false);
+  const p = api.renderPlanningStatusCell(e, jour, req({}), [], true);
+  assert.ok(m.includes('planning-shift-half-matin'), 'matin : classe diagonale');
+  assert.ok(a.includes('planning-shift-half-apres-midi'), 'après-midi : classe diagonale (vue Mois comprise)');
+  assert.ok(!p.includes('planning-shift-half'), 'journée entière : aucune diagonale');
+  console.log('OK — planning : demi-journée en diagonale');
+})();
