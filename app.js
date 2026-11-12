@@ -541,6 +541,8 @@ const NAV_ITEMS = [
   // renderSidebar). Même patron que Planning/Calendrier (2 entrées, même clé, navParams différents,
   // voir isNavItemActive) plutôt qu'un nouvel écran.
   { key: 'absences', label: 'Congés à valider', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: ['conges', 'planning'], navParams: NAVPARAMS_CONGES_A_VALIDER },
+  // Retour du 05/11/2026 (n° 12 de la Revue Nexus) : le calendrier de l'équipe/de l'entreprise doit s'ouvrir directement depuis la section Équipe, sans repasser par Personnel (qui s'ouvre sur la vue personnelle). Même clé que l'entrée Personnel, navParams différent (voir isNavItemActive).
+  { key: 'calendrier', label: 'Calendrier', icon: ICONS.calendar, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', navParams: { calendrierVue: 'entreprise' }, module: 'conges' },
   // §retour Betty du 23/09/2026 : volet gestion de "Entretiens" (planifier/lancer une campagne/voir
   // l'équipe), voir le commentaire de "Mes entretiens" (Personnel) ci-dessus pour le détail du
   // découpage. Même clé qu'avant ('entretiens') : aucune autre référence (render(), module-gating,
@@ -2475,13 +2477,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.12.3';
+const APP_VERSION = '2026.11.12.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Menu de gauche : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus (mémorisé sur votre appareil) ; « Calendrier » est aussi dans la section Équipe pour consulter les absences de l'équipe directement ; chaque espace (Personnel, Équipe, Paramètres) a sa couleur (liseré en haut, fond légèrement teinté) pour savoir où l'on est.",
+      "Calendrier de l'équipe : lignes resserrées (le nom ne passe plus à la ligne) pour voir davantage de salariés sans ascenseur vertical.",
       "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
       "Imports des salariés et des soldes initiaux : nouveau bouton « Télécharger le modèle » (colonnes déjà nommées, feuille d'aide ; le modèle des soldes liste déjà vos salariés avec leur matricule). Les lignes du modèle sans aucun solde sont ignorées sans erreur.",
       "Imports par fichier CSV : correction de trois erreurs silencieuses de lecture (jour et mois inversés pour les dates comme 03/08/2026, décimales françaises lues de travers comme « 12,5 » devenant 125, accents abîmés). Les fichiers Excel (.xlsx) n'étaient pas concernés.",
@@ -7895,6 +7899,41 @@ function isNavItemActive(item, allItems) {
 
 const MOBILE_NAV_QUERY = window.matchMedia('(max-width: 860px)');
 
+const CLE_STOCKAGE_SECTIONS_REPLIEES = 'nexusMenuSectionsReplieesV1';
+
+/** Sections du menu de gauche repliées par cet utilisateur sur cet appareil (simple confort d'affichage, jamais une donnée métier). */
+function sectionsMenuReplieesLire() {
+  try {
+    const brut = JSON.parse(window.localStorage.getItem(CLE_STOCKAGE_SECTIONS_REPLIEES) || '[]');
+    return new Set(Array.isArray(brut) ? brut.filter(c => c === 'personnel' || c === 'equipe') : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function sectionsMenuReplieesEcrire(ensemble) {
+  try { window.localStorage.setItem(CLE_STOCKAGE_SECTIONS_REPLIEES, JSON.stringify([...ensemble])); } catch (err) { /* stockage indisponible : le repli ne survit simplement pas au rechargement */ }
+}
+
+/** Retour du 05/11/2026 (n° 17 de la Revue Nexus) : dans quel « espace » se trouve l'utilisateur — 'personnel', 'equipe' ou 'parametres'
+ * (null sur l'Accueil, volontairement neutre). Sert à colorer différemment chacun des trois espaces (voir style.css, [data-espace]). */
+function espaceCourant() {
+  const vue = state.view;
+  if (vue === 'parametres' || vue === 'abonnement') return 'parametres';
+  const user = authRepository.getCurrentUser();
+  if (!user) return null;
+  const items = navItemsForRole(user);
+  const cle = DETAIL_VIEW_NAV_KEY[vue] || vue;
+  const actif = items.find(i => i.key === cle && i.group && isNavItemActive(i, items)) || items.find(i => i.key === cle && i.group);
+  return actif ? actif.group : null;
+}
+
+function appliquerEspaceCourant() {
+  const espace = espaceCourant();
+  if (espace) document.documentElement.setAttribute('data-espace', espace);
+  else document.documentElement.removeAttribute('data-espace');
+}
+
 function renderSidebar() {
   const user = authRepository.getCurrentUser();
   if (!user) return;
@@ -7944,12 +7983,20 @@ function renderSidebar() {
     const personnel = scrollable.filter(x => x.item.group === 'personnel');
     const equipe = scrollable.filter(x => x.item.group === 'equipe');
     const reste = scrollable.filter(x => !x.item.group && x.item.key !== 'dashboard');
+    // Retour du 05/11/2026 (n° 15 de la Revue Nexus) : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus.
+    // Replié, la section garde visible l'entrée de l'écran courant (on ne perd jamais « où on est »).
+    const replies = sectionsMenuReplieesLire();
+    const sectionHtml = (cle, libelle, entrees) => {
+      const replie = replies.has(cle);
+      const courante = entrees.find(x => isNavItemActive(x.item, items));
+      const visibles = replie ? (courante ? [courante] : []) : entrees;
+      return `<button type="button" class="nav-section-label nav-section-toggle" data-nav-section="${cle}" data-espace="${cle}" aria-expanded="${replie ? 'false' : 'true'}"><span>${libelle}</span><span class="nav-section-chevron" aria-hidden="true"></span></button>` +
+        visibles.map(x => renderItem(x.item, x.index)).join('');
+    };
     scrollableHtml =
       dashboard.map(x => renderItem(x.item, x.index)).join('') +
-      '<div class="nav-section-label">Personnel</div>' +
-      personnel.map(x => renderItem(x.item, x.index)).join('') +
-      '<div class="nav-section-label">Équipe</div>' +
-      equipe.map(x => renderItem(x.item, x.index)).join('') +
+      sectionHtml('personnel', 'Personnel', personnel) +
+      sectionHtml('equipe', 'Équipe', equipe) +
       reste.map(x => renderItem(x.item, x.index)).join('');
   } else {
     scrollableHtml = scrollable.map(x => renderItem(x.item, x.index)).join('');
@@ -7962,6 +8009,22 @@ function renderSidebar() {
     nav.innerHTML = scrollableHtml;
     pinnedNav.innerHTML = pinnedHtml;
   }
+
+  nav.querySelectorAll('.nav-section-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const replies = sectionsMenuReplieesLire();
+      const cle = btn.dataset.navSection;
+      if (replies.has(cle)) replies.delete(cle); else replies.add(cle);
+      sectionsMenuReplieesEcrire(replies);
+      // Sur téléphone, renderSidebar() referme le panneau ☰ : on le rouvre, l'utilisateur est en train de s'en servir.
+      const etaitOuvert = nav.classList.contains('open');
+      renderSidebar();
+      if (etaitOuvert) {
+        nav.classList.add('open');
+        document.getElementById('btn-mobile-nav-toggle')?.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
 
   [nav, pinnedNav].forEach(container => {
     container.querySelectorAll('.nav-item').forEach(btn => {
@@ -8026,6 +8089,7 @@ function isViewBlockedForCurrentUser(view) {
 function render() {
   try {
     renderInner();
+    appliquerEspaceCourant();
     updateHelpButtonVisibility();
     insertScreenTip();
     hydrateAvatarImages();

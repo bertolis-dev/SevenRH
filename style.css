@@ -243,6 +243,43 @@ p { margin: 0; line-height: 1.5; }
   opacity: 0.85;
 }
 .nav-section-label:first-child { padding-top: 4px; }
+
+/* Revue Nexus n° 15 : « Personnel » / « Équipe » sont des boutons qui replient leurs sous-menus. */
+button.nav-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 8px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft); }
+.nav-section-chevron {
+  width: 7px; height: 7px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform 0.15s ease; margin-right: 4px;
+}
+.nav-section-toggle[aria-expanded="false"] .nav-section-chevron { transform: rotate(-45deg); }
+
+/* Revue Nexus n° 17 : chaque espace (Personnel, Équipe, Paramètres) a sa couleur — repère dans le menu, liseré en haut, fond légèrement teinté. */
+:root { --espace-personnel: #3b6fd1; --espace-equipe: #0f9d78; --espace-parametres: #7a5cc7; }
+.nav-section-toggle[data-espace="personnel"] { box-shadow: inset 3px 0 0 var(--espace-personnel); }
+.nav-section-toggle[data-espace="equipe"] { box-shadow: inset 3px 0 0 var(--espace-equipe); }
+:root[data-espace="personnel"] { --espace-accent: var(--espace-personnel); }
+:root[data-espace="equipe"] { --espace-accent: var(--espace-equipe); }
+:root[data-espace="parametres"] { --espace-accent: var(--espace-parametres); }
+:root[data-espace] #main-column { background: color-mix(in srgb, var(--espace-accent) 6%, var(--color-bg)); }
+:root[data-espace] #topbar { border-top: 4px solid var(--espace-accent); }
+:root[data-espace] #view-root > .view-header:first-child h1::before {
+  content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 10px;
+  border-radius: 50%; background: var(--espace-accent); vertical-align: middle;
+}
 .nav-item.disabled { opacity: 0.6; }
 
 /* §retour du 21/08/2026 : marine/or gardés comme base de la charte plutôt qu'une couleur différente
@@ -2133,8 +2170,11 @@ textarea.input { resize: vertical; font-family: inherit; }
    d'un cran (8px 6px/34px → 6px 4px/26px) — juste assez pour resserrer la grille, sans revenir à la
    bordure collapsée quasi invisible du tout premier essai. */
 .absence-cal-table { border-collapse: separate; border-spacing: 2px; }
-.absence-cal-table th, .absence-cal-table td { padding: 6px 4px; min-width: 26px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
-.absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 12px 18px; min-width: 0; }
+.absence-cal-table th, .absence-cal-table td { padding: 3px 3px; min-width: 26px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+/* Revue Nexus n° 13 : calendrier affiché en entier, sans ascenseur vertical. Le nom ne passe plus à la ligne (une ligne de salarié
+   faisait jusqu'à 100 px de haut) et les titres de service sont resserrés. */
+.absence-cal-table th:first-child, .absence-cal-table td:first-child { padding: 3px 12px; min-width: 0; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.absence-cal-table .planning-service-header td { padding: 5px 14px; max-width: none; }
 .absence-cal-table th.weekend, .absence-cal-cell.weekend { background: var(--color-muted-soft); }
 .absence-cal-table th.today { color: var(--color-primary-text); font-weight: 700; }
 .absence-cal-cell.today { box-shadow: inset 0 0 0 1px var(--color-primary-soft); }
