@@ -452,6 +452,11 @@ globalThis.__carriereUrlForCompany = carriereUrlForCompany;
 globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
 globalThis.__guessAbsencesColumnMapping = guessAbsencesColumnMapping;
 globalThis.__lireTableurEnLignes = lireTableurEnLignes;
+globalThis.__guessEmployeeColumnMapping = guessEmployeeColumnMapping;
+globalThis.__guessSoldesColumnMapping = guessSoldesColumnMapping;
+globalThis.__buildSoldesPreviewRows = buildSoldesPreviewRows;
+globalThis.__buildSoldesImportTemplateWorkbook = buildSoldesImportTemplateWorkbook;
+globalThis.__buildEmployeesImportTemplateWorkbook = buildEmployeesImportTemplateWorkbook;
 globalThis.__buildAbsencesPreviewRows = buildAbsencesPreviewRows;
 globalThis.__importAbsencesRows = importAbsencesRows;
 globalThis.__employeeFieldForRequest = employeeFieldForRequest;
@@ -824,6 +829,11 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderAbsenceCalendarRow: sandbox.__renderAbsenceCalendarRow,
     renderPlanningStatusCell: sandbox.__renderPlanningStatusCell,
     lireTableurEnLignes: sandbox.__lireTableurEnLignes,
+    guessEmployeeColumnMapping: sandbox.__guessEmployeeColumnMapping,
+    guessSoldesColumnMapping: sandbox.__guessSoldesColumnMapping,
+    buildSoldesPreviewRows: sandbox.__buildSoldesPreviewRows,
+    buildSoldesImportTemplateWorkbook: sandbox.__buildSoldesImportTemplateWorkbook,
+    buildEmployeesImportTemplateWorkbook: sandbox.__buildEmployeesImportTemplateWorkbook,
     renderAbsenceCalendarBoard: sandbox.__renderAbsenceCalendarBoard,
     leaveTypeRepository: sandbox.__leaveTypeRepository,
     openLeaveRequestModal: sandbox.__openLeaveRequestModal,

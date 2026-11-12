@@ -2475,7 +2475,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.12.2';
+const APP_VERSION = '2026.11.12.3';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2483,6 +2483,7 @@ const CHANGELOG_ENTRIES = [
     version: APP_VERSION,
     items: [
       "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
+      "Imports des salariés et des soldes initiaux : nouveau bouton « Télécharger le modèle » (colonnes déjà nommées, feuille d'aide ; le modèle des soldes liste déjà vos salariés avec leur matricule). Les lignes du modèle sans aucun solde sont ignorées sans erreur.",
       "Imports par fichier CSV : correction de trois erreurs silencieuses de lecture (jour et mois inversés pour les dates comme 03/08/2026, décimales françaises lues de travers comme « 12,5 » devenant 125, accents abîmés). Les fichiers Excel (.xlsx) n'étaient pas concernés.",
       "Planning : une demi-journée de congé est aussi coupée en diagonale (matin ou après-midi), en vue semaine comme en vue mois.",
       "Fiche salarié : un type d'absence décoché dans « Types d'absences autorisés » (ex. RTT pour un cadre à temps partiel) n'apparaît plus dans ses compteurs (sauf s'il a déjà des demandes dessus).",
@@ -10990,6 +10991,57 @@ function importSoldesRows(previewRows) {
   return results;
 }
 
+/** Modèle téléchargeable de l'import des soldes initiaux : un salarié par ligne (matricule déjà rempli), une colonne par type de congé à solde chiffré, nommée exactement comme
+ * le type (c'est ce qui permet de la reconnaître à l'import). Les cases de solde sont vides : on ne remplit que ce qu'on veut régler. */
+function buildSoldesImportTemplateWorkbook() {
+  const employees = employeeRepository.getAll().filter(e => !e.archive).slice().sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`));
+  const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === 'conge' && t.actif && !t.illimite && t.acquisition !== 'Illimitée');
+  const modeleRows = employees.map(e => [e.matricule || '', ...types.map(() => '')]);
+  const aideRows = [
+    ['Matricule', 'Déjà rempli pour chaque salarié actif. Une colonne « Email » est acceptée à la place. Ne modifiez pas les matricules.'],
+    ['Une colonne par type de congé', `Le nom de la colonne doit rester EXACTEMENT celui du type (${types.map(t => t.nom).join(', ') || 'aucun type à solde chiffré'}). Une colonne renommée est ignorée, l'aperçu vous le signale.`],
+    ['Que mettre dans les cases ?', 'Un nombre de jours : 12,5 ou 12.5 (jamais « 12j »). Selon le choix fait à l\'écran d\'import, c\'est soit le solde à avoir aujourd\'hui (recommandé), soit des jours à ajouter ou retirer (négatif pour retirer).'],
+    ['Case vide', 'Rien n\'est modifié pour ce type et ce salarié.'],
+    ['Salarié sans aucun solde à régler', 'Laissez ses cases vides : sa ligne est ignorée à l\'import, sans erreur.'],
+    ['Types illimités', 'Maladie, sans solde, etc. n\'ont pas de solde chiffré : ils n\'ont pas de colonne.']
+  ];
+  return buildMultiSheetExcelXmlWorkbook([
+    { name: 'Modèle', headers: ['Matricule', ...types.map(t => t.nom)], rows: modeleRows },
+    { name: 'Aide', headers: ['Colonne', 'Ce qu\'il faut écrire'], rows: aideRows }
+  ]);
+}
+
+/** Modèle téléchargeable de l'import des salariés : uniquement les en-têtes (aucune ligne d'exemple, qui serait créée comme un vrai salarié si on l'oubliait), une feuille d'aide
+ * avec un exemple écrit en texte, et les services / types de contrat de l'entreprise en référence. */
+function buildEmployeesImportTemplateWorkbook() {
+  const settings = settingsRepository.getSettings();
+  const typesContrat = settings.typesContrat || ['CDI', 'CDD'];
+  const services = serviceRepository.getAll();
+  const aideRows = [
+    ['Matricule', 'Facultatif. Pris en compte seulement si vous cochez « Conserver les matricules du fichier » ; sinon il est attribué automatiquement (recommandé).'],
+    ['Nom', 'Obligatoire.'],
+    ['Prénom', 'Obligatoire.'],
+    ['Email', 'Obligatoire, unique : un email déjà utilisé par un salarié est ignoré (pas de doublon).'],
+    ['Téléphone', 'Facultatif.'],
+    ['Poste / Service / Équipe', 'Facultatifs. Écrivez le service et l\'équipe comme dans l\'onglet « Services » du présent fichier.'],
+    ['Type de contrat', `Facultatif (CDI par défaut). Valeurs de votre entreprise : ${typesContrat.join(', ')}.`],
+    ['Date d\'embauche', 'Obligatoire, au format JJ/MM/AAAA (ex. 03/09/2025).'],
+    ['Date de naissance', 'Facultatif, au format JJ/MM/AAAA.'],
+    ['Exemple (écrit en texte, à ne pas copier tel quel)', 'DURAND ; Léa ; lea.durand@exemple.fr ; 06 12 34 56 78 ; Comptable ; Compta ; ; CDI ; 03/09/2025 ; 14/05/1990'],
+    ['Enregistrement', 'Enregistrez en .xlsx (ou en CSV, séparateur point-virgule), puis revenez sur l\'écran d\'import : un aperçu ligne par ligne s\'affiche avant toute création.']
+  ];
+  const servicesRows = [];
+  services.forEach(s => {
+    const equipes = (s.equipes || []).map(eq => eq.nom);
+    if (equipes.length) equipes.forEach(eq => servicesRows.push([s.nom, eq])); else servicesRows.push([s.nom, '']);
+  });
+  return buildMultiSheetExcelXmlWorkbook([
+    { name: 'Modèle', headers: ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Date de naissance'], rows: [] },
+    { name: 'Aide', headers: ['Colonne', 'Ce qu\'il faut écrire'], rows: aideRows },
+    { name: 'Services', headers: ['Service', 'Équipe'], rows: servicesRows }
+  ]);
+}
+
 function openImportSoldesInitiauxModal() {
   loadXLSXLibrary().catch(() => {});
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
@@ -11000,7 +11052,11 @@ function openImportSoldesInitiauxModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Une colonne d'identification (Matricule ou Email) + une colonne par type de congé, nommée comme le type (ex. « Congés payés », « RTT » ; les espaces en trop ne gênent pas).</p>
+        <p class="text-muted">Fichier Excel (.xlsx) ou CSV. Une colonne d'identification (Matricule ou Email) + une colonne par type de congé, nommée comme le type (ex. « Congés payés », « RTT » ; les espaces en trop ne gênent pas).</p>
+        <div class="card" style="padding: 14px; margin-bottom: 14px;">
+          <button type="button" class="btn btn-secondary" id="btn-telecharger-modele-import">Télécharger le modèle</button>
+          <p class="form-hint" style="margin-top: 8px; margin-bottom: 0;">Un salarié par ligne (matricule déjà rempli) et une colonne par type de congé à solde chiffré, déjà nommée comme il faut : il ne reste qu'à saisir les nombres de jours.</p>
+        </div>
         <fieldset style="border: 1px solid var(--border-color, #e5e7eb); border-radius: 6px; padding: 10px 14px; margin: 12px 0;">
           <legend style="font-size: 13px; padding: 0 6px;">Que représentent les chiffres du fichier ?</legend>
           <label style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px;">
@@ -11026,11 +11082,22 @@ function openImportSoldesInitiauxModal() {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-telecharger-modele-import').addEventListener('click', () => {
+    downloadExcelXmlFile(buildSoldesImportTemplateWorkbook(), 'modele-import-soldes.xls');
+  });
 
   let currentPreview = [];
   let lastDataRows = null;
   let lastMapping = null;
   const modeSoldesChoisi = () => (document.getElementById('f-mode-soldes-ajustement').checked ? 'ajustement' : 'cible');
+  let lignesVidesIgnorees = 0;
+  const afficherApercuSoldes = () => {
+    renderSoldesPreview(currentPreview, lastMapping);
+    if (lignesVidesIgnorees) {
+      const zone = document.getElementById('import-preview-zone');
+      zone.insertAdjacentHTML('afterbegin', `<p class="text-muted" style="margin-bottom: 8px;">${lignesVidesIgnorees} ligne${lignesVidesIgnorees > 1 ? 's' : ''} sans aucun solde renseigné ${lignesVidesIgnorees > 1 ? 'ont été ignorées' : 'a été ignorée'}.</p>`);
+    }
+  };
 
   document.getElementById('f-import-file').addEventListener('change', (evt) => {
     const file = evt.target.files[0];
@@ -11065,10 +11132,17 @@ function openImportSoldesInitiauxModal() {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucune colonne reconnue comme un type de congé existant (${leaveTypes.map(t => `« ${escapeHtml(t.nom)} »`).join(', ')}).</p>`;
         return;
       }
-      lastDataRows = dataRows;
+      // Le modèle contient tous les salariés : ceux dont on ne règle aucun solde (cases vides) sont écartés sans bruit, pas comptés comme des erreurs.
+      const avecSolde = dataRows.filter(r => r.some((c, i) => i !== mapping.identifiant.index && String(c == null ? '' : c).trim() !== ''));
+      lignesVidesIgnorees = dataRows.length - avecSolde.length;
+      if (!avecSolde.length) {
+        document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Aucun solde renseigné dans le fichier : saisissez au moins un nombre de jours.</p>`;
+        return;
+      }
+      lastDataRows = avecSolde;
       lastMapping = mapping;
-      currentPreview = buildSoldesPreviewRows(dataRows, mapping, modeSoldesChoisi());
-      renderSoldesPreview(currentPreview, mapping);
+      currentPreview = buildSoldesPreviewRows(avecSolde, mapping, modeSoldesChoisi());
+      afficherApercuSoldes();
     };
     reader.readAsArrayBuffer(file);
   });
@@ -11077,7 +11151,7 @@ function openImportSoldesInitiauxModal() {
   document.querySelectorAll('input[name="mode-soldes"]').forEach(radio => radio.addEventListener('change', () => {
     if (!lastDataRows) return;
     currentPreview = buildSoldesPreviewRows(lastDataRows, lastMapping, modeSoldesChoisi());
-    renderSoldesPreview(currentPreview, lastMapping);
+    afficherApercuSoldes();
   }));
 
   function renderSoldesPreview(preview, mapping) {
@@ -11469,7 +11543,11 @@ function openImportSalariesModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx). Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance. Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <p class="text-muted">Fichier Excel (.xlsx) ou CSV. Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance. Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <div class="card" style="padding: 14px; margin-bottom: 14px;">
+          <button type="button" class="btn btn-secondary" id="btn-telecharger-modele-import">Télécharger le modèle</button>
+          <p class="form-hint" style="margin-top: 8px; margin-bottom: 0;">Colonnes déjà nommées, une feuille d'aide qui dit quoi écrire (avec un exemple) et la liste des services de votre entreprise. Le modèle ne contient aucune ligne d'exemple : rien ne sera créé par erreur.</p>
+        </div>
         <label style="display: flex; align-items: center; gap: 8px; margin: 12px 0;">
           <input type="checkbox" id="f-import-preserve-matricule">
           <span>Conserver les matricules du fichier (sinon attribués automatiquement, recommandé)</span>
@@ -11488,6 +11566,9 @@ function openImportSalariesModal() {
   modalRoot.classList.add('open');
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-telecharger-modele-import').addEventListener('click', () => {
+    downloadExcelXmlFile(buildEmployeesImportTemplateWorkbook(), 'modele-import-salaries.xls');
+  });
 
   let currentPreview = [];
   let lastDataRows = null;
