@@ -2475,7 +2475,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.12.1';
+const APP_VERSION = '2026.11.12.2';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2483,6 +2483,7 @@ const CHANGELOG_ENTRIES = [
     version: APP_VERSION,
     items: [
       "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
+      "Imports par fichier CSV : correction de trois erreurs silencieuses de lecture (jour et mois inversés pour les dates comme 03/08/2026, décimales françaises lues de travers comme « 12,5 » devenant 125, accents abîmés). Les fichiers Excel (.xlsx) n'étaient pas concernés.",
       "Planning : une demi-journée de congé est aussi coupée en diagonale (matin ou après-midi), en vue semaine comme en vue mois.",
       "Fiche salarié : un type d'absence décoché dans « Types d'absences autorisés » (ex. RTT pour un cadre à temps partiel) n'apparaît plus dans ses compteurs (sauf s'il a déjà des demandes dessus).",
       "Import de l'historique : une ligne dont le salarié n'a pas de licence « Congés » est signalée dans l'aperçu (le serveur la refuserait). Le bandeau rouge de synchronisation explique maintenant la cause probable d'un refus de sécurité.",
@@ -10750,6 +10751,33 @@ function dateCelluleExcelEnFR(cellule) {
   return String(midi.getUTCDate()).padStart(2, '0') + '/' + String(midi.getUTCMonth() + 1).padStart(2, '0') + '/' + midi.getUTCFullYear();
 }
 
+/** Lit un fichier d'import (xlsx, xls, CSV) en lignes de cellules. Vérifié le 12/11/2026 : SheetJS lit un CSV « à l'américaine » — « 03/08/2026 » devient le 8 mars,
+ * « 12,5 » devient 125, « 0,5 » devient 5, et les accents UTF-8 ressortent cassés (« LÃ©a »). Un CSV est donc décodé ici (UTF-8, sinon Windows-1252, le format
+ * d'Excel français) puis lu en texte brut (`raw`), sans que SheetJS ne devine dates ni nombres. Les vrais classeurs Excel gardent leurs vraies dates et nombres.
+ * `garderNombres` : les cellules numériques d'un classeur restent des nombres (soldes), sinon tout est rendu en texte. */
+function lireTableurEnLignes(buffer, { garderNombres = false } = {}) {
+  const octets = new Uint8Array(buffer);
+  const debut = String.fromCharCode(...octets.slice(0, 8));
+  const estClasseur = debut.startsWith('PK') || octets[0] === 0xD0 && octets[1] === 0xCF || /^\s*<(\?xml|html|Workbook)/i.test(new TextDecoder('utf-8').decode(octets.slice(0, 64)));
+  let workbook;
+  if (estClasseur) {
+    workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  } else {
+    let texte;
+    try { texte = new TextDecoder('utf-8', { fatal: true }).decode(octets); }
+    catch (e) { texte = new TextDecoder('windows-1252').decode(octets); }
+    workbook = XLSX.read((texte.charCodeAt(0) === 0xFEFF ? texte.slice(1) : texte), { type: 'string', raw: true });
+  }
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+    .map(row => row.map(cell => {
+      if (cell instanceof Date && !Number.isNaN(cell.getTime())) return dateCelluleExcelEnFR(cell);
+      if (typeof cell === 'number') return garderNombres ? cell : String(cell);
+      return cell == null ? '' : String(cell);
+    }))
+    .filter(row => row.some(cell => cell !== ''));
+}
+
 function guessEmployeeColumnMapping(headers) {
   const mapping = {};
   headers.forEach((h, i) => {
@@ -11017,12 +11045,8 @@ function openImportSoldesInitiauxModal() {
       }
       let rows;
       try {
-        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
-          // Les nombres restent des nombres : un solde de 2.125 jour ne doit pas être relu comme « 2 125 » par parseMontantFR.
-          .map(row => row.map(cell => (typeof cell === 'number' ? cell : (cell == null ? '' : String(cell)))))
-          .filter(row => row.some(cell => cell !== ''));
+        // Les nombres d'un classeur restent des nombres : un solde de 2.125 jour ne doit pas être relu comme « 2 125 » par parseMontantFR.
+        rows = lireTableurEnLignes(reader.result, { garderNombres: true });
       } catch (err) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
         return;
@@ -11359,16 +11383,7 @@ function openImportAbsencesHistoriqueModal(categorie) {
       }
       let rows;
       try {
-        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
-          .map(row => row.map(cell => {
-            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
-              return dateCelluleExcelEnFR(cell);
-            }
-            return cell == null ? '' : String(cell);
-          }))
-          .filter(row => row.some(cell => cell !== ''));
+        rows = lireTableurEnLignes(reader.result);
       } catch (err) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
         return;
@@ -11498,21 +11513,7 @@ function openImportSalariesModal() {
         // ci-dessous, sans dépendre du format d'affichage Excel qui variait trop pour être fiable.
         // Une cellule saisie en texte libre (pas une vraie cellule Date) reste une chaîne, traitée
         // ensuite par parseImportDate (accepte plusieurs séparateurs et l'année sur 2 chiffres).
-        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
-          .map(row => row.map(cell => {
-            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
-              // SheetJS construit ces Date en UTC (minuit UTC de ce jour-là, une date Excel n'ayant
-              // pas de fuseau horaire) — les getters LOCAUX (getDate/getMonth/getFullYear)
-              // décaleraient d'un jour en arrière dans tout fuseau en retard sur UTC (repéré en
-              // testant depuis un fuseau américain). Toujours lire via les getters UTC pour rester
-              // correct quel que soit le fuseau du navigateur de l'utilisateur.
-              return dateCelluleExcelEnFR(cell);
-            }
-            return cell == null ? '' : String(cell);
-          }))
-          .filter(row => row.some(cell => cell !== ''));
+        rows = lireTableurEnLignes(reader.result);
       } catch (err) {
         document.getElementById('import-preview-zone').innerHTML = `<p class="login-error" role="alert">Fichier illisible : vérifiez qu'il s'agit bien d'un fichier Excel (.xlsx) valide.</p>`;
         return;
@@ -29657,17 +29658,8 @@ function lireFichierTableur(file) {
     reader.onload = async () => {
       try {
         await loadXLSXLibrary();
-        // raw:true : un CSV français (« 650,50 ») resterait sinon lu à l'américaine par SheetJS (650,50 → 65050), ce qui fausserait les totaux.
-        const workbook = XLSX.read(reader.result, { type: 'array', cellDates: true, raw: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
-          .map(row => row.map(cell => {
-            if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
-              return dateCelluleExcelEnFR(cell);
-            }
-            return typeof cell === 'number' ? cell : (cell == null ? '' : String(cell));
-          }))
-          .filter(row => row.some(cell => cell !== ''));
+        // Un CSV français (« 650,50 ») est lu en texte brut par lireTableurEnLignes : sinon SheetJS le lit à l'américaine (650,50 → 65050) et fausse les totaux.
+        const rows = lireTableurEnLignes(reader.result, { garderNombres: true });
         resolve(rows);
       } catch (err) {
         reject(new Error("Fichier illisible : vérifiez qu'il s'agit bien d'un fichier CSV ou Excel valide."));

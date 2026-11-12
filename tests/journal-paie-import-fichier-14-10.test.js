@@ -9,6 +9,8 @@ const { loadAppJs } = require('./load-app-js');
 
 function brancher(api) {
   api.sandbox.XLSX = XLSX;
+  api.sandbox.TextDecoder = TextDecoder;
+  api.sandbox.Uint8Array = Uint8Array;
   api.sandbox.loadXLSXLibrary = async () => {};
   api.sandbox.FileReader = class { readAsArrayBuffer(fichier) { this.result = fichier.contenu; setImmediate(() => this.onload()); } };
 }

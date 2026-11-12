@@ -451,6 +451,7 @@ globalThis.__renderCarrierePage = renderCarrierePage;
 globalThis.__carriereUrlForCompany = carriereUrlForCompany;
 globalThis.__candidatureUrlForCompany = candidatureUrlForCompany;
 globalThis.__guessAbsencesColumnMapping = guessAbsencesColumnMapping;
+globalThis.__lireTableurEnLignes = lireTableurEnLignes;
 globalThis.__buildAbsencesPreviewRows = buildAbsencesPreviewRows;
 globalThis.__importAbsencesRows = importAbsencesRows;
 globalThis.__employeeFieldForRequest = employeeFieldForRequest;
@@ -822,6 +823,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     computeAbsenceCalendarSegments: sandbox.__computeAbsenceCalendarSegments,
     renderAbsenceCalendarRow: sandbox.__renderAbsenceCalendarRow,
     renderPlanningStatusCell: sandbox.__renderPlanningStatusCell,
+    lireTableurEnLignes: sandbox.__lireTableurEnLignes,
     renderAbsenceCalendarBoard: sandbox.__renderAbsenceCalendarBoard,
     leaveTypeRepository: sandbox.__leaveTypeRepository,
     openLeaveRequestModal: sandbox.__openLeaveRequestModal,
