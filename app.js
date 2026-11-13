@@ -2477,13 +2477,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.3';
+const APP_VERSION = '2026.11.13.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Nouvelle barre du haut : le logo Nexus à gauche, puis trois boutons ronds Accueil / Personnel / Équipe, la recherche et votre compte. Le bouton choisi décide des écrans listés dans le menu de gauche, qui ne montre plus que ceux de la section (sur téléphone, le menu ☰ garde la liste complète).",
       "Menu du rond en haut à droite allégé : il ne garde que Paramètres, Aide / Signaler un problème, le Guide de l'application et la déconnexion. Apparence (clair/sombre), mot de passe, téléchargement de vos données, synchronisation du calendrier, changement de compte, abonnement et transfert de propriété sont réunis dans Paramètres > Mon compte, désormais en tête de la liste des paramètres.",
       "Menu de gauche : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus (mémorisé sur votre appareil) ; « Calendrier » est aussi dans la section Équipe pour consulter les absences de l'équipe directement ; chaque espace (Personnel, Équipe, Paramètres) a sa couleur (liseré en haut, fond légèrement teinté) pour savoir où l'on est.",
       "Calendrier de l'équipe : lignes resserrées (le nom ne passe plus à la ligne) pour voir davantage de salariés sans ascenseur vertical.",
@@ -6503,6 +6504,8 @@ function openHelpModal() {
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
   document.getElementById('btn-reload-app').addEventListener('click', () => window.location.reload());
+  // Logo Nexus de la barre du haut : retour à l'accueil (refonte du 13/11/2026).
+  document.getElementById('topbar-brand')?.addEventListener('click', () => navigateTo('dashboard'));
 
   // Menu mobile "☰" (demande du 17/08/2026) — même patron ouverture/fermeture que
   // .notif-wrapper/.user-menu-wrapper (bindNotificationEvents/bindUserMenuEvents) : bouton statique
@@ -7927,6 +7930,32 @@ function appliquerEspaceCourant() {
   else document.documentElement.removeAttribute('data-espace');
 }
 
+/** Boutons ronds de la barre du haut : Accueil, puis une section par groupe du menu (Personnel, Équipe). Absents quand le rôle n'a qu'un
+ * seul groupe (ex. salarié) : le menu de gauche liste alors tout, comme avant. Un clic sur une section ouvre son premier écran. */
+function renderTopbarSections(personnel, equipe, sectionChoisie, items) {
+  const conteneur = document.getElementById('topbar-sections');
+  if (!conteneur) return;
+  if (!sectionChoisie) { conteneur.innerHTML = ''; return; }
+  const pill = (cle, libelle, iconeSvg, actif) =>
+    `<button type="button" class="topbar-pill${actif ? ' active' : ''}" data-pill="${cle}" aria-pressed="${actif ? 'true' : 'false'}">${iconeSvg}<span>${libelle}</span></button>`;
+  const surAccueil = state.view === 'dashboard';
+  const sectionActive = !surAccueil && ['personnel', 'equipe'].includes(espaceCourant()) ? espaceCourant() : null;
+  conteneur.innerHTML =
+    pill('accueil', 'Accueil', ICONS.home, surAccueil) +
+    pill('personnel', 'Personnel', ICONS.idCard, sectionActive === 'personnel') +
+    pill('equipe', 'Équipe', ICONS.people, sectionActive === 'equipe');
+  conteneur.querySelectorAll('.topbar-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cle = btn.dataset.pill;
+      if (cle === 'accueil') { navigateTo('dashboard'); return; }
+      if (btn.classList.contains('active')) return;
+      state.navSection = cle;
+      const premier = (cle === 'equipe' ? equipe : personnel)[0];
+      if (premier) navigateTo(premier.item.key, premier.item.navParams || {});
+    });
+  });
+}
+
 function renderSidebar() {
   const user = authRepository.getCurrentUser();
   if (!user) return;
@@ -7986,12 +8015,24 @@ function renderSidebar() {
       return `<button type="button" class="nav-section-label nav-section-toggle" data-nav-section="${cle}" data-espace="${cle}" aria-expanded="${replie ? 'false' : 'true'}"><span>${libelle}</span><span class="nav-section-chevron" aria-hidden="true"></span></button>` +
         visibles.map(x => renderItem(x.item, x.index)).join('');
     };
-    scrollableHtml =
-      dashboard.map(x => renderItem(x.item, x.index)).join('') +
-      sectionHtml('personnel', 'Personnel', personnel) +
-      sectionHtml('equipe', 'Équipe', equipe) +
-      reste.map(x => renderItem(x.item, x.index)).join('');
+    // Refonte du 13/11/2026 : sur ordinateur, les boutons ronds de la barre du haut (Accueil / Personnel / Équipe) choisissent la section ;
+    // le menu de gauche ne liste alors que les écrans de cette section. Sur téléphone, le panneau ☰ garde la liste complète à sections repliables.
+    const courant = espaceCourant();
+    if (courant === 'personnel' || courant === 'equipe') state.navSection = courant;
+    const sectionChoisie = state.navSection === 'equipe' ? 'equipe' : 'personnel';
+    renderTopbarSections(personnel, equipe, sectionChoisie, items);
+    if (!MOBILE_NAV_QUERY.matches) {
+      scrollableHtml = (sectionChoisie === 'equipe' ? equipe : personnel).map(x => renderItem(x.item, x.index)).join('') +
+        reste.map(x => renderItem(x.item, x.index)).join('');
+    } else {
+      scrollableHtml =
+        dashboard.map(x => renderItem(x.item, x.index)).join('') +
+        sectionHtml('personnel', 'Personnel', personnel) +
+        sectionHtml('equipe', 'Équipe', equipe) +
+        reste.map(x => renderItem(x.item, x.index)).join('');
+    }
   } else {
+    renderTopbarSections([], [], null, items);
     scrollableHtml = scrollable.map(x => renderItem(x.item, x.index)).join('');
   }
 

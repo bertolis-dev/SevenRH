@@ -133,6 +133,7 @@ p { margin: 0; line-height: 1.5; }
 }
 
 #sidebar {
+  top: var(--topbar-height);
   width: var(--sidebar-width);
   /* Léger voile marine du haut vers le bas (§passe couleur "premium ++" du 21/08/2026) — la barre
      latérale reste sinon la plus grande zone plate/neutre de toute l'appli, visible en permanence
@@ -144,7 +145,7 @@ p { margin: 0; line-height: 1.5; }
   flex-direction: column;
   flex-shrink: 0;
   position: fixed;
-  top: 0; left: 0; bottom: 0;
+  left: 0; bottom: 0;
 }
 
 .sidebar-logo {
@@ -319,18 +320,48 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
   min-height: 100vh;
 }
 
+/* Refonte du 13/11/2026 : la barre du haut couvre toute la largeur (logo Nexus, boutons ronds de section, recherche, compte) et le menu de
+   gauche se place dessous — il ne liste plus que les écrans de la section choisie (voir renderSidebar / renderTopbarSections). */
 #topbar {
   height: var(--topbar-height);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 28px;
+  gap: 20px;
+  padding: 0 24px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 5;
+  left: 0;
+  right: 0;
+  z-index: 30;
 }
+#main-column { padding-top: var(--topbar-height); }
+.topbar-brand {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  background: none; border: 0; padding: 0; cursor: pointer; color: var(--color-text);
+  font-family: inherit; font-weight: 700; font-size: 19px; letter-spacing: 0.01em;
+}
+.topbar-brand .logo-mark { width: 40px; height: 40px; padding: 4px; }
+.topbar-sections {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  padding: 4px; border-radius: 14px; background: var(--color-muted-soft);
+}
+.topbar-sections:empty { display: none; }
+.topbar-pill {
+  --pill-color: var(--color-primary);
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border: 0; border-radius: 10px; cursor: pointer;
+  background: none; color: var(--color-text-muted);
+  font-family: inherit; font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.topbar-pill svg { width: 18px; height: 18px; display: block; flex-shrink: 0; }
+.topbar-pill:hover { color: var(--color-text); background: var(--color-surface); }
+.topbar-pill.active { background: var(--pill-color); color: #fff; }
+.topbar-pill[data-pill="personnel"] { --pill-color: var(--espace-personnel); }
+.topbar-pill[data-pill="equipe"] { --pill-color: var(--espace-equipe); }
+.topbar-user { margin-left: auto; }
 
 .topbar-title { font-weight: 600; font-size: 14px; color: var(--color-text-muted); }
 
@@ -4052,6 +4083,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .calendar-cell { height: 84px; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
+  .topbar-brand, .topbar-sections { display: none; }
   .topbar-search { max-width: none; }
   /* flex-wrap: wrap est maintenant la règle de base (voir .detail-header ci-dessus, plus haut dans
      ce fichier) — ne reste ici que ce qui est vraiment spécifique au mobile. */
