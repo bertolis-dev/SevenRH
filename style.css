@@ -1827,8 +1827,9 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 .settings-lists-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 20px;
+  align-items: start;
 }
 
 .chip-list {
@@ -4320,42 +4321,88 @@ textarea.input { resize: vertical; font-family: inherit; }
    afficher 7 lignes") : présentation commune à toutes les listes de référence, en remplacement des
    pastilles qui déroulaient la liste entière sans hauteur maîtrisée (183 conventions collectives
    occupaient plusieurs écrans à elles seules). Voir renderSettingsListCard/renderPostesCard. */
-.settings-list-card { display: flex; flex-direction: column; }
-.settings-list-header { padding: 16px 16px 0; align-items: flex-start; gap: 12px; }
-.settings-list-header h2 { margin-bottom: 2px; }
-.settings-list-header .text-muted { font-size: 12px; margin: 0; }
-
-/* 7 lignes visibles, l'ascenseur prend le relais au-delà : chaque carte garde la même hauteur quel
-   que soit le nombre d'éléments, une liste de 4 forfaits comme une liste de 183 conventions. */
-.settings-list-scroll {
-  max-height: calc(7 * 37px);
-  overflow-y: auto;
-  margin-top: 10px;
-  border-top: 1px solid var(--color-border);
+/* Refonte du 13/11/2026 : cartes de listes de référence (postes, catégories, conventions, types de contrat…) plus claires.
+   Titre + nombre d'éléments, une phrase qui explique à quoi sert la liste, lignes aérées, corbeille parlante, recherche. */
+.settings-list-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.ref-card-wide { grid-column: 1 / -1; }
+.ref-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding: 18px 20px 14px;
 }
-
-/* Lignes volontairement plus courtes que .table standard : ces listes n'ont qu'un libellé et une
-   action, jamais le contenu dense d'un tableau de salariés. */
-.table-settings-list td, .table-settings-list th { padding: 8px 16px; font-size: 13px; }
-.table-settings-list thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--color-surface);
+.ref-card-title { min-width: 0; }
+.ref-card-title h2 { margin: 0 0 6px; display: flex; align-items: center; gap: 10px; font-size: 17px; }
+.ref-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 22px; padding: 0 8px; border-radius: 999px;
+  background: var(--color-primary-soft); color: var(--color-primary-text);
+  font-size: 12px; font-weight: 700;
 }
-.settings-list-valeur { width: 100%; }
-.settings-list-action { text-align: right; white-space: nowrap; }
-.settings-list-vide { padding: 14px 16px 16px; margin: 0; }
+.ref-card-help { margin: 0; max-width: 72ch; font-size: 13.5px; line-height: 1.5; color: var(--color-text-muted); }
+.ref-card-head > .btn { flex-shrink: 0; }
+
+/* Zone de saisie d'un nouvel élément : bandeau teinté qui s'ouvre au clic sur « + Ajouter ». */
 .settings-list-add {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 12px 16px 0;
-  margin: 0;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 0; padding: 12px 20px;
+  background: var(--color-primary-soft);
+  border-top: 1px solid var(--color-border-soft); border-bottom: 1px solid var(--color-border-soft);
 }
-.settings-list-add .input { flex: 1 1 180px; }
-.input-sm { padding: 5px 8px; font-size: 13px; }
+.settings-list-add[hidden] { display: none; }
+.settings-list-add .input { flex: 1 1 220px; background: var(--color-surface); }
+
+.ref-search { position: relative; padding: 0 20px 12px; }
+.ref-search-icon { position: absolute; left: 32px; top: 8px; color: var(--color-text-muted); display: inline-flex; pointer-events: none; }
+.ref-search .input { width: 100%; padding-left: 34px; }
+
+/* 7 lignes visibles puis ascenseur : chaque carte garde une hauteur raisonnable, même avec 190 conventions. */
+.settings-list-scroll { max-height: 352px; overflow-y: auto; border-top: 1px solid var(--color-border-soft); }
+.ref-list { list-style: none; margin: 0; padding: 0; }
+.ref-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 48px; padding: 8px 20px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.ref-row[hidden], tr[hidden] { display: none; }
+.ref-row:last-child { border-bottom: 0; }
+.ref-row:hover { background: var(--color-muted-soft); }
+.ref-row-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; color: var(--color-text); overflow-wrap: anywhere; }
+.ref-row-label small { font-size: 12.5px; color: var(--color-text-muted); }
+.ref-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ref-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: none; color: var(--color-text-muted); cursor: pointer;
+}
+.ref-icon-btn:hover { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+.ref-icon-btn-danger:hover { color: var(--color-danger); border-color: var(--color-danger); background: var(--color-danger-soft, var(--color-surface)); }
+.ref-icon-btn svg, .ref-icon-btn.chip-remove svg { width: 16px; height: 16px; display: block; }
+/* Les boutons de retrait gardent la classe .chip-remove (crochet d'événements) : on neutralise ses réglages de petite pastille. */
+.ref-icon-btn.chip-remove { width: 32px; height: 32px; border-radius: var(--radius-sm); font-size: inherit; }
+.ref-icon-btn.chip-remove::before { display: none; }
+.ref-icon-btn.chip-remove:hover { background: var(--color-danger-soft, var(--color-surface)); color: var(--color-danger); }
+.ref-badge {
+  flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
+  background: var(--color-muted-soft); color: var(--color-text-muted); font-size: 12px; font-weight: 600;
+}
+.ref-empty, .ref-empty-search { margin: 0; padding: 20px; text-align: center; color: var(--color-text-muted); font-size: 14px; border-top: 1px solid var(--color-border-soft); }
+.ref-empty-search[hidden] { display: none; }
+
+/* Tableau des postes : trois formes lisibles, cases de saisie assez larges pour lire l'intitulé en entier. */
+.table-settings-list { width: 100%; }
+.table-settings-list th {
+  position: sticky; top: 0; z-index: 1; background: var(--color-surface);
+  padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+.table-settings-list td { padding: 6px 12px; font-size: 14px; vertical-align: middle; border-bottom: 1px solid var(--color-border-soft); }
+.table-settings-list th:first-child, .table-settings-list td:first-child { padding-left: 20px; }
+.table-settings-list th:last-child, .table-settings-list td:last-child { padding-right: 20px; }
+.table-settings-list tbody tr:hover { background: var(--color-muted-soft); }
+.ref-poste-neutre { font-weight: 600; min-width: 110px; }
+.ref-postes-table .poste-genre-input { width: 100%; min-width: 100px; }
+.settings-list-action { text-align: right; white-space: nowrap; width: 1%; }
+.input-sm { padding: 7px 10px; font-size: 13.5px; }
+
 
 /* §retour Betty du 22/09/2026 ("on voit qu'il y a beaucoup d'espace perdu... on ne voit que deux
    cartouches alors qu'on pourrait facilement en voir plus") : les onglets de Paramètres empilaient

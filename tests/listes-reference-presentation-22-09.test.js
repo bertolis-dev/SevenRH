@@ -31,7 +31,7 @@ test('un bouton "Ajouter" en en-tête, plus de champ toujours visible', () => {
 
 test('les crochets d\'événements sont inchangés (data-list-key sur retrait et ajout)', () => {
   const html = renderSettingsListCard(listDef, items);
-  assert.ok(html.includes('class="btn-link btn-link-danger chip-remove" data-list-key="typesContrat" data-index="0"'),
+  assert.ok(html.includes('class="ref-icon-btn ref-icon-btn-danger chip-remove" data-list-key="typesContrat" data-index="0"'),
     'bindChipListEvents cible .chip-remove[data-list-key] avec data-index');
   assert.ok(html.includes('<form class="chip-add-form settings-list-add" data-list-key="typesContrat"'),
     'bindChipListEvents cible .chip-add-form avec data-list-key');
@@ -40,7 +40,7 @@ test('les crochets d\'événements sont inchangés (data-list-key sur retrait et
 test('la liste passe dans un conteneur à ascenseur', () => {
   const html = renderSettingsListCard(listDef, items);
   assert.ok(html.includes('class="settings-list-scroll"'), 'conteneur à ascenseur attendu');
-  assert.ok(html.includes('table-settings-list'), 'table compacte attendue');
+  assert.ok(html.includes('class="ref-list"'), 'liste de lignes attendue');
 });
 
 test('une entrée officielle ne propose pas de suppression', () => {
@@ -58,6 +58,16 @@ test('liste vide : un message, jamais un tableau à un en-tête seul', () => {
   const html = renderSettingsListCard(listDef, []);
   assert.ok(html.includes('Aucun élément'), 'message de liste vide attendu');
   assert.ok(!html.includes('settings-list-scroll'), 'pas de conteneur à ascenseur sur une liste vide');
+});
+
+test('une longue liste propose un champ de recherche, une courte non', () => {
+  const longue = Array.from({ length: 20 }, (_, i) => 'Élément ' + i);
+  assert.ok(renderSettingsListCard(listDef, longue).includes('data-ref-search'), 'recherche attendue au-delà de 8 éléments');
+  assert.ok(!renderSettingsListCard(listDef, ['CDI', 'CDD']).includes('data-ref-search'), 'pas de recherche sur une courte liste');
+});
+
+test('chaque liste explique à quoi elle sert', () => {
+  assert.ok(renderSettingsListCard(listDef, items).includes('ref-card-help'), 'phrase d aide attendue');
 });
 
 test('les postes suivent le même patron, en gardant leurs trois formes', () => {

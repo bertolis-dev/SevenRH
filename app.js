@@ -391,6 +391,7 @@ const ICONS = {
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.9M22 12s-1.6 2.8-4.4 4.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
@@ -2477,13 +2478,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.6';
+const APP_VERSION = '2026.11.13.7';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paramètres > Référentiels refait : chaque liste (postes, catégories de salariés, conventions collectives, types de contrat, forfaits, documents, checklists) est une carte claire avec le nombre d'éléments, une phrase qui explique à quoi elle sert, des lignes aérées, une corbeille pour retirer un élément et, pour les longues listes, un champ de recherche.",
       "Nouvelle barre du haut : le logo Nexus à gauche (un clic ramène à l'accueil), puis la recherche et votre compte.",
       "Menu du rond en haut à droite allégé : il ne garde que Paramètres, Aide / Signaler un problème, le Guide de l'application et la déconnexion. Apparence (clair/sombre), mot de passe, téléchargement de vos données, synchronisation du calendrier, changement de compte, abonnement et transfert de propriété sont réunis dans Paramètres > Mon compte, désormais en tête de la liste des paramètres.",
       "Menu de gauche : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus (mémorisé sur votre appareil) ; « Calendrier » est aussi dans la section Équipe pour consulter les absences de l'équipe directement ; chaque espace (Personnel, Équipe, Paramètres) a sa couleur (liseré en haut, fond légèrement teinté) pour savoir où l'on est.",
@@ -20702,7 +20704,7 @@ function openCalendarDayModal(dateStr) {
 // de socle à deriveCategoriesSalarieFromStatutPro, data.js) : seule cette carte, devenue trompeuse
 // dans Paramètres, disparaît.
 const SETTINGS_LISTS_RH = [
-  { key: 'conventionsCollectives', label: 'Conventions collectives' },
+  { key: 'conventionsCollectives', label: 'Conventions collectives', large: true },
   { key: 'typesContrat', label: 'Types de contrat' },
   { key: 'forfaits', label: 'Forfaits' },
   { key: 'categoriesDocuments', label: 'Catégories de documents' },
@@ -22787,32 +22789,28 @@ function renderParametresListes() {
          salariés', il n'existe plus" — regroupé ici depuis le sprint §6.3, mais sans aucun indice
          pour qui cherche encore par l'ancien nom. Rappel visible en tête d'onglet, en plus de
          l'indexation déjà correcte dans la recherche globale (voir PARAMETRES_SEARCH_SECTIONS). -->
-    <p class="text-muted" style="margin: -8px 0 16px;">Postes, <strong>catégories de salariés</strong>, conventions collectives et autres listes de référence de la fiche salarié.</p>
-    <div class="card table-card">
-      <div class="view-header-row" style="padding: 20px 20px 0;">
-        <div>
-          <h2>Catégories de salariés</h2>
-          <p class="text-muted">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise, utilisable dans les règles de congés, jours fériés et fermetures.</p>
-        </div>
-        <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
-      </div>
-      <table class="table">
-        <thead><tr><th>Nom</th><th>Description</th><th></th></tr></thead>
-        <tbody>
-          ${categories.map(c => `
-            <tr>
-              <td>${escapeHtml(c.nom)}</td>
-              <td>${escapeHtml(c.description || '—')}</td>
-              <td>
-                <button type="button" class="btn-link" data-edit-categorie-salarie="${escapeHtml(c.id)}">Modifier</button>
-                <button type="button" class="btn-link btn-link-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}">Supprimer</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
+    <p class="text-muted" style="margin: -8px 0 16px;">Les listes proposées dans la fiche du salarié et ailleurs dans l'application : postes, <strong>catégories de salariés</strong>, conventions collectives, types de contrat… Cliquez sur « + Ajouter » pour compléter une liste, sur la corbeille pour retirer un élément (impossible tant qu'il est utilisé).</p>
     <div class="settings-lists-grid">
+      <section class="card ref-card ref-card-wide settings-list-card">
+        <div class="ref-card-head">
+          <div class="ref-card-title">
+            <h2>Catégories de salariés <span class="ref-count">${categories.length}</span></h2>
+            <p class="ref-card-help">Ex. Cadre, Non cadre, ou toute autre catégorisation propre à votre entreprise. Elles servent dans les règles de congés, les jours fériés et les fermetures.</p>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-add-categorie-salarie">+ Ajouter une catégorie</button>
+        </div>
+        ${categories.length ? `<div class="settings-list-scroll"><ul class="ref-list">
+          ${categories.map(c => `
+            <li class="ref-row">
+              <span class="ref-row-label"><strong>${escapeHtml(c.nom)}</strong>${c.description ? `<small>${escapeHtml(c.description)}</small>` : ''}</span>
+              <span class="ref-row-actions">
+                <button type="button" class="ref-icon-btn" data-edit-categorie-salarie="${escapeHtml(c.id)}" title="Modifier" aria-label="Modifier ${escapeHtml(c.nom)}">${icon(ICONS.pencil, 15)}</button>
+                <button type="button" class="ref-icon-btn ref-icon-btn-danger" data-delete-categorie-salarie="${escapeHtml(c.id)}" data-nom="${escapeHtml(c.nom)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(c.nom)}">${icon(ICONS.trash, 15)}</button>
+              </span>
+            </li>
+          `).join('')}
+        </ul></div>` : '<p class="ref-empty">Aucune catégorie pour l\'instant. Cliquez sur « + Ajouter une catégorie » pour créer la première.</p>'}
+      </section>
       ${renderPostesCard(settings.postes)}
       ${SETTINGS_LISTS_RH.map(l => renderSettingsListCard(l, settings[l.key] || [],
         l.key === 'conventionsCollectives' ? new Set(['Aucune', ...IDCC_CONVENTIONS.map(formatConventionCollective)]) : null)).join('')}
@@ -23332,52 +23330,57 @@ function renderCategoriesFraisConfigCard(settings) {
 // collectives passe ce paramètre — les autres listes (Postes, Statuts pro, ...), bien plus courtes,
 // restent affichées normalement. Le formulaire d'ajout reste TOUJOURS visible, hors du panneau
 // repliable, pour ajouter une convention manquante sans avoir à tout déplier.
-/** §retour Betty du 22/09/2026 : "je préfère cette présentation dans les catégories de salariés...
- * je voudrais que tu fasses la même chose pour les postes, les conventions, les types de contrats,
- * les forfaits, les catégories de documents, les checklists" — les pastilles (.chip) affichaient la
- * liste entière d'un bloc, sans hauteur maîtrisée : la liste officielle des conventions (183
- * entrées) occupait à elle seule plusieurs écrans. Même patron que "Catégories de salariés"
- * désormais : un bouton "Ajouter" en en-tête, une liste de lignes courtes en dessous, et un
- * ascenseur au-delà de 7 lignes (voir .settings-list-scroll, style.css) pour que chaque carte garde
- * la même hauteur quel que soit le nombre d'éléments.
- *
- * Les crochets d'événements ne changent pas (data-list-key sur le bouton de retrait et sur le
- * formulaire d'ajout, voir bindChipListEvents) : seule la présentation est refaite. Le formulaire
- * d'ajout reste replié tant qu'on n'a pas cliqué sur "Ajouter", plutôt qu'un champ toujours visible
- * en bas de chaque carte. */
+/** Retour du 13/11/2026 (« les cases comme ça, c'est pas possible : mieux designées et faciles à comprendre ») : refonte des listes de référence.
+ * Chaque liste est une carte claire : un titre avec le nombre d'éléments, une phrase qui dit À QUOI SERT la liste, un bouton « Ajouter »,
+ * des lignes aérées avec une corbeille parlante (au lieu d'un « Supprimer » minuscule) et, pour les longues listes, un champ de recherche.
+ * Les crochets d'événements ne changent pas (data-list-key, data-index, .chip-remove, .chip-add-form : voir bindChipListEvents). */
+const AIDE_LISTES_REFERENCE = {
+  conventionsCollectives: "Proposées dans la fiche du salarié. La liste officielle est déjà chargée : n'ajoutez qu'une convention qui en serait absente.",
+  typesContrat: "Proposés dans la fiche du salarié (CDI, CDD, alternance…).",
+  forfaits: "Proposés dans la fiche du salarié (forfait jours, forfait heures…).",
+  categoriesDocuments: "Servent à classer les documents des salariés (contrat, attestation, bulletin…).",
+  onboardingChecklistTemplate: "Les étapes à cocher à l'arrivée d'un salarié. Elles s'affichent dans l'ordre de cette liste.",
+  offboardingChecklistTemplate: "Les étapes à cocher au départ d'un salarié. Elles s'affichent dans l'ordre de cette liste.",
+  categoriesFrais: "Les catégories proposées quand on saisit une note de frais (repas, transport, hébergement…)."
+};
+
+/** Au-delà de ce nombre d'éléments, un champ de recherche apparaît au-dessus de la liste. */
+const SEUIL_RECHERCHE_LISTE_REFERENCE = 8;
+
 function renderSettingsListCard(listDef, items, readOnlyValues) {
   const lignes = items.map((item, i) => {
     const readOnly = readOnlyValues && readOnlyValues.has(item);
     return `
-      <tr>
-        <td class="settings-list-valeur">${escapeHtml(item)}</td>
-        <td class="settings-list-action">
-          ${readOnly
-            ? '<span class="text-muted" title="Entrée de la liste officielle, non modifiable ici">Officielle</span>'
-            : `<button type="button" class="btn-link btn-link-danger chip-remove" data-list-key="${listDef.key}" data-index="${i}">Supprimer</button>`}
-        </td>
-      </tr>
+      <li class="ref-row" data-ref-row>
+        <span class="ref-row-label">${escapeHtml(item)}</span>
+        ${readOnly
+          ? '<span class="ref-badge" title="Entrée de la liste officielle, non modifiable ici">Officielle</span>'
+          : `<button type="button" class="ref-icon-btn ref-icon-btn-danger chip-remove" data-list-key="${listDef.key}" data-index="${i}" title="Supprimer" aria-label="Supprimer ${escapeHtml(item)}">${icon(ICONS.trash, 15)}</button>`}
+      </li>
     `;
   }).join('');
+  const aide = listDef.aide || AIDE_LISTES_REFERENCE[listDef.key] || '';
 
   return `
-    <div class="card table-card settings-list-card">
-      <div class="view-header-row settings-list-header">
-        <div>
-          <h2>${escapeHtml(listDef.label)}</h2>
-          <p class="text-muted">${items.length} élément${items.length > 1 ? 's' : ''}${readOnlyValues ? ' · la liste officielle n\'est pas modifiable ici, ajoutez seulement une convention qui en serait absente' : ''}</p>
+    <section class="card ref-card settings-list-card${listDef.large ? ' ref-card-wide' : ''}">
+      <div class="ref-card-head">
+        <div class="ref-card-title">
+          <h2>${escapeHtml(listDef.label)} <span class="ref-count">${items.length}</span></h2>
+          ${aide ? `<p class="ref-card-help">${escapeHtml(aide)}</p>` : ''}
         </div>
         <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="${listDef.key}">+ Ajouter</button>
       </div>
       <form class="chip-add-form settings-list-add" data-list-key="${listDef.key}" hidden>
-        <input type="text" class="input" placeholder="${readOnlyValues ? 'Convention absente de la liste officielle...' : 'Nouvel élément...'}" required>
-        <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
-        <button type="button" class="btn-link" data-cancel-add-list="${listDef.key}">Annuler</button>
+        <input type="text" class="input" placeholder="${readOnlyValues ? 'Nom de la convention absente de la liste officielle…' : 'Nom du nouvel élément…'}" required>
+        <button type="submit" class="btn btn-primary btn-sm">Ajouter</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-cancel-add-list="${listDef.key}">Annuler</button>
       </form>
+      ${items.length > SEUIL_RECHERCHE_LISTE_REFERENCE ? `
+        <div class="ref-search"><span class="ref-search-icon">${icon(ICONS.search, 15)}</span><input type="search" class="input input-sm" data-ref-search placeholder="Rechercher dans cette liste…" aria-label="Rechercher dans ${escapeHtml(listDef.label)}"></div>` : ''}
       ${items.length
-        ? `<div class="settings-list-scroll"><table class="table table-settings-list"><tbody>${lignes}</tbody></table></div>`
-        : '<p class="text-muted settings-list-vide">Aucun élément pour l\'instant.</p>'}
-    </div>
+        ? `<div class="settings-list-scroll"><ul class="ref-list">${lignes}</ul><p class="ref-empty-search" hidden>Aucun résultat.</p></div>`
+        : '<p class="ref-empty">Aucun élément pour l\'instant. Cliquez sur « + Ajouter » pour créer le premier.</p>'}
+    </section>
   `;
 }
 
@@ -23482,6 +23485,25 @@ function bindChipListEvents() {
       if (!form) return;
       form.querySelector('input').value = '';
       form.hidden = true;
+    });
+  });
+
+  // Champ « Rechercher dans cette liste » des longues listes (ex. 190 conventions collectives) : simple filtre d'affichage.
+  document.querySelectorAll('[data-ref-search]').forEach(input => {
+    input.addEventListener('input', () => {
+      const carte = input.closest('.ref-card');
+      if (!carte) return;
+      const recherche = normalizeForSearch(input.value);
+      const selecteur = input.dataset.refSelector || 'li[data-ref-row]';
+      let visibles = 0;
+      carte.querySelectorAll(selecteur).forEach(ligne => {
+        const texte = ligne.textContent + ' ' + [...ligne.querySelectorAll('input')].map(i => i.value).join(' ');
+        const correspond = !recherche || normalizeForSearch(texte).includes(recherche);
+        ligne.hidden = !correspond;
+        if (correspond) visibles++;
+      });
+      const vide = carte.querySelector('.ref-empty-search');
+      if (vide) vide.hidden = visibles > 0;
     });
   });
 
@@ -30721,38 +30743,41 @@ function renderPostesOuvertsCard(postesOuverts) {
  * composant partagé). La forme neutre reste la seule valeur stockée sur un salarié (employee.poste,
  * jamais changée) : masculin/féminin ne servent qu'à l'affichage (getPosteAccorde, data.js). */
 function renderPostesCard(postes) {
-  const lignes = (postes || []).map((poste, i) => `
-    <tr>
-      <td class="settings-list-valeur">${escapeHtml(poste.neutre)}</td>
+  const liste = postes || [];
+  const lignes = liste.map((poste, i) => `
+    <tr data-ref-row>
+      <td class="ref-poste-neutre">${escapeHtml(poste.neutre)}</td>
       <td><input type="text" class="input input-sm poste-genre-input" data-champ="masculin" data-index="${i}" value="${escapeHtml(poste.masculin)}" aria-label="Forme masculine de ${escapeHtml(poste.neutre)}"></td>
       <td><input type="text" class="input input-sm poste-genre-input" data-champ="feminin" data-index="${i}" value="${escapeHtml(poste.feminin)}" aria-label="Forme féminine de ${escapeHtml(poste.neutre)}"></td>
       <td class="settings-list-action">
-        <button type="button" class="btn-link btn-link-danger" data-delete-poste="${i}" data-index="${i}">Supprimer</button>
+        <button type="button" class="ref-icon-btn ref-icon-btn-danger" data-delete-poste="${i}" data-index="${i}" title="Supprimer" aria-label="Supprimer le poste ${escapeHtml(poste.neutre)}">${icon(ICONS.trash, 15)}</button>
       </td>
     </tr>
   `).join('');
 
   return `
-    <div class="card table-card settings-list-card">
-      <div class="view-header-row settings-list-header">
-        <div>
-          <h2>Postes</h2>
-          <p class="text-muted">${(postes || []).length} poste${(postes || []).length > 1 ? 's' : ''} · les formes masculine et féminine sont proposées à partir de l'intitulé neutre, corrigez-les si besoin.</p>
+    <section class="card ref-card settings-list-card ref-card-wide">
+      <div class="ref-card-head">
+        <div class="ref-card-title">
+          <h2>Postes <span class="ref-count">${liste.length}</span></h2>
+          <p class="ref-card-help">Les métiers proposés dans la fiche du salarié. Chaque poste s'écrit sous trois formes : l'intitulé neutre sert dans les listes, le masculin et le féminin accordent l'intitulé sur la fiche de la personne. Ils sont proposés automatiquement : corrigez-les directement dans les cases si besoin.</p>
         </div>
         <button type="button" class="btn btn-primary btn-sm" data-toggle-add-list="poste">+ Ajouter</button>
       </div>
       <form class="chip-add-form settings-list-add" id="form-add-poste" data-list-key="poste" hidden>
-        <input type="text" class="input" id="input-poste-neutre" placeholder="Intitulé neutre (ex. Commercial·e)..." required>
-        <button type="submit" class="btn btn-secondary btn-sm">Ajouter</button>
-        <button type="button" class="btn-link" data-cancel-add-list="poste">Annuler</button>
+        <input type="text" class="input" id="input-poste-neutre" placeholder="Intitulé neutre (ex. Commercial·e)…" required>
+        <button type="submit" class="btn btn-primary btn-sm">Ajouter</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-cancel-add-list="poste">Annuler</button>
       </form>
+      ${liste.length > SEUIL_RECHERCHE_LISTE_REFERENCE ? `
+        <div class="ref-search"><span class="ref-search-icon">${icon(ICONS.search, 15)}</span><input type="search" class="input input-sm" data-ref-search data-ref-selector="tr[data-ref-row]" placeholder="Rechercher un poste…" aria-label="Rechercher un poste"></div>` : ''}
       ${lignes
-        ? `<div class="settings-list-scroll"><table class="table table-settings-list">
-            <thead><tr><th>Intitulé neutre</th><th>Masculin</th><th>Féminin</th><th></th></tr></thead>
+        ? `<div class="settings-list-scroll"><table class="table table-settings-list ref-postes-table">
+            <thead><tr><th>Intitulé neutre</th><th>Au masculin</th><th>Au féminin</th><th></th></tr></thead>
             <tbody>${lignes}</tbody>
-          </table></div>`
-        : '<p class="text-muted settings-list-vide">Aucun poste pour l\'instant.</p>'}
-    </div>
+          </table><p class="ref-empty-search" hidden>Aucun résultat.</p></div>`
+        : '<p class="ref-empty">Aucun poste pour l\'instant. Cliquez sur « + Ajouter » pour créer le premier.</p>'}
+    </section>
   `;
 }
 
