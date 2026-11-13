@@ -310,6 +310,7 @@ globalThis.__NAV_ITEMS = NAV_ITEMS;
 globalThis.__renderSidebar = renderSidebar;
 globalThis.__authRepository = authRepository;
 globalThis.__renderUserMenuPanel = renderUserMenuPanel;
+globalThis.__renderMonCompteOutilsHtml = renderMonCompteOutilsHtml;
 globalThis.__openGroupSummaryModal = openGroupSummaryModal;
 globalThis.__runGroupSummaryRefresh = runGroupSummaryRefresh;
 globalThis.__renderGroupSummaryResult = renderGroupSummaryResult;
@@ -696,6 +697,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     renderSidebar: sandbox.__renderSidebar,
     authRepository: sandbox.__authRepository,
     renderUserMenuPanel: sandbox.__renderUserMenuPanel,
+    renderMonCompteOutilsHtml: sandbox.__renderMonCompteOutilsHtml,
     openGroupSummaryModal: sandbox.__openGroupSummaryModal,
     runGroupSummaryRefresh: sandbox.__runGroupSummaryRefresh,
     renderGroupSummaryResult: sandbox.__renderGroupSummaryResult,

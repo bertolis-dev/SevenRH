@@ -2477,13 +2477,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.12.4';
+const APP_VERSION = '2026.11.13.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Menu du rond en haut à droite allégé : il ne garde que Paramètres, Aide / Signaler un problème, le Guide de l'application et la déconnexion. Apparence (clair/sombre), mot de passe, téléchargement de vos données, synchronisation du calendrier, changement de compte, abonnement et transfert de propriété sont réunis dans Paramètres > Mon compte, désormais en tête de la liste des paramètres.",
       "Menu de gauche : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus (mémorisé sur votre appareil) ; « Calendrier » est aussi dans la section Équipe pour consulter les absences de l'équipe directement ; chaque espace (Personnel, Équipe, Paramètres) a sa couleur (liseré en haut, fond légèrement teinté) pour savoir où l'on est.",
       "Calendrier de l'équipe : lignes resserrées (le nom ne passe plus à la ligne) pour voir davantage de salariés sans ascenseur vertical.",
       "Calendrier des absences : une demi-journée se voit au premier coup d'œil, la case est coupée en diagonale (matin en haut à gauche, après-midi en bas à droite) ; sur une période, l'extrémité concernée est taillée en biais.",
@@ -4213,28 +4214,7 @@ function renderUserMenuPanel() {
   const panel = document.getElementById('user-menu-panel');
   if (!user) { panel.innerHTML = ''; return; }
 
-  // "Abonnement" en plus de sa propre entrée de menu (retour utilisateur : toujours pas facile à
-  // trouver au fond d'une longue liste) — le menu du compte est l'endroit où la quasi-totalité des
-  // SaaS (Stripe lui-même, GitHub, Notion, Slack...) placent la facturation : toujours visible en
-  // un clic sur l'avatar, jamais besoin de faire défiler quoi que ce soit.
   const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
-  // §tour de bugs du 07/09/2026 : le rôle codé en dur annulait toute surcharge individuelle
-  // gererParametres accordée à un manager/salarié/comptable — hasPermission() suffit déjà seul,
-  // exactement comme ensureDefaultLeaveTypesBackfilled (data.js) le fait pour cette même permission.
-  const canGererParametres = hasPermission(user, PERMISSIONS.GERER_PARAMETRES);
-  // §correctif audit du 23/08/2026 (§5) : le transfert de propriété n'est proposé qu'au Propriétaire
-  // actuel lui-même (seul habilité côté serveur, transfer_proprietaire) — jamais sur la fiche de
-  // quelqu'un d'autre, voir renderCompteCard/openChangeRoleModal qui n'offrent plus ce rôle du tout.
-  const isProprietaire = user.role === ROLES.PROPRIETAIRE;
-  // §correctif audit du 23/08/2026 (§7.19) : lien "équipe" seulement pour les rôles qui ont
-  // effectivement une équipe/entreprise à montrer — même liste que calendar-feed (fonction Edge)
-  // revérifie côté serveur, ici juste pour ne pas proposer un lien qui reviendrait toujours vide.
-  // §correctif QA du 26/08/2026 (point A.3) : "Abonnement" désigne désormais exclusivement
-  // l'abonnement payant (Stripe) — ce lien iCal n'a jamais été un abonnement au sens du produit,
-  // renommé pour ne plus créer 3 sens différents du même mot dans le même menu. Les deux entrées
-  // moi/équipe sont fusionnées en une seule (choix du périmètre fait DANS la modale, voir
-  // openCalendarSyncModal), et l'entrée entière est masquée si l'entreprise n'a pas le module congés.
-  const hasTeamScope = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
   const currentCompany = DB.getCurrentCompany();
 
   // Comptes gardés en parallèle (bascule multi-entreprise façon Gmail, demande du 21/08/2026) — un
@@ -4242,10 +4222,6 @@ function renderUserMenuPanel() {
   // entreprises sous UN seul compte (voir SAVED_ACCOUNTS_KEY, data.js). L'actif ne se réaffiche pas
   // dans sa propre liste de bascule.
   const otherAccounts = authRepository.getSavedAccounts().filter(a => a.id !== authRepository.getCurrentAccountId());
-  // §"Chaîne Multi-sociétés" (roadmap différenciation #5, 01/09/2026) : proposée seulement à qui a
-  // déjà une vision entreprise entière (même gate que canSeeRegistrePersonnel/Radar Seuils) — jamais
-  // à un manager/salarié qui aurait par coïncidence 2 comptes gardés en parallèle sur son appareil.
-  const canSeeGroupSummary = getVisibleEmployeeIdsForCurrentUser() === null && authRepository.getSavedAccounts().length >= 2;
 
   panel.innerHTML = `
     <div class="user-menu-header">
@@ -4253,96 +4229,14 @@ function renderUserMenuPanel() {
       <span class="badge badge-primary">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span>
       ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
-    <div class="theme-toggle-group" role="group" aria-label="Thème de l'application">
-      ${[['system', 'Système'], ['light', 'Clair'], ['dark', 'Sombre']].map(([value, label]) =>
-        `<button type="button" class="theme-toggle-btn${getThemePreference() === value ? ' active' : ''}" data-theme-choice="${value}">${label}</button>`
-      ).join('')}
-    </div>
     <div class="user-menu-divider"></div>
+    <button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} <span class="user-menu-item-text">Paramètres<small>Mon compte, mot de passe, apparence, comptes${canGererAbonnement ? ', abonnement' : ''}…</small></span></button>
+    <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item user-menu-item-guide" id="btn-user-menu-guide">${icon(ICONS.helpCircle, 14)} Guide de l'application</button>
     <div class="user-menu-divider"></div>
-    ${otherAccounts.length ? `
-      <div class="user-menu-section-label">Autres comptes</div>
-      ${otherAccounts.map(a => `
-        <div class="user-menu-account-wrap">
-          <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
-            <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
-            <span class="user-menu-account-info">
-              <span class="user-menu-account-name">${personNameHtml(a)}</span>
-              <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
-            </span>
-          </button>
-          <button type="button" class="btn-icon user-menu-account-remove" data-remove-account="${escapeHtml(a.id)}" title="Retirer ce compte de cet appareil" aria-label="Retirer ce compte de cet appareil">${icon(ICONS.close, 13)}</button>
-        </div>
-      `).join('')}
-    ` : ''}
-    ${canSeeGroupSummary ? `<button type="button" class="user-menu-item" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
-    <button type="button" class="user-menu-item" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
-    <div class="user-menu-divider"></div>
-    <button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>
-    ${canGererAbonnement ? `<button type="button" class="user-menu-item" id="btn-user-menu-abonnement">${icon(ICONS.card, 14)} Abonnement</button>` : ''}
-    ${isProprietaire ? `<button type="button" class="user-menu-item" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>` : ''}
-    ${hasModule('conges') ? `<button type="button" class="user-menu-item" id="btn-ical-sync">${icon(ICONS.calendar, 14)} Synchroniser mon calendrier</button>` : ''}
-    <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
-    <button type="button" class="user-menu-item" id="btn-change-password">Modifier mon mot de passe</button>
-    <button type="button" class="user-menu-item" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
     <button type="button" class="user-menu-item" id="btn-logout">Se déconnecter${otherAccounts.length ? ' de ce compte' : ''}</button>
     <div class="user-menu-version"><span>Nexus · version ${escapeHtml(APP_VERSION)}</span><button type="button" class="btn-link" id="btn-user-menu-nouveautes">Nouveautés</button></div>
   `;
-
-  document.querySelectorAll('[data-switch-account]').forEach(row => {
-    row.addEventListener('click', async () => {
-      row.disabled = true;
-      // §correctif retour Betty du 07/09/2026 : filet de sécurité supplémentaire ICI en plus de
-      // celui déjà posé dans DB.switchToSavedAccount — une exception qui échapperait malgré tout
-      // (ex. window.SupabaseSync.switchToSession lui-même en erreur réseau) ne doit jamais laisser
-      // ce bouton dans un état muet (row.disabled resté true, aucun message, menu qui semble figé).
-      let result;
-      try {
-        result = await authRepository.switchAccount(row.dataset.switchAccount);
-      } catch (err) {
-        showToast(`Bascule de compte interrompue (${(err && err.message) || err}). Vérifiez sur quel compte vous êtes connecté(e) avant de continuer.`, 'error');
-        renderUserMenuPanel();
-        return;
-      }
-      if (!result.success) {
-        showToast(result.error, 'error');
-        renderUserMenuPanel();
-        return;
-      }
-      document.getElementById('user-menu-panel').classList.remove('open');
-      showApp();
-    });
-  });
-  // §correctif audit du 23/08/2026 (2.8) : jusqu'ici aucun moyen de retirer un compte gardé en
-  // parallèle sur cet appareil — son refresh_token restait dans localStorage indéfiniment, sans
-  // expiration, offrant une bascule sans mot de passe à quiconque reprend ce navigateur. Ne
-  // révoque que la mémorisation LOCALE (removeSavedAccount, déjà existant) : n'affecte pas la
-  // session active de ce compte ailleurs, exactement comme "Se déconnecter" pour le compte actif.
-  document.querySelectorAll('[data-remove-account]').forEach(btn => {
-    btn.addEventListener('click', (evt) => {
-      evt.stopPropagation();
-      authRepository.removeSavedAccount(btn.dataset.removeAccount);
-      renderUserMenuPanel();
-    });
-  });
-  document.getElementById('btn-add-account').addEventListener('click', () => {
-    document.getElementById('user-menu-panel').classList.remove('open');
-    openAddAccountFlow();
-  });
-  document.querySelectorAll('[data-theme-choice]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      applyThemePreference(btn.dataset.themeChoice);
-      renderUserMenuPanel();
-    });
-  });
-
-  if (canSeeGroupSummary) {
-    document.getElementById('btn-group-summary').addEventListener('click', () => {
-      document.getElementById('user-menu-panel').classList.remove('open');
-      openGroupSummaryModal();
-    });
-  }
 
   // Visible pour TOUT rôle : seule porte d'entrée vers Mon compte pour qui n'a pas gererParametres
   // (renderParametres retombe sur Mon compte, seul onglet visible dans ce cas).
@@ -4350,26 +4244,6 @@ function renderUserMenuPanel() {
     document.getElementById('user-menu-panel').classList.remove('open');
     navigateTo('parametres');
   });
-  if (canGererAbonnement) {
-    document.getElementById('btn-user-menu-abonnement').addEventListener('click', () => {
-      document.getElementById('user-menu-panel').classList.remove('open');
-      state.parametresTab = 'abonnement';
-      navigateTo('parametres');
-    });
-  }
-  if (isProprietaire) {
-    document.getElementById('btn-user-menu-transfer-proprietaire').addEventListener('click', () => {
-      document.getElementById('user-menu-panel').classList.remove('open');
-      openTransferProprietaireModal();
-    });
-  }
-  const btnIcalSync = document.getElementById('btn-ical-sync');
-  if (btnIcalSync) {
-    btnIcalSync.addEventListener('click', () => {
-      document.getElementById('user-menu-panel').classList.remove('open');
-      openCalendarSyncModal(hasTeamScope);
-    });
-  }
   document.getElementById('btn-user-menu-guide').addEventListener('click', () => {
     document.getElementById('user-menu-panel').classList.remove('open');
     openGuideModal();
@@ -4382,14 +4256,6 @@ function renderUserMenuPanel() {
     document.getElementById('user-menu-panel').classList.remove('open');
     openSupportTicketModal();
   });
-  document.getElementById('btn-change-password').addEventListener('click', () => {
-    document.getElementById('user-menu-panel').classList.remove('open');
-    openChangePasswordModal();
-  });
-  document.getElementById('btn-export-my-data').addEventListener('click', () => {
-    document.getElementById('user-menu-panel').classList.remove('open');
-    exportMyDataRGPD();
-  });
   document.getElementById('btn-logout').addEventListener('click', async () => {
     // Le clic reste dans .user-menu-wrapper : l'écouteur « clic extérieur » ne referme pas le menu. Sans ceci, le menu
     // (nom, e-mail, comptes enregistrés) de l'utilisateur précédent réapparaissait ouvert après la connexion suivante.
@@ -4398,6 +4264,134 @@ function renderUserMenuPanel() {
     if (result.switchedTo) showApp();
     else showLogin();
   });
+}
+
+/** Retour du 13/11/2026 (« moins de choses dans le menu du rond, le reste dans les paramètres, facile à retrouver ») : tout ce qui
+ * était dans le menu du rond — apparence, mot de passe, données RGPD, calendrier, comptes gardés, abonnement, transfert de propriété —
+ * vit désormais dans Paramètres > Mon compte, seul onglet ouvert à tout rôle. Mêmes actions, mêmes fenêtres qu'avant. */
+function renderMonCompteOutilsHtml(user) {
+  const otherAccounts = authRepository.getSavedAccounts().filter(a => a.id !== authRepository.getCurrentAccountId());
+  // §"Chaîne Multi-sociétés" (roadmap différenciation #5, 01/09/2026) : proposée seulement à qui a déjà une vision entreprise
+  // entière — jamais à un manager/salarié qui aurait par coïncidence 2 comptes gardés en parallèle sur son appareil.
+  const canSeeGroupSummary = getVisibleEmployeeIdsForCurrentUser() === null && authRepository.getSavedAccounts().length >= 2;
+  const isProprietaire = user.role === ROLES.PROPRIETAIRE;
+  const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
+  return `
+    <div class="card" style="margin-top: 16px;" id="mon-compte-apparence">
+      <h2>Apparence</h2>
+      <p class="text-muted" style="margin: 0 0 8px;">« Système » suit le réglage clair ou sombre de votre appareil. Le choix est mémorisé.</p>
+      <div class="theme-toggle-group" role="group" aria-label="Thème de l'application" style="padding: 0;">
+        ${[['system', 'Système'], ['light', 'Clair'], ['dark', 'Sombre']].map(([value, label]) =>
+          `<button type="button" class="theme-toggle-btn${getThemePreference() === value ? ' active' : ''}" data-theme-choice="${value}">${label}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="card" style="margin-top: 16px;" id="mon-compte-securite">
+      <h2>Connexion et données personnelles</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-change-password">Modifier mon mot de passe</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-export-my-data">Télécharger mes données (RGPD)</button>
+      </div>
+      <p class="text-muted" style="margin: 8px 0 0;">Le fichier téléchargé contient les données que Nexus conserve sur vous.</p>
+    </div>
+    ${hasModule('conges') ? `
+      <div class="card" style="margin-top: 16px;" id="mon-compte-calendrier">
+        <h2>Mon calendrier</h2>
+        <p class="text-muted" style="margin: 0 0 8px;">Affichez vos congés validés dans Outlook, Google Agenda ou tout autre logiciel de calendrier.</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-ical-sync">${icon(ICONS.calendar, 14)} Synchroniser mon calendrier</button>
+      </div>` : ''}
+    <div class="card" style="margin-top: 16px;" id="mon-compte-comptes">
+      <h2>Mes comptes sur cet appareil</h2>
+      <p class="text-muted" style="margin: 0 0 8px;">Passez d'une entreprise à l'autre sans vous déconnecter. La croix retire un compte de cet appareil (rien n'est supprimé ailleurs).</p>
+      ${otherAccounts.map(a => `
+        <div class="user-menu-account-wrap">
+          <button type="button" class="user-menu-account-row" data-switch-account="${escapeHtml(a.id)}">
+            <span class="avatar avatar-initials user-menu-account-avatar ${getAvatarColorClass(a.prenom, a.nom)}">${escapeHtml(getInitials(a.prenom, a.nom))}</span>
+            <span class="user-menu-account-info">
+              <span class="user-menu-account-name">${personNameHtml(a)}</span>
+              <span class="user-menu-account-detail">${escapeHtml(a.companyName || a.email)}</span>
+            </span>
+          </button>
+          <button type="button" class="btn-icon user-menu-account-remove" data-remove-account="${escapeHtml(a.id)}" title="Retirer ce compte de cet appareil" aria-label="Retirer ce compte de cet appareil">${icon(ICONS.close, 13)}</button>
+        </div>
+      `).join('')}
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-add-account">${icon(ICONS.personPlus, 14)} Ajouter un compte</button>
+        ${canSeeGroupSummary ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-group-summary">${icon(ICONS.orgchart, 14)} Vue groupe</button>` : ''}
+      </div>
+    </div>
+    ${canGererAbonnement ? `
+      <div class="card" style="margin-top: 16px;" id="mon-compte-abonnement">
+        <h2>Abonnement</h2>
+        <p class="text-muted" style="margin: 0 0 8px;">Votre formule, vos modules, vos licences et le paiement.</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-mon-compte-abonnement">${icon(ICONS.card, 14)} Ouvrir l'abonnement</button>
+      </div>` : ''}
+    ${isProprietaire ? `
+      <div class="card" style="margin-top: 16px;" id="mon-compte-propriete">
+        <h2>Propriété de l'entreprise</h2>
+        <p class="text-muted" style="margin: 0 0 8px;">Le propriétaire a accès à tout, y compris l'abonnement. À faire avec soin.</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-user-menu-transfer-proprietaire">${icon(ICONS.personPlus, 14)} Transférer la propriété</button>
+      </div>` : ''}
+    <div class="card" style="margin-top: 16px;" id="mon-compte-apropos">
+      <h2>À propos</h2>
+      <p class="text-muted" style="margin: 0 0 8px;">Nexus · version ${escapeHtml(APP_VERSION)}</p>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-mon-compte-nouveautes">Voir les nouveautés</button>
+    </div>
+  `;
+}
+
+function bindMonCompteOutilsEvents(user) {
+  const hasTeamScope = ['manager', 'rh', 'proprietaire', 'comptabilite'].includes(user.role);
+  const surClic = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  document.querySelectorAll('[data-switch-account]').forEach(row => {
+    row.addEventListener('click', async () => {
+      row.disabled = true;
+      // §correctif retour Betty du 07/09/2026 : filet de sécurité supplémentaire ICI en plus de
+      // celui déjà posé dans DB.switchToSavedAccount — une exception qui échapperait malgré tout
+      // (ex. window.SupabaseSync.switchToSession lui-même en erreur réseau) ne doit jamais laisser
+      // ce bouton dans un état muet (row.disabled resté true, aucun message, menu qui semble figé).
+      let result;
+      try {
+        result = await authRepository.switchAccount(row.dataset.switchAccount);
+      } catch (err) {
+        showToast(`Bascule de compte interrompue (${(err && err.message) || err}). Vérifiez sur quel compte vous êtes connecté(e) avant de continuer.`, 'error');
+        render();
+        return;
+      }
+      if (!result.success) {
+        showToast(result.error, 'error');
+        render();
+        return;
+      }
+      showApp();
+    });
+  });
+  // §correctif audit du 23/08/2026 (2.8) : jusqu'ici aucun moyen de retirer un compte gardé en
+  // parallèle sur cet appareil — son refresh_token restait dans localStorage indéfiniment, sans
+  // expiration, offrant une bascule sans mot de passe à quiconque reprend ce navigateur. Ne
+  // révoque que la mémorisation LOCALE (removeSavedAccount, déjà existant) : n'affecte pas la
+  // session active de ce compte ailleurs, exactement comme "Se déconnecter" pour le compte actif.
+  document.querySelectorAll('[data-remove-account]').forEach(btn => {
+    btn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      authRepository.removeSavedAccount(btn.dataset.removeAccount);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-theme-choice]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyThemePreference(btn.dataset.themeChoice);
+      render();
+    });
+  });
+  surClic('btn-group-summary', openGroupSummaryModal);
+  surClic('btn-add-account', openAddAccountFlow);
+  surClic('btn-mon-compte-abonnement', () => { state.parametresTab = 'abonnement'; navigateTo('parametres'); });
+  surClic('btn-user-menu-transfer-proprietaire', openTransferProprietaireModal);
+  surClic('btn-ical-sync', () => openCalendarSyncModal(hasTeamScope));
+  surClic('btn-change-password', openChangePasswordModal);
+  surClic('btn-export-my-data', exportMyDataRGPD);
+  surClic('btn-mon-compte-nouveautes', openChangelogModal);
 }
 
 // ---------------------------------------------------------------------------
@@ -5089,10 +5083,10 @@ function guideOutroSections() {
       html: `
         <ul class="guide-tips-list">
           <li><strong>Ctrl+K</strong> (ou ⌘K sur Mac) ouvre la recherche depuis n'importe quel écran.</li>
-          <li><strong>Thème sombre :</strong> dans le menu de votre compte, choisissez Clair, Sombre ou Système.</li>
+          <li><strong>Thème sombre :</strong> dans Paramètres > Mon compte, rubrique Apparence, choisissez Clair, Sombre ou Système.</li>
           <li><strong>Installer Nexus :</strong> sur ordinateur, téléphone ou tablette, utilisez l'option « Installer l'application » de votre navigateur pour l'ouvrir comme une vraie application.</li>
-          <li><strong>Après une mise à jour :</strong> le bouton de rechargement en haut à droite charge la dernière version. Le numéro de version est affiché dans le menu de votre compte.</li>
-          <li><strong>Plusieurs comptes :</strong> « Ajouter un compte » dans le menu du compte permet de passer d'une entreprise à l'autre sans vous déconnecter.</li>
+          <li><strong>Après une mise à jour :</strong> le bouton de rechargement en haut à droite charge la dernière version. Le numéro de version est affiché dans Paramètres > Mon compte, rubrique À propos, et en bas du menu du rond.</li>
+          <li><strong>Plusieurs comptes :</strong> « Ajouter un compte » (Paramètres > Mon compte, rubrique Mes comptes sur cet appareil) permet de passer d'une entreprise à l'autre sans vous déconnecter.</li>
           <li><strong>Une explication par écran :</strong> le bouton « ? » en haut de chaque écran donne son mode d'emploi détaillé.</li>
         </ul>`
     },
@@ -5483,7 +5477,7 @@ const GUIDE_THEMES = [
       { id: 'd-mes-docs', q: 'Où trouver mes documents (contrat, attestations...) ?', module: 'rh', vue: 'mes-documents', mots: 'document contrat avenant attestation bulletin coffre-fort fichier pdf télécharger',
         r: gP(`Ouvrez <strong>Documents</strong> : vous y voyez les documents que les RH ont déposés pour vous (contrat, avenants, attestations...) ou diffusés à votre service. Un document qui manque n'a pas été partagé avec vous : demandez-le à vos RH.`) },
       { id: 'd-rgpd', q: 'Comment télécharger mes données personnelles (RGPD) ?', mots: 'rgpd données personnelles export télécharger droit d\'accès copie',
-        r: gP(`Cliquez sur le rond avec vos initiales (en haut à droite), puis sur <strong>Télécharger mes données (RGPD)</strong> : vous recevez un fichier avec les données que Nexus conserve sur vous.`) },
+        r: gP(`Cliquez sur le rond avec vos initiales (en haut à droite), puis sur <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Connexion et données personnelles », et sur <strong>Télécharger mes données (RGPD)</strong> : vous recevez un fichier avec les données que Nexus conserve sur vous.`) },
       { id: 'd-coordonnees', q: 'Comment modifier mes coordonnées ou corriger ma fiche ?', vue: 'ma-fiche', mots: 'adresse téléphone coordonnées modifier fiche information erreur nom changement',
         r: gShot('ma-fiche', "Écran Ma fiche : identité, contrat et poste, avec les onglets Fiche, Contrat, Congés et absences, Notes de frais et Documents") + gP(`Ouvrez <strong>Ma fiche</strong> : vous voyez vos informations telles que l'entreprise les a enregistrées. Selon vos droits, vous pouvez modifier vos coordonnées (adresse, téléphone...). Pour le reste (nom, contrat, poste...), signalez l'erreur à vos RH.`) },
       { id: 'd-retraite', q: 'À quoi sert l\'écran « Ma retraite » ?', module: 'rh', vue: 'retraite', mots: 'retraite carrière âge départ emplois précédents ancienneté trimestres relevé',
@@ -5499,10 +5493,10 @@ const GUIDE_THEMES = [
   },
   {
     id: 'faire-compte', titre: 'Mon compte, sécurité et confort', icone: ICONS.gear,
-    intro: gP(`Mot de passe, apparence, notifications, plusieurs comptes : tout ce qui se règle depuis le rond avec vos initiales, en haut à droite.`),
+    intro: gP(`Mot de passe, apparence, notifications, plusieurs comptes : tout ce qui se règle dans <strong>Paramètres > Mon compte</strong>, accessible depuis le rond avec vos initiales, en haut à droite. Le menu du rond ne garde que Paramètres, Aide / Signaler un problème, le Guide et la déconnexion.`),
     entrees: [
       { id: 'k-mdp', q: 'Comment changer mon mot de passe ?', mots: 'mot de passe mdp changer modifier password sécurité',
-        r: gShot('menu-compte', "Menu du rond avec les initiales : thème, guide, comptes, paramètres, mot de passe, données personnelles, déconnexion et numéro de version") + gP(`Cliquez sur le rond avec vos initiales, puis sur <strong>Modifier mon mot de passe</strong>. Choisissez-en un nouveau et confirmez.`) },
+        r: gShot('menu-compte', "Menu du rond avec les initiales : Paramètres, Aide / Signaler un problème, Guide de l'application, déconnexion et numéro de version") + gP(`Cliquez sur le rond avec vos initiales, puis sur <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Connexion et données personnelles », et sur <strong>Modifier mon mot de passe</strong>. Choisissez-en un nouveau et confirmez.`) },
       { id: 'k-mdp-oublie', q: 'J\'ai oublié mon mot de passe', mots: 'oublié perdu mot de passe mdp réinitialiser connexion impossible mail lien',
         r: gEtapes(
           `Sur l'écran de connexion, cliquez sur <strong>Mot de passe oublié ?</strong> et saisissez votre adresse e-mail professionnelle.`,
@@ -5511,7 +5505,7 @@ const GUIDE_THEMES = [
       { id: 'k-mdp-premier', q: 'On me demande de changer mon mot de passe à la connexion', mots: 'première connexion mot de passe provisoire obligatoire changer nouveau compte',
         r: gP(`C'est normal quand vos RH vous ont donné un mot de passe provisoire : Nexus vous demande d'en choisir un personnel avant de continuer. Choisissez-en un que vous n'utilisez nulle part ailleurs.`) },
       { id: 'k-theme', q: 'Comment passer en mode sombre ?', mots: 'thème sombre clair nuit apparence couleur affichage dark',
-        r: gP(`Dans le menu du rond en haut à droite, choisissez <strong>Système</strong> (suit votre appareil), <strong>Clair</strong> ou <strong>Sombre</strong>. Le choix est mémorisé.`) },
+        r: gP(`Dans le menu du rond en haut à droite, ouvrez <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Apparence », puis choisissez <strong>Système</strong> (suit votre appareil), <strong>Clair</strong> ou <strong>Sombre</strong>. Le choix est mémorisé.`) },
       { id: 'k-photo', q: 'Comment changer ma photo de profil ?', vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'photo avatar image profil portrait',
         r: gP(`Ouvrez le menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Photo de profil ». Elle s'affiche ensuite à côté de votre nom partout (planning, listes, en-tête).`) },
       { id: 'k-notifs', q: 'Où voir mes notifications ?', mots: 'notification cloche alerte rappel message demande à valider décision',
@@ -5519,13 +5513,13 @@ const GUIDE_THEMES = [
       { id: 'k-installer', q: 'Comment installer Nexus comme une application ?', mots: 'installer application téléphone mobile tablette écran d\'accueil raccourci pwa icône',
         r: gP(`Dans votre navigateur, utilisez l'option <strong>Installer l'application</strong> (ou « Ajouter à l'écran d'accueil » sur téléphone). Nexus s'ouvre alors dans sa propre fenêtre, comme une vraie application, sur ordinateur, téléphone ou tablette.`) },
       { id: 'k-agenda', q: 'Comment voir mes congés dans mon agenda (Outlook, Google...) ?', module: 'conges', mots: 'agenda calendrier synchroniser ical outlook google apple lien abonnement synchronisation',
-        r: gP(`Dans le menu du rond en haut à droite, cliquez sur <strong>Synchroniser mon calendrier</strong>. Choisissez ce que vous voulez voir, puis ajoutez le lien proposé dans votre logiciel de calendrier (Outlook, Google Agenda...). Les congés validés y apparaissent ; la mise à jour se fait ensuite automatiquement, au rythme de votre logiciel de calendrier.`) },
+        r: gP(`Dans le menu du rond en haut à droite, ouvrez <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Mon calendrier », puis cliquez sur <strong>Synchroniser mon calendrier</strong>. Choisissez ce que vous voulez voir, puis ajoutez le lien proposé dans votre logiciel de calendrier (Outlook, Google Agenda...). Les congés validés y apparaissent ; la mise à jour se fait ensuite automatiquement, au rythme de votre logiciel de calendrier.`) },
       { id: 'k-comptes', q: 'Comment passer d\'une entreprise à une autre sans me déconnecter ?', mots: 'plusieurs comptes entreprises changer de compte basculer ajouter un compte multi société retirer',
-        r: gP(`Dans le menu du rond, <strong>Ajouter un compte</strong> vous connecte à une autre entreprise en gardant la première. Les comptes gardés apparaissent ensuite dans « Autres comptes » : un clic pour basculer. La croix à côté d'un compte le retire de cet appareil (sans rien supprimer ailleurs).`) },
+        r: gP(`Dans le menu du rond, ouvrez <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Mes comptes sur cet appareil » : <strong>Ajouter un compte</strong> vous connecte à une autre entreprise en gardant la première. Les comptes gardés apparaissent ensuite dans la même rubrique : un clic pour basculer. La croix à côté d'un compte le retire de cet appareil (sans rien supprimer ailleurs).`) },
       { id: 'k-recherche', q: 'Comment utiliser la recherche en haut ?', mots: 'recherche ctrl k raccourci trouver salarié action rapide clavier global',
         r: gP(`La barre de recherche (raccourci <strong>Ctrl+K</strong>, ⌘K sur Mac) retrouve un salarié, une demande ou une note de frais en tapant son nom, et lance des actions : ajouter un salarié, poser un congé, déclarer du télétravail... Elle ne montre que ce que vous avez le droit de voir.`) },
       { id: 'k-version', q: 'Comment savoir quelle version j\'utilise et ce qui a changé ?', mots: 'version numéro mise à jour nouveautés changements actualiser recharger nouvelle',
-        r: gP(`Le numéro de version est affiché en bas du menu du rond en haut à droite, avec le lien <strong>Nouveautés</strong> qui liste les changements. Après une mise à jour, rechargez la page (bouton de rechargement en haut à droite) pour passer à la dernière version.`) },
+        r: gP(`Le numéro de version est affiché en bas du menu du rond en haut à droite, et dans <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « À propos », avec le lien <strong>Nouveautés</strong> qui liste les changements. Après une mise à jour, rechargez la page (bouton de rechargement en haut à droite) pour passer à la dernière version.`) },
       { id: 'k-support', q: 'Comment signaler un problème ou poser une question ?', vue: 'mes-tickets', mots: 'support aide bug problème erreur question contact ticket signaler assistance',
         r: gEtapes(
           `Ouvrez <strong>Aide et support</strong> (ou « Aide / Signaler un problème » dans le menu du rond).`,
@@ -5723,16 +5717,16 @@ GUIDE_THEMES.push(
     intro: gP(`Ce qui est réservé au propriétaire du compte.`),
     entrees: [
       { id: 'o-abonnement', q: 'Comment gérer mon abonnement et mes modules ?', vue: 'parametres', params: { parametresTab: 'abonnement' }, vueLabel: 'Abonnement', mots: 'abonnement facture paiement carte stripe formule modules licences offre prix souscrire résilier essai',
-        r: gP(`Ouvrez <strong>Abonnement</strong> dans le menu du rond en haut à droite : vous y voyez votre formule, vos modules et vos licences, et vous gérez le paiement. Pour une formule à la carte, les licences d'un module se répartissent entre les salariés.`) },
+        r: gP(`Ouvrez <strong>Paramètres</strong> (menu du rond en haut à droite), onglet <strong>Abonnement</strong> (ou la rubrique Abonnement de Mon compte) : vous y voyez votre formule, vos modules et vos licences, et vous gérez le paiement. Pour une formule à la carte, les licences d'un module se répartissent entre les salariés.`) },
       { id: 'o-transfert', q: 'Comment transférer la propriété du compte ?', mots: 'transférer propriété propriétaire céder changer de propriétaire nouveau responsable compte',
-        r: gP(`Menu du rond en haut à droite, puis <strong>Transférer la propriété</strong> : choisissez la personne qui devient propriétaire. Faites-le avec soin : le propriétaire a accès à tout, y compris l'abonnement.`) },
+        r: gP(`Menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Propriété de l'entreprise », et <strong>Transférer la propriété</strong> : choisissez la personne qui devient propriétaire. Faites-le avec soin : le propriétaire a accès à tout, y compris l'abonnement.`) },
       { id: 'o-mise-en-service', q: 'À quoi sert le « mode mise en service » ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'mise en service mode corriger ses propres congés compteurs rh démarrage reprise données temporaire 90 jours',
         r: gP(`Normalement, personne ne gère sa propre demande de congé ni son propre compteur : seul le propriétaire le peut. Pendant que vous reprenez vos données dans Nexus, ce mode permet à la personne RH qui paramètre l'outil de corriger <strong>ses propres</strong> congés et compteurs.`) + gEtapes(
           `Ouvrez <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`,
           `Dans « Mode mise en service », choisissez la durée (de 1 à 90 jours) et cliquez sur <strong>Activer le mode</strong>.`
         ) + gP(`Le mode s'éteint tout seul à la date choisie (ou plus tôt avec « Désactiver maintenant »), et chaque activation est tracée dans le journal d'audit. Seul le propriétaire peut l'activer.`) },
       { id: 'o-vue-groupe', q: 'Comment suivre plusieurs entreprises ?', mots: 'groupe plusieurs sociétés vue groupe multi entreprises consolidation holding',
-        r: gP(`Si vous avez plusieurs comptes gardés sur cet appareil, le menu du rond propose <strong>Vue groupe</strong> : un résumé de vos entreprises côte à côte. Ajoutez chaque entreprise avec « Ajouter un compte ».`) }
+        r: gP(`Si vous avez plusieurs comptes gardés sur cet appareil, la rubrique « Mes comptes sur cet appareil » de <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>) propose <strong>Vue groupe</strong> : un résumé de vos entreprises côte à côte. Ajoutez chaque entreprise avec « Ajouter un compte ».`) }
     ]
   },
   {
@@ -5816,11 +5810,11 @@ GUIDE_THEMES.push(
       { id: 'g-tickets', q: 'Tickets restaurant', mots: 'tickets restaurant titres repas', r: gP(`Les titres-restaurant, calculés d'après les jours réellement travaillés dans le mois. Ne les confondez pas avec « Aide et support », qui sert à contacter l'équipe Nexus.`) },
       { id: 'g-pointeuse', q: 'Pointeuse et QR code', mots: 'pointeuse pointage qr code arrivée départ badge scanner', r: gFig.pointage() + gP(`Un QR code affiché sur le lieu de travail : vous le scannez à l'arrivée puis au départ pour enregistrer vos horaires.`) },
       { id: 'g-audit', q: 'Journal d\'audit', mots: 'audit journal trace historique qui a fait quoi', r: gP(`Le registre des actions importantes (qui, quoi, quand), consultable par ceux qui en ont le droit.`) },
-      { id: 'g-rgpd', q: 'RGPD', mots: 'rgpd données personnelles protection droit accès export', r: gP(`Le règlement européen sur la protection des données. Vous pouvez télécharger vos données depuis le menu du rond en haut à droite.`) },
+      { id: 'g-rgpd', q: 'RGPD', mots: 'rgpd données personnelles protection droit accès export', r: gP(`Le règlement européen sur la protection des données. Vous pouvez télécharger vos données depuis Paramètres > Mon compte (menu du rond en haut à droite).`) },
       { id: 'g-avenant', q: 'Avenant', mots: 'avenant contrat modification', r: gP(`Un document qui modifie un contrat existant (horaires, poste, rémunération...).`) },
       { id: 'g-offboarding', q: 'Intégration et départ (onboarding, offboarding)', mots: 'onboarding offboarding checklist intégration départ parcours', r: gP(`Deux checklists de la fiche d'un salarié (onglet Parcours) : une pour son arrivée, une pour son départ (matériel, accès, solde de tout compte).`) },
       { id: 'g-ical', q: 'Synchronisation de calendrier', mots: 'ical agenda calendrier synchroniser outlook google lien', r: gP(`Un lien qui affiche vos congés dans l'agenda que vous utilisez déjà, et se met à jour sans rien refaire.`) },
-      { id: 'g-version', q: 'Numéro de version', mots: 'version numéro mise à jour aaaa.mm.jj nouveautés', r: gP(`Il se lit <strong>année.mois.jour.n°</strong> : par exemple 2026.10.26.1 est la première mise en ligne du 26 octobre 2026. Il est affiché en bas du menu du rond en haut à droite.`) }
+      { id: 'g-version', q: 'Numéro de version', mots: 'version numéro mise à jour aaaa.mm.jj nouveautés', r: gP(`Il se lit <strong>année.mois.jour.n°</strong> : par exemple 2026.10.26.1 est la première mise en ligne du 26 octobre 2026. Il est affiché en bas du menu du rond en haut à droite et dans Paramètres > Mon compte.`) }
     ]
   }
 );
@@ -20933,12 +20927,12 @@ function renderParametres() {
   return `
     <div class="view-header">
       <h1>Paramètres</h1>
-      <p class="view-subtitle">${canManageParametres() ? "Entreprise, référentiels, calendrier et un onglet par module souscrit" : 'Vos réglages personnels'}</p>
+      <p class="view-subtitle">${canManageParametres() ? "Mon compte (photo, mot de passe, apparence, comptes), entreprise, référentiels, calendrier et un onglet par module souscrit" : 'Vos réglages personnels : photo, mot de passe, apparence, comptes'}</p>
     </div>
     <div class="parametres-layout">
       <nav class="parametres-sidebar-desktop">
-        ${groupesHtml}
         ${monCompteHtml}
+        ${groupesHtml}
       </nav>
       <!-- §demande 18/08/2026, conservé : sous 860px (voir style.css), un menu déroulant remplace
            la barre latérale — même sélection (state.parametresTab). -->
@@ -21077,6 +21071,7 @@ function renderParametresMonCompte() {
         </div>
       </div>
     </div>
+    ${renderMonCompteOutilsHtml(user)}
     ${renderIndisponibilitesCard(user)}
     ${renderDelegationCard(user)}
   `;
@@ -21089,6 +21084,7 @@ function renderParametresMonCompte() {
  * jamais tout seul via render() (voir showApp(), seul autre appelant de renderUserMenuButton). */
 function bindParametresMonCompteEvents() {
   const user = authRepository.getCurrentUser();
+  bindMonCompteOutilsEvents(user);
   const photoUploadInput = document.getElementById('f-photo-upload');
   document.getElementById('btn-upload-photo').addEventListener('click', () => photoUploadInput.click());
   photoUploadInput.addEventListener('change', () => {

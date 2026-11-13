@@ -10,7 +10,7 @@ const assert = require('assert');
 const { loadAppJs } = require('./load-app-js');
 
 async function run() {
-  const { DB, sandbox, authRepository, renderUserMenuPanel, runGroupSummaryRefresh, renderGroupSummaryResult } = loadAppJs();
+  const { DB, sandbox, authRepository, renderMonCompteOutilsHtml, runGroupSummaryRefresh, renderGroupSummaryResult } = loadAppJs();
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
 
@@ -20,19 +20,16 @@ async function run() {
     DB._currentEmployeeId = rh.id;
 
     authRepository.getSavedAccounts = () => [{ id: 'a' }]; // un seul compte
-    renderUserMenuPanel();
-    let html = sandbox.document.getElementById('user-menu-panel').innerHTML;
+    let html = renderMonCompteOutilsHtml(authRepository.getCurrentUser());
     assert.ok(!html.includes('Vue groupe'), 'avec un seul compte enregistré, "Vue groupe" ne doit pas apparaître');
 
     authRepository.getSavedAccounts = () => [{ id: 'a' }, { id: 'b' }]; // 2 comptes
-    renderUserMenuPanel();
-    html = sandbox.document.getElementById('user-menu-panel').innerHTML;
+    html = renderMonCompteOutilsHtml(authRepository.getCurrentUser());
     assert.ok(html.includes('Vue groupe'), 'avec 2 comptes enregistrés et une vision entreprise entière (RH), "Vue groupe" doit apparaître');
 
     const manager = DB.getEmployees().find(e => e.role === 'manager');
     DB._currentEmployeeId = manager.id;
-    renderUserMenuPanel();
-    html = sandbox.document.getElementById('user-menu-panel').innerHTML;
+    html = renderMonCompteOutilsHtml(authRepository.getCurrentUser());
     assert.ok(!html.includes('Vue groupe'), 'un manager (portée équipe, pas entreprise entière) ne doit jamais voir "Vue groupe", même avec 2 comptes');
 
     DB._currentEmployeeId = rh.id;
