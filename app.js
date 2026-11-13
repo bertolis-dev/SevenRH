@@ -2477,7 +2477,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.1';
+const APP_VERSION = '2026.11.13.2';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -4214,7 +4214,6 @@ function renderUserMenuPanel() {
   const panel = document.getElementById('user-menu-panel');
   if (!user) { panel.innerHTML = ''; return; }
 
-  const canGererAbonnement = hasPermission(user, PERMISSIONS.GERER_ABONNEMENTS);
   const currentCompany = DB.getCurrentCompany();
 
   // Comptes gardés en parallèle (bascule multi-entreprise façon Gmail, demande du 21/08/2026) — un
@@ -4230,7 +4229,7 @@ function renderUserMenuPanel() {
       ${currentCompany && currentCompany.raisonSociale ? `<span class="text-muted" style="font-size:12px;">${escapeHtml(currentCompany.raisonSociale)}</span>` : ''}
     </div>
     <div class="user-menu-divider"></div>
-    <button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} <span class="user-menu-item-text">Paramètres<small>Mon compte, mot de passe, apparence, comptes${canGererAbonnement ? ', abonnement' : ''}…</small></span></button>
+    <button type="button" class="user-menu-item" id="btn-user-menu-parametres">${icon(ICONS.gear, 14)} Paramètres</button>
     <button type="button" class="user-menu-item" id="btn-user-menu-support">${icon(ICONS.headset, 14)} Aide / Signaler un problème</button>
     <button type="button" class="user-menu-item user-menu-item-guide" id="btn-user-menu-guide">${icon(ICONS.helpCircle, 14)} Guide de l'application</button>
     <div class="user-menu-divider"></div>
