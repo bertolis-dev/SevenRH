@@ -2478,7 +2478,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.8';
+const APP_VERSION = '2026.11.13.9';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2487,6 +2487,7 @@ const CHANGELOG_ENTRIES = [
     items: [
       "Calendrier des absences, pour la RH et les administrateurs : un double-clic sur un congé ouvre sa fiche pour le modifier (type, dates, demi-journée) ou le supprimer.",
       "Compteurs : un type réservé à certains salariés par une règle d'éligibilité (ex. « RTT cadres ») n'apparaît plus chez les autres, ni dans leur fiche (cartes de solde) ni dans le Tableau des compteurs (cellule « — » au lieu de « 0 »). Un historique existant reste toujours visible.",
+      "Paramètres > Congés et absences : nouveau bouton « Deux RTT selon le statut » qui crée « RTT cadres » et « RTT non-cadres » en un clic, chacun réservé à sa catégorie (il peut réutiliser votre type RTT actuel pour les cadres, historique conservé, et crée les catégories manquantes).",
       "RTT : le guide recommande désormais deux types RTT selon le statut (par exemple « RTT cadres » et « RTT non-cadres »), chacun réservé à sa catégorie, avec pas à pas dans Paramètres > Congés et absences.",
       "Paramètres > Référentiels refait : chaque liste (postes, catégories de salariés, conventions collectives, types de contrat, forfaits, documents, checklists) est une carte claire avec le nombre d'éléments, une phrase qui explique à quoi elle sert, des lignes aérées, une corbeille pour retirer un élément et, pour les longues listes, un champ de recherche.",
       "Nouvelle barre du haut : le logo Nexus à gauche (un clic ramène à l'accueil), puis la recherche et votre compte.",
@@ -5631,7 +5632,7 @@ GUIDE_THEMES.push(
       { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
         r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
       { id: 'r-rtt-categories', q: 'Comment donner un nombre de RTT différent aux cadres et aux non-cadres ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'rtt cadres non-cadres cadre catégorie de salarié nombre de jours différent deux compteurs éligibilité règle dupliquer type',
-        r: gP(`La méthode recommandée : <strong>deux types RTT, un par statut</strong> (par exemple « RTT cadres » et « RTT non-cadres »). Chaque type est réservé à sa catégorie par une règle d'éligibilité : un salarié ne voit et ne pose que le RTT de son statut, avec son propre compteur.`) + gEtapes(
+        r: gP(`La méthode recommandée : <strong>deux types RTT, un par statut</strong> (par exemple « RTT cadres » et « RTT non-cadres »). Chaque type est réservé à sa catégorie par une règle d'éligibilité : un salarié ne voit et ne pose que le RTT de son statut, avec son propre compteur.`) + gP(`<strong>Le plus rapide :</strong> dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, cliquez sur <strong>Deux RTT selon le statut</strong>, indiquez les jours par an de chaque statut : les deux types sont créés avec leur règle. Le pas à pas ci-dessous fait la même chose à la main.`) + gEtapes(
           `Vérifiez que les catégories existent : <strong>Paramètres</strong>, onglet <strong>Référentiels</strong> (par exemple « Cadre » et « Non cadre »), et que chaque salarié a la bonne <strong>catégorie de salarié</strong> sur sa fiche.`,
           `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, cliquez sur <strong>Modifier</strong> à côté du type RTT. Renommez-le « RTT cadres » et indiquez son nombre de jours par an (par exemple 12).`,
           `Dans « Règles d'éligibilité », cliquez sur <strong>+ Ajouter une règle</strong>, choisissez le critère <strong>Catégorie de salarié</strong> et cochez <strong>Cadre</strong>. Enregistrez.`,
@@ -19163,6 +19164,115 @@ async function submitLeaveRequestForm(evt) {
 
 // ---- Sous-vue : Types de congés ----
 
+/** Retour du 13/11/2026 (« on va mettre deux sortes de RTT en fonction du statut ») : crée en un clic « RTT cadres » et « RTT non-cadres », chacun
+ * réservé à sa catégorie par une règle d'éligibilité. Peut réutiliser un type RTT existant pour les cadres (son historique est conservé : il est
+ * renommé, jamais recréé), puis copie ses réglages pour les non-cadres. Les catégories manquantes sont créées. */
+function creerDeuxTypesRtt({ baseId, categorieCadreId, categorieNonCadreId, joursCadre, joursNonCadre }) {
+  if (!categorieCadreId || !categorieNonCadreId) return { success: false, error: 'Choisissez une catégorie pour chaque statut.' };
+  if (categorieCadreId === categorieNonCadreId) return { success: false, error: 'Les deux statuts doivent avoir des catégories différentes.' };
+  if (!(Number(joursCadre) > 0) || !(Number(joursNonCadre) > 0)) return { success: false, error: 'Indiquez un nombre de jours par an supérieur à 0 pour chaque statut.' };
+  const base = baseId ? leaveTypeRepository.getLeaveTypeById(baseId) : null;
+  const autres = leaveTypeRepository.getLeaveTypes().filter(t => !base || t.id !== base.id);
+  const existe = (nom) => autres.some(t => (t.nom || '').trim().toLowerCase() === nom.toLowerCase());
+  if (existe('RTT cadres') || existe('RTT non-cadres')) return { success: false, error: 'Un type « RTT cadres » ou « RTT non-cadres » existe déjà.' };
+
+  // Autres règles éventuelles du type de départ (ancienneté...) conservées ; seule la règle de catégorie est remplacée.
+  const reglesSans = (base && base.regles || []).filter(r => r.critere !== 'categorieSalarieId');
+  const regles = (categorieId) => reglesSans.concat([{ critere: 'categorieSalarieId', operateur: 'in', valeur: [categorieId] }]);
+
+  const cadres = base
+    ? leaveTypeRepository.updateLeaveType(base.id, { nom: 'RTT cadres', nombreAnnuel: Number(joursCadre), regles: regles(categorieCadreId) })
+    : leaveTypeRepository.addLeaveType({ nom: 'RTT cadres', icone: '⏱️', couleur: '#7c3aed', categorie: 'conge', acquisition: 'Mensuelle', nombreAnnuel: Number(joursCadre), paye: true, workflow: ['manager'], regles: regles(categorieCadreId) });
+  const nonCadres = leaveTypeRepository.addLeaveType(Object.assign({}, cadres, {
+    id: undefined, nom: 'RTT non-cadres', couleur: '#0ea5e9', nombreAnnuel: Number(joursNonCadre), regles: regles(categorieNonCadreId)
+  }));
+  return { success: true, cadres, nonCadres };
+}
+
+function openDeuxRttModal() {
+  const categories = categorieSalarieRepository.getAll();
+  const cadre = categories.find(c => /^cadres?$/i.test((c.nom || '').trim()));
+  const nonCadre = categories.find(c => /^non[\s-]?cadres?$/i.test((c.nom || '').trim()));
+  const typesRtt = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === 'conge' && leaveTypeNameMatches(t.nom, 'RTT'));
+  const optionsCategorie = (selectionId, nomACreer) => `
+    ${categories.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === selectionId ? 'selected' : ''}>${escapeHtml(c.nom)}</option>`).join('')}
+    ${categories.some(c => (c.nom || '').trim().toLowerCase() === nomACreer.toLowerCase()) ? '' : `<option value="__creer__" ${selectionId ? '' : 'selected'}>Créer la catégorie « ${nomACreer} »</option>`}`;
+
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Deux RTT selon le statut</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="deux-rtt-form">
+        <div class="modal-body">
+          <p class="text-muted">Crée « RTT cadres » et « RTT non-cadres ». Chaque type est réservé à sa catégorie : un salarié ne voit et ne pose que le RTT de son statut, avec son propre compteur.</p>
+          ${typesRtt.length ? `
+            <div class="form-field">
+              <label for="f-rtt-base">Point de départ</label>
+              <select class="input" id="f-rtt-base">
+                ${typesRtt.map(t => `<option value="${escapeHtml(t.id)}">Réutiliser « ${escapeHtml(t.nom)} » pour les cadres (garde son historique)</option>`).join('')}
+                <option value="">Créer deux nouveaux types</option>
+              </select>
+              <p class="form-hint">Le type choisi est renommé « RTT cadres ». « RTT non-cadres » en est une copie (mêmes réglages de validation, couleur différente).</p>
+            </div>` : ''}
+          <div class="form-grid" style="margin-top: 12px;">
+            <div class="form-field">
+              <label for="f-rtt-cat-cadre">Catégorie des cadres</label>
+              <select class="input" id="f-rtt-cat-cadre">${optionsCategorie(cadre && cadre.id, 'Cadre')}</select>
+            </div>
+            <div class="form-field">
+              <label for="f-rtt-jours-cadre">Jours de RTT par an (cadres)</label>
+              <input class="input" type="number" min="0.5" step="0.5" id="f-rtt-jours-cadre" placeholder="ex. 12" required>
+            </div>
+            <div class="form-field">
+              <label for="f-rtt-cat-non">Catégorie des non-cadres</label>
+              <select class="input" id="f-rtt-cat-non">${optionsCategorie(nonCadre && nonCadre.id, 'Non cadre')}</select>
+            </div>
+            <div class="form-field">
+              <label for="f-rtt-jours-non">Jours de RTT par an (non-cadres)</label>
+              <input class="input" type="number" min="0.5" step="0.5" id="f-rtt-jours-non" placeholder="ex. 8" required>
+            </div>
+          </div>
+          <p class="form-hint">Pensez à renseigner la catégorie de chaque salarié sur sa fiche : sans catégorie, il n'a aucun des deux RTT.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer les deux types</button>
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('deux-rtt-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const idCategorie = (selectId, nom) => {
+      const valeur = document.getElementById(selectId).value;
+      if (valeur !== '__creer__') return valeur;
+      return categorieSalarieRepository.create({ nom }).id;
+    };
+    const baseEl = document.getElementById('f-rtt-base');
+    const jours = { cadre: document.getElementById('f-rtt-jours-cadre').value, non: document.getElementById('f-rtt-jours-non').value };
+    // Valide d'abord les nombres : on ne crée une catégorie manquante que si la suite peut aboutir.
+    if (!(Number(jours.cadre) > 0) || !(Number(jours.non) > 0)) { showToast('Indiquez un nombre de jours par an supérieur à 0 pour chaque statut.', 'error'); return; }
+    const resultat = creerDeuxTypesRtt({
+      baseId: baseEl ? baseEl.value : '',
+      categorieCadreId: idCategorie('f-rtt-cat-cadre', 'Cadre'),
+      categorieNonCadreId: idCategorie('f-rtt-cat-non', 'Non cadre'),
+      joursCadre: jours.cadre,
+      joursNonCadre: jours.non
+    });
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    showToast('Types « RTT cadres » et « RTT non-cadres » créés.');
+    closeModal();
+    render();
+  });
+}
+
 function renderCongesTypes(categorie = 'conge') {
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const noun = categorie === 'conge' ? 'de congé' : 'd\'absence';
@@ -19174,6 +19284,7 @@ function renderCongesTypes(categorie = 'conge') {
       <div class="detail-header-actions">
         <!-- §retour Betty du 18/09/2026 (point 5) : déplacé depuis l'écran Congés & absences —
              une opération de mise en service (à la création des types), pas un usage quotidien. -->
+        ${categorie === 'conge' ? '<button class="btn btn-secondary btn-sm" id="btn-rtt-deux-statuts" title="Crée RTT cadres et RTT non-cadres, chacun réservé à sa catégorie">Deux RTT selon le statut</button>' : ''}
         <button class="btn btn-secondary btn-sm" id="btn-import-absences-historique">Importer l'historique</button>
         <button class="btn btn-primary btn-sm" id="btn-new-leave-type">+ Nouveau type</button>
       </div>
@@ -19280,6 +19391,8 @@ function renderLeaveTypeRow(t) {
 function bindCongesTypesEvents(categorie = 'conge') {
   document.getElementById('btn-new-leave-type').addEventListener('click', () => openLeaveTypeModal(null, categorie));
   document.getElementById('btn-import-absences-historique').addEventListener('click', () => openImportAbsencesHistoriqueModal(categorie));
+  const btnDeuxRtt = document.getElementById('btn-rtt-deux-statuts');
+  if (btnDeuxRtt) btnDeuxRtt.addEventListener('click', openDeuxRttModal);
 
   document.querySelectorAll('[data-edit-type]').forEach(btn => btn.addEventListener('click', () => openLeaveTypeModal(btn.dataset.editType)));
   document.querySelectorAll('[data-duplicate-type]').forEach(btn => btn.addEventListener('click', () => {

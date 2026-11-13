@@ -66,3 +66,44 @@ const modale = api.sandbox.document.getElementById('modal-root').innerHTML;
 assert.ok(modale.includes('Modifier le congé') && modale.includes('id="btn-delete-leave-modal"') && modale.includes('Enregistrer'), 'fiche de modification avec bouton Supprimer');
 
 console.log('OK — rtt-deux-statuts-calendrier-double-clic-13-11.test.js');
+
+// --- Assistant « Deux RTT selon le statut » ---
+(function assistantDeuxRtt() {
+  const api2 = loadAppJs();
+  api2.sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  api2.DB.init();
+  const DB2 = api2.DB;
+  const cats = DB2.getSettings().categoriesSalarie || [];
+  const cadre2 = cats.find(c => /^cadre$/i.test(c.nom));
+  const non2 = cats.find(c => /non cadre/i.test(c.nom));
+  const baseRtt = DB2.getLeaveTypes().find(t => t.categorie === 'conge' && /^rtt/i.test(t.nom));
+  assert.ok(baseRtt, 'préalable : un type RTT existe dans les données de démonstration');
+
+  // Refus : mêmes catégories, jours manquants
+  assert.strictEqual(api2.sandbox.creerDeuxTypesRtt({ baseId: baseRtt.id, categorieCadreId: cadre2.id, categorieNonCadreId: cadre2.id, joursCadre: 12, joursNonCadre: 8 }).success, false);
+  assert.strictEqual(api2.sandbox.creerDeuxTypesRtt({ baseId: baseRtt.id, categorieCadreId: cadre2.id, categorieNonCadreId: non2.id, joursCadre: 0, joursNonCadre: 8 }).success, false);
+
+  const avant = DB2.getLeaveTypes().length;
+  const res = api2.sandbox.creerDeuxTypesRtt({ baseId: baseRtt.id, categorieCadreId: cadre2.id, categorieNonCadreId: non2.id, joursCadre: 12, joursNonCadre: 8 });
+  assert.ok(res.success, res.error);
+  assert.strictEqual(res.cadres.id, baseRtt.id, 'le type RTT existant est réutilisé (historique conservé)');
+  assert.strictEqual(DB2.getLeaveTypes().length, avant + 1, 'un seul nouveau type : RTT non-cadres');
+  assert.strictEqual(res.cadres.nom, 'RTT cadres');
+  assert.strictEqual(res.nonCadres.nom, 'RTT non-cadres');
+  assert.strictEqual(res.cadres.nombreAnnuel, 12);
+  assert.strictEqual(res.nonCadres.nombreAnnuel, 8);
+  assert.strictEqual(JSON.stringify(res.cadres.regles.find(r => r.critere === 'categorieSalarieId').valeur), JSON.stringify([cadre2.id]));
+  assert.strictEqual(JSON.stringify(res.nonCadres.regles.find(r => r.critere === 'categorieSalarieId').valeur), JSON.stringify([non2.id]));
+
+  // Relancer l'assistant ne doit pas créer de doublons
+  assert.strictEqual(api2.sandbox.creerDeuxTypesRtt({ baseId: '', categorieCadreId: cadre2.id, categorieNonCadreId: non2.id, joursCadre: 12, joursNonCadre: 8 }).success, false, 'doublon refusé');
+
+  // Départ de zéro : deux nouveaux types
+  const api3 = loadAppJs();
+  api3.sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
+  api3.DB.init();
+  const c3 = api3.DB.getSettings().categoriesSalarie;
+  const neuf = api3.sandbox.creerDeuxTypesRtt({ baseId: '', categorieCadreId: c3.find(c => /^cadre$/i.test(c.nom)).id, categorieNonCadreId: c3.find(c => /non cadre/i.test(c.nom)).id, joursCadre: 10, joursNonCadre: 6 });
+  assert.ok(neuf.success && neuf.cadres.id !== neuf.nonCadres.id, 'deux types distincts créés');
+  console.log('OK — assistant « Deux RTT selon le statut »');
+})();
