@@ -320,8 +320,7 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
   min-height: 100vh;
 }
 
-/* Refonte du 13/11/2026 : la barre du haut couvre toute la largeur (logo Nexus, boutons ronds de section, recherche, compte) et le menu de
-   gauche se place dessous — il ne liste plus que les écrans de la section choisie (voir renderSidebar / renderTopbarSections). */
+/* Refonte du 13/11/2026 : la barre du haut couvre toute la largeur (logo Nexus, recherche, compte) et le menu de gauche se place dessous. */
 #topbar {
   height: var(--topbar-height);
   display: flex;
@@ -343,24 +342,6 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
   font-family: inherit; font-weight: 700; font-size: 19px; letter-spacing: 0.01em;
 }
 .topbar-brand .logo-mark { width: 40px; height: 40px; padding: 4px; }
-.topbar-sections {
-  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
-  padding: 4px; border-radius: 14px; background: var(--color-muted-soft);
-}
-.topbar-sections:empty { display: none; }
-.topbar-pill {
-  --pill-color: var(--color-primary);
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 16px; border: 0; border-radius: 10px; cursor: pointer;
-  background: none; color: var(--color-text-muted);
-  font-family: inherit; font-size: 14px; font-weight: 600; white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-.topbar-pill svg { width: 18px; height: 18px; display: block; flex-shrink: 0; }
-.topbar-pill:hover { color: var(--color-text); background: var(--color-surface); }
-.topbar-pill.active { background: var(--pill-color); color: #fff; }
-.topbar-pill[data-pill="personnel"] { --pill-color: var(--espace-personnel); }
-.topbar-pill[data-pill="equipe"] { --pill-color: var(--espace-equipe); }
 .topbar-user { margin-left: auto; }
 
 .topbar-title { font-weight: 600; font-size: 14px; color: var(--color-text-muted); }
@@ -4083,7 +4064,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .calendar-cell { height: 84px; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
-  .topbar-brand, .topbar-sections { display: none; }
+  .topbar-brand { display: none; }
   .topbar-search { max-width: none; }
   /* flex-wrap: wrap est maintenant la règle de base (voir .detail-header ci-dessus, plus haut dans
      ce fichier) — ne reste ici que ce qui est vraiment spécifique au mobile. */
