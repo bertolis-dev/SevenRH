@@ -2478,13 +2478,16 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.7';
+const APP_VERSION = '2026.11.13.8';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Calendrier des absences, pour la RH et les administrateurs : un double-clic sur un congé ouvre sa fiche pour le modifier (type, dates, demi-journée) ou le supprimer.",
+      "Compteurs : un type réservé à certains salariés par une règle d'éligibilité (ex. « RTT cadres ») n'apparaît plus chez les autres, ni dans leur fiche (cartes de solde) ni dans le Tableau des compteurs (cellule « — » au lieu de « 0 »). Un historique existant reste toujours visible.",
+      "RTT : le guide recommande désormais deux types RTT selon le statut (par exemple « RTT cadres » et « RTT non-cadres »), chacun réservé à sa catégorie, avec pas à pas dans Paramètres > Congés et absences.",
       "Paramètres > Référentiels refait : chaque liste (postes, catégories de salariés, conventions collectives, types de contrat, forfaits, documents, checklists) est une carte claire avec le nombre d'éléments, une phrase qui explique à quoi elle sert, des lignes aérées, une corbeille pour retirer un élément et, pour les longues listes, un champ de recherche.",
       "Nouvelle barre du haut : le logo Nexus à gauche (un clic ramène à l'accueil), puis la recherche et votre compte.",
       "Menu du rond en haut à droite allégé : il ne garde que Paramètres, Aide / Signaler un problème, le Guide de l'application et la déconnexion. Apparence (clair/sombre), mot de passe, téléchargement de vos données, synchronisation du calendrier, changement de compte, abonnement et transfert de propriété sont réunis dans Paramètres > Mon compte, désormais en tête de la liste des paramètres.",
@@ -5628,12 +5631,12 @@ GUIDE_THEMES.push(
       { id: 'r-rtt', q: 'Pourquoi les RTT sont-ils grisés « non activé » ?', mots: 'rtt non activé grisé inactif compteur activer type',
         r: gP(`Le type RTT existe mais personne ne l'a encore activé : ce n'est pas une fonction manquante. Activez-le dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`) },
       { id: 'r-rtt-categories', q: 'Comment donner un nombre de RTT différent aux cadres et aux non-cadres ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'rtt cadres non-cadres cadre catégorie de salarié nombre de jours différent deux compteurs éligibilité règle dupliquer type',
-        r: gP(`Le plus simple : <strong>un seul type RTT</strong> avec des <strong>paliers par catégorie</strong>, comme pour les congés payés. Chaque salarié garde un seul compteur RTT, et son nombre de jours dépend de sa catégorie (Cadre, Non cadre...).`) + gEtapes(
+        r: gP(`La méthode recommandée : <strong>deux types RTT, un par statut</strong> (par exemple « RTT cadres » et « RTT non-cadres »). Chaque type est réservé à sa catégorie par une règle d'éligibilité : un salarié ne voit et ne pose que le RTT de son statut, avec son propre compteur.`) + gEtapes(
           `Vérifiez que les catégories existent : <strong>Paramètres</strong>, onglet <strong>Référentiels</strong> (par exemple « Cadre » et « Non cadre »), et que chaque salarié a la bonne <strong>catégorie de salarié</strong> sur sa fiche.`,
-          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, ouvrez le type RTT et descendez jusqu'à « Paliers d'ancienneté ».`,
-          `Ajoutez un palier <strong>« à partir de 0 an »</strong> pour les non-cadres (par exemple 10 jours par an, catégorie « Non cadre »), et un second palier <strong>« à partir de 0 an »</strong> pour les cadres (par exemple 8 jours par an, catégorie « Cadre »).`,
-          `Vérifiez la ligne « Résumé » sous les paliers, puis enregistrez.`
-        ) + gP(`Le nombre de jours est toujours un total par an, même en acquisition mensuelle (12 par an = 1 jour par mois). Un salarié sans catégorie n'a que les paliers « Toutes les catégories » : pensez à renseigner la catégorie de chacun. Vous pouvez aussi ajouter un palier « Toutes les catégories » à 0 an comme valeur par défaut ; à ancienneté égale, le palier de la catégorie du salarié l'emporte.`) + gP(`<strong>Autre méthode :</strong> créer deux types distincts (« RTT cadres » et « RTT non-cadres »), chacun réservé à sa catégorie par une règle d'éligibilité (bouton « Dupliquer » sur le type). Les salariés ont alors deux compteurs RTT portant des noms différents, et il faut commencer chaque nom par « RTT » pour que la paie les reconnaisse.`) },
+          `Dans <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>, cliquez sur <strong>Modifier</strong> à côté du type RTT. Renommez-le « RTT cadres » et indiquez son nombre de jours par an (par exemple 12).`,
+          `Dans « Règles d'éligibilité », cliquez sur <strong>+ Ajouter une règle</strong>, choisissez le critère <strong>Catégorie de salarié</strong> et cochez <strong>Cadre</strong>. Enregistrez.`,
+          `De retour dans la liste, cliquez sur <strong>Dupliquer</strong> à côté de « RTT cadres ». Nommez la copie « RTT non-cadres », indiquez son nombre de jours (par exemple 8), et remplacez la catégorie de la règle par <strong>Non cadre</strong>. Enregistrez.`
+        ) + gP(`Chaque salarié n'a alors que le compteur RTT de son statut. Un salarié sans catégorie n'a aucun des deux : pensez à renseigner la catégorie de chacun. Commencez toujours le nom par « RTT » pour que la paie reconnaisse ces types. Pour les imports de soldes, chaque type a sa propre colonne (« RTT cadres », « RTT non-cadres »).`) + gP(`<strong>Autre méthode :</strong> garder un seul type RTT et lui donner des <strong>paliers par catégorie</strong> (« Paliers d'ancienneté », case « Catégorie concernée »). Le salarié n'a alors qu'un seul compteur RTT, dont le nombre de jours dépend de sa catégorie.`) },
       { id: 'r-desactiver', q: 'Faut-il désactiver ou supprimer un type de congé ?', mots: 'désactiver supprimer type congé historique inactif',
         r: gP(`<strong>Désactivez</strong> un type plutôt que de le supprimer s'il a déjà servi : la désactivation empêche les nouvelles demandes mais conserve l'historique des demandes passées. La suppression est faite pour les types jamais utilisés.`) },
       { id: 'r-cloture', q: 'Comment faire courir les congés payés du 1er juin au 31 mai ?', mots: 'clôture période acquisition 31 mai 1er juin année de référence report perte compteur date de clôture exercice',
@@ -10569,6 +10572,12 @@ function renderTableauCompteursPeriodInfo(info) {
 // puis acquis/pris/en attente/report (RH en a besoin au moins autant que du disponible seul), puis
 // pour un type à clôture, la période exacte du disponible ET ce qui s'acquiert en plus sur la
 // période en cours (jamais mélangé, jamais consommable avant sa propre clôture — voir getLeaveBalance).
+/** Retour du 13/11/2026 : cellule « — » plutôt que « 0 » quand le type est réservé à d'autres salariés (ex. RTT cadres chez un non-cadre) et que rien n'y est enregistré. */
+function compteurNonConcerne(employee, type, balance) {
+  if (isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) return false;
+  return !(balance && (balance.acquis || balance.pris || balance.enAttente || balance.ajustement));
+}
+
 function renderTableauCompteursCell(b) {
   if (b.disponible === Infinity) return `<div class="tc-disponible">Illimité</div>`;
   const detail = [`acquis ${formatDurationFR(b.acquis)}`, `pris ${formatDurationFR(b.pris)}`];
@@ -10643,7 +10652,7 @@ function renderTableauCompteurs() {
                 ${pageItems.map(row => `
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
-                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${leaveTypes[i].actif ? renderTableauCompteursCell(b) : '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>'}</td>`).join('')}
+                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
@@ -16616,7 +16625,11 @@ function renderEmployeeBalances(employee, canAdjust = false) {
   // demandes sur ce type, on le garde, pour ne jamais cacher un historique réel.
   const desactives = new Set(employee.typesAbsenceDesactives || []);
   const aDesDemandes = (t) => requests.some(r => r.employeeId === employee.id && r.typeId === t.id);
-  const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie && !(desactives.has(t.id) && !aDesDemandes(t)));
+  // Retour du 13/11/2026 (deux RTT selon le statut) : un type réservé par une règle d'éligibilité (ex. « RTT cadres ») n'apparaît pas chez un salarié
+  // qui n'est pas concerné — sauf s'il a déjà des demandes ou un ajustement sur ce type (on ne cache jamais un historique réel).
+  const categoriesSalarie = categorieSalarieRepository.getAll();
+  const concerne = (t) => isLeaveTypeEligibleForEmployee(employee, t, categoriesSalarie) || aDesDemandes(t) || Boolean(employee.compteurs && employee.compteurs[t.id]);
+  const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie && !(desactives.has(t.id) && !aDesDemandes(t)) && concerne(t));
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
   return `
@@ -17844,6 +17857,17 @@ function canDeleteLeaveRequest(request) {
     .some(p => hasPermission(user, p));
 }
 
+/** Retour du 13/11/2026 : dans le calendrier, un double-clic sur un congé ouvre sa fiche de modification/suppression — réservé à la RH et aux
+ * administrateurs (gestion des salariés ou des paramètres), et seulement pour les demandes qu'ils ont le droit de gérer. */
+function utilisateurPeutEditerCongesDepuisCalendrier() {
+  const user = authRepository.getCurrentUser();
+  return !!user && (hasPermission(user, PERMISSIONS.GERER_UTILISATEURS) || hasPermission(user, PERMISSIONS.GERER_PARAMETRES));
+}
+
+function peutModifierCongeDepuisCalendrier(request) {
+  return !!request && utilisateurPeutEditerCongesDepuisCalendrier() && canManageRequestFor(request.employeeId);
+}
+
 function handleDeleteLeaveRequest(id) {
   const request = leaveRepository.getById(id);
   if (!request || !canDeleteLeaveRequest(request)) { showToast('Action non autorisée.', 'error'); return; }
@@ -18020,7 +18044,8 @@ function openProlongerModal(requestId) {
  * réservée à qui peut déjà gérer la demande (même contrôle que "Annuler"). Le type proposé reste
  * dans la MÊME catégorie (congé ou autre absence) que le type actuel — changer de catégorie via
  * une régularisation mélangerait des règles de saisie différentes (§15) sans raison claire. */
-function openRegulariserModal(requestId) {
+function openRegulariserModal(requestId, options = {}) {
+  const depuisCalendrier = !!options.depuisCalendrier;
   const request = leaveRepository.getById(requestId);
   if (!request) { showToast('Cette demande n\'est plus disponible.', 'error'); return; }
   // §correctif audit du 31/08/2026 : défense en profondeur, même contrôle que le bouton "Régulariser"
@@ -18040,12 +18065,12 @@ function openRegulariserModal(requestId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Régulariser la demande</h2>
+        <h2>${depuisCalendrier ? 'Modifier le congé' : 'Régulariser la demande'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="regulariser-form">
         <div class="modal-body">
-          <p class="text-muted">${personNameHtml(employee)} : actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}.</p>
+          <p class="text-muted">${personNameHtml(employee)} : actuellement ${escapeHtml(currentType.nom)}, du ${formatDate(request.dateDebut)} au ${formatDate(request.dateFin)}${depuisCalendrier ? ` · statut : ${escapeHtml(request.statut)}` : ''}.</p>
           ${selectField('typeId', 'Type', null, request.typeId, typesMemeCategorie.map(t => ({ value: t.id, label: t.actif ? t.nom : `${t.nom} (désactivé)` })))}
           <div class="form-grid" style="margin-top: 12px;">
             ${textField('dateDebut', 'Date de début', request.dateDebut, true, 'date')}
@@ -18060,13 +18085,14 @@ function openRegulariserModal(requestId) {
             </select>
           </div>
           <div class="form-field" style="margin-top: 12px;">
-            <label for="f-motif">Motif de la régularisation</label>
+            <label for="f-motif">${depuisCalendrier ? 'Motif de la modification (facultatif)' : 'Motif de la régularisation'}</label>
             <input class="input" type="text" id="f-motif" name="motif" placeholder="Ex. erreur de saisie initiale, absence reclassée">
           </div>
         </div>
         <div class="modal-footer">
+          ${depuisCalendrier && canDeleteLeaveRequest(request) ? '<button type="button" class="btn btn-danger" id="btn-delete-leave-modal" style="margin-right: auto;">Supprimer ce congé</button>' : ''}
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
-          <button type="submit" class="btn btn-primary">Régulariser</button>
+          <button type="submit" class="btn btn-primary">${depuisCalendrier ? 'Enregistrer' : 'Régulariser'}</button>
         </div>
       </form>
     </div>
@@ -18092,6 +18118,8 @@ function openRegulariserModal(requestId) {
 
   document.getElementById('btn-close-modal').addEventListener('click', closeModal);
   document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const btnSupprimerConge = document.getElementById('btn-delete-leave-modal');
+  if (btnSupprimerConge) btnSupprimerConge.addEventListener('click', () => { closeModal(); handleDeleteLeaveRequest(requestId); });
   document.getElementById('regulariser-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const typeId = document.getElementById('f-typeId').value;
@@ -18101,7 +18129,7 @@ function openRegulariserModal(requestId) {
     const motif = document.getElementById('f-motif').value;
     const result = leaveRepository.regulariser(requestId, { typeId, dateDebut, dateFin, demiJournee, motif });
     if (!result.success) { showToast(result.error, 'error'); return; }
-    showToast('Demande régularisée.');
+    showToast(depuisCalendrier ? 'Congé modifié.' : 'Demande régularisée.');
     closeModal();
     render();
   });
@@ -20176,6 +20204,7 @@ function renderAbsenceCalendarBoard(sharedData) {
            garde bien sa case colorée dans la grille ci-dessous, seule la légende change. -->
       ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
       ${hasModule('planning') ? '<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>' : ''}
+      ${utilisateurPeutEditerCongesDepuisCalendrier() ? '<span class="absence-cal-legend-item absence-cal-hint">Double-cliquez sur un congé pour le modifier ou le supprimer.</span>' : ''}
     </div>
     <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
@@ -20266,9 +20295,13 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
       const couleurFond = escapeHtml(type ? type.couleur : 'var(--color-text-muted)');
       const titre = `${escapeHtml(type ? type.nom : 'Congé')}${escapeHtml(titleSuffix)}${pending ? ' (en attente)' : ''}`;
       const pendingCls = pending ? ' absence-cal-bar-pending' : '';
+      const editable = peutModifierCongeDepuisCalendrier(seg.leave);
+      const editCls = editable ? ' absence-cal-editable' : '';
+      const editAttr = editable ? ` data-cal-leave="${escapeHtml(seg.leave.id)}"` : '';
+      const editHint = editable ? ' (double-clic pour modifier ou supprimer)' : '';
       if (!multiDay && startHalf) {
         const clip = startHalf === 'matin' ? 'polygon(0 0, 100% 0, 0 100%)' : 'polygon(100% 0, 100% 100%, 0 100%)';
-        return `<td class="absence-cal-bar-cell absence-cal-half-cell"><div class="absence-cal-bar absence-cal-bar-half absence-cal-half-${startHalf === 'matin' ? 'matin' : 'apres-midi'}${pendingCls}" style="background:${couleurFond};clip-path:${clip}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}"><span class="absence-cal-half-mark" aria-label="${escapeHtml(label)}">½</span></div></td>`;
+        return `<td class="absence-cal-bar-cell absence-cal-half-cell${editCls}"${editAttr}><div class="absence-cal-bar absence-cal-bar-half absence-cal-half-${startHalf === 'matin' ? 'matin' : 'apres-midi'}${pendingCls}" style="background:${couleurFond};clip-path:${clip}" title="${escapeHtml(label)}${pending ? ' (en attente)' : ''}${editHint}"><span class="absence-cal-half-mark" aria-label="${escapeHtml(label)}">½</span></div></td>`;
       }
       const largeurJour = 100 / seg.days.length;
       const biais = multiDay && (startHalf === 'apres-midi' || endHalf === 'matin');
@@ -20283,7 +20316,7 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
         if (startHalf === 'apres-midi') paddings += `padding-left:calc(${pct(largeurJour / 2)} + 4px);`;
         if (endHalf === 'matin') paddings += `padding-right:calc(${pct(largeurJour / 2)} + 4px);`;
       }
-      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell"><div class="absence-cal-bar${pendingCls}" style="background:${couleurFond};${clipPeriode}${paddings}" title="${titre}">
+      return `<td colspan="${seg.days.length}" class="absence-cal-bar-cell${editCls}"${editAttr}><div class="absence-cal-bar${pendingCls}" style="background:${couleurFond};${clipPeriode}${paddings}" title="${titre}${editHint}">
         ${multiDay ? `<span class="absence-cal-bar-edge">${startDay}${startHalf ? '<sup>½</sup>' : ''}</span>` : ''}
         <span class="absence-cal-bar-label">${escapeHtml(label)}</span>
         ${multiDay ? `<span class="absence-cal-bar-edge">${endDay}${endHalf ? '<sup>½</sup>' : ''}</span>` : ''}
@@ -20314,6 +20347,17 @@ function bindCalendrierEvents() {
     render();
   });
   bindMoiEquipeToggleEvents();
+
+  // Double-clic sur un congé (RH / administrateurs) : fiche de modification et de suppression.
+  const tableCalendrier = document.querySelector('.absence-cal-table');
+  if (tableCalendrier) tableCalendrier.addEventListener('dblclick', (e) => {
+    const cible = e.target.closest('[data-cal-leave]');
+    if (!cible) return;
+    const demande = leaveRepository.getById(cible.dataset.calLeave);
+    if (!peutModifierCongeDepuisCalendrier(demande)) return;
+    if (window.getSelection) window.getSelection().removeAllRanges();
+    openRegulariserModal(demande.id, { depuisCalendrier: true });
+  });
 
   const btnGotoVacances = document.getElementById('btn-cal-goto-vacances-settings');
   if (btnGotoVacances) {
