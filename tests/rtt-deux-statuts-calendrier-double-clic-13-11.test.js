@@ -107,3 +107,20 @@ console.log('OK — rtt-deux-statuts-calendrier-double-clic-13-11.test.js');
   assert.ok(neuf.success && neuf.cadres.id !== neuf.nonCadres.id, 'deux types distincts créés');
   console.log('OK — assistant « Deux RTT selon le statut »');
 })();
+
+// --- Imports : un type réservé ne s'applique pas à un salarié non concerné (même règle que la saisie manuelle) ---
+(function importsRespectentEligibilite() {
+  const types2 = DB.getLeaveTypes();
+  const mapSoldes = api.guessSoldesColumnMapping(['Matricule', 'RTT cadres'], types2);
+  const lignes = api.buildSoldesPreviewRows([[a.matricule, '3'], [b.matricule, '3']], mapSoldes, 'cible');
+  assert.strictEqual(lignes[0].status, 'ok', 'un cadre peut recevoir un solde « RTT cadres » : ' + lignes[0].message);
+  assert.strictEqual(lignes[1].status, 'error', 'un non-cadre ne peut pas recevoir de solde « RTT cadres »');
+  assert.ok(/pas concerné/.test(lignes[1].message), lignes[1].message);
+
+  const mapAbs = api.guessAbsencesColumnMapping(['Matricule', 'Type', 'Date début', 'Date fin']);
+  const abs = api.buildAbsencesPreviewRows([[a.matricule, 'RTT cadres', '05/10/2026', ''], [b.matricule, 'RTT cadres', '06/10/2026', '']], mapAbs, 'conge');
+  assert.strictEqual(abs[0].status, 'ok', 'un cadre peut importer un « RTT cadres » : ' + abs[0].message);
+  assert.strictEqual(abs[1].status, 'error', 'un non-cadre ne peut pas importer un « RTT cadres »');
+  assert.ok(/pas concerné/.test(abs[1].message), abs[1].message);
+  console.log('OK — imports soldes et absences : règle d\'éligibilité respectée');
+})();

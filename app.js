@@ -2478,7 +2478,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.9';
+const APP_VERSION = '2026.11.13.10';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -2487,6 +2487,7 @@ const CHANGELOG_ENTRIES = [
     items: [
       "Calendrier des absences, pour la RH et les administrateurs : un double-clic sur un congé ouvre sa fiche pour le modifier (type, dates, demi-journée) ou le supprimer.",
       "Compteurs : un type réservé à certains salariés par une règle d'éligibilité (ex. « RTT cadres ») n'apparaît plus chez les autres, ni dans leur fiche (cartes de solde) ni dans le Tableau des compteurs (cellule « — » au lieu de « 0 »). Un historique existant reste toujours visible.",
+      "Imports : un type réservé à certains salariés (ex. « RTT cadres ») est refusé dans l'aperçu pour un salarié non concerné, au lieu d'enregistrer un solde ou un congé invisible. Même règle que la saisie manuelle.",
       "Paramètres > Congés et absences : nouveau bouton « Deux RTT selon le statut » qui crée « RTT cadres » et « RTT non-cadres » en un clic, chacun réservé à sa catégorie (il peut réutiliser votre type RTT actuel pour les cadres, historique conservé, et crée les catégories manquantes).",
       "RTT : le guide recommande désormais deux types RTT selon le statut (par exemple « RTT cadres » et « RTT non-cadres »), chacun réservé à sa catégorie, avec pas à pas dans Paramètres > Congés et absences.",
       "Paramètres > Référentiels refait : chaque liste (postes, catégories de salariés, conventions collectives, types de contrat, forfaits, documents, checklists) est une carte claire avec le nombre d'éléments, une phrase qui explique à quoi elle sert, des lignes aérées, une corbeille pour retirer un élément et, pour les longues listes, un champ de recherche.",
@@ -11039,6 +11040,7 @@ function buildSoldesPreviewRows(dataRows, mapping, mode) {
         const type = allTypes.find(t => t.id === s.typeId);
         const nombre = lireSoldeImporte(s);
         const balance = type ? getLeaveBalance(employee, type, allRequests, allTypes) : null;
+        if (type && !isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) { status = 'error'; message = 'Ce salarié n\'est pas concerné par « ' + s.typeNom + ' » (règle d\'éligibilité du type) : videz cette colonne pour lui.'; break; }
         if (!balance || balance.disponible === Infinity) { status = 'error'; message = '« ' + s.typeNom + ' » n\'a pas de solde chiffré (type illimité).'; break; }
         const sansAjustement = round2(balance.disponible - (balance.ajustement || 0));
         s.avant = balance.disponible;
@@ -11376,6 +11378,8 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     else if (!type) { status = 'error'; message = `Type "${typeValue}" introuvable parmi les types existants.`; }
     // Le serveur refuse tout congé d'un salarié sans licence « Congés » (offre à la carte) : on le dit ici, avant l'envoi, au lieu de laisser l'import échouer en silence.
     else if (!hasModuleLicense(employee, 'conges')) { status = 'error'; message = 'Ce salarié n\'a pas de licence « Congés » (Abonnement > Gérer les accès) : le serveur refuserait l\'enregistrement.'; }
+    // Même règle que la saisie manuelle : un type réservé par une règle d'éligibilité (ex. « RTT cadres ») ne s'applique pas à un salarié non concerné.
+    else if (!isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) { status = 'error'; message = `Ce salarié n'est pas concerné par « ${type.nom} » (règle d'éligibilité du type, par exemple la catégorie de salarié). Vérifiez sa catégorie ou le type indiqué.`; }
     else if (!dateDebut) { status = 'error'; message = 'Date de début manquante ou invalide.'; }
     else if (dateFinRaw && !dateFinParsed) { status = 'error'; message = 'Date de fin invalide (format non reconnu).'; }
     else if (!dateFin) { status = 'error'; message = 'Date de fin manquante ou invalide.'; }
