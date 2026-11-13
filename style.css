@@ -343,6 +343,8 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 }
 .topbar-brand .logo-mark { width: 40px; height: 40px; padding: 4px; }
 .topbar-user { margin-left: auto; }
+/* Recherche écartée du logo (retour du 13/11/2026). */
+.topbar-brand + .topbar-search { margin-left: 36px; }
 
 .topbar-title { font-weight: 600; font-size: 14px; color: var(--color-text-muted); }
 
@@ -4065,6 +4067,7 @@ textarea.input { resize: vertical; font-family: inherit; }
   .calendar-weekday { font-size: 10px; }
   #topbar { padding: 0 14px; gap: 10px; }
   .topbar-brand { display: none; }
+  .topbar-brand + .topbar-search { margin-left: 0; }
   .topbar-search { max-width: none; }
   /* flex-wrap: wrap est maintenant la règle de base (voir .detail-header ci-dessus, plus haut dans
      ce fichier) — ne reste ici que ce qui est vraiment spécifique au mobile. */
