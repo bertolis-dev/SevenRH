@@ -267,10 +267,8 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 }
 .nav-section-toggle[aria-expanded="false"] .nav-section-chevron { transform: rotate(-45deg); }
 
-/* Revue Nexus n° 17 : chaque espace (Personnel, Équipe, Paramètres) a sa couleur — repère dans le menu, liseré en haut, fond légèrement teinté. */
+/* Revue Nexus n° 17 : chaque espace (Personnel, Équipe, Paramètres) a sa couleur — liseré en haut, fond légèrement teinté. */
 :root { --espace-personnel: #3b6fd1; --espace-equipe: #0f9d78; --espace-parametres: #7a5cc7; }
-.nav-section-toggle[data-espace="personnel"] { box-shadow: inset 3px 0 0 var(--espace-personnel); }
-.nav-section-toggle[data-espace="equipe"] { box-shadow: inset 3px 0 0 var(--espace-equipe); }
 :root[data-espace="personnel"] { --espace-accent: var(--espace-personnel); }
 :root[data-espace="equipe"] { --espace-accent: var(--espace-equipe); }
 :root[data-espace="parametres"] { --espace-accent: var(--espace-parametres); }
