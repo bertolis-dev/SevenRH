@@ -2478,13 +2478,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.13.10';
+const APP_VERSION = '2026.11.16.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Fiche salarié : le statut cadre / non-cadre n'est plus saisi en double. Il se déduit de la catégorie de salarié (Cadre ou Dirigeant : cadre ; Non cadre ou Agent de maîtrise : non-cadre) : la ligne « Statut » en doublon disparaît de « Contrat & poste », et la case « Statut cadre » du contrat est verrouillée dans ce cas (libre pour une catégorie personnalisée). Plus d'incohérence possible.",
+      "Tableau des compteurs : un type désactivé (ex. un ancien RTT) affiche de nouveau les jours pris ou en attente d'un salarié, au lieu d'un tiret qui les cachait.",
       "Calendrier des absences, pour la RH et les administrateurs : un double-clic sur un congé ouvre sa fiche pour le modifier (type, dates, demi-journée) ou le supprimer.",
       "Compteurs : un type réservé à certains salariés par une règle d'éligibilité (ex. « RTT cadres ») n'apparaît plus chez les autres, ni dans leur fiche (cartes de solde) ni dans le Tableau des compteurs (cellule « — » au lieu de « 0 »). Un historique existant reste toujours visible.",
       "Imports : un type réservé à certains salariés (ex. « RTT cadres ») est refusé dans l'aperçu pour un salarié non concerné, au lieu d'enregistrer un solde ou un congé invisible. Même règle que la saisie manuelle.",
@@ -9117,17 +9119,7 @@ function getDataQualityIssues() {
   const sansDateEntree = employees.filter(e => !e.dateEmbauche);
   if (sansDateEntree.length) issues.push({ severity: 'warning', label: 'Sans date d\'entrée', employees: sansDateEntree });
 
-  // §retour Betty du 28/09/2026 ("dans contrat & poste il y a une petite incohérence sur le
-  // statut, catégorie cadre et le statut est à non cadre") : deux champs distincts encodent chacun
-  // un statut cadre — statutPro/categorieSalarieId (catégorie de salarié, modifiable depuis "Modifier
-  // le salarié") et statutCadre (case à cocher du CONTRAT, depuis le socle enrichi du 22/09/2026,
-  // voir renderContratFormFields) — rien ne les synchronise entre eux : choisir la catégorie "Cadre"
-  // ne coche jamais automatiquement le statut du contrat, et réciproquement. Seules les 2 catégories
-  // sans ambiguïté (Cadre/Dirigeant -> cadre, Non cadre/Agent de maîtrise -> non-cadre) sont
-  // comparées : une catégorie personnalisée n'a pas de correspondance fiable, jamais signalée à tort.
-  const categorieImpliqueCadre = { 'Cadre': true, 'Dirigeant': true, 'Non cadre': false, 'Agent de maîtrise': false };
-  const cadreIncoherent = employees.filter(e => (e.statutPro || '') in categorieImpliqueCadre && categorieImpliqueCadre[e.statutPro] !== Boolean(e.statutCadre));
-  if (cadreIncoherent.length) issues.push({ severity: 'warning', label: 'Catégorie de salarié et statut cadre du contrat en désaccord', employees: cadreIncoherent });
+  // Retour du 16/11/2026 : le statut cadre se déduit de la catégorie de salarié (voir getStatutCadreEffectif, data.js) : plus de désaccord possible à signaler ici.
 
   // §correctif audit du 23/08/2026 (§6.4) : "le numéro de sécurité sociale n'a pas à être signalé
   // comme manquant chez un client qui n'a que le module Congés" — pertinent seulement pour la
@@ -10654,7 +10646,7 @@ function renderTableauCompteurs() {
                 ${pageItems.map(row => `
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
-                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
+                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif && !(b.pris || b.enAttente) ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
@@ -14792,9 +14784,13 @@ function renderContratFormFields(contrat, employee, settings) {
         <label for="f-contrat-classification">Classification</label>
         <input class="input" type="text" id="f-contrat-classification" value="${escapeHtml(contrat.classification || '')}" placeholder="Ex. Niveau III, coefficient 240 (convention collective)">
       </div>
-      <div class="form-field form-field-checkbox">
-        <label><input type="checkbox" id="f-contrat-statut-cadre" ${contrat.statutCadre ? 'checked' : ''}> Statut cadre</label>
-      </div>
+      ${(() => {
+        const categories = categorieSalarieRepository.getAll();
+        const implique = getStatutCadreParCategorie(employee, categories);
+        if (implique === null) return `<div class="form-field form-field-checkbox"><label><input type="checkbox" id="f-contrat-statut-cadre" ${contrat.statutCadre ? 'checked' : ''}> Statut cadre</label></div>`;
+        const categorie = categories.find(c => c.id === getEffectiveCategorieSalarieId(employee, categories));
+        return `<div class="form-field form-field-checkbox"><label><input type="checkbox" id="f-contrat-statut-cadre" ${implique ? 'checked' : ''} disabled> Statut cadre</label><p class="form-hint">Déduit de la catégorie de salarié (${escapeHtml(categorie ? categorie.nom : employee.statutPro || '')}). Pour le changer, modifiez la catégorie dans « Modifier le salarié ».</p></div>`;
+      })()}
       ${selectField('contrat-etablissement', 'Établissement', null, contrat.etablissementId, etablissementsSelectables.map(e => ({ value: e.id, label: e.actif ? e.nom : `${e.nom} (désactivé)` })), undefined, undefined, 'etablissements')}
       <div class="form-field">
         <label for="f-contrat-temps-travail">Temps de travail</label>
@@ -15686,7 +15682,6 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         ${canSeeContractuel ? infoRow('Catégorie de salarié', e.statutPro) : ''}
         ${canSeeContractuel ? infoRow('Type de contrat', e.typeContrat) : ''}
         ${canSeeContractuel && e.classification ? infoRow('Classification', e.classification) : ''}
-        ${canSeeContractuel ? infoRow('Statut', e.statutCadre ? 'Cadre' : 'Non-cadre') : ''}
         ${infoRow('Date d\'embauche', formatDate(e.dateEmbauche))}
         ${infoRow('Ancienneté', calculateAnciennete(e.dateEmbauche))}
         ${canSeeContractuel && estTypeContratATerme(e.typeContrat) ? infoRow('Date de fin de contrat', formatDate(e.dateFinContrat)) : ''}

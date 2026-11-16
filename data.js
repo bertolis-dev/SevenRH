@@ -1620,7 +1620,7 @@ function construireValeursFusionContrat(employee, contrat, company) {
     dateFinContrat: c.dateFin ? formatDate(c.dateFin) : '',
     motifRecours: c.motifRecours || '',
     classification: c.classification || '',
-    statutCadre: c.statutCadre ? 'cadre' : 'non-cadre',
+    statutCadre: (employee ? getStatutCadreEffectif(employee, settings.categoriesSalarie) : Boolean(c.statutCadre)) ? 'cadre' : 'non-cadre',
     etablissement: (((company && company.etablissements) || []).find(et => et.id === c.etablissementId) || {}).nom || '',
     nombreMoisSalaire: settings.masseSalarialeActivee && salaireAutoriseDansDocument(employee) ? (c.nombreMoisSalaire || '') : '',
     // §retour Betty du 23/09/2026 : primesRecurrentes/avantagesNature (listes) n'avaient jusqu'ici
@@ -6637,6 +6637,24 @@ function getEffectiveCategorieSalarieId(employee, categoriesSalarie) {
   if (employee.categorieSalarieId) return employee.categorieSalarieId;
   const match = (categoriesSalarie || []).find(c => c.nom === (employee.statutPro || '').trim());
   return match ? match.id : null;
+}
+
+/** Retour du 16/11/2026 (« doublon entre la catégorie de salarié et le statut ») : le statut cadre / non-cadre se déduit désormais de la catégorie de
+ * salarié quand elle est sans ambiguïté (Cadre et Dirigeant : cadre ; Non cadre et Agent de maîtrise : non-cadre). Une catégorie personnalisée n'a pas de
+ * correspondance fiable : la case « Statut cadre » du contrat reste alors modifiable. Une seule source, donc plus d'incohérence possible à l'affichage. */
+const STATUT_CADRE_PAR_CATEGORIE = { 'cadre': true, 'dirigeant': true, 'non cadre': false, 'non-cadre': false, 'agent de maîtrise': false };
+
+function getStatutCadreParCategorie(employee, categoriesSalarie) {
+  const categories = categoriesSalarie || DB.getSettings().categoriesSalarie || [];
+  const id = getEffectiveCategorieSalarieId(employee, categories);
+  const categorie = categories.find(c => c.id === id);
+  const nom = ((categorie && categorie.nom) || employee.statutPro || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(STATUT_CADRE_PAR_CATEGORIE, nom) ? STATUT_CADRE_PAR_CATEGORIE[nom] : null;
+}
+
+function getStatutCadreEffectif(employee, categoriesSalarie) {
+  const deduit = getStatutCadreParCategorie(employee, categoriesSalarie);
+  return deduit === null ? Boolean(employee.statutCadre) : deduit;
 }
 
 function makeEmptyEquipe() {

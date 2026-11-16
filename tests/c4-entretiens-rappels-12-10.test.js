@@ -77,7 +77,8 @@ async function runLesRappelsSontEchelonnes() {
   reglerDernier(25);
   await api.syncNotifications();
   assert.strictEqual(cles().length, 1, 'à 25 jours : premier rappel');
-  assert.ok(!/j7|retard/.test(cles()[0]));
+  // Le suffixe seulement : l'identifiant du salarié est dérivé de l'heure et peut contenir « j7 » par hasard (échec constaté le 16/11/2026).
+  assert.ok(!/-(j7|retard)$/.test(cles()[0]));
 
   reglerDernier(6);
   await api.syncNotifications();
