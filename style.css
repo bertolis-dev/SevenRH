@@ -269,9 +269,10 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 .nav-section-toggle[aria-expanded="false"] .nav-section-chevron { transform: rotate(-45deg); }
 
 /* Revue Nexus n° 17 : chaque espace (Personnel, Équipe, Paramètres) a sa couleur — liseré en haut, fond légèrement teinté. */
-:root { --espace-personnel: #3b6fd1; --espace-equipe: #0f9d78; --espace-parametres: #7a5cc7; }
+:root { --espace-personnel: #3b6fd1; --espace-equipe: #0f9d78; --espace-administration: #b7791f; --espace-parametres: #7a5cc7; }
 :root[data-espace="personnel"] { --espace-accent: var(--espace-personnel); }
 :root[data-espace="equipe"] { --espace-accent: var(--espace-equipe); }
+:root[data-espace="administration"] { --espace-accent: var(--espace-administration); }
 :root[data-espace="parametres"] { --espace-accent: var(--espace-parametres); }
 :root[data-espace] #main-column { background: color-mix(in srgb, var(--espace-accent) 6%, var(--color-bg)); }
 :root[data-espace] #topbar { border-top: 4px solid var(--espace-accent); }
@@ -289,13 +290,13 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--color-chip-bg), var(--color-primary-soft));
   color: var(--color-primary-text);
 }
-.nav-icon svg { width: 16px; height: 16px; display: block; }
+.nav-icon svg { width: 18px; height: 18px; display: block; }
 
 /* Voir icon() (app.js) — wrapper générique pour une icône ICONS.xxx insérée en ligne dans du texte
    (titres, listes, badges), ailleurs que dans .nav-icon (sidebar, son propre wrapper dédié). */
@@ -930,6 +931,14 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
    de types non activés grisées, jamais silencieusement absentes. */
 .tc-table td, .tc-table th { vertical-align: top; }
 .tc-disponible { font-weight: 600; }
+/* Refonte du 16/11/2026 : solde rouge s'il est négatif, orange à un jour ou moins ; première colonne (le salarié) figée quand le tableau défile à droite ; colonne « Total RTT » mise en avant. */
+.tc-solde-negatif { color: var(--color-danger); }
+.tc-solde-bas { color: var(--color-warning); }
+.tc-legende { margin: 0 0 12px; font-size: 13px; }
+.tc-total-rtt { border-left: 2px solid var(--color-border); background: var(--color-primary-soft); }
+@media (min-width: 861px) {
+  .tc-table th:first-child, .tc-table td:first-child { position: sticky; left: 0; z-index: 2; background: var(--color-surface); box-shadow: 1px 0 0 var(--color-border); }
+}
 .tc-periode, .tc-detail, .tc-en-cours { font-size: 12px; white-space: nowrap; }
 .tc-inactif { opacity: 0.55; }
 /* §demande Betty du 04/09/2026 : année/période affichées une seule fois par colonne (entête), pas
@@ -1129,6 +1138,8 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 
 .badge-row { display: flex; gap: 6px; margin-top: 8px; }
 
+/* Pastille de statut (Validé, En attente, Refusé, Annulé, Actif...) : même point de couleur partout. */
+.badge-statut::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge-success { background: var(--color-success-soft); color: var(--color-success); }
 .badge-warning { background: var(--color-warning-soft); color: var(--color-warning); }
 .badge-info { background: var(--color-info-soft); color: var(--color-info-text); }
@@ -1282,6 +1293,16 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
   margin-bottom: 4px;
 }
 .empty-icon svg { width: 26px; height: 26px; display: block; }
+.empty-state-titre { margin: 6px 0 0; font-size: 17px; }
+.empty-state p { max-width: 46ch; color: var(--color-text-muted); margin: 0 0 8px; }
+
+/* Carte « Mise en route » (Accueil RH / propriétaire) */
+.mise-en-route { margin-bottom: 16px; border-left: 4px solid var(--color-gold); }
+.mise-en-route-tete { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mise-en-route-tete h2 { margin: 0 0 4px; }
+.mise-en-route-tete p { margin: 0; }
+.mise-en-route-barre { height: 8px; margin-top: 14px; border-radius: 999px; background: var(--color-muted-soft); overflow: hidden; }
+.mise-en-route-barre span { display: block; height: 100%; border-radius: 999px; background: var(--color-gold); transition: width 0.3s ease; }
 
 /* ---------------------------------------------------------------------
    Modales
@@ -4593,3 +4614,12 @@ textarea.input { resize: vertical; font-family: inherit; }
 .guide-shot-img:focus-visible { outline: 2px solid var(--landing-gold-500); outline-offset: 2px; }
 .guide-lightbox { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; background: rgba(10, 16, 30, 0.82); cursor: zoom-out; }
 .guide-lightbox img { max-width: min(96vw, 1200px); max-height: calc(100vh - 90px); width: auto; height: auto; border-radius: 8px; background: #fff; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+
+
+/* Refonte du 16/11/2026 : cartes de réglages plus claires dans tous les onglets de Paramètres (même esprit que les listes de référence) :
+   titre net séparé du contenu, explications lisibles, champs bien espacés. */
+.parametres-content .card > h2:first-child { margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--color-border-soft); font-size: 17px; }
+.parametres-content .card > h2:first-child + .text-muted, .parametres-content .card > h2:first-child + p { max-width: 70ch; line-height: 1.5; }
+.parametres-content .form-hint { font-size: 13px; line-height: 1.5; margin-top: 6px; }
+.parametres-content .form-field > label { font-weight: 600; }
+.parametres-content .form-grid { gap: 18px 20px; }

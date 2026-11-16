@@ -7795,7 +7795,7 @@ function libelleStatutNoteFrais(expense) {
     case 'Remboursé': return expense.datePaiement
       ? { libelle: 'Remboursée', classe: 'success' }
       : { libelle: 'Validée, à payer', classe: 'info' };
-    case 'Refusé': return { libelle: 'Refusée', classe: 'muted' };
+    case 'Refusé': return { libelle: 'Refusée', classe: 'danger' };
     case 'Annulé': return { libelle: 'Annulée', classe: 'muted' };
     default: return { libelle: (expense && expense.statut) || '—', classe: 'muted' };
   }

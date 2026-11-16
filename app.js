@@ -560,7 +560,7 @@ const NAV_ITEMS = [
   // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
   { key: 'tableau-compteurs', label: 'Tableau des compteurs', icon: ICONS.sun, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe', module: 'conges' },
   // Retour du 21/10/2026 : parcours guidé pour renseigner les données de départ (salariés, types de congés, soldes, historique). Pour ceux qui paramètrent.
-  { key: 'prise-en-main', label: 'Prise en main', icon: ICONS.rocket, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES], group: 'equipe' },
+  { key: 'prise-en-main', label: 'Prise en main', icon: ICONS.rocket, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES], group: 'administration' },
   { key: 'organigramme', label: 'Organigramme', icon: ICONS.orgchart, roles: ['manager', 'rh', 'proprietaire'], group: 'equipe', module: 'rh' },
   // §"Boussole" (roadmap différenciation #2) : désactivée le 01/09/2026 à la demande de Betty (coût
   // API Anthropic non retenu — "je veux pas on annule"). L'entrée RESTE dans NAV_ITEMS (jamais
@@ -586,23 +586,23 @@ const NAV_ITEMS = [
   // pointe pour soi-même, même patron que "Tickets restaurant" ci-dessus), gated par le nouveau
   // module "pointage" (voir LANDING_ALACARTE_MODULES).
   { key: 'pointeuse', label: 'Pointeuse', icon: ICONS.schedule, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'pointage' },
-  { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'equipe', module: 'rh' },
+  { key: 'export-paie', label: 'Préparation de paie', icon: ICONS.upload, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.EXPORTER_PAIE], group: 'administration', module: 'rh' },
   // Réutilise settings.masseSalarialeActivee/employee.salaireBrutMensuel (déjà existants, jusqu'ici
   // seulement affichés en un seul chiffre agrégé sur le tableau de bord Direction) — voirInfosFinancieres
   // n'est pas accordée à RH par défaut (DEFAULT_ROLE_PERMISSIONS, data.js), donc réservé au Propriétaire
   // sauf surcharge individuelle, cohérent avec le reste des données salariales dans l'app.
-  { key: 'remuneration', label: 'Rémunération', icon: ICONS.coin, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'equipe', module: 'remuneration' },
+  { key: 'remuneration', label: 'Rémunération', icon: ICONS.coin, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_INFOS_FINANCIERES], group: 'administration', module: 'remuneration' },
   // Demande du 17/08/2026 : dépôt de candidature via QR code, périmètre volontairement minimal
   // (upload + liste + conversion en salarié) — le recrutement/ATS complet reste par ailleurs hors
   // scope de Nexus RH. Rattaché au module "rh" (pas de nouvelle ligne tarifaire) : qui paie déjà
   // pour la gestion des salariés a accès à l'embauche, cohérent avec creerSalarie.
-  { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'equipe', module: 'embauche' },
+  { key: 'embauche', label: 'Embauche', icon: ICONS.personPlus, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.CREER_SALARIE], group: 'administration', module: 'embauche' },
 
   // §retour du 21/08/2026 : retirées de la barre latérale (mobile ET desktop) — restent accessibles
   // uniquement via le menu utilisateur en haut à droite (renderUserMenuPanel), qui les propose déjà
   // toutes les deux. navItemsForRole() les garde côté permissions (navigateTo() doit toujours
   // pouvoir y aller depuis ce menu) ; seul renderSidebar() filtre leur AFFICHAGE dans la barre.
-  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES] },
+  { key: 'parametres', label: 'Paramètres', icon: ICONS.gear, roles: ['rh', 'proprietaire'], permissions: [PERMISSIONS.GERER_PARAMETRES], group: 'administration' },
   // Entrée dédiée plutôt que caché dans Paramètres parmi 8 autres onglets (retour utilisateur :
   // "pas très facile d'accès") — même schéma que les concurrents SaaS (Stripe, Notion, Linear...),
   // qui donnent toujours à la facturation son propre accès direct. Réutilise la vue "parametres"
@@ -2033,7 +2033,7 @@ const ABOUT_CATEGORIES = [
     items: [
       "Préparation de paie avec détection automatique des anomalies avant export",
       "Export vers votre logiciel de paie",
-      "Notes de frais avec justificatifs, workflow de validation et remboursement (y compris kilométrique)",
+      "Notes de frais avec justificatifs, circuit de validation et remboursement (y compris kilométrique)",
       "Tickets restaurant calculés automatiquement selon les jours travaillés, part employeur incluse",
       "Rémunération : salaire brut, heures supplémentaires, repos compensateur et projection de la masse salariale"
     ]
@@ -2478,13 +2478,19 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.3';
+const APP_VERSION = '2026.11.16.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Menu de gauche en trois blocs selon votre rôle : « Mon espace », « Mon équipe » et « Administration » (mise en route, paie, rémunération, embauche et Paramètres, pour la RH et le propriétaire). Icônes un peu plus grandes.",
+      "Accueil de la RH et du propriétaire : une carte « Mise en route » avec barre d'avancement et la prochaine étape à faire, jusqu'à ce que tout soit terminé.",
+      "Tableau des compteurs : soldes en rouge s'ils sont négatifs et en orange à un jour ou moins, colonne du salarié figée quand on fait défiler, et une colonne « Total RTT » qui additionne les types RTT.",
+      "Statuts : mêmes pastilles de couleur partout (vert validé, orange en attente, rouge refusé, gris annulé).",
+      "Listes vides : un titre, une explication et un bouton pour faire la première action (nouvelle demande, nouvelle note, planifier un entretien).",
+      "Paramètres : cartes de réglages plus claires dans tous les onglets (titre séparé, explications lisibles, champs espacés). Textes rendus plus simples (« circuit de validation » à la place de « workflow », détail technique des erreurs de synchronisation mieux indiqué).",
       "Paramètres sur toute la page : le menu de l'application à gauche disparaît dans les Paramètres, qui occupent tout l'écran avec leur propre menu de réglages (qui reste visible en défilant). Un bouton « Retour à l'application » en haut ramène à l'écran d'où vous veniez.",
       "Fiche salarié : le statut cadre / non-cadre n'est plus saisi en double. Il se déduit de la catégorie de salarié (Cadre ou Dirigeant : cadre ; Non cadre ou Agent de maîtrise : non-cadre) : la ligne « Statut » en doublon disparaît de « Contrat & poste », et la case « Statut cadre » du contrat est verrouillée dans ce cas (libre pour une catégorie personnalisée). Plus d'incohérence possible.",
       "Tableau des compteurs : un type désactivé (ex. un ancien RTT) affiche de nouveau les jours pris ou en attente d'un salarié, au lieu d'un tiret qui les cachait.",
@@ -3303,7 +3309,7 @@ function renderSyncFailureBanner() {
   banner.innerHTML = `
     <div>
       <span>${icon(ICONS.warningTriangle, 14)} ${count} modification${count > 1 ? 's' : ''} non synchronisée${count > 1 ? 's' : ''} avec le serveur. Ne fermez pas cette page tant que cet avertissement n'a pas disparu.</span>
-      ${firstError ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">Détail : ${escapeHtml(firstError)}</div>` : ''}
+      ${firstError ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">Détail technique (à transmettre au support si besoin) : ${escapeHtml(firstError)}</div>` : ''}
       ${explicationRefusSynchro(firstError) ? `<div style="font-size: 12px; margin-top: 4px;">${escapeHtml(explicationRefusSynchro(firstError))}</div>` : ''}
     </div>
     <button type="button" class="btn btn-sm" id="btn-retry-sync">Réessayer maintenant</button>
@@ -4886,7 +4892,7 @@ const HELP_CONTENT = {
   absences: {
     title: 'Congés & absences',
     body: `<p>3 onglets : <strong>Congés</strong> (congés payés, RTT, ancienneté...), <strong>Absences</strong> (maladie, événements familiaux, et tout autre type paramétrable), <strong>Télétravail</strong> (demandes + planning hebdomadaire). Dans Congés/Absences, créez une demande (+ Nouvelle demande), suivez/validez celles de votre équipe. Un brouillon en cours (bouton "Enregistrer comme brouillon") apparaît dans "Mes brouillons" et peut être repris plus tard. Chaque ligne a un bouton <strong>Historique</strong> qui retrace création/validations/rectifications.</p>
-           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...), à savoir les règles d'acquisition, le workflow de validation et le justificatif obligatoire, se fait désormais uniquement dans Paramètres > Congés et absences.</p>`,
+           <p>La gestion des <strong>types</strong> (congés payés, RTT, maladie...), à savoir les règles d'acquisition, le circuit de validation et le justificatif obligatoire, se fait désormais uniquement dans Paramètres > Congés et absences.</p>`,
     faq: [
       { q: 'Pourquoi je ne peux pas créer un congé dans le passé ?', r: 'Un salarié ne peut jamais saisir/modifier une période déjà passée : seuls Manager/RH/Propriétaire le peuvent, pour garder une trace fiable de qui a autorisé quoi.' },
       { q: 'Comment corriger une demande déjà validée ?', r: 'Utilisez "Régulariser" sur la ligne concernée plutôt que de l\'annuler puis recréer : l\'historique garde la trace de la correction et le motif.' },
@@ -4911,7 +4917,7 @@ const HELP_CONTENT = {
   },
   frais: {
     title: 'Notes de frais',
-    body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le workflow de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`,
+    body: `<p>Créez une note (standard avec justificatif, ou kilométrique avec calcul automatique de l'indemnité selon distance/puissance fiscale). Le circuit de validation est paramétrable (Paramètres). Le total remboursé du mois alimente automatiquement l'export paie.</p>`,
     faq: [{ q: 'Comment fonctionne le calcul kilométrique ?', r: 'Indiquez la distance et la puissance fiscale du véhicule : le montant est calculé automatiquement selon le barème, vous n\'avez rien à saisir manuellement.' }],
     bonnesPratiques: ['Joignez toujours le justificatif dès la création de la note : une note validée sans justificatif ressort comme anomalie avant l\'export de paie.']
   },
@@ -5064,7 +5070,7 @@ function guideIntroSections(user) {
         ${gFig.reperes()}
         <dl class="guide-defs">
           <dt>Le menu à gauche</dt>
-          <dd>Il liste vos écrans. « Personnel » regroupe vos propres démarches ; « Équipe » (si vous encadrez des personnes ou gérez les RH) regroupe la gestion. Sur téléphone, il s'ouvre avec le bouton ☰ en haut à gauche.</dd>
+          <dd>Il liste vos écrans. « Mon espace » regroupe vos propres démarches ; « Mon équipe » (si vous encadrez des personnes ou gérez les RH) regroupe la gestion ; « Administration » (RH et propriétaire) regroupe la paie, l'embauche et les Paramètres. Sur téléphone, il s'ouvre avec le bouton ☰ en haut à gauche.</dd>
           <dt>La barre de recherche (Ctrl+K)</dt>
           <dd>Tapez un nom de salarié, une demande ou une note de frais pour l'ouvrir directement. Elle lance aussi des actions : ajouter un salarié, poser un congé, déclarer du télétravail...</dd>
           <dt>Le bouton « ? »</dt>
@@ -6246,7 +6252,7 @@ function tourStepsForUser(user) {
     {
       cibles: ['#sidebar-nav', '#btn-mobile-nav-toggle'],
       titre: 'Le menu',
-      texte: "Vos écrans sont ici : « Personnel » pour vos propres démarches, « Équipe » pour la gestion si votre rôle le permet. Sur téléphone, ouvrez-le avec le bouton ☰.",
+      texte: "Vos écrans sont ici : « Mon espace » pour vos propres démarches, « Mon équipe » pour la gestion et « Administration » pour la paie et les réglages, selon votre rôle. Sur téléphone, ouvrez-le avec le bouton ☰.",
       placement: 'right'
     },
     {
@@ -6514,6 +6520,15 @@ function openHelpModal() {
 function bindGlobalEvents() {
   document.getElementById('btn-help').addEventListener('click', openHelpModal);
   document.getElementById('btn-reload-app').addEventListener('click', () => window.location.reload());
+  // Boutons génériques : data-go-view ouvre un écran, data-click-id clique un bouton existant (états vides, carte « Mise en route »).
+  document.addEventListener('click', (e) => {
+    const bouton = e.target.closest('[data-go-view], [data-click-id]');
+    if (!bouton) return;
+    if (bouton.dataset.clickId) { const cible = document.getElementById(bouton.dataset.clickId); if (cible) cible.click(); return; }
+    let params = {};
+    try { params = JSON.parse(bouton.dataset.goParams || '{}'); } catch (err) { params = {}; }
+    navigateTo(bouton.dataset.goView, params);
+  });
   // Logo Nexus de la barre du haut : retour à l'accueil (refonte du 13/11/2026).
   document.getElementById('topbar-brand')?.addEventListener('click', () => navigateTo('dashboard'));
 
@@ -7913,7 +7928,7 @@ const CLE_STOCKAGE_SECTIONS_REPLIEES = 'nexusMenuSectionsReplieesV1';
 function sectionsMenuReplieesLire() {
   try {
     const brut = JSON.parse(window.localStorage.getItem(CLE_STOCKAGE_SECTIONS_REPLIEES) || '[]');
-    return new Set(Array.isArray(brut) ? brut.filter(c => c === 'personnel' || c === 'equipe') : []);
+    return new Set(Array.isArray(brut) ? brut.filter(c => c === 'personnel' || c === 'equipe' || c === 'administration') : []);
   } catch (err) {
     return new Set();
   }
@@ -7951,7 +7966,7 @@ function renderSidebar() {
   // pouvoir y aller depuis ce menu) ; seul l'AFFICHAGE ici les exclut.
   // 'boussole' : désactivée (§"Boussole" ci-dessus, NAV_ITEMS) — exclue de l'affichage exactement
   // comme 'parametres', jamais atteignable depuis l'interface tant qu'elle reste dans cette liste.
-  const items = navItemsForRole(user).filter(i => i.key !== 'parametres' && i.key !== 'boussole');
+  const items = navItemsForRole(user).filter(i => (i.key !== 'parametres' || i.group === 'administration') && i.key !== 'boussole');
   const nav = document.getElementById('sidebar-nav');
   const pinnedNav = document.getElementById('sidebar-nav-pinned');
   // Referme toujours le panneau mobile "☰" au changement de vue (innerHTML reconstruit juste après
@@ -7990,6 +8005,7 @@ function renderSidebar() {
     const dashboard = scrollable.filter(x => !x.item.group && x.item.key === 'dashboard');
     const personnel = scrollable.filter(x => x.item.group === 'personnel');
     const equipe = scrollable.filter(x => x.item.group === 'equipe');
+    const administration = scrollable.filter(x => x.item.group === 'administration');
     const reste = scrollable.filter(x => !x.item.group && x.item.key !== 'dashboard');
     // Retour du 05/11/2026 (n° 15 de la Revue Nexus) : un clic sur « Personnel » ou « Équipe » replie/déplie ses sous-menus.
     // Replié, la section garde visible l'entrée de l'écran courant (on ne perd jamais « où on est »).
@@ -8003,8 +8019,9 @@ function renderSidebar() {
     };
     scrollableHtml =
       dashboard.map(x => renderItem(x.item, x.index)).join('') +
-      sectionHtml('personnel', 'Personnel', personnel) +
-      sectionHtml('equipe', 'Équipe', equipe) +
+      sectionHtml('personnel', 'Mon espace', personnel) +
+      sectionHtml('equipe', 'Mon équipe', equipe) +
+      (administration.length ? sectionHtml('administration', 'Administration', administration) : '') +
       reste.map(x => renderItem(x.item, x.index)).join('');
   } else {
     scrollableHtml = scrollable.map(x => renderItem(x.item, x.index)).join('');
@@ -8723,6 +8740,7 @@ function renderDashboardRH() {
   const user = authRepository.getCurrentUser();
   return `
     ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
+    ${renderCarteMiseEnRoute()}
     ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
@@ -8782,7 +8800,7 @@ function renderDashboardSalarie(user) {
     <div class="dashboard-grid">
       <div class="card">
         <h2>Mes demandes en attente</h2>
-        ${enAttente.length === 0 ? '<p class="text-muted">Aucune demande en attente.</p>' : `
+        ${enAttente.length === 0 ? '<p class="text-muted">Tout est à jour : aucune demande en attente.</p>' : `
           <div class="mini-list">
             ${enAttente.map(r => `
               <div class="mini-list-item">
@@ -8857,6 +8875,7 @@ function renderDashboardProprietaire() {
   const user = authRepository.getCurrentUser();
   return `
     ${renderDashboardHero('Accueil', "Vue d'ensemble de votre effectif", renderDashboardCustomizeButton())}
+    ${renderCarteMiseEnRoute()}
     ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
     ${renderOperationalDashboardBody(employees, null)}
@@ -10026,11 +10045,27 @@ function renderPaginationControls(page, totalPages, pageStart, pageCount, total,
  * qui dit quoi faire, pas seulement qu'il n'y a rien") — le message lui-même reste à la charge de
  * l'appelant, qui sait distinguer "aucune donnée du tout" (dire quoi faire) de "aucun résultat pour
  * CES filtres" (dire de les ajuster), voir renderEntretiens/renderTableauCompteurs pour le patron. */
-function renderListEmptyState(message, iconKey) {
+/** Retour du 16/11/2026 : un état vide dit ce qui se passe et propose quoi faire. `action` : { label, clickId } (clique un bouton existant) ou { label, view, params } (ouvre un écran). */
+function renderEtatVide({ icone, titre, texte, action }) {
+  const attributs = !action ? '' : action.clickId
+    ? ` data-click-id="${escapeHtml(action.clickId)}"`
+    : ` data-go-view="${escapeHtml(action.view)}" data-go-params="${escapeHtml(JSON.stringify(action.params || {}))}"`;
+  return `
+    <div class="empty-state">
+      <div class="empty-icon">${icon(ICONS[icone] || ICONS.search, 26)}</div>
+      ${titre ? `<h3 class="empty-state-titre">${escapeHtml(titre)}</h3>` : ''}
+      <p>${escapeHtml(texte)}</p>
+      ${action ? `<button type="button" class="btn btn-secondary btn-sm"${attributs}>${escapeHtml(action.label)}</button>` : ''}
+    </div>
+  `;
+}
+
+function renderListEmptyState(message, iconKey, action) {
   return `
     <div class="empty-state">
       <div class="empty-icon">${icon(ICONS[iconKey] || ICONS.search, 26)}</div>
       <p>${message}</p>
+      ${action ? `<button type="button" class="btn btn-secondary btn-sm" ${action.clickId ? `data-click-id="${escapeHtml(action.clickId)}"` : `data-go-view="${escapeHtml(action.view)}" data-go-params="${escapeHtml(JSON.stringify(action.params || {}))}"`}>${escapeHtml(action.label)}</button>` : ''}
     </div>
   `;
 }
@@ -10301,6 +10336,30 @@ function getEtapesPriseEnMain() {
     ...e,
     fait: e.manuelle ? Boolean(manuelles[e.key]) : Boolean(automatique[e.key] && automatique[e.key]())
   }));
+}
+
+/** Retour du 16/11/2026 : carte « Mise en route » en tête de l'Accueil de la RH et du propriétaire tant que toutes les étapes ne sont pas faites
+ * (mêmes étapes que l'écran Prise en main). Disparaît d'elle-même une fois tout terminé. */
+function renderCarteMiseEnRoute() {
+  const user = authRepository.getCurrentUser();
+  if (!user || !navItemsForRole(user).some(i => i.key === 'prise-en-main')) return '';
+  const etapes = getEtapesPriseEnMain();
+  const faites = etapes.filter(e => e.fait).length;
+  if (!etapes.length || faites === etapes.length) return '';
+  const suivante = etapes.find(e => !e.fait);
+  const pourcentage = Math.round((faites / etapes.length) * 100);
+  return `
+    <div class="card mise-en-route">
+      <div class="mise-en-route-tete">
+        <div>
+          <h2>Mise en route de Nexus</h2>
+          <p class="text-muted">${faites} étape${faites > 1 ? 's' : ''} sur ${etapes.length} terminée${faites > 1 ? 's' : ''}. Prochaine étape : <strong>${escapeHtml(suivante.titre)}</strong>.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-go-view="prise-en-main" data-go-params="{}">Continuer la mise en route</button>
+      </div>
+      <div class="mise-en-route-barre" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pourcentage}"><span style="width:${pourcentage}%"></span></div>
+    </div>
+  `;
 }
 
 function marquerEtapePriseEnMain(key, fait) {
@@ -10591,8 +10650,9 @@ function renderTableauCompteursCell(b) {
   const conventionBonus = b.conventionCollectiveBonus
     ? `<div class="tc-convention text-muted">Dont ${formatDurationFR(b.conventionCollectiveBonus)} de congé(s) d'ancienneté (convention collective), à confirmer avec votre expert-comptable/juriste.</div>`
     : '';
+  const niveau = b.disponible < 0 ? ' tc-solde-negatif' : b.disponible <= 1 ? ' tc-solde-bas' : '';
   return `
-    <div class="tc-disponible">${formatDurationFR(b.disponible)}</div>
+    <div class="tc-disponible${niveau}">${formatDurationFR(b.disponible)}</div>
     ${periode}
     <div class="tc-detail text-muted">${detail.join(' · ')}</div>
     ${enCours}
@@ -10607,6 +10667,13 @@ function renderTableauCompteurs() {
   const filters = state.tableauCompteursFilters;
   const activeCount = [state.tableauCompteursSearch, filters.service, filters.etablissementId].filter(Boolean).length;
   const aUnFiltreActif = activeCount > 0;
+  // Deux types RTT ou plus (ex. « RTT cadres » et « RTT non-cadres ») : une colonne additionne les deux, chaque salarié n'étant concerné que par l'un.
+  const colonnesRtt = leaveTypes.map((t, i) => (t.actif && leaveTypeNameMatches(t.nom, 'RTT') ? i : -1)).filter(i => i >= 0);
+  const avecTotalRtt = colonnesRtt.length >= 2;
+  const totalRtt = (balances) => {
+    const finis = colonnesRtt.map(i => balances[i]).filter(b => b.disponible !== Infinity);
+    return { disponible: finis.reduce((somme, b) => somme + b.disponible, 0), pris: finis.reduce((somme, b) => somme + b.pris, 0) };
+  };
 
   return `
     <div class="view-header">
@@ -10614,6 +10681,7 @@ function renderTableauCompteurs() {
       <p class="view-subtitle">Solde disponible par salarié et par type de congé. Pour un type à clôture (ex. congés payés), le disponible est celui de la période close ; ${escapeHtml(libelleRegleAnticipationConges(settingsRepository.getSettings()))}</p>
     </div>
     ${renderTableauCompteursTabs('soldes')}
+    <p class="tc-legende text-muted"><span class="tc-solde-negatif">Rouge</span> : solde négatif · <span class="tc-solde-bas">Orange</span> : un jour ou moins · le détail (acquis, pris) est sous chaque solde.</p>
     <!-- §retour Betty du 19/09/2026 (point 6, "socle commun") : recherche + filtre établissement
          ajoutés ("l'application gère les établissements", pas de raison qu'un seul écran l'ignore),
          export Excel, et le repli mobile (toolbar-collapsible) qui manquait ici alors qu'il existe
@@ -10643,6 +10711,7 @@ function renderTableauCompteurs() {
                 <tr>
                   ${renderSortableHeader('Salarié', 'nom', 'tableauCompteursSortBy', 'tableauCompteursSortDir')}
                   ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}${renderTableauCompteursPeriodInfo(periodInfoByType.get(t.id))}</th>`).join('')}
+                  ${avecTotalRtt ? '<th style="text-align: right; white-space: nowrap;" class="tc-total-rtt">Total RTT<div class="tc-header-period text-muted">tous types RTT</div></th>' : ''}
                 </tr>
               </thead>
               <tbody>
@@ -10650,6 +10719,7 @@ function renderTableauCompteurs() {
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
                     ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif && !(b.pris || b.enAttente) ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
+                    ${avecTotalRtt ? (() => { const t = totalRtt(row.balances); return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><div class="tc-disponible${t.disponible < 0 ? ' tc-solde-negatif' : t.disponible <= 1 ? ' tc-solde-bas' : ''}">${formatDurationFR(t.disponible)}</div><div class="tc-detail text-muted">pris ${formatDurationFR(t.pris)}</div></td>`; })() : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -10663,6 +10733,7 @@ function renderTableauCompteurs() {
                     const total = finiteValues.reduce((sum, v) => sum + v, 0);
                     return `<td data-label="${escapeHtml(t.nom)}" style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
                   }).join('')}
+                  ${avecTotalRtt ? `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><strong>${formatDurationFR(rows.reduce((somme, r) => somme + totalRtt(r.balances).disponible, 0))}</strong></td>` : ''}
                 </tr>
               </tfoot>
             </table>
@@ -11876,7 +11947,7 @@ function renderContratBadge(type) {
 }
 
 function renderStatutBadge(statut) {
-  return `<span class="badge badge-${statut === 'Actif' ? 'success' : 'muted'}">${escapeHtml(statut)}</span>`;
+  return `<span class="badge badge-statut badge-${statut === 'Actif' ? 'success' : 'muted'}">${escapeHtml(statut)}</span>`;
 }
 
 function renderEmptyState() {
@@ -13232,8 +13303,9 @@ function renderEntretiens() {
       ${filtered.length === 0 ? renderListEmptyState(
           aUnFiltreActif
             ? 'Aucun entretien ne correspond à ces filtres.'
-            : `Aucun entretien pour le moment.${canPlan ? ' Utilisez le bouton "+ Planifier un entretien" ci-dessus pour créer le premier.' : ''}`,
-          'notepad'
+            : `Aucun entretien pour le moment.${canPlan ? ' Planifiez le premier pour suivre les entretiens annuels et professionnels.' : ''}`,
+          'notepad',
+          !aUnFiltreActif && canPlan ? { label: '+ Planifier un entretien', clickId: 'btn-planifier-entretien' } : undefined
         ) : `
         <table class="table mobile-cards">
           <thead>
@@ -17633,7 +17705,9 @@ function renderCongesDemandes(categorie = 'conge') {
     ` : ''}
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.sun}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
+      ${requests.length === 0 ? (Object.values(filters).some(Boolean) || state[searchKey]
+        ? renderEtatVide({ icone: 'search', titre: 'Aucun résultat', texte: 'Aucune demande ne correspond à ces filtres. Essayez de les élargir.' })
+        : renderEtatVide({ icone: 'sun', titre: `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant`, texte: 'Les demandes des salariés apparaîtront ici. Vous pouvez aussi en saisir une vous-même.', action: { label: '+ Nouvelle demande', clickId: 'btn-new-leave-request' } })) : `
         <table class="table mobile-cards">
           <thead>
             <tr>
@@ -17698,16 +17772,16 @@ function renderExpenseStatutBadge(n) {
     ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">${escapeHtml(n.motifRefus)}</div>` : '';
   const paye = n.statut === 'Remboursé' && n.datePaiement
     ? ` <span class="text-muted" style="font-size:12px;">le ${formatDate(n.datePaiement)}</span>` : '';
-  return `<span class="badge badge-${classe}">${escapeHtml(libelle)}${suffixe}</span>${paye}${motif}`;
+  return `<span class="badge badge-statut badge-${classe}">${escapeHtml(libelle)}${suffixe}</span>${paye}${motif}`;
 }
 
 function renderRequestStatutBadge(r) {
-  const map = { 'En attente': 'warning', 'Validé': 'success', 'Remboursé': 'success', 'Refusé': 'muted', 'Annulé': 'muted' };
+  const map = { 'En attente': 'warning', 'Validé': 'success', 'Remboursé': 'success', 'Refusé': 'danger', 'Annulé': 'muted' };
   const currentRole = r.statut === 'En attente' && r.workflow && r.workflow[r.etapeIndex];
   const suffix = currentRole ? ` (${ROLE_LABELS[currentRole] || currentRole})` : '';
   const motif = r.statut === 'Refusé' && r.motifRefus
     ? `<div class="text-muted" style="font-size: 12px; margin-top: 4px;">${escapeHtml(r.motifRefus)}</div>` : '';
-  return `<span class="badge badge-${map[r.statut] || 'muted'}">${escapeHtml(r.statut)}${suffix}</span>${motif}`;
+  return `<span class="badge badge-statut badge-${map[r.statut] || 'muted'}">${escapeHtml(r.statut)}${suffix}</span>${motif}`;
 }
 
 /**
@@ -19606,7 +19680,7 @@ function openLeaveTypeModal(id, categorie = 'conge') {
             </div>
             <div class="form-field" style="margin-top:14px;">
               ${selectField('compteurPartageAvecId', 'Partager le compteur avec (optionnel)', null, type.compteurPartageAvecId, autresTypes.map(t => ({ value: t.id, label: t.nom })))}
-              <p class="form-hint">« — » = compteur propre à ce type (par défaut). Sinon, les demandes de CE type viennent en plus s'imputer sur le solde du type choisi (ex. un congé sans solde qui entame le compteur CP).</p>
+              <p class="form-hint">« — » = compteur propre à ce type (par défaut). Sinon, les demandes de CE type se déduisent aussi du solde du type choisi (ex. un congé sans solde qui entame le compteur CP).</p>
             </div>
             <div class="form-field" style="margin-top:14px;">
               <label>Règles d'éligibilité (optionnel)</label>
@@ -26565,7 +26639,9 @@ function renderTeletravailDemandes() {
     </div>
 
     <div class="card table-card">
-      ${requests.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.laptop}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
+      ${requests.length === 0 ? (Object.values(state.teletravailFilters).some(Boolean)
+        ? renderEtatVide({ icone: 'search', titre: 'Aucun résultat', texte: 'Aucune demande ne correspond à ces filtres. Essayez de les élargir.' })
+        : renderEtatVide({ icone: 'laptop', titre: 'Aucune demande de télétravail pour l\'instant', texte: 'Les jours de télétravail demandés apparaîtront ici.', action: { label: '+ Nouvelle demande', clickId: 'btn-new-telework-request' } })) : `
         <table class="table mobile-cards">
           <thead><tr><th>Salarié</th><th>Période</th><th>Jours</th><th>Statut</th><th></th></tr></thead>
           <tbody>${pageItems.map(renderTeleworkRequestRow).join('')}</tbody>
@@ -27967,7 +28043,7 @@ function renderFrais() {
   const total = expenses.filter(n => n.statut !== 'Refusé' && n.statut !== 'Annulé').reduce((sum, n) => sum + n.montantTTC, 0);
   // §retour Betty du 07/09/2026 (point 13) : voir séparément ce qui est en attente/remboursé/refusé,
   // plutôt qu'un total unique qui mélange tout (voir aussi le correctif du point 6 juste au-dessus).
-  const STATUT_BADGE_CLASS = { 'En attente': 'warning', 'Remboursé': 'success', 'Refusé': 'muted', 'Annulé': 'muted' };
+  const STATUT_BADGE_CLASS = { 'En attente': 'warning', 'Remboursé': 'success', 'Refusé': 'danger', 'Annulé': 'muted' };
   const totauxParStatut = ['En attente', 'Remboursé', 'Refusé', 'Annulé']
     .map(statut => ({ statut, notes: expenses.filter(n => n.statut === statut) }))
     .filter(t => t.notes.length > 0)
@@ -28038,7 +28114,9 @@ function renderFrais() {
     </div>
 
     <div class="card table-card">
-      ${expenses.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>${escapeHtml(emptyStateMessage)}</p></div>` : `
+      ${expenses.length === 0 ? (periodeAvantFenetre || Object.values(state.fraisFilters).some(Boolean) || state.fraisSearch
+        ? renderEtatVide({ icone: 'search', titre: 'Aucun résultat', texte: emptyStateMessage })
+        : renderEtatVide({ icone: 'receipt', titre: 'Aucune note de frais pour l\'instant', texte: 'Ajoutez une note avec son justificatif : elle suivra ensuite sa validation jusqu\'au remboursement.', action: { label: '+ Nouvelle note', clickId: 'btn-new-expense' } })) : `
         <table class="table mobile-cards">
           <thead>
             <tr>
