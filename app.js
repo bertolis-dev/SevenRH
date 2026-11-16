@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.6';
+const APP_VERSION = '2026.11.16.7';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Espacement harmonisé dans toute l'application : une même échelle (4, 8, 12, 16, 24 px) entre les cartes, les grilles, les en-têtes et les marges de page, et un menu de gauche plus compact (lignes plus serrées, plus d'écrans visibles sans défiler).",
       "La RH et le propriétaire peuvent maintenant modifier et supprimer leurs propres congés et RTT (double-clic dans le calendrier, « Régulariser » ou « Supprimer » dans la liste), sans activer le mode mise en service. Ils ne valident toujours pas leur propre demande. Nécessite la migration 0077.",
       "Nouvel écran Paramètres > Couleurs : choisissez la couleur principale (boutons et actions), celle du texte, la couleur de mise en avant et le fond, puis une palette pour chacun des quatre espaces du menu (Mon espace, Mon équipe, Administration, Paramètres). La palette d'un espace colore le liseré du haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Un bouton rétablit les couleurs de Nexus.",
       "Menu de gauche en trois blocs selon votre rôle : « Mon espace », « Mon équipe » et « Administration » (mise en route, paie, rémunération, embauche et Paramètres, pour la RH et le propriétaire). Icônes un peu plus grandes.",

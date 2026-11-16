@@ -4647,3 +4647,34 @@ textarea.input { resize: vertical; font-family: inherit; }
 .palette-echantillon { display: flex; width: 100%; height: 26px; border-radius: 6px; overflow: hidden; }
 .palette-echantillon i { flex: 1; display: block; }
 .palette-nom { font-size: 12px; color: var(--color-text-muted); }
+
+
+/* ---------------------------------------------------------------------
+   Espacement harmonisé (retour du 16/11/2026) : une même échelle partout (4 / 8 / 12 / 16 / 24 px), un menu de gauche plus compact.
+   Bloc placé en dernier : il prime sur les valeurs historiques dispersées plus haut dans ce fichier.
+   --------------------------------------------------------------------- */
+:root { --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; }
+
+/* Menu de gauche : lignes plus serrées (ordinateur seulement, les cibles tactiles du téléphone restent grandes). */
+@media (min-width: 861px) {
+  #sidebar-nav, #sidebar-nav-pinned { padding: 6px 8px; gap: 0; }
+  .nav-item { padding: 5px 10px; gap: 9px; }
+  .nav-icon { width: 24px; height: 24px; }
+  .nav-icon svg { width: 15px; height: 15px; }
+  .nav-section-label { padding: 10px 10px 3px; }
+  .nav-section-label:first-child { padding-top: 4px; }
+  button.nav-section-toggle { margin-top: 2px; padding-top: 8px; }
+  #view-root { padding: 20px 28px; }
+  :root[data-espace="parametres"] #view-root { padding-left: 28px; padding-right: 28px; }
+}
+
+/* Même rythme entre les blocs de toutes les pages. */
+.card { margin-bottom: var(--space-lg); }
+.view-header { margin-bottom: 20px; }
+.kpi-grid { gap: var(--space-md); margin-bottom: var(--space-lg); }
+.balance-grid { gap: var(--space-md); }
+.dashboard-grid, .detail-grid, .detail-grid-cards, .settings-cards-grid, .settings-lists-grid { gap: var(--space-lg); }
+.dashboard-grid { margin-bottom: var(--space-lg); }
+.toolbar { gap: var(--space-sm); }
+.parametres-layout { gap: var(--space-xl); }
+.settings-cards-grid > .card, .settings-lists-grid > .card { margin-bottom: 0; }
