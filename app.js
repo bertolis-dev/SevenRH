@@ -2478,7 +2478,7 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.2';
+const APP_VERSION = '2026.11.16.3';
 
 const CHANGELOG_ENTRIES = [
   {
@@ -15710,7 +15710,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         ${infoRow('Heures hebdomadaires', formatNumberFR(e.horairesHebdo) + ' h')}
         ${infoRow('Forfait', e.forfait)}
         ${infoRow('Jours travaillés', (e.joursTravailles || []).join(', '))}
-        ${infoRow('Régime RTT', e.regimeRTT || '—')}
+        ${infoRow('Régime RTT', (REGIME_RTT_OPTIONS.find(o => o.value === e.regimeRTT) || {}).label || '—')}
         ${(() => {
           const year = new Date().getFullYear();
           const contingent = settingsRepository.getSettings().contingentAnnuelHeuresSup;
