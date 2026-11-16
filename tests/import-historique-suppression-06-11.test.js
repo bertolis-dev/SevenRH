@@ -76,14 +76,14 @@ async function run() {
   const demandeDu = (employeeId) => ({ employeeId, statut: 'Validé' });
   const rh = dePersonne('rh');
   assert.strictEqual(canDeleteLeaveRequest(demandeDu(salarie.id)), true, 'un RH supprime la demande d\'un salarié');
-  assert.strictEqual(canDeleteLeaveRequest(demandeDu(rh.id)), false, 'un RH ne supprime pas sa propre demande (hors mode mise en service)');
+  assert.strictEqual(canDeleteLeaveRequest(demandeDu(rh.id)), true, 'un RH supprime aussi sa propre demande (retour du 16/11/2026, migration 0077)');
   const manager = dePersonne('manager');
   assert.strictEqual(canDeleteLeaveRequest(demandeDu(salarie.id)), false, 'un manager n\'a pas ce droit (le serveur refuserait)');
   dePersonne('salarie');
   assert.strictEqual(canDeleteLeaveRequest(demandeDu(salarie.id)), false, 'un salarié non plus');
   const proprietaire = dePersonne('proprietaire');
   assert.strictEqual(canDeleteLeaveRequest(demandeDu(salarie.id)), true, 'le propriétaire supprime la demande d\'un salarié');
-  assert.strictEqual(canDeleteLeaveRequest(demandeDu(proprietaire.id)), false, 'mais pas la sienne hors mode mise en service');
+  assert.strictEqual(canDeleteLeaveRequest(demandeDu(proprietaire.id)), true, 'et la sienne aussi (retour du 16/11/2026)');
   assert.ok(manager && proprietaire);
 
   console.log('OK — import-historique-suppression-06-11.test.js (import en un lot, vrai résultat, file de synchronisation sûre, suppression)');

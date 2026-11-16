@@ -124,3 +124,21 @@ console.log('OK — rtt-deux-statuts-calendrier-double-clic-13-11.test.js');
   assert.ok(/pas concerné/.test(abs[1].message), abs[1].message);
   console.log('OK — imports soldes et absences : règle d\'éligibilité respectée');
 })();
+
+// --- La RH modifie et supprime ses propres congés (retour du 16/11/2026) ; elle ne valide pas sa propre demande ---
+(function rhCorrigeSesPropresConges() {
+  const rhPerso = DB.getEmployees().find(e => e.role === 'rh');
+  DB._currentEmployeeId = rhPerso.id;
+  const sb2 = api.sandbox;
+  assert.strictEqual(sb2.canManageRequestFor(rhPerso.id), true, 'la RH peut modifier/annuler sa propre demande');
+  assert.strictEqual(sb2.canDeleteLeaveRequest({ employeeId: rhPerso.id, statut: 'Validé' }), true, 'la RH peut supprimer sa propre demande');
+  assert.strictEqual(sb2.peutModifierCongeDepuisCalendrier({ employeeId: rhPerso.id }), true, 'double-clic sur son propre congé dans le calendrier');
+  const propre = { employeeId: rhPerso.id, statut: 'En attente', workflow: ['rh'], etapeIndex: 0 };
+  assert.strictEqual(sb2.canActOnRequestFor(propre), false, 'la RH ne valide toujours pas sa propre demande');
+  assert.strictEqual(sb2.canRefuserRequestFor(propre), false, 'ni ne la refuse');
+  const salarie2 = DB.getEmployees().find(e => e.role === 'salarie');
+  DB._currentEmployeeId = salarie2.id;
+  assert.strictEqual(sb2.canManageRequestFor(salarie2.id), false, 'un simple salarié ne gère pas sa propre demande');
+  assert.strictEqual(sb2.canDeleteLeaveRequest({ employeeId: salarie2.id, statut: 'Validé' }), false, 'ni ne la supprime');
+  console.log('OK — la RH corrige ses propres congés sans valider sa propre demande');
+})();

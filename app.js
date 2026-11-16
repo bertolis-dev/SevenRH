@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.5';
+const APP_VERSION = '2026.11.16.6';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "La RH et le propriétaire peuvent maintenant modifier et supprimer leurs propres congés et RTT (double-clic dans le calendrier, « Régulariser » ou « Supprimer » dans la liste), sans activer le mode mise en service. Ils ne valident toujours pas leur propre demande. Nécessite la migration 0077.",
       "Nouvel écran Paramètres > Couleurs : choisissez la couleur principale (boutons et actions), celle du texte, la couleur de mise en avant et le fond, puis une palette pour chacun des quatre espaces du menu (Mon espace, Mon équipe, Administration, Paramètres). La palette d'un espace colore le liseré du haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Un bouton rétablit les couleurs de Nexus.",
       "Menu de gauche en trois blocs selon votre rôle : « Mon espace », « Mon équipe » et « Administration » (mise en route, paie, rémunération, embauche et Paramètres, pour la RH et le propriétaire). Icônes un peu plus grandes.",
       "Accueil de la RH et du propriétaire : une carte « Mise en route » avec barre d'avancement et la prochaine étape à faire, jusqu'à ce que tout soit terminé.",
@@ -5564,7 +5565,7 @@ const GUIDE_THEMES = [
           `<strong>Supprimer</strong> : à utiliser pour une erreur de saisie, un doublon ou une ligne importée par erreur ;`,
           `<strong>Annuler</strong> : la demande reste visible avec le statut « Annulé » et les jours sont recrédités, ce qui garde une trace ;`,
           `<strong>Régulariser</strong> : pour changer le type ou les dates d'une demande validée, avec un motif conservé dans l'historique.`
-        ) + gP(`Vous ne pouvez pas supprimer votre propre demande, sauf si le propriétaire a activé le mode mise en service. Un manager n'a pas ce bouton : il peut annuler ou régulariser les demandes de son équipe.`) },
+        ) + gP(`La RH et le propriétaire peuvent supprimer et modifier leurs propres demandes de congé et de RTT. Les autres rôles ne le peuvent pas pour leur propre demande, sauf si le propriétaire a activé le mode mise en service. Un manager n'a pas ce bouton pour sa propre demande : il peut annuler ou régulariser les demandes de son équipe.`) },
       { id: 'c-modifier-dates', q: 'Quelqu\'un veut changer les dates de son congé ou de son RTT : que faire ?', pour: GUIDE_EQUIPE, vue: 'absences', mots: 'modifier changer décaler déplacer dates congé rtt déjà validé nouvelle date corriger',
         r: gP(`Pour une demande <strong>déjà validée</strong>, ouvrez sa ligne et utilisez <strong>Régulariser</strong> : vous changez le type, les dates ou la demi-journée, avec un motif. L'ancienne version reste dans l'historique et le compteur se recalcule. Si le salarié préfère tout recommencer, <strong>Annuler</strong> puis une nouvelle demande fonctionne aussi. Pour une demande encore <strong>en attente</strong>, le salarié peut l'annuler lui-même tant qu'aucune étape de validation n'a eu lieu.`) },
       { id: 'c-delegation', q: 'Comment déléguer mes validations pendant mes absences ?', pour: GUIDE_EQUIPE, vue: 'parametres', params: { parametresTab: 'mon-compte' }, vueLabel: 'Mon compte', mots: 'délégation remplaçant suppléant vacances validation absent remplacer',
@@ -5764,7 +5765,7 @@ GUIDE_THEMES.push(
           `Ouvrez la fiche du salarié, onglet <strong>Congés et absences</strong>, puis <strong>Voir le détail des compteurs</strong>.`,
           `Choisissez le compteur à corriger. Indiquez <strong>le solde que le salarié doit avoir</strong> (Nexus calcule l'ajustement) ou <strong>des jours à ajouter ou retirer</strong>.`,
           `Saisissez le <strong>motif</strong> et validez : la correction est tracée.`
-        ) + gP(`Pour votre <em>propre</em> fiche, la correction est normalement réservée au propriétaire. Pendant la mise en service de l'outil, le propriétaire peut activer le « mode mise en service » pour que les RH corrigent aussi leurs propres compteurs.`) },
+        ) + gP(`Pour votre <em>propre</em> fiche, la correction des compteurs est normalement réservée au propriétaire. Pendant la mise en service de l'outil, le propriétaire peut activer le « mode mise en service » pour que les RH corrigent aussi leurs propres compteurs. Vos propres congés et RTT, eux, vous pouvez toujours les modifier ou les supprimer si vous êtes RH.`) },
       { id: 's-contrat', q: 'Comment gérer les contrats et avenants ?', module: 'rh', mots: 'contrat avenant cdi cdd période d\'essai projet de contrat clause renouvellement fin de contrat durée modèle',
         r: gP(`Sur la fiche du salarié, onglet <strong>Contrat</strong> : <strong>+ Nouveau contrat</strong> crée un contrat, et chaque contrat permet d'ajouter un <strong>avenant</strong>, de le corriger ou de générer un <strong>projet de contrat</strong> à partir de vos modèles et clauses (Paramètres, « Modèles de documents »). Les fins de contrat du mois remontent aussi dans la préparation de paie.`) },
       { id: 's-acces', q: 'Comment donner un accès à un salarié ou changer ses droits ?', mots: 'accès compte connexion rôle droits permissions menus manager rh comptabilité identifiant créer compte mot de passe provisoire',
@@ -5899,7 +5900,7 @@ GUIDE_THEMES.push(
       { id: 'o-transfert', q: 'Comment transférer la propriété du compte ?', mots: 'transférer propriété propriétaire céder changer de propriétaire nouveau responsable compte',
         r: gP(`Menu du rond en haut à droite, puis <strong>Paramètres</strong> (onglet <strong>Mon compte</strong>), rubrique « Propriété de l'entreprise », et <strong>Transférer la propriété</strong> : choisissez la personne qui devient propriétaire. Faites-le avec soin : le propriétaire a accès à tout, y compris l'abonnement.`) },
       { id: 'o-mise-en-service', q: 'À quoi sert le « mode mise en service » ?', vue: 'parametres', params: { parametresTab: 'types-absences' }, vueLabel: 'Paramètres', mots: 'mise en service mode corriger ses propres congés compteurs rh démarrage reprise données temporaire 90 jours',
-        r: gP(`Normalement, personne ne gère sa propre demande de congé ni son propre compteur : seul le propriétaire le peut. Pendant que vous reprenez vos données dans Nexus, ce mode permet à la personne RH qui paramètre l'outil de corriger <strong>ses propres</strong> congés et compteurs.`) + gEtapes(
+        r: gP(`La RH et le propriétaire peuvent modifier et supprimer leurs propres congés. En revanche, personne ne règle son propre compteur : seul le propriétaire le peut. Pendant que vous reprenez vos données dans Nexus, ce mode permet à la personne RH qui paramètre l'outil de corriger <strong>ses propres</strong> compteurs.`) + gEtapes(
           `Ouvrez <strong>Paramètres</strong>, onglet <strong>Congés et absences</strong>.`,
           `Dans « Mode mise en service », choisissez la durée (de 1 à 90 jours) et cliquez sur <strong>Activer le mode</strong>.`
         ) + gP(`Le mode s'éteint tout seul à la date choisie (ou plus tôt avec « Désactiver maintenant »), et chaque activation est tracée dans le journal d'audit. Seul le propriétaire peut l'activer.`) },
@@ -5919,7 +5920,7 @@ GUIDE_THEMES.push(
       { id: 'x-modif-disparait', q: 'Ma modification a disparu quand j\'ai rechargé la page', mots: 'disparu perdu pas enregistré modification sauvegarde recharger disparaît annulée refusée droits',
         r: gP(`Cela arrive quand l'enregistrement a été refusé ou a échoué. Vérifiez :`) + gListe(
           `si un message d'erreur ou un bandeau signalait un échec d'enregistrement : rechargez la page, vérifiez la donnée et recommencez ;`,
-          `si vous avez le <strong>droit</strong> de faire cette modification. Par exemple, un RH ne corrige pas ses propres congés, sauf pendant le mode mise en service (activé par le propriétaire) ;`,
+          `si vous avez le <strong>droit</strong> de faire cette modification. Par exemple, un RH ne corrige pas ses propres compteurs, sauf pendant le mode mise en service (activé par le propriétaire) ;`,
           `si votre connexion était coupée.`) + gP(`Si le problème se répète, envoyez un ticket depuis « Aide et support » avec ce que vous avez fait.`) },
       { id: 'x-page-ancienne', q: 'L\'écran ne montre pas les nouveautés ou semble figé', mots: 'ancienne version cache actualiser recharger mise à jour bug figé écran ne change pas rafraîchir',
         r: gListe(
@@ -5974,7 +5975,7 @@ GUIDE_THEMES.push(
       { id: 'g-role', q: 'Rôle', mots: 'rôle salarié manager rh comptabilité propriétaire profil', r: gP(`Votre profil dans Nexus : <strong>Salarié</strong>, <strong>Manager</strong>, <strong>RH</strong>, <strong>Comptabilité</strong> ou <strong>Propriétaire</strong>. Il détermine les écrans et actions auxquels vous avez accès.`) },
       { id: 'g-permission', q: 'Permission', mots: 'permission droit autorisation accès individuel menus autorisés', r: gP(`Un droit précis (valider une absence, voir les compteurs, exporter la paie...). Chaque rôle en a par défaut, et les RH peuvent en ajouter ou en retirer à une personne.`) },
       { id: 'g-module', q: 'Module', mots: 'module souscrit abonnement fonctionnalité option à la carte licence', r: gP(`Un ensemble de fonctions (congés, planning, notes de frais, tickets restaurant, pointage...) que l'entreprise souscrit. Sans le module, ses écrans et boutons n'apparaissent pas.`) },
-      { id: 'g-mise-en-service', q: 'Mode mise en service', mots: 'mise en service mode temporaire corriger ses propres congés', r: gP(`Un mode temporaire (1 à 90 jours), activé par le propriétaire, qui permet à la personne RH qui paramètre l'outil de corriger ses propres congés et compteurs.`) },
+      { id: 'g-mise-en-service', q: 'Mode mise en service', mots: 'mise en service mode temporaire corriger ses propres congés', r: gP(`Un mode temporaire (1 à 90 jours), activé par le propriétaire, qui permet à la personne RH qui paramètre l'outil de corriger ses propres compteurs (ses congés, elle peut déjà les modifier et les supprimer).`) },
       { id: 'g-matricule', q: 'Matricule', mots: 'matricule numéro identifiant salarié', r: gP(`Le numéro qui identifie un salarié dans l'entreprise. Il est attribué automatiquement, ou repris d'un fichier lors d'un import.`) },
       { id: 'g-etablissement', q: 'Établissement, service, équipe', mots: 'établissement service équipe organisation site département', r: gP(`Le <strong>établissement</strong> est un lieu de travail ; le <strong>service</strong> un département ; l'<strong>équipe</strong> un groupe plus petit, avec un ou plusieurs managers.`) },
       { id: 'g-cpf', q: 'CPF (compte personnel de formation)', mots: 'cpf compte personnel de formation financement droits formation', r: gP(`Un droit à formation attaché à la personne, utilisable avec ou sans l'accord de l'employeur selon que la formation a lieu pendant ou hors du temps de travail. Nexus prépare la demande et les lettres associées.`) },
@@ -18004,6 +18005,15 @@ function canSelfServiceAsProprietaire(user, domain) {
   return miseEnServiceActive() && (hasPermission(user, PERMISSIONS.VALIDER_ABSENCE) || hasPermission(user, PERMISSIONS.ANNULER_ABSENCE));
 }
 
+/** Retour du 16/11/2026 : la RH (et le propriétaire) peut modifier, annuler et supprimer SES PROPRES congés, RTT et télétravail, sans mode mise en service.
+ * Différent de canSelfServiceAsProprietaire : cela ne donne PAS le droit de valider ou refuser sa propre demande (seul le propriétaire l'a). Aligné sur la
+ * migration 0077 (politiques leave_requests / telework_requests). Les autres rôles gardent la séparation des tâches, sauf mode mise en service. */
+function peutCorrigerSesPropresAbsences(user, domain) {
+  if (!user || domain !== 'absence') return false;
+  if (canSelfServiceAsProprietaire(user, domain)) return true;
+  return user.role === ROLES.RH && (hasPermission(user, PERMISSIONS.ANNULER_ABSENCE) || hasPermission(user, PERMISSIONS.GERER_UTILISATEURS));
+}
+
 /** Vrai tant que la date fixée par le propriétaire n'est pas dépassée (réglage miseEnServiceJusquau). */
 function miseEnServiceActive() {
   const jusquau = String(settingsRepository.getSettings().miseEnServiceJusquau || '');
@@ -18067,8 +18077,8 @@ function canRefuserRequestFor(request, domain = 'absence') {
 function canManageRequestFor(employeeId, domain = 'absence') {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
-  // séparation des tâches : personne ne gère sa propre demande, même RH — sauf le Propriétaire (congés/absences).
-  if (employeeId === user.id && !canSelfServiceAsProprietaire(user, domain)) return false;
+  // séparation des tâches : personne ne gère sa propre demande — sauf le Propriétaire et la RH pour leurs congés/absences (voir peutCorrigerSesPropresAbsences).
+  if (employeeId === user.id && !peutCorrigerSesPropresAbsences(user, domain)) return false;
   if (hasPermission(user, domain === 'frais' ? PERMISSIONS.VALIDER_NOTE_FRAIS : PERMISSIONS.ANNULER_ABSENCE)) return true;
   if (user.role === ROLES.MANAGER) {
     return isManagerOfEmployee(user.id, employeeId);
@@ -18087,12 +18097,12 @@ function canSelfCancelPendingRequest(request, user) {
   return Boolean(user) && request.employeeId === user.id && request.statut === 'En attente' && request.etapeIndex === 0;
 }
 
-/** Aligné sur les politiques du serveur (leave_requests_delete, migration 0076) : il faut gérer les utilisateurs, les paramètres ou les absences, et jamais sa propre demande
- * hors mode mise en service. Un manager sans ces droits n'a donc pas le bouton (le serveur refuserait). */
+/** Aligné sur les politiques du serveur (leave_requests_delete, migrations 0076 et 0077) : il faut gérer les utilisateurs, les paramètres ou les absences, et jamais sa propre demande
+ * sauf pour la RH et le propriétaire, ou en mode mise en service. Un manager sans ces droits n'a donc pas le bouton (le serveur refuserait). */
 function canDeleteLeaveRequest(request) {
   const user = authRepository.getCurrentUser();
   if (!user) return false;
-  if (request.employeeId === user.id && !miseEnServiceActive()) return false;
+  if (request.employeeId === user.id && !peutCorrigerSesPropresAbsences(user, 'absence')) return false;
   return [PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.GERER_PARAMETRES, PERMISSIONS.VALIDER_ABSENCE, PERMISSIONS.REFUSER_ABSENCE, PERMISSIONS.ANNULER_ABSENCE]
     .some(p => hasPermission(user, p));
 }
@@ -21772,7 +21782,7 @@ function renderParametresTypesAbsences() {
     ${authRepository.getCurrentUser().role === ROLES.PROPRIETAIRE ? `
     <div class="card" style="margin-bottom: 16px;">
       <h2>Mode mise en service</h2>
-      <p class="text-muted">Pendant que vous reprenez vos données dans Nexus, la personne RH qui paramètre l'outil peut corriger <strong>ses propres</strong> congés et compteurs (normalement réservé au propriétaire, pour qu'on ne gère pas sa propre demande). Le mode s'éteint tout seul à la date choisie, et chaque activation est tracée dans le journal d'audit.</p>
+      <p class="text-muted">Pendant que vous reprenez vos données dans Nexus, la personne RH qui paramètre l'outil peut corriger <strong>ses propres</strong> compteurs (normalement réservé au propriétaire). Ses congés et RTT, elle peut déjà les modifier et les supprimer sans ce mode. Le mode s'éteint tout seul à la date choisie, et chaque activation est tracée dans le journal d'audit.</p>
       ${miseEnServiceActive()
         ? `<p><span class="badge badge-warning">Actif jusqu'au ${formatDate(settings.miseEnServiceJusquau)}</span></p><button type="button" class="btn btn-secondary" id="btn-mise-en-service-desactiver">Désactiver maintenant</button>`
         : `<div style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">

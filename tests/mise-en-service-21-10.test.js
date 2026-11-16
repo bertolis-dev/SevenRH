@@ -24,10 +24,10 @@ function run() {
   const { api, proprietaire, rh, demande } = setup();
   const { sandbox, DB } = api;
 
-  // par défaut : la règle de séparation des tâches s'applique au RH
+  // par défaut (retour du 16/11/2026) : le RH corrige déjà ses propres congés ; ses propres compteurs restent réservés au propriétaire hors mode
   DB._currentEmployeeId = rh.id;
   assert.strictEqual(sandbox.miseEnServiceActive(), false);
-  assert.strictEqual(sandbox.canManageRequestFor(rh.id), false, 'le RH ne gère pas sa propre demande par défaut');
+  assert.strictEqual(sandbox.canManageRequestFor(rh.id), true, 'le RH gère sa propre demande de congé sans mode mise en service');
   assert.ok(!sandbox.renderEmployeeBalances(DB.getEmployeeById(rh.id), sandbox.peutAjusterCompteursDe(DB.getEmployeeById(rh.id))).includes('data-adjust-compteur'), 'ni ses propres compteurs');
 
   // seul le propriétaire active le mode
@@ -55,7 +55,8 @@ function run() {
   const reglages = DB.getSettings(); reglages.miseEnServiceJusquau = hier(); DB.saveSettings(reglages);
   DB._currentEmployeeId = rh.id;
   assert.strictEqual(sandbox.miseEnServiceActive(), false, 'mode expiré');
-  assert.strictEqual(sandbox.canManageRequestFor(rh.id), false);
+  assert.strictEqual(sandbox.canManageRequestFor(rh.id), true, 'les congés du RH restent corrigeables sans le mode');
+  assert.strictEqual(sandbox.peutAjusterCompteursDe(DB.getEmployeeById(rh.id)), false, 'mais ses propres compteurs redeviennent réservés au propriétaire');
 
   // veille d'expiration encore valable, désactivation manuelle
   DB._currentEmployeeId = proprietaire.id;
