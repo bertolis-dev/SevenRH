@@ -23,6 +23,11 @@ function runLeTableauNeutraliseLesTypesInactifs() {
   assert.strictEqual(rtt.actif, false, 'préalable : le RTT est inactif par défaut');
   api.leaveTypeRepository.updateLeaveType(rtt.id, { nombreAnnuel: 10, acquisition: 'Mensuelle' });
 
+  // Retour du 16/11/2026 : un type non activé sans aucune donnée est masqué par défaut (colonne de tirets) ; on le réaffiche explicitement ici.
+  const htmlMasque = api.sandbox.renderTableauCompteurs();
+  assert.ok(!htmlMasque.includes(`data-label="${rtt.nom}"`), 'masqué par défaut : aucune donnée sur ce type non activé');
+  assert.ok(htmlMasque.includes('btn-tc-montrer-inactifs'), 'avec un lien pour afficher');
+  api.state.tableauCompteursMontrerInactifs = true;
   const html = api.sandbox.renderTableauCompteurs();
   const colonnesRtt = html.split('<td ').filter(c => c.includes(`data-label="${rtt.nom}"`) && c.includes('tc-inactif') && !c.includes('Total'));
   assert.ok(colonnesRtt.length > 0, 'les cellules du type inactif existent (la colonne reste visible)');
