@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.7';
+const APP_VERSION = '2026.11.16.8';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tableau des compteurs plus étroit, pour éviter le défilement horizontal : les types non activés sans aucune donnée (anciens RTT désactivés) sont masqués avec un lien « Les afficher », les cellules sont resserrées, les en-têtes et détails passent à la ligne et le nom du salarié tient sur une ligne.",
       "Espacement harmonisé dans toute l'application : une même échelle (4, 8, 12, 16, 24 px) entre les cartes, les grilles, les en-têtes et les marges de page, et un menu de gauche plus compact (lignes plus serrées, plus d'écrans visibles sans défiler).",
       "La RH et le propriétaire peuvent maintenant modifier et supprimer leurs propres congés et RTT (double-clic dans le calendrier, « Régulariser » ou « Supprimer » dans la liste), sans activer le mode mise en service. Ils ne valident toujours pas leur propre demande. Nécessite la migration 0077.",
       "Nouvel écran Paramètres > Couleurs : choisissez la couleur principale (boutons et actions), celle du texte, la couleur de mise en avant et le fond, puis une palette pour chacun des quatre espaces du menu (Mon espace, Mon équipe, Administration, Paramètres). La palette d'un espace colore le liseré du haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Un bouton rétablit les couleurs de Nexus.",
@@ -10827,7 +10828,16 @@ function renderTableauCompteursCell(b) {
 
 function renderTableauCompteurs() {
   if (state.tableauCompteursVue === 'annuel') return renderRecapAnnuelConges();
-  const { leaveTypes, rows, periodInfoByType } = getTableauCompteursData();
+  let { leaveTypes, rows, periodInfoByType } = getTableauCompteursData();
+  // Retour du 16/11/2026 : un type non activé dont personne n'a rien (ancien RTT désactivé par exemple) n'est qu'une colonne de tirets qui force le défilement
+  // horizontal : on la masque, avec un lien pour la réafficher. Un type non activé où quelqu'un a des jours pris ou en attente reste visible.
+  const typesVidesMasquables = leaveTypes.map((t, i) => !t.actif && !rows.some(r => r.balances[i].pris || r.balances[i].enAttente));
+  const nombreMasques = state.tableauCompteursMontrerInactifs ? 0 : typesVidesMasquables.filter(Boolean).length;
+  if (nombreMasques) {
+    const gardes = leaveTypes.map((t, i) => i).filter(i => !typesVidesMasquables[i]);
+    leaveTypes = gardes.map(i => leaveTypes[i]);
+    rows = rows.map(r => ({ ...r, balances: gardes.map(i => r.balances[i]) }));
+  }
   const { pageItems, totalPages, page, pageStart } = paginate(rows, 'tableauCompteursPage');
   const filters = state.tableauCompteursFilters;
   const activeCount = [state.tableauCompteursSearch, filters.service, filters.etablissementId].filter(Boolean).length;
@@ -10875,8 +10885,8 @@ function renderTableauCompteurs() {
               <thead>
                 <tr>
                   ${renderSortableHeader('Salarié', 'nom', 'tableauCompteursSortBy', 'tableauCompteursSortDir')}
-                  ${leaveTypes.map(t => `<th style="text-align: right; white-space: nowrap;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}${renderTableauCompteursPeriodInfo(periodInfoByType.get(t.id))}</th>`).join('')}
-                  ${avecTotalRtt ? '<th style="text-align: right; white-space: nowrap;" class="tc-total-rtt">Total RTT<div class="tc-header-period text-muted">tous types RTT</div></th>' : ''}
+                  ${leaveTypes.map(t => `<th style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}">${escapeHtml(t.nom)}${t.actif ? '' : ' <span class="badge badge-muted">non activé</span>'}${renderTableauCompteursPeriodInfo(periodInfoByType.get(t.id))}</th>`).join('')}
+                  ${avecTotalRtt ? '<th style="text-align: right;" class="tc-total-rtt">Total RTT<div class="tc-header-period text-muted">tous types RTT</div></th>' : ''}
                 </tr>
               </thead>
               <tbody>
@@ -10904,6 +10914,7 @@ function renderTableauCompteurs() {
             </table>
           </div>
           ${leaveTypes.some((t, i) => rows.some(r => r.balances[i].disponible === Infinity)) ? '<p class="text-muted" style="margin-top: 8px;">* au moins un salarié a un solde illimité pour ce type, exclu du total.</p>' : ''}
+          ${nombreMasques ? `<p class="text-muted" style="margin-top: 8px;">${nombreMasques} type${nombreMasques > 1 ? 's' : ''} non activé${nombreMasques > 1 ? 's' : ''} sans aucune donnée masqué${nombreMasques > 1 ? 's' : ''}. <button type="button" class="btn-link" id="btn-tc-montrer-inactifs">Les afficher</button></p>` : state.tableauCompteursMontrerInactifs && typesVidesMasquables.some(Boolean) ? '<p class="text-muted" style="margin-top: 8px;"><button type="button" class="btn-link" id="btn-tc-montrer-inactifs">Masquer les types non activés sans donnée</button></p>' : ''}
           ${leaveTypes.some(t => !t.actif) ? '<p class="text-muted" style="margin-top: 8px;">Les types marqués "non activé" existent mais ne sont pas encore ouverts aux salariés. Activez-les dans Paramètres → Types d\'absences si besoin.</p>' : ''}
         `}
       </div>
@@ -10914,6 +10925,8 @@ function renderTableauCompteurs() {
 
 function bindTableauCompteursEvents() {
   bindFilterToggleButtons();
+  const btnInactifs = document.getElementById('btn-tc-montrer-inactifs');
+  if (btnInactifs) btnInactifs.addEventListener('click', () => { state.tableauCompteursMontrerInactifs = !state.tableauCompteursMontrerInactifs; render(); });
   document.querySelectorAll('[data-tc-vue]').forEach(btn => btn.addEventListener('click', () => {
     state.tableauCompteursVue = btn.dataset.tcVue;
     render();
