@@ -1566,6 +1566,19 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 }
 .parametres-content { flex: 1; min-width: 0; }
 
+/* Refonte du 16/11/2026 : les Paramètres occupent toute la page (plus de menu de l'application à gauche, ni de colonne vide). Ordinateur seulement :
+   sur téléphone, #sidebar sert d'ancre au menu ☰. Bouton « Retour à l'application » en tête, menu des réglages qui reste visible en défilant. */
+.parametres-retour-ligne { margin: 0 0 12px; }
+@media (min-width: 861px) {
+  :root[data-espace="parametres"] #sidebar { display: none; }
+  :root[data-espace="parametres"] #main-column { margin-left: 0; }
+  :root[data-espace="parametres"] #view-root { max-width: 1680px; padding-left: 40px; padding-right: 40px; }
+  :root[data-espace="parametres"] .parametres-sidebar-desktop {
+    position: sticky; top: calc(var(--topbar-height) + 20px);
+    width: 260px; max-height: calc(100vh - var(--topbar-height) - 40px); overflow-y: auto;
+  }
+}
+
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 
 .balance-grid {

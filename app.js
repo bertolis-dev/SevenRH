@@ -2478,13 +2478,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.1';
+const APP_VERSION = '2026.11.16.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paramètres sur toute la page : le menu de l'application à gauche disparaît dans les Paramètres, qui occupent tout l'écran avec leur propre menu de réglages (qui reste visible en défilant). Un bouton « Retour à l'application » en haut ramène à l'écran d'où vous veniez.",
       "Fiche salarié : le statut cadre / non-cadre n'est plus saisi en double. Il se déduit de la catégorie de salarié (Cadre ou Dirigeant : cadre ; Non cadre ou Agent de maîtrise : non-cadre) : la ligne « Statut » en doublon disparaît de « Contrat & poste », et la case « Statut cadre » du contrat est verrouillée dans ce cas (libre pour une catégorie personnalisée). Plus d'incohérence possible.",
       "Tableau des compteurs : un type désactivé (ex. un ancien RTT) affiche de nouveau les jours pris ou en attente d'un salarié, au lieu d'un tiret qui les cachait.",
       "Calendrier des absences, pour la RH et les administrateurs : un double-clic sur un congé ouvre sa fiche pour le modifier (type, dates, demi-journée) ou le supprimer.",
@@ -7849,6 +7850,8 @@ function bindNotifItemEvents() {
 }
 
 function navigateTo(view, params = {}) {
+  // Les Paramètres s'ouvrent sur toute la page (sans le menu de gauche) : on retient l'écran d'où l'on vient pour le bouton « Retour à l'application ».
+  if (view !== 'parametres' && view !== 'abonnement') state.derniereVueHorsParametres = { view, params: { ...params } };
   const user = authRepository.getCurrentUser();
   const allowedKeys = navItemsForRole(user || { role: ROLES.SALARIE }).map(i => i.key);
   // Toujours autoriser les vues qui ne sont pas des entrées de menu (détail salarié, coming-soon...).
@@ -21085,6 +21088,7 @@ function renderParametres() {
   ` : '';
 
   return `
+    <div class="parametres-retour-ligne"><button type="button" class="btn btn-secondary btn-sm" id="btn-parametres-retour">← Retour à l'application</button></div>
     <div class="view-header">
       <h1>Paramètres</h1>
       <p class="view-subtitle">${canManageParametres() ? "Mon compte (photo, mot de passe, apparence, comptes), entreprise, référentiels, calendrier et un onglet par module souscrit" : 'Vos réglages personnels : photo, mot de passe, apparence, comptes'}</p>
@@ -21858,6 +21862,11 @@ function bindParametresIntegrationsEvents() {
 }
 
 function bindParametresEvents() {
+  const btnRetour = document.getElementById('btn-parametres-retour');
+  if (btnRetour) btnRetour.addEventListener('click', () => {
+    const precedent = state.derniereVueHorsParametres;
+    if (precedent && precedent.view) navigateTo(precedent.view, precedent.params || {}); else navigateTo('dashboard');
+  });
   const tabSelect = document.getElementById('parametres-tab-select');
   if (tabSelect) tabSelect.addEventListener('change', () => { state.parametresTab = tabSelect.value; render(); renderSidebar(); });
   document.querySelectorAll('[data-parametres-tab]').forEach(btn => {
