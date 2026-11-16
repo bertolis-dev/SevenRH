@@ -269,7 +269,7 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 .nav-section-toggle[aria-expanded="false"] .nav-section-chevron { transform: rotate(-45deg); }
 
 /* Revue Nexus n° 17 : chaque espace (Personnel, Équipe, Paramètres) a sa couleur — liseré en haut, fond légèrement teinté. */
-:root { --espace-personnel: #3b6fd1; --espace-equipe: #0f9d78; --espace-administration: #b7791f; --espace-parametres: #7a5cc7; }
+:root { --espace-personnel: #245090; --espace-equipe: #2e6e40; --espace-administration: #a8501c; --espace-parametres: #6743a6; }
 :root[data-espace="personnel"] { --espace-accent: var(--espace-personnel); }
 :root[data-espace="equipe"] { --espace-accent: var(--espace-equipe); }
 :root[data-espace="administration"] { --espace-accent: var(--espace-administration); }
@@ -4623,3 +4623,27 @@ textarea.input { resize: vertical; font-family: inherit; }
 .parametres-content .form-hint { font-size: 13px; line-height: 1.5; margin-top: 6px; }
 .parametres-content .form-field > label { font-weight: 600; }
 .parametres-content .form-grid { gap: 18px 20px; }
+
+
+/* Couleurs de l'entreprise (Paramètres > Couleurs) et palettes d'espace : liseré, élément actif du menu, titres de tableaux, une ligne sur deux. */
+:root[data-espace] .nav-item.active { background: color-mix(in srgb, var(--espace-accent) 14%, transparent); box-shadow: inset 3px 0 0 var(--espace-accent); }
+:root[data-espace] .table thead th { background: color-mix(in srgb, var(--espace-accent) 11%, var(--color-surface)); border-bottom: 2px solid var(--espace-accent); }
+@media (min-width: 861px) {
+  :root[data-espace] .table:not(.mobile-cards) tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--espace-accent) 4%, transparent); }
+}
+.couleurs-generales { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 24px; margin: 16px 0; }
+.couleur-champ { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.couleur-champ label { font-weight: 600; }
+.couleur-champ input[type="color"] { width: 100%; max-width: 160px; height: 40px; padding: 3px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); cursor: pointer; }
+.couleurs-apercu { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 20px; border: 1px dashed var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.couleurs-apercu-titre { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); font-weight: 700; }
+.couleurs-apercu-miseenavant { color: var(--color-gold); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
+.palette-ligne { margin: 16px 0; }
+.palette-ligne-titre { font-weight: 600; font-size: 13.5px; margin-bottom: 8px; }
+.palette-choix { display: flex; flex-wrap: wrap; gap: 8px; }
+.palette-pastille { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px; padding: 8px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; font-family: inherit; color: var(--color-text); }
+.palette-pastille:hover { border-color: var(--color-text-muted); }
+.palette-pastille.active { border: 2px solid var(--color-text); padding: 7px 5px; }
+.palette-echantillon { display: flex; width: 100%; height: 26px; border-radius: 6px; overflow: hidden; }
+.palette-echantillon i { flex: 1; display: block; }
+.palette-nom { font-size: 12px; color: var(--color-text-muted); }

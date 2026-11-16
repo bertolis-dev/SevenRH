@@ -788,7 +788,6 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     bindParametresTicketsRestaurantEvents: sandbox.__bindParametresTicketsRestaurantEvents,
     renderParametresCalendrier: sandbox.__renderParametresCalendrier,
     bindParametresCalendrierEvents: sandbox.__bindParametresCalendrierEvents,
-    PARAMETRES_TABS: sandbox.__PARAMETRES_TABS,
     PARAMETRES_TABS_COMPLETION: sandbox.__PARAMETRES_TABS_COMPLETION,
     renderParametresEntreprise: sandbox.__renderParametresEntreprise,
     bindParametresEntrepriseEvents: sandbox.__bindParametresEntrepriseEvents,

@@ -520,6 +520,8 @@ const DEFAULT_SETTINGS = {
   forfaits: ['Aucun', 'Forfait jours', 'Forfait heures'],
   joursOuvres: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
   schoolZone: 'C', // 'A' | 'B' | 'C', code court, aligné avec LeaveType.zones / seedSchoolHolidays()
+  // Couleurs de l'entreprise (retour du 16/11/2026) : vide = couleurs de Nexus. Les palettes sont celles des quatre espaces du menu.
+  couleurs: { principale: '', menuTexte: '', miseEnAvant: '', fond: '', palettes: { personnel: 'bleu', equipe: 'vert', administration: 'terre-cuite', parametres: 'lavande' } },
   // §correctif retour QA du 27/08/2026 : format des NOUVEAUX matricules (AAAA-NNNN par défaut, ex.
   // 2026-0001) — false retire le tiret (20260001). Purement cosmétique : voir formatMatricule ;
   // n'affecte jamais l'unicité, garantie côté serveur indépendamment de ce réglage.

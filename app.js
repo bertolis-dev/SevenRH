@@ -327,6 +327,165 @@ function getThemePreference() {
     return (v === 'light' || v === 'dark') ? v : 'system';
   } catch (e) { return 'system'; }
 }
+// ---------------------------------------------------------------------------
+// Couleurs de l'entreprise (retour du 16/11/2026, inspiré de l'écran « Couleurs » de Hadaly)
+// ---------------------------------------------------------------------------
+
+/** Palettes proposées pour chaque espace : une couleur forte, dont on tire un ton moyen et un ton très clair. */
+const PALETTES_COULEURS = [
+  { key: 'bleu-canard', nom: 'Bleu canard', fort: '#176775' },
+  { key: 'bleu', nom: 'Bleu', fort: '#245090' },
+  { key: 'bleu-nuit', nom: 'Bleu nuit', fort: '#2a3a69' },
+  { key: 'violet', nom: 'Violet', fort: '#7a3b61' },
+  { key: 'lavande', nom: 'Lavande', fort: '#6743a6' },
+  { key: 'vert', nom: 'Vert', fort: '#2e6e40' },
+  { key: 'bordeaux', nom: 'Bordeaux', fort: '#8b1f3a' },
+  { key: 'terre-cuite', nom: 'Terre cuite', fort: '#a8501c' },
+  { key: 'ardoise', nom: 'Ardoise', fort: '#3f4a5c' }
+];
+
+const ESPACES_COULEURS = [
+  { key: 'personnel', label: 'Mon espace' },
+  { key: 'equipe', label: 'Mon équipe' },
+  { key: 'administration', label: 'Administration' },
+  { key: 'parametres', label: 'Paramètres' }
+];
+
+const COULEURS_PAR_DEFAUT = { principale: '#17284d', menuTexte: '#1a1d24', miseEnAvant: '#c99a54', fond: '#f6f7f9' };
+
+function couleurHexValide(valeur) {
+  return /^#[0-9a-f]{6}$/i.test(valeur || '');
+}
+
+function hexVersRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mélange `hex` avec `autre` : ratio 0 = hex, 1 = autre. */
+function melangerHex(hex, autre, ratio) {
+  const a = hexVersRgb(hex), b = hexVersRgb(autre);
+  const canal = (i) => Math.round(a[i] + (b[i] - a[i]) * ratio).toString(16).padStart(2, '0');
+  return '#' + canal(0) + canal(1) + canal(2);
+}
+
+function couleursEntrepriseEffectives() {
+  const reglees = (settingsRepository.getSettings().couleurs) || {};
+  const defauts = DEFAULT_SETTINGS.couleurs;
+  return {
+    principale: couleurHexValide(reglees.principale) ? reglees.principale : '',
+    menuTexte: couleurHexValide(reglees.menuTexte) ? reglees.menuTexte : '',
+    miseEnAvant: couleurHexValide(reglees.miseEnAvant) ? reglees.miseEnAvant : '',
+    fond: couleurHexValide(reglees.fond) ? reglees.fond : '',
+    palettes: Object.assign({}, defauts.palettes, reglees.palettes || {})
+  };
+}
+
+/** CSS des couleurs choisies par l'entreprise. Les couleurs générales (principale, texte, mise en avant, fond) ne s'appliquent qu'au thème clair :
+ * en thème sombre elles pourraient rendre le texte illisible. Les couleurs des espaces valent pour les deux thèmes. */
+function genererCssCouleursEntreprise(couleurs) {
+  const c = couleurs || {};
+  let generales = '';
+  if (couleurHexValide(c.principale)) {
+    generales += `--color-primary:${c.principale};--color-primary-hover:${melangerHex(c.principale, '#000000', 0.25)};--color-primary-soft:${melangerHex(c.principale, '#ffffff', 0.92)};--color-primary-text:${c.principale};--color-chip-bg:${melangerHex(c.principale, '#ffffff', 0.7)};`;
+  }
+  if (couleurHexValide(c.menuTexte)) generales += `--color-text:${c.menuTexte};`;
+  if (couleurHexValide(c.miseEnAvant)) generales += `--color-gold:${c.miseEnAvant};--color-gold-soft:${melangerHex(c.miseEnAvant, '#ffffff', 0.88)};`;
+  if (couleurHexValide(c.fond)) generales += `--color-bg:${c.fond};`;
+  const espaces = ESPACES_COULEURS.map(e => {
+    const palette = PALETTES_COULEURS.find(p => p.key === (c.palettes || {})[e.key]);
+    return palette ? `--espace-${e.key}:${palette.fort};` : '';
+  }).join('');
+  let css = espaces ? `:root{${espaces}}` : '';
+  if (generales) css += `@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){${generales}}}:root[data-theme="light"]{${generales}}`;
+  return css;
+}
+
+function appliquerCouleursEntreprise() {
+  let balise = document.getElementById('couleurs-entreprise');
+  if (!balise) {
+    balise = document.createElement('style');
+    balise.id = 'couleurs-entreprise';
+    document.head.appendChild(balise);
+  }
+  balise.textContent = genererCssCouleursEntreprise(couleursEntrepriseEffectives());
+}
+
+function enregistrerCouleursEntreprise(modification) {
+  const reglages = settingsRepository.getSettings();
+  const actuelles = Object.assign({}, DEFAULT_SETTINGS.couleurs, reglages.couleurs || {});
+  reglages.couleurs = Object.assign({}, actuelles, modification, { palettes: Object.assign({}, actuelles.palettes, (modification && modification.palettes) || {}) });
+  settingsRepository.saveSettings(reglages);
+  appliquerCouleursEntreprise();
+}
+
+function renderParametresCouleurs() {
+  const c = couleursEntrepriseEffectives();
+  const champ = (cle, label, aide) => `
+    <div class="couleur-champ">
+      <label for="f-couleur-${cle}">${label}</label>
+      <input type="color" id="f-couleur-${cle}" data-couleur="${cle}" value="${escapeHtml(c[cle] || COULEURS_PAR_DEFAUT[cle])}">
+      <span class="text-muted">${aide}</span>
+    </div>`;
+  const ligne = (espace) => `
+    <div class="palette-ligne">
+      <div class="palette-ligne-titre">Palette de l'espace « ${escapeHtml(espace.label)} »</div>
+      <div class="palette-choix">
+        ${PALETTES_COULEURS.map(p => `
+          <button type="button" class="palette-pastille${c.palettes[espace.key] === p.key ? ' active' : ''}" data-palette-espace="${espace.key}" data-palette="${p.key}" aria-pressed="${c.palettes[espace.key] === p.key ? 'true' : 'false'}">
+            <span class="palette-echantillon"><i style="background:${p.fort}"></i><i style="background:${melangerHex(p.fort, '#ffffff', 0.8)}"></i><i style="background:${melangerHex(p.fort, '#ffffff', 0.94)}"></i></span>
+            <span class="palette-nom">${escapeHtml(p.nom)}</span>
+          </button>`).join('')}
+      </div>
+    </div>`;
+  return `
+    <div class="card">
+      <h2>Couleurs</h2>
+      <p class="text-muted">Personnalisez l'apparence de Nexus aux couleurs de votre entreprise. Chaque changement s'applique tout de suite à tous vos salariés.</p>
+      <div class="couleurs-generales">
+        ${champ('principale', 'Principale (boutons et actions)', 'Boutons, liens et éléments actifs')}
+        ${champ('menuTexte', 'Texte et menu', 'Couleur du texte principal')}
+        ${champ('miseEnAvant', 'Mise en avant', 'Titres de sections, repères, éléments à remarquer')}
+        ${champ('fond', 'Fond', 'Arrière-plan des pages')}
+      </div>
+      <div class="couleurs-apercu" aria-hidden="true">
+        <span class="couleurs-apercu-titre">Aperçu</span>
+        <button type="button" class="btn btn-primary btn-sm" tabindex="-1">Bouton principal</button>
+        <span class="badge badge-primary">Pastille</span>
+        <span class="couleurs-apercu-miseenavant">Mise en avant</span>
+      </div>
+      ${ESPACES_COULEURS.map(ligne).join('')}
+      <p class="form-hint">La palette d'un espace colore le liseré en haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Les couleurs d'état (validé, en attente, refusé) restent fixes pour être reconnues partout. Les couleurs générales s'appliquent au thème clair ; le thème sombre garde ses couleurs pour rester lisible.</p>
+      <div style="margin-top: 14px;"><button type="button" class="btn btn-secondary btn-sm" id="btn-couleurs-reinitialiser">Revenir aux couleurs de Nexus</button></div>
+    </div>
+  `;
+}
+
+function bindParametresCouleursEvents() {
+  document.querySelectorAll('[data-couleur]').forEach(champ => {
+    champ.addEventListener('change', () => {
+      enregistrerCouleursEntreprise({ [champ.dataset.couleur]: champ.value });
+      showToast('Couleur enregistrée.');
+      render();
+    });
+  });
+  document.querySelectorAll('[data-palette]').forEach(bouton => {
+    bouton.addEventListener('click', () => {
+      enregistrerCouleursEntreprise({ palettes: { [bouton.dataset.paletteEspace]: bouton.dataset.palette } });
+      render();
+    });
+  });
+  const reinit = document.getElementById('btn-couleurs-reinitialiser');
+  if (reinit) reinit.addEventListener('click', () => {
+    const reglages = settingsRepository.getSettings();
+    reglages.couleurs = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.couleurs));
+    settingsRepository.saveSettings(reglages);
+    appliquerCouleursEntreprise();
+    showToast('Couleurs de Nexus rétablies.');
+    render();
+  });
+}
+
 function applyThemePreference(value) {
   try {
     if (value === 'light' || value === 'dark') {
@@ -392,6 +551,7 @@ const ICONS = {
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7c1.6 0 3 .3 4.2.9M22 12s-1.6 2.8-4.4 4.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+  palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.2" r="1"/><circle cx="14.5" cy="7.2" r="1"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 7.5-7 9-4-1.5-7-4-7-9V6z"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>',
@@ -2478,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.4';
+const APP_VERSION = '2026.11.16.5';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Nouvel écran Paramètres > Couleurs : choisissez la couleur principale (boutons et actions), celle du texte, la couleur de mise en avant et le fond, puis une palette pour chacun des quatre espaces du menu (Mon espace, Mon équipe, Administration, Paramètres). La palette d'un espace colore le liseré du haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Un bouton rétablit les couleurs de Nexus.",
       "Menu de gauche en trois blocs selon votre rôle : « Mon espace », « Mon équipe » et « Administration » (mise en route, paie, rémunération, embauche et Paramètres, pour la RH et le propriétaire). Icônes un peu plus grandes.",
       "Accueil de la RH et du propriétaire : une carte « Mise en route » avec barre d'avancement et la prochaine étape à faire, jusqu'à ce que tout soit terminé.",
       "Tableau des compteurs : soldes en rouge s'ils sont négatifs et en orange à un jour ou moins, colonne du salarié figée quand on fait défiler, et une colonne « Total RTT » qui additionne les types RTT.",
@@ -3186,6 +3347,7 @@ function showApp() {
   document.getElementById('bertolis-root').style.display = 'none';
   document.getElementById('landing-root').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
+  appliquerCouleursEntreprise();
   renderSidebar();
   renderUserMenuButton();
   navigateTo('dashboard');
@@ -7074,6 +7236,7 @@ function restorePageAfterPrinting() {
 const PARAMETRES_SEARCH_SECTIONS = [
   { label: 'Entreprise', tab: 'entreprise', keywords: ['société', 'raison sociale', 'siret'] },
   { label: 'Établissements', tab: 'etablissements', keywords: ['site', 'agence', 'adresse'] },
+  { label: 'Couleurs', tab: 'couleurs', keywords: ['couleur', 'palette', 'thème', 'apparence', 'identité visuelle', 'fond', 'bouton'] },
   { label: 'Services & équipes', tab: 'services', keywords: ['service', 'équipe', 'organisation'] },
   { label: 'Référentiels', tab: 'listes', keywords: ['postes', 'catégories de salariés', 'conventions collectives', 'listes de référence'] },
   { label: 'Calendrier', tab: 'calendrier', keywords: ['férié', 'jour chômé', 'fermeture', 'pont'] },
@@ -21072,6 +21235,7 @@ const PARAMETRES_GROUPES = [
 
 const PARAMETRES_TABS = [
   { key: 'entreprise', label: 'Entreprise', groupe: 'entreprise', icon: ICONS.building, isVisible: canManageParametres, render: renderParametresEntreprise, bind: bindParametresEntrepriseEvents },
+  { key: 'couleurs', label: 'Couleurs', groupe: 'entreprise', icon: ICONS.palette, isVisible: canManageParametres, render: renderParametresCouleurs, bind: bindParametresCouleursEvents },
   { key: 'abonnement', label: 'Abonnement', groupe: 'entreprise', icon: ICONS.card, isVisible: () => hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS), render: renderParametresAbonnement, bind: bindParametresAbonnementEvents },
   { key: 'etablissements', label: 'Établissements', groupe: 'entreprise', icon: ICONS.cabinet, isVisible: canManageParametres, render: renderParametresEtablissements, bind: bindParametresEtablissementsEvents },
   { key: 'services', label: 'Services &amp; équipes', groupe: 'entreprise', icon: ICONS.people, isVisible: canManageParametres, render: renderParametresServices, bind: bindParametresServicesEvents },
