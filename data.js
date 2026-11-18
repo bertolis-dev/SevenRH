@@ -4450,8 +4450,10 @@ const DB = {
       const delimiteur = ligne.includes(';') ? ';' : ',';
       const parts = ligne.split(delimiteur);
       if (parts.length < 3) { ignorees++; return; }
-      const [datePart, libellePart, montantPart] = parts;
-      const montant = Math.abs(parseFloat(String(montantPart).replace(',', '.').replace(/[^0-9.\-]/g, '')));
+      // Guillemets des CSV de banque retirés ; montant lu « à la française » (1 234,56 ou 1.234,56) par parseMontantFR : l'ancien calcul lisait « 1.234,56 » comme 1,234.
+      const [datePart, libellePart, montantPart] = parts.map(p => String(p).trim().replace(/^"|"$/g, '').trim());
+      const lu = parseMontantFR(montantPart);
+      const montant = lu === null ? NaN : Math.abs(lu);
       const date = normaliserDateReleve((datePart || '').trim());
       if (!date || !Number.isFinite(montant) || montant <= 0) { ignorees++; return; }
       const cle = `${date}|${(libellePart || '').trim()}|${montant}`;
@@ -7168,7 +7170,7 @@ function makeEmptyReleveLigne() {
  * normalisé) — renvoie null pour tout le reste plutôt que de deviner un format ambigu. */
 function normaliserDateReleve(str) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const m = str.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   return null;
 }

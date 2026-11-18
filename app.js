@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.18.2';
+const APP_VERSION = '2026.11.18.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Imports : essai de tous les imports (salariés, soldes initiaux, historique des congés et des absences, journal de paie, relevé bancaire). Deux corrections : l'import de l'historique accepte maintenant deux demi-journées complémentaires le même jour (matin + après-midi) au lieu de les refuser comme un chevauchement ; le relevé bancaire lit correctement les montants « 1 234,56 » et « 1.234,56 », les guillemets, les dates JJ-MM-AAAA et JJ.MM.AAAA, et les accents d'un fichier de banque en Windows-1252.",
       "Paramètres > Congés et absences : nouveau bouton « Déplacer des demandes » pour passer toutes les demandes d'un type vers un autre (par exemple un ancien RTT désactivé vers « RTT cadres » ou « RTT non-cadres »). Les jours pris sont décomptés sur le nouveau compteur sans rien supprimer ni réimporter. Sont ignorées : les demandes d'un salarié non concerné par le type d'arrivée, les doublons et celles qu'on n'a pas le droit de modifier. L'historique garde la trace du changement.",
       "Calendrier de l'équipe : les vacances scolaires de votre zone s'affichent maintenant en « parenthèse » au-dessus des jours concernés (avec le nom de la période), et ces jours sont légèrement teintés. Si le mois affiché n'est pas encore renseigné, un lien mène aux Paramètres pour les ajouter.",
       "Préparation de paie : le récapitulatif par salarié est plus étroit (cellules resserrées, en-têtes sur plusieurs lignes) pour éviter l'ascenseur horizontal.",
@@ -11582,6 +11583,18 @@ function lireNombreJoursImport(valeur) {
   return Number.isFinite(nombre) && nombre >= 0 ? nombre : NaN;
 }
 
+/** Chevauchement d'une ligne d'import avec les demandes existantes ou déjà acceptées du fichier. Même règle que la saisie manuelle : deux demi-journées
+ * complémentaires (matin + après-midi) d'une même date isolée ne se chevauchent pas (retour de Christilla : « deux demi-journées le même jour refusées »). */
+function chevauchementImportAbsence(demandes, employeeId, dateDebut, dateFin, demiJournee) {
+  return demandes.some(r => {
+    if (r.employeeId !== employeeId || r.statut === 'Refusé' || r.statut === 'Annulé') return false;
+    if (!(r.dateDebut <= dateFin && r.dateFin >= dateDebut)) return false;
+    const memeJourIsole = dateDebut === dateFin && r.dateDebut === r.dateFin && r.dateDebut === dateDebut;
+    if (memeJourIsole && demiJournee && r.demiJournee && demiJournee !== r.demiJournee) return false;
+    return true;
+  });
+}
+
 function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const leaveTypes = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
@@ -11655,12 +11668,12 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
         message = `Le fichier indique ${jours(nbFichier)} jour${nbFichier > 1 ? 's' : ''}, l'application en compte ${jours(nbJours)} (week-ends, jours fériés et demi-journées pris en compte).`
           + (unJour && !demiJournee && nbFichier === 0.5 ? ' Précisez Matin ou Après-midi dans la colonne « Demi-journée ».' : ' Vérifiez les dates et les demi-journées.');
       }
-      else if (hasActiveRequestOverlap(existingActive, employee.id, dateDebut, dateFin) || hasActiveRequestOverlap(acceptedInFile, employee.id, dateDebut, dateFin)) {
+      else if (chevauchementImportAbsence(existingActive, employee.id, dateDebut, dateFin, demiJournee) || chevauchementImportAbsence(acceptedInFile, employee.id, dateDebut, dateFin, demiJournee)) {
         status = 'error';
         message = 'Chevauche une absence déjà existante ou une autre ligne de ce fichier pour ce salarié.';
       }
     }
-    if (status === 'ok') acceptedInFile.push({ id: `import-${i}`, employeeId: employee.id, dateDebut, dateFin });
+    if (status === 'ok') acceptedInFile.push({ id: `import-${i}`, employeeId: employee.id, dateDebut, dateFin, demiJournee });
     return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, commentaire, nbJours, status, message };
   });
 }
@@ -28625,13 +28638,17 @@ function bindRapprochementBancaireEvents() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const result = releveBancaireRepository.importer(String(reader.result || ''));
+      // Les CSV de banque sont souvent en Windows-1252 : UTF-8 d'abord, repli sur Windows-1252 (accents des libellés conservés), BOM retiré.
+      const octets = new Uint8Array(reader.result);
+      let texte;
+      try { texte = new TextDecoder('utf-8', { fatal: true }).decode(octets); } catch (err) { texte = new TextDecoder('windows-1252').decode(octets); }
+      const result = releveBancaireRepository.importer(texte.charCodeAt(0) === 0xFEFF ? texte.slice(1) : texte);
       if (!result.success) { showToast('Impossible de lire ce fichier.', 'error'); return; }
       showToast(`${result.ajoutees} ligne(s) importée(s)${result.ignorees ? `, ${result.ignorees} ignorée(s) (format non reconnu)` : ''}.`);
       render();
     };
     reader.onerror = () => showToast('Impossible de lire ce fichier.', 'error');
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   });
 
   const autoBtn = document.getElementById('btn-rapprocher-auto');
