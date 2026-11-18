@@ -4689,3 +4689,32 @@ textarea.input { resize: vertical; font-family: inherit; }
 .tc-table th:not(:first-child), .tc-table td:not(:first-child) { min-width: 104px; }
 .tc-periode, .tc-detail, .tc-en-cours { white-space: normal; line-height: 1.35; }
 .tc-table th .badge { margin-left: 2px; }
+
+
+/* Tableau récapitulatif de la préparation de paie : cellules resserrées, en-têtes sur plusieurs lignes, plus de défilement horizontal (retour du 16/11/2026). */
+.paie-recap-table th, .paie-recap-table td { padding: 10px 8px; }
+.paie-recap-table th { white-space: normal; line-height: 1.25; font-size: 12px; }
+.paie-recap-table td:last-child { white-space: normal; }
+.paie-recap-table .btn-link { padding: 0 2px; }
+
+/* Organigramme plus compact : cartes et espacements réduits ; la largeur est ensuite ajustée automatiquement (voir ajusterOrganigrammeALaLargeur). */
+.org-chart-card { padding: 20px 14px; }
+.org-tree li { padding: 0 6px; }
+.org-tree li.org-service-frame { padding: 26px 8px 8px; }
+.org-node { min-width: 118px; max-width: 168px; padding: 8px 10px; }
+.org-node .avatar { width: 34px; height: 34px; }
+.org-node-name { font-size: 12.5px; }
+
+/* Vacances scolaires dans le calendrier de l'équipe : une « parenthèse » au-dessus des jours concernés, et des jours légèrement teintés. */
+:root { --couleur-vacances: #2563eb; }
+.absence-cal-vacances-row th { border-color: transparent !important; background: transparent !important; padding: 0 2px; font-size: 11px; font-weight: 700; color: var(--couleur-vacances); vertical-align: bottom; }
+.absence-cal-vacances-titre { text-align: left; white-space: nowrap; font-weight: 600 !important; }
+.absence-cal-vacances-bloc span {
+  display: block; padding: 2px 6px 1px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border: 2px solid var(--couleur-vacances); border-bottom: 0; border-radius: 8px 8px 0 0; height: 22px; line-height: 17px;
+}
+.absence-cal-vacances-bloc span.ouvert-gauche { border-left: 0; border-top-left-radius: 0; }
+.absence-cal-vacances-bloc span.ouvert-droite { border-right: 0; border-top-right-radius: 0; }
+.absence-cal-table th.vacances, .absence-cal-cell.vacances { background: color-mix(in srgb, var(--couleur-vacances) 10%, var(--color-surface)); }
+.absence-cal-legend-vacances { background: color-mix(in srgb, var(--couleur-vacances) 25%, var(--color-surface)); border: 2px solid var(--couleur-vacances); box-sizing: border-box; }
+.absence-cal-lacune { margin: 0 0 10px; }

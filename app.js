@@ -2638,13 +2638,16 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.16.8';
+const APP_VERSION = '2026.11.18.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Calendrier de l'équipe : les vacances scolaires de votre zone s'affichent maintenant en « parenthèse » au-dessus des jours concernés (avec le nom de la période), et ces jours sont légèrement teintés. Si le mois affiché n'est pas encore renseigné, un lien mène aux Paramètres pour les ajouter.",
+      "Préparation de paie : le récapitulatif par salarié est plus étroit (cellules resserrées, en-têtes sur plusieurs lignes) pour éviter l'ascenseur horizontal.",
+      "Organigramme : cartes plus compactes, et le schéma se réduit tout seul pour tenir dans la largeur de l'écran, sans ascenseur horizontal.",
       "Tableau des compteurs plus étroit, pour éviter le défilement horizontal : les types non activés sans aucune donnée (anciens RTT désactivés) sont masqués avec un lien « Les afficher », les cellules sont resserrées, les en-têtes et détails passent à la ligne et le nom du salarié tient sur une ligne.",
       "Espacement harmonisé dans toute l'application : une même échelle (4, 8, 12, 16, 24 px) entre les cartes, les grilles, les en-têtes et les marges de page, et un menu de gauche plus compact (lignes plus serrées, plus d'écrans visibles sans défiler).",
       "La RH et le propriétaire peuvent maintenant modifier et supprimer leurs propres congés et RTT (double-clic dans le calendrier, « Régulariser » ou « Supprimer » dans la liste), sans activer le mode mise en service. Ils ne valident toujours pas leur propre demande. Nécessite la migration 0077.",
@@ -12419,7 +12422,26 @@ function renderOrgNode(employee, childrenOf, forceExpand) {
   `;
 }
 
+/** Retour du 16/11/2026 : l'organigramme se réduit tout seul pour tenir dans la largeur de l'écran (sans ascenseur horizontal), jusqu'à 55 % de sa taille. */
+function ajusterOrganigrammeALaLargeur() {
+  const carte = document.querySelector('.org-chart-card');
+  const arbre = carte && carte.querySelector('.org-tree');
+  if (!arbre) return;
+  arbre.style.zoom = '';
+  const style = getComputedStyle(carte);
+  const disponible = carte.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const necessaire = arbre.scrollWidth;
+  if (necessaire > disponible && disponible > 0) arbre.style.zoom = String(Math.max(0.55, Math.floor((disponible / necessaire) * 100) / 100));
+}
+
+let organigrammeRedimensionnementLie = false;
+
 function bindOrganigrammeEvents() {
+  ajusterOrganigrammeALaLargeur();
+  if (!organigrammeRedimensionnementLie) {
+    organigrammeRedimensionnementLie = true;
+    window.addEventListener('resize', () => { if (state.view === 'organigramme') ajusterOrganigrammeALaLargeur(); });
+  }
   bindFilterToggleButtons();
   document.querySelectorAll('[data-org-employee]').forEach(node => {
     node.addEventListener('click', () => navigateTo('employee-detail', { currentEmployeeId: node.dataset.orgEmployee }));
@@ -20554,6 +20576,43 @@ function renderCalendrier() {
  * barre continue façon Gantt — un essai en ce sens a été rejeté par Betty, "juste les cases").
  * Regroupement par service : même bandeau que le Planning (renderPlanningGroupRows/.planning-service-header)
  * pour une identité visuelle cohérente entre les deux écrans. */
+/** Retour du 16/11/2026 : les vacances scolaires choisies dans les Paramètres doivent se voir dans le calendrier de l'équipe. Pour chaque jour du mois,
+ * la période de vacances de la zone de l'entreprise ; les jours consécutifs d'une même période forment un segment (la « parenthèse » affichée au-dessus). */
+function calculerVacancesScolairesDuMois(days, dayMeta, sharedData) {
+  const schoolHolidays = sharedData.schoolHolidays;
+  const periodes = days.map(d => (schoolHolidays && schoolHolidays.periodes ? findSchoolHolidayPeriod(dayMeta(d).dateStr, sharedData.schoolZone, schoolHolidays) : null));
+  const segments = [];
+  let i = 0;
+  while (i < days.length) {
+    const p = periodes[i];
+    if (!p) { i++; continue; }
+    let j = i;
+    while (j + 1 < days.length && periodes[j + 1] === p) j++;
+    segments.push({ debut: i, fin: j, periode: p, commenceAvant: dayMeta(days[i]).dateStr > p.debut, finitApres: dayMeta(days[j]).dateStr < p.fin });
+    i = j + 1;
+  }
+  return { periodes, segments };
+}
+
+function renderLigneVacancesScolaires(days, vacances, zone) {
+  if (!vacances.segments.length) return '';
+  const cellules = [];
+  let idx = 0;
+  while (idx < days.length) {
+    const seg = vacances.segments.find(x => x.debut === idx);
+    if (seg) {
+      const longueur = seg.fin - seg.debut + 1;
+      const titre = `${seg.periode.nom} : du ${formatDate(seg.periode.debut)} au ${formatDate(seg.periode.fin)} (zone ${zone})`;
+      cellules.push(`<th colspan="${longueur}" class="absence-cal-vacances-bloc" title="${escapeHtml(titre)}"><span class="${seg.commenceAvant ? 'ouvert-gauche ' : ''}${seg.finitApres ? 'ouvert-droite' : ''}">${escapeHtml(seg.periode.nom)}</span></th>`);
+      idx = seg.fin + 1;
+    } else {
+      cellules.push('<th class="absence-cal-vacances-vide"></th>');
+      idx++;
+    }
+  }
+  return `<tr class="absence-cal-vacances-row"><th class="absence-cal-vacances-titre">Vacances scolaires <span class="text-muted">zone ${escapeHtml(zone)}</span></th>${cellules.join('')}</tr>`;
+}
+
 function renderAbsenceCalendarBoard(sharedData) {
   const year = state.calendarYear;
   const month = state.calendarMonth;
@@ -20569,8 +20628,10 @@ function renderAbsenceCalendarBoard(sharedData) {
   const dayMeta = (day) => {
     const date = new Date(year, month, day);
     const dateStr = toISODate(date);
-    return { dateStr, isWeekend: [0, 6].includes(date.getDay()), isToday: dateStr === todayStr };
+    return { dateStr, isWeekend: [0, 6].includes(date.getDay()), isToday: dateStr === todayStr, isVacances: Boolean(vacancesMois && vacancesMois.periodes[day - 1]) };
   };
+  const vacancesMois = calculerVacancesScolairesDuMois(days, (d) => ({ dateStr: toISODate(new Date(year, month, d)) }), sharedData);
+  const lacuneVacances = isMonthBeyondSchoolYearCoverage(year, month, sharedData.schoolHolidays);
 
   return `
     <div class="absence-cal-legend">
@@ -20580,15 +20641,18 @@ function renderAbsenceCalendarBoard(sharedData) {
            garde bien sa case colorée dans la grille ci-dessous, seule la légende change. -->
       ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
       ${hasModule('planning') ? '<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>' : ''}
+      ${vacancesMois.segments.length ? `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-vacances"></span>Vacances scolaires (zone ${escapeHtml(sharedData.schoolZone)})</span>` : ''}
       ${utilisateurPeutEditerCongesDepuisCalendrier() ? '<span class="absence-cal-legend-item absence-cal-hint">Double-cliquez sur un congé pour le modifier ou le supprimer.</span>' : ''}
     </div>
+    ${lacuneVacances ? '<p class="form-hint absence-cal-lacune">Les vacances scolaires de cette période ne sont pas encore renseignées. <button type="button" class="btn-link" id="btn-cal-goto-vacances-settings">Les ajouter dans les Paramètres</button></p>' : ''}
     <div class="card table-card planning-scroll-card">
       ${employees.length === 0 ? `<div class="empty-state"><div class="empty-icon">${ICONS.schedule}</div><p>Aucun salarié à afficher.</p></div>` : `
         <table class="table planning-table absence-cal-table">
           <thead>
+            ${renderLigneVacancesScolaires(days, vacancesMois, sharedData.schoolZone)}
             <tr>
               <th>Salarié</th>
-              ${days.map(day => { const m = dayMeta(day); return `<th class="${m.isWeekend ? 'weekend' : ''}${m.isToday ? ' today' : ''}">${day}</th>`; }).join('')}
+              ${days.map(day => { const m = dayMeta(day); return `<th class="${m.isWeekend ? 'weekend' : ''}${m.isToday ? ' today' : ''}${m.isVacances ? ' vacances' : ''}">${day}</th>`; }).join('')}
             </tr>
           </thead>
           <tbody>
@@ -20643,7 +20707,7 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
 
   return segments.map(seg => {
     if (!seg.key) {
-      return seg.days.map(day => { const m = dayMeta(day); return `<td class="absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}"></td>`; }).join('');
+      return seg.days.map(day => { const m = dayMeta(day); return `<td class="absence-cal-cell${m.isWeekend ? ' weekend' : ''}${m.isToday ? ' today' : ''}${m.isVacances ? ' vacances' : ''}"></td>`; }).join('');
     }
     const startDay = seg.days[0];
     const endDay = seg.days[seg.days.length - 1];
@@ -29957,7 +30021,7 @@ function renderExportPaiePreparationTab(rows) {
     <div class="card table-card">
       <h3 style="padding: 14px 14px 0;">Récapitulatif par salarié</h3>
       ${!rows.length ? `<div class="empty-state"><div class="empty-icon">${ICONS.receipt}</div><p>Aucun salarié pour ce mois.</p></div>` : `
-        <table class="table table-nowrap">
+        <table class="table table-nowrap paie-recap-table">
           <thead>
             <tr>
               <th>Salarié</th>
