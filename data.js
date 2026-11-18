@@ -4001,6 +4001,35 @@ const DB = {
     return { success: true, request: list[index] };
   },
 
+  /** Déplace des demandes vers un autre type (retour du 18/11/2026) : chaque demande garde son historique (une ligne de régularisation indique l'ancien type).
+   * Les contrôles (salarié concerné, droits, doublons) sont faits en amont par planifierDeplacementDemandes (app.js). nbJours n'est recalculé que si l'unité de
+   * décompte (jours ouvrés / ouvrables) diffère entre les deux types. */
+  deplacerDemandesVersType(ids, cibleId) {
+    const cible = this.getLeaveTypeById(cibleId);
+    if (!cible) return { success: false, error: 'Type d\'arrivée introuvable.' };
+    const aDeplacer = new Set(ids);
+    const list = this.getLeaveRequests();
+    const maintenant = new Date().toISOString();
+    let deplacees = 0;
+    const suivant = list.map(r => {
+      if (!aDeplacer.has(r.id) || r.typeId === cible.id) return r;
+      const ancien = this.getLeaveTypeById(r.typeId);
+      deplacees++;
+      const employee = this.getEmployeeById(r.employeeId);
+      let nbJours = r.nbJours;
+      if (ancien && employee && (ancien.uniteDecompte || 'ouvres') !== (cible.uniteDecompte || 'ouvres')) {
+        const recalcule = computeWorkingDays(r.dateDebut, r.dateFin, Boolean(r.demiJournee), employee, this.getSettings(), cible.uniteDecompte, r.demiJourneeDebut, r.demiJourneeFin);
+        if (recalcule > 0) nbJours = recalcule;
+      }
+      const regularisations = (r.regularisations || []).concat([{ date: maintenant, ancienType: ancien ? ancien.nom : '—', ancienneDateDebut: r.dateDebut, ancienneDateFin: r.dateFin, motif: 'Déplacée vers « ' + cible.nom + ' »' }]);
+      return Object.assign({}, r, { typeId: cible.id, nbJours, regularisations, dateModification: maintenant });
+    });
+    if (!deplacees) return { success: false, error: 'Aucune demande à déplacer.' };
+    this.saveLeaveRequests(suivant);
+    this.logAudit('Modification', 'Demandes déplacées vers un autre type', deplacees + ' demande(s) vers ' + cible.nom);
+    return { success: true, deplacees };
+  },
+
   /** Ajustement manuel du compteur d'un salarié pour un type de congé donné (§ MODIFIER_COMPTEURS) —
    * s'ajoute (ou se retranche, si négatif) au calcul automatique dans getLeaveBalance(). Remplace la
    * valeur précédente pour ce type (pas un cumul) : le formulaire affiche toujours l'ajustement courant. */
@@ -5910,6 +5939,7 @@ const leaveRepository = {
   update: (id, patch) => DB.updateLeaveRequest(id, patch),
   prolonger: (id, nouvelleDateFin, justificatif) => DB.prolongerArretMaladie(id, nouvelleDateFin, justificatif),
   regulariser: (id, patch) => DB.regulariserDemande(id, patch),
+  deplacerVersType: (ids, cibleId) => DB.deplacerDemandesVersType(ids, cibleId),
   applyFermetureDecompte: (fermeture) => applyFermetureDecompte(fermeture)
 };
 

@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.18.1';
+const APP_VERSION = '2026.11.18.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paramètres > Congés et absences : nouveau bouton « Déplacer des demandes » pour passer toutes les demandes d'un type vers un autre (par exemple un ancien RTT désactivé vers « RTT cadres » ou « RTT non-cadres »). Les jours pris sont décomptés sur le nouveau compteur sans rien supprimer ni réimporter. Sont ignorées : les demandes d'un salarié non concerné par le type d'arrivée, les doublons et celles qu'on n'a pas le droit de modifier. L'historique garde la trace du changement.",
       "Calendrier de l'équipe : les vacances scolaires de votre zone s'affichent maintenant en « parenthèse » au-dessus des jours concernés (avec le nom de la période), et ces jours sont légèrement teintés. Si le mois affiché n'est pas encore renseigné, un lien mène aux Paramètres pour les ajouter.",
       "Préparation de paie : le récapitulatif par salarié est plus étroit (cellules resserrées, en-têtes sur plusieurs lignes) pour éviter l'ascenseur horizontal.",
       "Organigramme : cartes plus compactes, et le schéma se réduit tout seul pour tenir dans la largeur de l'écran, sans ascenseur horizontal.",
@@ -19558,6 +19559,100 @@ function openDeuxRttModal() {
   });
 }
 
+/** Retour du 18/11/2026 : déplacer d'un coup toutes les demandes d'un type vers un autre (ex. l'ancien « RTT 2026 Employés » désactivé vers « RTT non-cadres »),
+ * pour que les jours pris soient décomptés sur le bon compteur sans tout supprimer ni réimporter. Rien n'est déplacé pour un salarié qui n'est pas concerné par le
+ * type cible (règle d'éligibilité), pour une demande qu'on n'a pas le droit de gérer, ni quand une demande identique existe déjà sur le type cible. */
+function planifierDeplacementDemandes(sourceId, cibleId) {
+  const plan = { aDeplacer: [], nonConcernes: [], doublons: [], sansDroit: [], erreur: '' };
+  const source = leaveTypeRepository.getLeaveTypeById(sourceId);
+  const cible = leaveTypeRepository.getLeaveTypeById(cibleId);
+  if (!source || !cible) { plan.erreur = 'Choisissez le type de départ et le type d\'arrivée.'; return plan; }
+  if (source.id === cible.id) { plan.erreur = 'Le type de départ et le type d\'arrivée doivent être différents.'; return plan; }
+  if (source.categorie !== cible.categorie) { plan.erreur = 'Les deux types doivent être de la même catégorie (congés avec congés, absences avec absences).'; return plan; }
+  const categories = categorieSalarieRepository.getAll();
+  const toutes = leaveRepository.getAll();
+  toutes.filter(r => r.typeId === source.id).forEach(r => {
+    const employee = employeeRepository.getById(r.employeeId);
+    if (!employee || !isLeaveTypeEligibleForEmployee(employee, cible, categories)) { plan.nonConcernes.push(r); return; }
+    if (!canManageRequestFor(r.employeeId)) { plan.sansDroit.push(r); return; }
+    const doublon = toutes.some(o => o.id !== r.id && o.typeId === cible.id && o.employeeId === r.employeeId && o.dateDebut === r.dateDebut && o.dateFin === r.dateFin && (o.demiJournee || '') === (r.demiJournee || '') && o.statut !== 'Refusé' && o.statut !== 'Annulé');
+    if (doublon) { plan.doublons.push(r); return; }
+    plan.aDeplacer.push(r);
+  });
+  return plan;
+}
+
+function openDeplacerDemandesModal() {
+  const types = leaveTypeRepository.getLeaveTypes();
+  const nombreDemandes = (t) => leaveRepository.getAll().filter(r => r.typeId === t.id).length;
+  const optionSource = (t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.nom)}${t.actif ? '' : ' (désactivé)'} : ${nombreDemandes(t)} demande${nombreDemandes(t) > 1 ? 's' : ''}</option>`;
+  const optionCible = (t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.nom)}</option>`;
+  const sources = types.filter(t => nombreDemandes(t) > 0);
+  const html = `
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h2>Déplacer des demandes vers un autre type</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="deplacer-demandes-form">
+        <div class="modal-body">
+          <p class="text-muted">Utile quand vous remplacez un type par un autre (par exemple un ancien RTT désactivé par « RTT cadres » ou « RTT non-cadres ») : les jours déjà pris sont alors décomptés sur le nouveau compteur, sans rien supprimer ni réimporter. L'historique de chaque demande garde la trace du changement.</p>
+          ${sources.length ? `
+          <div class="form-field">
+            <label for="f-deplacer-source">Déplacer les demandes du type</label>
+            <select class="input" id="f-deplacer-source">${sources.map(optionSource).join('')}</select>
+          </div>
+          <div class="form-field" style="margin-top: 12px;">
+            <label for="f-deplacer-cible">vers le type</label>
+            <select class="input" id="f-deplacer-cible"><option value="">Choisir un type…</option>${types.filter(t => t.actif).map(optionCible).join('')}</select>
+          </div>
+          <div id="deplacer-apercu" class="deplacer-apercu text-muted" style="margin-top: 14px;">Choisissez le type d'arrivée pour voir ce qui sera déplacé.</div>` : '<p>Aucun type n\'a encore de demandes à déplacer.</p>'}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          ${sources.length ? '<button type="submit" class="btn btn-primary" id="btn-deplacer-valider" disabled>Déplacer</button>' : ''}
+        </div>
+      </form>
+    </div>
+  `;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  if (!sources.length) return;
+
+  const apercu = document.getElementById('deplacer-apercu');
+  const valider = document.getElementById('btn-deplacer-valider');
+  const majApercu = () => {
+    const plan = planifierDeplacementDemandes(document.getElementById('f-deplacer-source').value, document.getElementById('f-deplacer-cible').value);
+    valider.disabled = true;
+    if (!document.getElementById('f-deplacer-cible').value) { apercu.textContent = 'Choisissez le type d\'arrivée pour voir ce qui sera déplacé.'; return; }
+    if (plan.erreur) { apercu.innerHTML = `<span class="text-danger">${escapeHtml(plan.erreur)}</span>`; return; }
+    const lignes = [`<strong>${plan.aDeplacer.length}</strong> demande${plan.aDeplacer.length > 1 ? 's' : ''} sera${plan.aDeplacer.length > 1 ? 'ont' : ''} déplacée${plan.aDeplacer.length > 1 ? 's' : ''}.`];
+    if (plan.nonConcernes.length) lignes.push(`${plan.nonConcernes.length} ignorée${plan.nonConcernes.length > 1 ? 's' : ''} : le salarié n'est pas concerné par le type d'arrivée (règle d'éligibilité, par exemple sa catégorie).`);
+    if (plan.doublons.length) lignes.push(`${plan.doublons.length} ignorée${plan.doublons.length > 1 ? 's' : ''} : une demande identique existe déjà sur le type d'arrivée.`);
+    if (plan.sansDroit.length) lignes.push(`${plan.sansDroit.length} ignorée${plan.sansDroit.length > 1 ? 's' : ''} : vous n'avez pas le droit de la modifier.`);
+    apercu.innerHTML = lignes.map(l => `<div>${l}</div>`).join('');
+    valider.disabled = plan.aDeplacer.length === 0;
+  };
+  document.getElementById('f-deplacer-source').addEventListener('change', majApercu);
+  document.getElementById('f-deplacer-cible').addEventListener('change', majApercu);
+  document.getElementById('deplacer-demandes-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const sourceId = document.getElementById('f-deplacer-source').value;
+    const cibleId = document.getElementById('f-deplacer-cible').value;
+    const plan = planifierDeplacementDemandes(sourceId, cibleId);
+    if (plan.erreur || !plan.aDeplacer.length) return;
+    const resultat = leaveRepository.deplacerVersType(plan.aDeplacer.map(r => r.id), cibleId);
+    if (!resultat.success) { showToast(resultat.error, 'error'); return; }
+    const cible = leaveTypeRepository.getLeaveTypeById(cibleId);
+    showToast(`${resultat.deplacees} demande${resultat.deplacees > 1 ? 's' : ''} déplacée${resultat.deplacees > 1 ? 's' : ''} vers « ${cible.nom} ».`);
+    closeModal();
+    render();
+  });
+}
+
 function renderCongesTypes(categorie = 'conge') {
   const types = leaveTypeRepository.getLeaveTypes().filter(t => t.categorie === categorie);
   const noun = categorie === 'conge' ? 'de congé' : 'd\'absence';
@@ -19570,6 +19665,7 @@ function renderCongesTypes(categorie = 'conge') {
         <!-- §retour Betty du 18/09/2026 (point 5) : déplacé depuis l'écran Congés & absences —
              une opération de mise en service (à la création des types), pas un usage quotidien. -->
         ${categorie === 'conge' ? '<button class="btn btn-secondary btn-sm" id="btn-rtt-deux-statuts" title="Crée RTT cadres et RTT non-cadres, chacun réservé à sa catégorie">Deux RTT selon le statut</button>' : ''}
+        <button class="btn btn-secondary btn-sm" id="btn-deplacer-demandes" title="Déplace toutes les demandes d'un type vers un autre (ex. un ancien RTT vers un nouveau)">Déplacer des demandes</button>
         <button class="btn btn-secondary btn-sm" id="btn-import-absences-historique">Importer l'historique</button>
         <button class="btn btn-primary btn-sm" id="btn-new-leave-type">+ Nouveau type</button>
       </div>
@@ -19676,6 +19772,8 @@ function renderLeaveTypeRow(t) {
 function bindCongesTypesEvents(categorie = 'conge') {
   document.getElementById('btn-new-leave-type').addEventListener('click', () => openLeaveTypeModal(null, categorie));
   document.getElementById('btn-import-absences-historique').addEventListener('click', () => openImportAbsencesHistoriqueModal(categorie));
+  const btnDeplacer = document.getElementById('btn-deplacer-demandes');
+  if (btnDeplacer) btnDeplacer.addEventListener('click', openDeplacerDemandesModal);
   const btnDeuxRtt = document.getElementById('btn-rtt-deux-statuts');
   if (btnDeuxRtt) btnDeuxRtt.addEventListener('click', openDeuxRttModal);
 
