@@ -4718,3 +4718,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 .absence-cal-table th.vacances, .absence-cal-cell.vacances { background: color-mix(in srgb, var(--couleur-vacances) 10%, var(--color-surface)); }
 .absence-cal-legend-vacances { background: color-mix(in srgb, var(--couleur-vacances) 25%, var(--color-surface)); border: 2px solid var(--couleur-vacances); box-sizing: border-box; }
 .absence-cal-lacune { margin: 0 0 10px; }
+
+/* Barème kilométrique (Paramètres > Notes de frais) : le tableau de cinq colonnes de saisie débordait de la page à 1440 px (essai complet du 18/11/2026). */
+.settings-cards-grid > .card, .settings-lists-grid > .card { min-width: 0; }
+#card-bareme-km .table-wrapper { max-width: 100%; overflow-x: auto; }
+#card-bareme-km .table th, #card-bareme-km .table td { padding: 8px 10px; }
+#card-bareme-km .table .input { min-width: 70px; width: 100%; }
+
+/* Téléphone : les cartes de Paramètres qui contiennent un grand tableau défilent à l'intérieur de la carte au lieu de faire défiler toute la page. */
+@media (max-width: 860px) {
+  .parametres-content { min-width: 0; max-width: 100%; }
+  .parametres-content .card { max-width: 100%; overflow-x: auto; }
+}

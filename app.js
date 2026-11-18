@@ -2638,13 +2638,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.18.3';
+const APP_VERSION = '2026.11.18.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tour complet de l'application (tous les rôles, tous les écrans, tous les onglets de Paramètres, les fenêtres et les 13 exports) : tout fonctionne. Un seul écran dépassait la largeur de la page à 1440 px, le barème kilométrique de Paramètres > Notes de frais : corrigé.",
       "Imports : essai de tous les imports (salariés, soldes initiaux, historique des congés et des absences, journal de paie, relevé bancaire). Deux corrections : l'import de l'historique accepte maintenant deux demi-journées complémentaires le même jour (matin + après-midi) au lieu de les refuser comme un chevauchement ; le relevé bancaire lit correctement les montants « 1 234,56 » et « 1.234,56 », les guillemets, les dates JJ-MM-AAAA et JJ.MM.AAAA, et les accents d'un fichier de banque en Windows-1252.",
       "Paramètres > Congés et absences : nouveau bouton « Déplacer des demandes » pour passer toutes les demandes d'un type vers un autre (par exemple un ancien RTT désactivé vers « RTT cadres » ou « RTT non-cadres »). Les jours pris sont décomptés sur le nouveau compteur sans rien supprimer ni réimporter. Sont ignorées : les demandes d'un salarié non concerné par le type d'arrivée, les doublons et celles qu'on n'a pas le droit de modifier. L'historique garde la trace du changement.",
       "Calendrier de l'équipe : les vacances scolaires de votre zone s'affichent maintenant en « parenthèse » au-dessus des jours concernés (avec le nom de la période), et ces jours sont légèrement teintés. Si le mois affiché n'est pas encore renseigné, un lien mène aux Paramètres pour les ajouter.",
