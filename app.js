@@ -2657,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.5';
+const APP_VERSION = '2026.11.19.6';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Modèles d'import et exports Excel : les fichiers sont maintenant de vrais classeurs .xlsx. Ils portaient jusqu'ici l'extension « .xls » alors que leur contenu était du XML, ce qu'Excel signalait comme suspect et qui pouvait faire perdre la saisie. Mêmes couleurs, mêmes colonnes, première ligne figée. Les anciens modèles .xls restent importables.",
       "Import des salariés : une colonne « Sexe » (Homme/Femme, H/F, M/Mme, ou une colonne « Civilité ») est maintenant reconnue et reprise sur la fiche, qui n'a plus à être complétée à la main avant de pouvoir la modifier. Le modèle téléchargeable l'inclut, et l'écran de fin signale les fiches créées sans sexe. L'historique d'une demande refusée nomme maintenant qui a refusé (« Refusé (par Manager) »), comme pour une validation.",
       "Tableau des compteurs : un type décoché dans « Types d'absences autorisés » de la fiche d'un salarié (par exemple les deux RTT) n'affiche plus de solde dans le tableau, comme c'était déjà le cas dans sa fiche. Les totaux (Total RTT, pied de tableau) et l'export Excel suivent la même règle. Le compteur reste visible s'il y a des jours pris, une demande en attente ou un ajustement manuel.",
       "Imports : un email écrit dans la colonne « Matricule » (ou un matricule dans la colonne « Email ») est maintenant reconnu, pour l'historique des congés et absences comme pour les soldes initiaux. À l'import des salariés, si la création échoue, la raison s'affiche au lieu d'un simple « erreurs ».",
@@ -28411,15 +28412,161 @@ function buildMultiSheetExcelXmlWorkbook(sheets) {
 </Workbook>`;
 }
 
-/** Comme downloadJSONFile : sans le BOM de downloadTextFile, inutile ici (l'encodage est déclaré
- * dans la déclaration XML elle-même) et risqué avant une déclaration <?xml ...?> qui doit rester en
- * tout premier caractère du fichier. */
+/** Retour de Christilla du 19/11/2026 : les modèles et exports « .xls » étaient en réalité du XML (SpreadsheetML) renommé — Excel avertit que le format ne correspond pas à l'extension,
+ * et un fichier ainsi rouvert/enregistré perd facilement la saisie. Les classeurs produits par buildExcelXmlWorkbook / buildMultiSheetExcelXmlWorkbook /
+ * buildCalendarExcelXmlWorkbook sont donc convertis, au moment du téléchargement, en VRAI classeur .xlsx (Office Open XML) : mêmes styles (couleurs, bordures, alignements),
+ * mêmes largeurs de colonnes, première ligne figée. Aucune bibliothèque : un classeur .xlsx n'est qu'une archive ZIP de fichiers XML, écrite ici sans compression. */
+function xmlTableurDeseschapper(texte) {
+  return String(texte).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+function xlsxEchapper(texte) {
+  return String(texte).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function xlsxLettreColonne(index) {
+  let n = index + 1, lettres = '';
+  while (n > 0) { const reste = (n - 1) % 26; lettres = String.fromCharCode(65 + reste) + lettres; n = Math.floor((n - 1) / 26); }
+  return lettres;
+}
+function xlsxCrc32(octets) {
+  if (!xlsxCrc32.table) {
+    xlsxCrc32.table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; xlsxCrc32.table[i] = c >>> 0; }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < octets.length; i++) crc = xlsxCrc32.table[(crc ^ octets[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+/** Archive ZIP sans compression (méthode « stockée ») : fichiers = [{ nom, contenu(string) }]. */
+function xlsxArchiveZip(fichiers) {
+  const encodeur = new TextEncoder();
+  const morceaux = [], centrale = [];
+  let decalage = 0;
+  const dateDos = ((2026 - 1980) << 9) | (1 << 5) | 1;
+  fichiers.forEach(f => {
+    const nom = encodeur.encode(f.nom), donnees = encodeur.encode(f.contenu), crc = xlsxCrc32(donnees);
+    const entete = new DataView(new ArrayBuffer(30));
+    entete.setUint32(0, 0x04034b50, true); entete.setUint16(4, 20, true); entete.setUint16(6, 0x0800, true); entete.setUint16(8, 0, true);
+    entete.setUint16(10, 0, true); entete.setUint16(12, dateDos, true); entete.setUint32(14, crc, true);
+    entete.setUint32(18, donnees.length, true); entete.setUint32(22, donnees.length, true); entete.setUint16(26, nom.length, true); entete.setUint16(28, 0, true);
+    morceaux.push(new Uint8Array(entete.buffer), nom, donnees);
+    const dir = new DataView(new ArrayBuffer(46));
+    dir.setUint32(0, 0x02014b50, true); dir.setUint16(4, 20, true); dir.setUint16(6, 20, true); dir.setUint16(8, 0x0800, true); dir.setUint16(10, 0, true);
+    dir.setUint16(12, 0, true); dir.setUint16(14, dateDos, true); dir.setUint32(16, crc, true); dir.setUint32(20, donnees.length, true); dir.setUint32(24, donnees.length, true);
+    dir.setUint16(28, nom.length, true); dir.setUint16(30, 0, true); dir.setUint16(32, 0, true); dir.setUint16(34, 0, true); dir.setUint16(36, 0, true); dir.setUint32(38, 0, true); dir.setUint32(42, decalage, true);
+    centrale.push(new Uint8Array(dir.buffer), nom);
+    decalage += 30 + nom.length + donnees.length;
+  });
+  const tailleCentrale = centrale.reduce((s, c) => s + c.length, 0);
+  const fin = new DataView(new ArrayBuffer(22));
+  fin.setUint32(0, 0x06054b50, true); fin.setUint16(4, 0, true); fin.setUint16(6, 0, true); fin.setUint16(8, fichiers.length, true); fin.setUint16(10, fichiers.length, true);
+  fin.setUint32(12, tailleCentrale, true); fin.setUint32(16, decalage, true); fin.setUint16(20, 0, true);
+  const tout = morceaux.concat(centrale, [new Uint8Array(fin.buffer)]);
+  const resultat = new Uint8Array(tout.reduce((s, c) => s + c.length, 0));
+  let position = 0;
+  tout.forEach(c => { resultat.set(c, position); position += c.length; });
+  return resultat;
+}
+/** Classeur SpreadsheetML (celui que produisent nos générateurs) -> octets d'un vrai classeur .xlsx. */
+function xmlTableurVersXlsx(xml) {
+  const attr = (texte, nom) => { const m = new RegExp('(?:ss:)?' + nom + '="([^"]*)"').exec(texte || ''); return m ? xmlTableurDeseschapper(m[1]) : null; };
+  // --- Styles ---
+  const polices = ['<font><sz val="11"/><name val="Calibri"/></font>'], remplissages = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'], bordures = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
+  const xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
+  const indexStyle = {};
+  const unique = (liste, valeur) => { const i = liste.indexOf(valeur); if (i >= 0) return i; liste.push(valeur); return liste.length - 1; };
+  const couleur = (c) => 'FF' + String(c || '#000000').replace('#', '').toUpperCase();
+  const poids = { 1: 'thin', 2: 'medium', 3: 'thick' };
+  const reStyle = /<Style\s+ss:ID="([^"]+)"[^>]*>([\s\S]*?)<\/Style>/g;
+  let m;
+  while ((m = reStyle.exec(xml))) {
+    const corps = m[2];
+    const police = /<Font([^>]*)\/>/.exec(corps);
+    const interieur = /<Interior([^>]*)\/>/.exec(corps);
+    const alignement = /<Alignment([^>]*)\/>/.exec(corps);
+    const cotes = {};
+    const reBord = /<Border([^>]*)\/>/g; let b;
+    while ((b = reBord.exec(corps))) { const pos = (attr(b[1], 'Position') || '').toLowerCase(); if (pos) cotes[pos] = '<' + pos + ' style="' + (poids[attr(b[1], 'Weight')] || 'thin') + '"><color rgb="' + couleur(attr(b[1], 'Color')) + '"/></' + pos + '>'; }
+    const fontId = police ? unique(polices, '<font>' + (attr(police[1], 'Bold') === '1' ? '<b/>' : '') + '<sz val="11"/>' + (attr(police[1], 'Color') ? '<color rgb="' + couleur(attr(police[1], 'Color')) + '"/>' : '') + '<name val="Calibri"/></font>') : 0;
+    const fillId = interieur && attr(interieur[1], 'Color') ? unique(remplissages, '<fill><patternFill patternType="solid"><fgColor rgb="' + couleur(attr(interieur[1], 'Color')) + '"/><bgColor indexed="64"/></patternFill></fill>') : 0;
+    const bordId = Object.keys(cotes).length ? unique(bordures, '<border>' + ['left', 'right', 'top', 'bottom'].map(p => cotes[p] || '<' + p + '/>').join('') + '<diagonal/></border>') : 0;
+    const horiz = alignement ? ({ left: 'left', center: 'center', right: 'right' }[(attr(alignement[1], 'Horizontal') || '').toLowerCase()]) : null;
+    const vert = alignement ? ({ top: 'top', center: 'center', bottom: 'bottom' }[(attr(alignement[1], 'Vertical') || '').toLowerCase()]) : null;
+    const retour = alignement && attr(alignement[1], 'WrapText') === '1';
+    const align = (horiz || vert || retour) ? '<alignment' + (horiz ? ' horizontal="' + horiz + '"' : '') + (vert ? ' vertical="' + vert + '"' : '') + (retour ? ' wrapText="1"' : '') + '/>' : '';
+    xfs.push('<xf numFmtId="0" fontId="' + fontId + '" fillId="' + fillId + '" borderId="' + bordId + '" xfId="0" applyFont="1" applyFill="1" applyBorder="1"' + (align ? ' applyAlignment="1">' + align + '</xf>' : '/>'));
+    indexStyle[m[1]] = xfs.length - 1;
+  }
+  const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="' + polices.length + '">' + polices.join('') + '</fonts><fills count="' + remplissages.length + '">' + remplissages.join('') + '</fills><borders count="' + bordures.length + '">' + bordures.join('') + '</borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+  // --- Feuilles ---
+  const feuilles = [];
+  const reFeuille = /<Worksheet\s+ss:Name="([^"]*)"[^>]*>([\s\S]*?)<\/Worksheet>/g;
+  const nomsPris = new Set();
+  while ((m = reFeuille.exec(xml))) {
+    let nom = xmlTableurDeseschapper(m[1]).replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Feuille' + (feuilles.length + 1);
+    while (nomsPris.has(nom.toLowerCase())) nom = (nom.slice(0, 28) + ' ' + (feuilles.length + 1)).slice(0, 31);
+    nomsPris.add(nom.toLowerCase());
+    const corps = m[2];
+    const largeurs = []; const reCol = /<Column\s+([^>]*?)\/>/g; let c;
+    while ((c = reCol.exec(corps))) { const w = Number(attr(c[1], 'Width')); largeurs.push(Number.isFinite(w) && w > 0 ? w : 64); }
+    const colsXml = largeurs.length ? '<cols>' + largeurs.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + (w / 7).toFixed(2) + '" customWidth="1"/>').join('') + '</cols>' : '';
+    let lignesXml = ''; let numLigne = 0; const reLigne = /<Row([^>]*)>([\s\S]*?)<\/Row>/g; let r;
+    while ((r = reLigne.exec(corps))) {
+      numLigne++;
+      const hauteur = attr(r[1], 'Height');
+      let cellulesXml = ''; let numCol = 0; const reCell = /<Cell\s+([^>]*?)(\/>|>([\s\S]*?)<\/Cell>)/g; let k;
+      while ((k = reCell.exec(r[2]))) {
+        const idx = attr(k[1], 'Index'); numCol = idx ? Number(idx) : numCol + 1;
+        const ref = xlsxLettreColonne(numCol - 1) + numLigne;
+        const s = indexStyle[attr(k[1], 'StyleID')]; const sAttr = s ? ' s="' + s + '"' : '';
+        const donnee = k[3] ? /<Data\s+([^>]*)>([\s\S]*?)<\/Data>/.exec(k[3]) : null;
+        if (!donnee) { cellulesXml += '<c r="' + ref + '"' + sAttr + '/>'; continue; }
+        const valeur = xmlTableurDeseschapper(donnee[2]);
+        if (attr(donnee[1], 'Type') === 'Number' && Number.isFinite(Number(valeur))) cellulesXml += '<c r="' + ref + '"' + sAttr + '><v>' + Number(valeur) + '</v></c>';
+        else cellulesXml += '<c r="' + ref + '"' + sAttr + ' t="inlineStr"><is><t xml:space="preserve">' + xlsxEchapper(valeur) + '</t></is></c>';
+      }
+      lignesXml += '<row r="' + numLigne + '"' + (hauteur ? ' ht="' + Number(hauteur) + '" customHeight="1"' : '') + '>' + cellulesXml + '</row>';
+    }
+    const figee = /<FreezePanes\s*\/>/.test(corps);
+    feuilles.push({ nom, xml: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<sheetViews><sheetView workbookViewId="0">' + (figee ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/>' : '') + '</sheetView></sheetViews>'
+      + '<sheetFormatPr defaultRowHeight="15"/>' + colsXml + '<sheetData>' + lignesXml + '</sheetData></worksheet>' });
+  }
+  if (!feuilles.length) throw new Error('Aucune feuille à convertir.');
+
+  const fichiers = [
+    { nom: '[Content_Types].xml', contenu: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + feuilles.map((f, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')
+      + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+    { nom: '_rels/.rels', contenu: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { nom: 'xl/workbook.xml', contenu: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>'
+      + feuilles.map((f, i) => '<sheet name="' + xlsxEchapper(f.nom) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets></workbook>' },
+    { nom: 'xl/_rels/workbook.xml.rels', contenu: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + feuilles.map((f, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('')
+      + '<Relationship Id="rId' + (feuilles.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+    { nom: 'xl/styles.xml', contenu: stylesXml }
+  ].concat(feuilles.map((f, i) => ({ nom: 'xl/worksheets/sheet' + (i + 1) + '.xml', contenu: f.xml })));
+  return xlsxArchiveZip(fichiers);
+}
+
+/** Télécharge un classeur produit par les générateurs ci-dessus, en VRAI .xlsx (voir xmlTableurVersXlsx). Les appelants gardent leur nom en « .xls » : l'extension est
+ * corrigée ici. En cas d'échec de la conversion (ne devrait pas arriver), repli sur l'ancien XML plutôt que de ne rien livrer. */
 function downloadExcelXmlFile(xml, filename) {
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  let blob, nom = filename;
+  try {
+    blob = new Blob([xmlTableurVersXlsx(xml)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    nom = filename.replace(/\.xls$/i, '.xlsx');
+  } catch (err) {
+    console.error('downloadExcelXmlFile : conversion en .xlsx impossible, repli sur le XML.', err);
+    blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = nom;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

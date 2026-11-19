@@ -473,6 +473,7 @@ globalThis.__renderCandidatureCreneauxCard = renderCandidatureCreneauxCard;
 globalThis.__renderCandidatureEvaluationsCard = renderCandidatureEvaluationsCard;
 globalThis.__buildExcelXmlWorkbook = buildExcelXmlWorkbook;
 globalThis.__downloadExcelXmlFile = downloadExcelXmlFile;
+globalThis.__xmlTableurVersXlsx = xmlTableurVersXlsx;
 globalThis.__exportRowsToCSVWithDelimiter = exportRowsToCSVWithDelimiter;
 globalThis.__exportLeaveRequestsCSV = exportLeaveRequestsCSV;
 globalThis.__exportExpensesCSV = exportExpensesCSV;
@@ -893,6 +894,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getFilteredSortedEmployees: sandbox.__getFilteredSortedEmployees,
     buildExcelXmlWorkbook: sandbox.__buildExcelXmlWorkbook,
     downloadExcelXmlFile: sandbox.__downloadExcelXmlFile,
+    xmlTableurVersXlsx: sandbox.__xmlTableurVersXlsx,
     exportRowsToCSVWithDelimiter: sandbox.__exportRowsToCSVWithDelimiter,
     exportLeaveRequestsCSV: sandbox.__exportLeaveRequestsCSV,
     exportExpensesCSV: sandbox.__exportExpensesCSV,
