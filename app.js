@@ -2657,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.1';
+const APP_VERSION = '2026.11.19.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Après un import volumineux, le bandeau rouge « lignes refusées… duplicate key » ne reste plus affiché à tort : une ligne déjà enregistrée sur le serveur par une tentative précédente est maintenant reconnue comme un succès, et le bouton « Réessayer maintenant » fait disparaître l'avertissement.",
       "Import de l'historique des congés : quand les lignes sont refusées à cause de l'abonnement « à la carte », l'aperçu l'explique maintenant clairement, une seule fois. Il distingue « le module Congés n'est pas dans votre abonnement » de « ces salariés n'ont pas de licence Congés » (avec leurs noms et un bouton « Attribuer les licences »). Dans la gestion des accès, un bouton « Accorder l'accès à tous » attribue d'un coup les places libres, sans changer la facturation.",
       "Tour complet de l'application (tous les rôles, tous les écrans, tous les onglets de Paramètres, les fenêtres et les 13 exports) : tout fonctionne. Un seul écran dépassait la largeur de la page à 1440 px, le barème kilométrique de Paramètres > Notes de frais : corrigé.",
       "Imports : essai de tous les imports (salariés, soldes initiaux, historique des congés et des absences, journal de paie, relevé bancaire). Deux corrections : l'import de l'historique accepte maintenant deux demi-journées complémentaires le même jour (matin + après-midi) au lieu de les refuser comme un chevauchement ; le relevé bancaire lit correctement les montants « 1 234,56 » et « 1.234,56 », les guillemets, les dates JJ-MM-AAAA et JJ.MM.AAAA, et les accents d'un fichier de banque en Windows-1252.",

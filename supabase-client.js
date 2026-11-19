@@ -577,7 +577,10 @@ async function mapAvecLimite(elements, limite, fn) {
 async function insertRows(tableName, rows, toRowFn, companyId) {
   if (rows.length === 0) return;
   const results = await mapAvecLimite(rows, 6, r => supabase.from(tableName).insert(toRowFn(r, companyId)));
-  const errors = results.map(res => res.error).filter(Boolean);
+  // Retour du 19/11/2026 (import de 101 congés) : une ligne dont l'id existe déjà (code 23505) a été enregistrée par une tentative précédente dont la réponse s'est
+  // perdue. Ce n'est pas un échec : la ligne est bien sur le serveur. La traiter comme une erreur faisait échouer toutes les nouvelles tentatives (« 101 lignes refusées
+  // sur 101 ») et laissait le bandeau rouge affiché indéfiniment, alors que rien n'était perdu.
+  const errors = results.map(res => res.error).filter(err => err && err.code !== '23505');
   if (errors.length) {
     const first = errors[0];
     throw errors.length === 1
