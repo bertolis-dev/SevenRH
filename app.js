@@ -2657,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.3';
+const APP_VERSION = '2026.11.19.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tableau des compteurs : un type décoché dans « Types d'absences autorisés » de la fiche d'un salarié (par exemple les deux RTT) n'affiche plus de solde dans le tableau, comme c'était déjà le cas dans sa fiche. Les totaux (Total RTT, pied de tableau) et l'export Excel suivent la même règle. Le compteur reste visible s'il y a des jours pris, une demande en attente ou un ajustement manuel.",
       "Imports : un email écrit dans la colonne « Matricule » (ou un matricule dans la colonne « Email ») est maintenant reconnu, pour l'historique des congés et absences comme pour les soldes initiaux. À l'import des salariés, si la création échoue, la raison s'affiche au lieu d'un simple « erreurs ».",
       "Après un import volumineux, le bandeau rouge « lignes refusées… duplicate key » ne reste plus affiché à tort : une ligne déjà enregistrée sur le serveur par une tentative précédente est maintenant reconnue comme un succès, et le bouton « Réessayer maintenant » fait disparaître l'avertissement.",
       "Import de l'historique des congés : quand les lignes sont refusées à cause de l'abonnement « à la carte », l'aperçu l'explique maintenant clairement, une seule fois. Il distingue « le module Congés n'est pas dans votre abonnement » de « ces salariés n'ont pas de licence Congés » (avec leurs noms et un bouton « Attribuer les licences »). Dans la gestion des accès, un bouton « Accorder l'accès à tous » attribue d'un coup les places libres, sans changer la facturation.",
@@ -10824,6 +10825,10 @@ function renderTableauCompteursPeriodInfo(info) {
 // période en cours (jamais mélangé, jamais consommable avant sa propre clôture — voir getLeaveBalance).
 /** Retour du 13/11/2026 : cellule « — » plutôt que « 0 » quand le type est réservé à d'autres salariés (ex. RTT cadres chez un non-cadre) et que rien n'y est enregistré. */
 function compteurNonConcerne(employee, type, balance) {
+  // Retour du 19/11/2026 : un type décoché dans « Types d'absences autorisés » de la fiche (typesAbsenceDesactives) est déjà masqué dans les compteurs du salarié ; le tableau
+  // l'affichait pourtant (le droit s'acquiert automatiquement, d'où un solde « acquis » sans que la personne y ait droit). Même exception que la fiche : des jours pris,
+  // en attente ou un ajustement manuel gardent le compteur visible (on ne cache jamais un historique réel).
+  if ((employee.typesAbsenceDesactives || []).includes(type.id)) return !(balance && (balance.pris || balance.enAttente || balance.ajustement));
   if (isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) return false;
   return !(balance && (balance.acquis || balance.pris || balance.enAttente || balance.ajustement));
 }
@@ -10873,8 +10878,8 @@ function renderTableauCompteurs() {
   // Deux types RTT ou plus (ex. « RTT cadres » et « RTT non-cadres ») : une colonne additionne les deux, chaque salarié n'étant concerné que par l'un.
   const colonnesRtt = leaveTypes.map((t, i) => (t.actif && leaveTypeNameMatches(t.nom, 'RTT') ? i : -1)).filter(i => i >= 0);
   const avecTotalRtt = colonnesRtt.length >= 2;
-  const totalRtt = (balances) => {
-    const finis = colonnesRtt.map(i => balances[i]).filter(b => b.disponible !== Infinity);
+  const totalRtt = (balances, employee) => {
+    const finis = colonnesRtt.filter(i => !(employee && leaveTypes[i].actif && compteurNonConcerne(employee, leaveTypes[i], balances[i]))).map(i => balances[i]).filter(b => b.disponible !== Infinity);
     return { disponible: finis.reduce((somme, b) => somme + b.disponible, 0), pris: finis.reduce((somme, b) => somme + b.pris, 0) };
   };
 
@@ -10922,7 +10927,7 @@ function renderTableauCompteurs() {
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
                     ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif && !(b.pris || b.enAttente) ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
-                    ${avecTotalRtt ? (() => { const t = totalRtt(row.balances); return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><div class="tc-disponible${t.disponible < 0 ? ' tc-solde-negatif' : t.disponible <= 1 ? ' tc-solde-bas' : ''}">${formatDurationFR(t.disponible)}</div><div class="tc-detail text-muted">pris ${formatDurationFR(t.pris)}</div></td>`; })() : ''}
+                    ${avecTotalRtt ? (() => { const t = totalRtt(row.balances, row.employee); return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><div class="tc-disponible${t.disponible < 0 ? ' tc-solde-negatif' : t.disponible <= 1 ? ' tc-solde-bas' : ''}">${formatDurationFR(t.disponible)}</div><div class="tc-detail text-muted">pris ${formatDurationFR(t.pris)}</div></td>`; })() : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -10931,12 +10936,13 @@ function renderTableauCompteurs() {
                   <td data-label="Total" class="row-title"><strong>Total disponible (tous les salariés filtrés, pas seulement cette page)</strong></td>
                   ${leaveTypes.map((t, i) => {
                     if (!t.actif) return `<td data-label="${escapeHtml(t.nom)}" style="text-align: right;" class="tc-inactif"><span class="text-muted">—</span></td>`;
-                    const finiteValues = rows.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
-                    const hasIllimite = finiteValues.length < rows.length;
+                    const concernes = rows.filter(r => !compteurNonConcerne(r.employee, t, r.balances[i]));
+                    const finiteValues = concernes.map(r => r.balances[i].disponible).filter(v => v !== Infinity);
+                    const hasIllimite = finiteValues.length < concernes.length;
                     const total = finiteValues.reduce((sum, v) => sum + v, 0);
                     return `<td data-label="${escapeHtml(t.nom)}" style="text-align: right;" class="${t.actif ? '' : 'tc-inactif'}"><strong>${formatDurationFR(total)}${hasIllimite ? ' *' : ''}</strong></td>`;
                   }).join('')}
-                  ${avecTotalRtt ? `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><strong>${formatDurationFR(rows.reduce((somme, r) => somme + totalRtt(r.balances).disponible, 0))}</strong></td>` : ''}
+                  ${avecTotalRtt ? `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><strong>${formatDurationFR(rows.reduce((somme, r) => somme + totalRtt(r.balances, r.employee).disponible, 0))}</strong></td>` : ''}
                 </tr>
               </tfoot>
             </table>
@@ -11003,7 +11009,7 @@ function exportTableauCompteursExcel() {
   const headers = ['Matricule', 'Salarié', 'Service', ...leaveTypes.map(t => t.nom)];
   const excelRows = rows.map(row => [
     row.employee.matricule, `${row.employee.prenom} ${row.employee.nom}`, row.employee.service,
-    ...row.balances.map(b => b.disponible === Infinity ? 'Illimité' : formatDurationFR(b.disponible))
+    ...row.balances.map((b, i) => (leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b)) ? '—' : b.disponible === Infinity ? 'Illimité' : formatDurationFR(b.disponible))
   ]);
   const xml = buildExcelXmlWorkbook(headers, excelRows, 'Tableau des compteurs', { zebra: true });
   downloadExcelXmlFile(xml, 'tableau-compteurs.xls');
