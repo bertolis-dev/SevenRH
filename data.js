@@ -8126,9 +8126,10 @@ function construireExportNexusGestion({ annee, mois, maintenant, profile, lignes
  * demande refusée sans explication, et rien n'en gardait la trace. motif est désormais obligatoire
  * côté UI (openRefuseModal, app.js) ; stocké deux fois par commodité — motifRefus pour l'affichage
  * direct au salarié, et dans historique pour rester cohérent avec les autres actions déjà tracées là. */
-function refuseRequest(request, motif) {
+function refuseRequest(request, motif, acteurRoleLabel) {
   const historique = (request.historique || []).slice();
-  historique.push({ date: new Date().toISOString(), action: 'Refusé', motif });
+  // Comme une validation (« Validé (par Manager) ») : l'historique nomme qui a refusé (retour du 19/11/2026). Sans rôle fourni, la mention reste « Refusé ».
+  historique.push({ date: new Date().toISOString(), action: acteurRoleLabel ? `Refusé (par ${acteurRoleLabel})` : 'Refusé', motif });
   return { statut: 'Refusé', motifRefus: motif, historique };
 }
 

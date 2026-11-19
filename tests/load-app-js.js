@@ -197,6 +197,7 @@ globalThis.__getEmployeesOnLongAbsence = getEmployeesOnLongAbsence;
 globalThis.__getReposCompensateurSolde = getReposCompensateurSolde;
 globalThis.__buildImportPreviewRows = buildImportPreviewRows;
 globalThis.__importEmployeesRows = importEmployeesRows;
+globalThis.__sexeImporte = sexeImporte;
 globalThis.__requiredModuleForSourceKey = requiredModuleForSourceKey;
 globalThis.__SOURCE_KEY_MODULE_RULES = SOURCE_KEY_MODULE_RULES;
 globalThis.__HELP_CONTENT = HELP_CONTENT;
@@ -602,6 +603,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     getReposCompensateurSolde: sandbox.__getReposCompensateurSolde,
     buildImportPreviewRows: sandbox.__buildImportPreviewRows,
     importEmployeesRows: sandbox.__importEmployeesRows,
+    sexeImporte: sandbox.__sexeImporte,
     requiredModuleForSourceKey: sandbox.__requiredModuleForSourceKey,
     SOURCE_KEY_MODULE_RULES: sandbox.__SOURCE_KEY_MODULE_RULES,
     HELP_CONTENT: sandbox.__HELP_CONTENT,

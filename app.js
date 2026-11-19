@@ -2657,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.4';
+const APP_VERSION = '2026.11.19.5';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Import des salariés : une colonne « Sexe » (Homme/Femme, H/F, M/Mme, ou une colonne « Civilité ») est maintenant reconnue et reprise sur la fiche, qui n'a plus à être complétée à la main avant de pouvoir la modifier. Le modèle téléchargeable l'inclut, et l'écran de fin signale les fiches créées sans sexe. L'historique d'une demande refusée nomme maintenant qui a refusé (« Refusé (par Manager) »), comme pour une validation.",
       "Tableau des compteurs : un type décoché dans « Types d'absences autorisés » de la fiche d'un salarié (par exemple les deux RTT) n'affiche plus de solde dans le tableau, comme c'était déjà le cas dans sa fiche. Les totaux (Total RTT, pied de tableau) et l'export Excel suivent la même règle. Le compteur reste visible s'il y a des jours pris, une demande en attente ou un ajustement manuel.",
       "Imports : un email écrit dans la colonne « Matricule » (ou un matricule dans la colonne « Email ») est maintenant reconnu, pour l'historique des congés et absences comme pour les soldes initiaux. À l'import des salariés, si la création échoue, la raison s'affiche au lieu d'un simple « erreurs ».",
       "Après un import volumineux, le bandeau rouge « lignes refusées… duplicate key » ne reste plus affiché à tort : une ligne déjà enregistrée sur le serveur par une tentative précédente est maintenant reconnue comme un succès, et le bouton « Réessayer maintenant » fait disparaître l'avertissement.",
@@ -11085,8 +11086,18 @@ const IMPORT_EMPLOYEE_FIELD_ALIASES = {
   equipe: ['equipe', 'team'],
   typeContrat: ['type de contrat', 'contrat', 'contract type', 'contract'],
   dateEmbauche: ["date d'embauche", 'date embauche', 'hire date', "date d'entree", 'date entree'],
-  dateNaissance: ['date de naissance', 'birthdate', 'date naissance', 'date of birth']
+  dateNaissance: ['date de naissance', 'birthdate', 'date naissance', 'date of birth'],
+  // Facultatif, mais obligatoire dans la fiche (registre du personnel, DSN, égalité professionnelle) : sans cette colonne, chaque fiche importée devait être complétée à la main.
+  sexe: ['sexe', 'genre', 'civilite', 'gender', 'sex']
 };
+
+/** « Homme » / « Femme » à partir d'une cellule de fichier : Homme, H, M, M., Mr, Monsieur, masculin... ou Femme, F, Mme, Mlle, Madame, féminin... Tout le reste : vide (jamais deviné). */
+function sexeImporte(valeur) {
+  const v = normalizeForSearch(String(valeur == null ? '' : valeur).trim()).replace(/\./g, '');
+  if (['homme', 'h', 'm', 'mr', 'monsieur', 'masculin', 'male'].includes(v)) return 'Homme';
+  if (['femme', 'f', 'mme', 'mlle', 'madame', 'mademoiselle', 'feminin', 'female'].includes(v)) return 'Femme';
+  return '';
+}
 
 /** En-tête de colonne comparable : espaces de début/fin retirés, espaces multiples et insécables ramenés à un seul (retour du
  * 21/10/2026 : « Congés payés 2026-2027 » suivi d'un espace n'était pas reconnu, et toute la colonne était ignorée sans un mot). */
@@ -11216,7 +11227,8 @@ function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
       equipe: get('equipe'),
       typeContrat: get('typeContrat') || 'CDI',
       dateEmbauche: parseImportDate(get('dateEmbauche')),
-      dateNaissance: parseImportDate(get('dateNaissance'))
+      dateNaissance: parseImportDate(get('dateNaissance')),
+      sexe: sexeImporte(get('sexe'))
     };
     let status = 'ok', message = '';
     const emailKey = normalizeForSearch(record.email);
@@ -11237,7 +11249,7 @@ function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
 }
 
 async function importEmployeesRows(previewRows) {
-  const results = { created: 0, skipped: 0, errors: 0, plafondAtteint: 0, premiereErreur: '' };
+  const results = { created: 0, skipped: 0, errors: 0, plafondAtteint: 0, premiereErreur: '', sansSexe: 0 };
   // Même plafond de salariés que le formulaire de création (submitEmployeeForm) : l'import l'ignorait (revue du 13/10/2026).
   const abonnement = companyRepository.getCurrent().abonnement;
   const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
@@ -11251,6 +11263,7 @@ async function importEmployeesRows(previewRows) {
     try {
       await employeeRepository.create(r.record);
       results.created++;
+      if (!r.record.sexe) results.sansSexe++;
     } catch (err) {
       results.errors++;
       // La raison n'était jamais montrée (« 6 erreurs » sans explication quand le serveur refusait la création).
@@ -11384,7 +11397,8 @@ function buildEmployeesImportTemplateWorkbook() {
     ['Type de contrat', `Facultatif (CDI par défaut). Valeurs de votre entreprise : ${typesContrat.join(', ')}.`],
     ['Date d\'embauche', 'Obligatoire, au format JJ/MM/AAAA (ex. 03/09/2025).'],
     ['Date de naissance', 'Facultatif, au format JJ/MM/AAAA.'],
-    ['Exemple (écrit en texte, à ne pas copier tel quel)', 'DURAND ; Léa ; lea.durand@exemple.fr ; 06 12 34 56 78 ; Comptable ; Compta ; ; CDI ; 03/09/2025 ; 14/05/1990'],
+    ['Sexe', 'Facultatif mais recommandé : Homme ou Femme (H / F, M / Mme acceptés). Il sert au registre du personnel, à la DSN et à l\'index d\'égalité ; une fiche créée sans sexe devra être complétée à la main.'],
+    ['Exemple (écrit en texte, à ne pas copier tel quel)', 'DURAND ; Léa ; lea.durand@exemple.fr ; 06 12 34 56 78 ; Comptable ; Compta ; ; CDI ; 03/09/2025 ; 14/05/1990 ; Femme'],
     ['Enregistrement', 'Enregistrez en .xlsx (ou en CSV, séparateur point-virgule), puis revenez sur l\'écran d\'import : un aperçu ligne par ligne s\'affiche avant toute création.']
   ];
   const servicesRows = [];
@@ -11393,7 +11407,7 @@ function buildEmployeesImportTemplateWorkbook() {
     if (equipes.length) equipes.forEach(eq => servicesRows.push([s.nom, eq])); else servicesRows.push([s.nom, '']);
   });
   return buildMultiSheetExcelXmlWorkbook([
-    { name: 'Modèle', headers: ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Date de naissance'], rows: [] },
+    { name: 'Modèle', headers: ['Matricule', 'Nom', 'Prénom', 'Email', 'Téléphone', 'Poste', 'Service', 'Équipe', 'Type de contrat', 'Date d\'embauche', 'Date de naissance', 'Sexe'], rows: [] },
     { name: 'Aide', headers: ['Colonne', 'Ce qu\'il faut écrire'], rows: aideRows },
     { name: 'Services', headers: ['Service', 'Équipe'], rows: servicesRows }
   ]);
@@ -11946,7 +11960,7 @@ function openImportSalariesModal() {
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Fichier Excel (.xlsx) ou CSV. Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance. Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
+        <p class="text-muted">Fichier Excel (.xlsx) ou CSV. Colonnes reconnues automatiquement par en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance, Sexe (Homme/Femme). Nom/Prénom/Email/Date d'embauche sont obligatoires.</p>
         <div class="card" style="padding: 14px; margin-bottom: 14px;">
           <button type="button" class="btn btn-secondary" id="btn-telecharger-modele-import">Télécharger le modèle</button>
           <p class="form-hint" style="margin-top: 8px; margin-bottom: 0;">Colonnes déjà nommées, une feuille d'aide qui dit quoi écrire (avec un exemple) et la liste des services de votre entreprise. Le modèle ne contient aucune ligne d'exemple : rien ne sera créé par erreur.</p>
@@ -12073,6 +12087,7 @@ function openImportSalariesModal() {
           <div class="empty-icon">${ICONS.checkCircle}</div>
           <p><strong>${results.created}</strong> salarié${results.created > 1 ? 's' : ''} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}.</p>
           ${results.premiereErreur ? `<p class="login-error" role="alert">Première erreur rencontrée : ${escapeHtml(results.premiereErreur)}</p>` : ''}
+          ${results.sansSexe ? `<p class="text-muted">${results.sansSexe} fiche${results.sansSexe > 1 ? 's' : ''} créée${results.sansSexe > 1 ? 's' : ''} sans « Sexe » (colonne absente ou non reconnue) : à compléter dans la fiche, il sert au registre du personnel, à la DSN et à l'index d'égalité.</p>` : ''}
         </div>
       `;
       confirmBtn.style.display = 'none';
@@ -18861,7 +18876,7 @@ function handleRefuseRequest(id) {
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus. Ses jours ne seront pas décomptés.',
     onConfirm: (motif) => {
-      leaveRepository.update(id, refuseRequest(request, motif));
+      leaveRepository.update(id, refuseRequest(request, motif, currentActorRoleLabel()));
       auditLogRepository.logAudit('Refus', 'Demande de congé', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
       notifyRequesterEmail(request.id, 'conge', 'refusee', motif);
       showToast('Demande refusée.');
@@ -27182,7 +27197,7 @@ function handleRefuseTelework(id) {
     title: 'Refuser cette demande ?',
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
-      teleworkRepository.update(id, refuseRequest(request, motif));
+      teleworkRepository.update(id, refuseRequest(request, motif, currentActorRoleLabel()));
       auditLogRepository.logAudit('Refus', 'Demande de télétravail', `${auditLabelForEmployee(request.employeeId)} : ${motif}`, auditDetailsForActor());
       notifyRequesterEmail(request.id, 'teletravail', 'refusee', motif);
       showToast('Demande refusée.');
@@ -28828,7 +28843,7 @@ function bindFraisEvents() {
       message: `${notes.length} note(s) seront refusées, le salarié sera informé.`,
       onConfirm: (motif) => {
         notes.forEach(n => {
-          expenseRepository.update(n.id, refuseRequest(n, motif));
+          expenseRepository.update(n.id, refuseRequest(n, motif, currentActorRoleLabel()));
           // §correctif audit du 16/09/2026 : ce chemin groupé contournait handleRefuseExpense (le
           // seul qui recalculait jusqu'ici), oubliant le recalcul du barème kilométrique sur les
           // notes du dossier — même correctif que handleRefuseExpense/handleCancelExpense
@@ -28961,7 +28976,7 @@ function handleRefuseExpense(id) {
     title: 'Refuser cette note de frais ?',
     message: 'Le salarié sera informé du refus.',
     onConfirm: (motif) => {
-      expenseRepository.update(id, refuseRequest(expense, motif));
+      expenseRepository.update(id, refuseRequest(expense, motif, currentActorRoleLabel()));
       // §retour Betty du 07/09/2026, revenu le 11/09/2026 ("vrai défaut de paiement") : voir le
       // commentaire identique sur handleCancelExpense/handleSelfCancelExpense ci-dessous.
       if (expense.categorie === 'Kilométrique') expenseRepository.recalculerIndemnitesKilometriques(expense.employeeId, (expense.date || '').slice(0, 4));
