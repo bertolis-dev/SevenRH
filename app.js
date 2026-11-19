@@ -2657,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.2';
+const APP_VERSION = '2026.11.19.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Imports : un email écrit dans la colonne « Matricule » (ou un matricule dans la colonne « Email ») est maintenant reconnu, pour l'historique des congés et absences comme pour les soldes initiaux. À l'import des salariés, si la création échoue, la raison s'affiche au lieu d'un simple « erreurs ».",
       "Après un import volumineux, le bandeau rouge « lignes refusées… duplicate key » ne reste plus affiché à tort : une ligne déjà enregistrée sur le serveur par une tentative précédente est maintenant reconnue comme un succès, et le bouton « Réessayer maintenant » fait disparaître l'avertissement.",
       "Import de l'historique des congés : quand les lignes sont refusées à cause de l'abonnement « à la carte », l'aperçu l'explique maintenant clairement, une seule fois. Il distingue « le module Congés n'est pas dans votre abonnement » de « ces salariés n'ont pas de licence Congés » (avec leurs noms et un bouton « Attribuer les licences »). Dans la gestion des accès, un bouton « Accorder l'accès à tous » attribue d'un coup les places libres, sans changer la facturation.",
       "Tour complet de l'application (tous les rôles, tous les écrans, tous les onglets de Paramètres, les fenêtres et les 13 exports) : tout fonctionne. Un seul écran dépassait la largeur de la page à 1440 px, le barème kilométrique de Paramètres > Notes de frais : corrigé.",
@@ -11230,7 +11231,7 @@ function buildImportPreviewRows(dataRows, mapping, preserveMatricule) {
 }
 
 async function importEmployeesRows(previewRows) {
-  const results = { created: 0, skipped: 0, errors: 0, plafondAtteint: 0 };
+  const results = { created: 0, skipped: 0, errors: 0, plafondAtteint: 0, premiereErreur: '' };
   // Même plafond de salariés que le formulaire de création (submitEmployeeForm) : l'import l'ignorait (revue du 13/10/2026).
   const abonnement = companyRepository.getCurrent().abonnement;
   const offre = (abonnement && OFFRES_BERTOLIS[abonnement.offre]) || OFFRES_BERTOLIS.essai;
@@ -11246,6 +11247,8 @@ async function importEmployeesRows(previewRows) {
       results.created++;
     } catch (err) {
       results.errors++;
+      // La raison n'était jamais montrée (« 6 erreurs » sans explication quand le serveur refusait la création).
+      if (!results.premiereErreur) results.premiereErreur = (err && err.message) || 'erreur inconnue';
     }
   }
   results.skipped = previewRows.filter(r => r.status === 'duplicate').length;
@@ -11293,7 +11296,10 @@ function buildSoldesPreviewRows(dataRows, mapping, mode) {
   const findEmployee = (value) => {
     if (!value) return null;
     const norm = normalizeForSearch(value);
-    return employees.find(e => normalizeForSearch(mapping.identifiant.field === 'matricule' ? (e.matricule || '') : (e.email || '')) === norm) || null;
+    // Colonne déclarée d'abord ; à défaut, l'autre identifiant (un email saisi dans la colonne « Matricule », ou l'inverse, est reconnu au lieu d'être refusé).
+    const principal = mapping.identifiant.field === 'matricule' ? 'matricule' : 'email';
+    const secondaire = principal === 'matricule' ? 'email' : 'matricule';
+    return employees.find(e => normalizeForSearch(e[principal] || '') === norm) || employees.find(e => normalizeForSearch(e[secondaire] || '') === norm) || null;
   };
   return dataRows.map((cells, i) => {
     const idValue = String(cells[mapping.identifiant.index] == null ? '' : cells[mapping.identifiant.index]).trim();
@@ -11627,7 +11633,10 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
   const findEmployee = (value) => {
     if (!value) return null;
     const norm = normalizeForSearch(value);
-    return employees.find(e => normalizeForSearch(mapping.identifiant.field === 'matricule' ? (e.matricule || '') : (e.email || '')) === norm) || null;
+    // Colonne déclarée d'abord ; à défaut, l'autre identifiant (un email saisi dans la colonne « Matricule », ou l'inverse, est reconnu au lieu d'être refusé).
+    const principal = mapping.identifiant.field === 'matricule' ? 'matricule' : 'email';
+    const secondaire = principal === 'matricule' ? 'email' : 'matricule';
+    return employees.find(e => normalizeForSearch(e[principal] || '') === norm) || employees.find(e => normalizeForSearch(e[secondaire] || '') === norm) || null;
   };
   const findType = (value) => {
     if (!value) return null;
@@ -12057,6 +12066,7 @@ function openImportSalariesModal() {
         <div class="empty-state">
           <div class="empty-icon">${ICONS.checkCircle}</div>
           <p><strong>${results.created}</strong> salarié${results.created > 1 ? 's' : ''} créé${results.created > 1 ? 's' : ''}, ${results.skipped} doublon${results.skipped > 1 ? 's' : ''} ignoré${results.skipped > 1 ? 's' : ''}, ${results.errors} erreur${results.errors > 1 ? 's' : ''}.</p>
+          ${results.premiereErreur ? `<p class="login-error" role="alert">Première erreur rencontrée : ${escapeHtml(results.premiereErreur)}</p>` : ''}
         </div>
       `;
       confirmBtn.style.display = 'none';
