@@ -4730,3 +4730,8 @@ textarea.input { resize: vertical; font-family: inherit; }
   .parametres-content { min-width: 0; max-width: 100%; }
   .parametres-content .card { max-width: 100%; overflow-x: auto; }
 }
+
+
+/* Encadré « licence Congés manquante » de l'aperçu d'import de l'historique (retour du 19/11/2026). */
+.encadre-licences { margin-bottom: 14px; padding: 12px 16px; border: 1px solid var(--color-warning); border-radius: var(--radius-md); background: var(--color-warning-soft); color: var(--color-text); }
+.encadre-licences p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.5; }

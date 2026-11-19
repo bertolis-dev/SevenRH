@@ -56,3 +56,29 @@ assert.strictEqual(parLibelle('PEAGE').montant, 8.2);
 assert.strictEqual(api.releveBancaireRepository.importer(csv).ajoutees, 0, 'un second import du même fichier n\'ajoute aucun doublon');
 
 console.log('OK — imports-corrections-18-11.test.js');
+
+// --- Abonnement « à la carte » (retour du 19/11/2026) : on distingue « module absent » et « salarié sans licence » ---
+(function licenceEtModule() {
+  const courant = api.companyRepository.getCurrent();
+  const mapping2 = api.guessAbsencesColumnMapping(['Matricule', 'Type', 'Date début', 'Date fin']);
+  const rh = DB.getEmployees().find(e => e.role === 'rh');
+  const ligne = (emp) => api.buildAbsencesPreviewRows([[emp.matricule, cp.nom, '17/12/2026', '17/12/2026']], mapping2, 'conge')[0];
+
+  courant.abonnement = Object.assign({}, courant.abonnement || {}, { offre: 'a_la_carte', modules: [{ key: 'conges', quantite: 2 }] });
+  courant.moduleLicenses = { conges: [] };
+  const sansLicence = ligne(salarie);
+  assert.strictEqual(sansLicence.status, 'error');
+  assert.strictEqual(sansLicence.licenceManquante, true, 'salarié sans licence : drapeau licenceManquante');
+  assert.strictEqual(sansLicence.moduleManquant, false);
+  assert.strictEqual(ligne(rh).status, 'ok', 'la RH est exemptée de licence');
+
+  courant.moduleLicenses = { conges: [salarie.id] };
+  assert.strictEqual(ligne(salarie).status, 'ok', 'avec une licence attribuée, la ligne passe');
+
+  courant.abonnement.modules = [];
+  const moduleAbsent = ligne(salarie);
+  assert.strictEqual(moduleAbsent.moduleManquant, true, 'module Congés absent de l\'abonnement : drapeau moduleManquant');
+  assert.strictEqual(moduleAbsent.licenceManquante, false);
+  assert.ok(/ne fait pas partie de votre abonnement/.test(moduleAbsent.message), moduleAbsent.message);
+  console.log('OK — licence Congés / module absent distingués dans l\'aperçu d\'import');
+})();

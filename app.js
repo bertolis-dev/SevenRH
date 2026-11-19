@@ -912,6 +912,7 @@ function openGererLicencesModal(moduleKey) {
         ${atCapacite ? ' Capacité atteinte : décochez un bénéficiaire pour en ajouter un autre, ou ajustez la quantité souscrite.' : ''}
       </p>
       ${atCapacite ? `<button type="button" class="btn-link" id="btn-ajuster-abonnement-licence">Ajuster l'abonnement</button>` : ''}
+      ${!atCapacite && employees.some(e => !beneficiaires.includes(e.id)) ? `<p><button type="button" class="btn btn-secondary btn-sm" id="btn-licences-tous">Accorder l'accès à tous (${Math.min(quantite - assigned, employees.filter(e => !beneficiaires.includes(e.id)).length)} place${quantite - assigned > 1 ? 's' : ''} libre${quantite - assigned > 1 ? 's' : ''})</button> <span class="text-muted">dans la limite des places souscrites, sans changer votre facturation.</span></p>` : ''}
       <table class="table" style="margin-top: 12px;">
         <thead><tr><th>Salarié</th><th>Rôle</th><th>Accès</th></tr></thead>
         <tbody>
@@ -960,6 +961,24 @@ function openGererLicencesModal(moduleKey) {
       closeModal();
       state.abonnementEditingModules = true;
       render();
+    });
+    const btnTous = document.getElementById('btn-licences-tous');
+    if (btnTous) btnTous.addEventListener('click', async () => {
+      btnTous.disabled = true;
+      const company = companyRepository.getCurrent();
+      const { assigned, employees, beneficiaires } = licenseSummaryForModule(moduleKey, quantite);
+      const aAttribuer = employees.filter(e => !beneficiaires.includes(e.id)).slice(0, Math.max(0, quantite - assigned));
+      let echecs = 0;
+      for (const e of aAttribuer) {
+        try { await window.SupabaseSync.grantModuleLicense(company.id, moduleKey, e.id, authRepository.getCurrentUser().id); } catch (err) { echecs++; }
+      }
+      try {
+        const refreshed = await window.SupabaseSync.hydrateCurrentCompany();
+        if (refreshed) DB._companiesCache = [refreshed];
+      } catch (err) { /* l'attribution a eu lieu : seul le rafraîchissement a échoué */ }
+      showToast(echecs ? `${aAttribuer.length - echecs} accès accordé(s), ${echecs} en échec.` : `${aAttribuer.length} accès accordé(s).`, echecs ? 'error' : undefined);
+      document.getElementById('licences-modal-body').innerHTML = renderBody();
+      bindBody();
     });
     document.querySelectorAll('[data-licence-employee]').forEach(cb => {
       cb.addEventListener('change', async () => {
@@ -2638,13 +2657,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.18.4';
+const APP_VERSION = '2026.11.19.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Import de l'historique des congés : quand les lignes sont refusées à cause de l'abonnement « à la carte », l'aperçu l'explique maintenant clairement, une seule fois. Il distingue « le module Congés n'est pas dans votre abonnement » de « ces salariés n'ont pas de licence Congés » (avec leurs noms et un bouton « Attribuer les licences »). Dans la gestion des accès, un bouton « Accorder l'accès à tous » attribue d'un coup les places libres, sans changer la facturation.",
       "Tour complet de l'application (tous les rôles, tous les écrans, tous les onglets de Paramètres, les fenêtres et les 13 exports) : tout fonctionne. Un seul écran dépassait la largeur de la page à 1440 px, le barème kilométrique de Paramètres > Notes de frais : corrigé.",
       "Imports : essai de tous les imports (salariés, soldes initiaux, historique des congés et des absences, journal de paie, relevé bancaire). Deux corrections : l'import de l'historique accepte maintenant deux demi-journées complémentaires le même jour (matin + après-midi) au lieu de les refuser comme un chevauchement ; le relevé bancaire lit correctement les montants « 1 234,56 » et « 1.234,56 », les guillemets, les dates JJ-MM-AAAA et JJ.MM.AAAA, et les accents d'un fichier de banque en Windows-1252.",
       "Paramètres > Congés et absences : nouveau bouton « Déplacer des demandes » pour passer toutes les demandes d'un type vers un autre (par exemple un ancien RTT désactivé vers « RTT cadres » ou « RTT non-cadres »). Les jours pris sont décomptés sur le nouveau compteur sans rien supprimer ni réimporter. Sont ignorées : les demandes d'un salarié non concerné par le type d'arrivée, les doublons et celles qu'on n'a pas le droit de modifier. L'historique garde la trace du changement.",
@@ -11632,14 +11652,19 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
     const nbFichier = lireNombreJoursImport(nbFichierRaw);
     const unJour = Boolean(dateDebut) && dateDebut === dateFin;
     const uniqueDemi = demiUnique.valeur === 'matin' || demiUnique.valeur === 'apres-midi';
-    let status = 'ok', message = '', nbJours = 0;
+    let status = 'ok', message = '', nbJours = 0, licenceManquante = false, moduleManquant = false;
     let demiJournee = null, demiJourneeDebut = null, demiJourneeFin = null;
     if (!idValue) { status = 'error'; message = 'Identifiant manquant.'; }
     else if (!employee) { status = 'error'; message = 'Salarié introuvable.'; }
     else if (!typeValue) { status = 'error'; message = 'Type de congé manquant.'; }
     else if (!type) { status = 'error'; message = `Type "${typeValue}" introuvable parmi les types existants.`; }
     // Le serveur refuse tout congé d'un salarié sans licence « Congés » (offre à la carte) : on le dit ici, avant l'envoi, au lieu de laisser l'import échouer en silence.
-    else if (!hasModuleLicense(employee, 'conges')) { status = 'error'; message = 'Ce salarié n\'a pas de licence « Congés » (Abonnement > Gérer les accès) : le serveur refuserait l\'enregistrement.'; }
+    else if (!hasModuleLicense(employee, 'conges')) {
+      status = 'error';
+      // Deux causes, deux messages : le module Congés n'est pas dans l'abonnement du tout, ou il y est mais ce salarié n'a pas de licence.
+      if (!hasModule('conges')) { moduleManquant = true; message = 'Le module « Congés » ne fait pas partie de votre abonnement : le serveur refuserait l\'enregistrement (Paramètres > Abonnement > Modifier mes modules).'; }
+      else { licenceManquante = true; message = 'Ce salarié n\'a pas de licence « Congés » (Abonnement > Gérer les accès) : le serveur refuserait l\'enregistrement.'; }
+    }
     // Même règle que la saisie manuelle : un type réservé par une règle d'éligibilité (ex. « RTT cadres ») ne s'applique pas à un salarié non concerné.
     else if (!isLeaveTypeEligibleForEmployee(employee, type, categorieSalarieRepository.getAll())) { status = 'error'; message = `Ce salarié n'est pas concerné par « ${type.nom} » (règle d'éligibilité du type, par exemple la catégorie de salarié). Vérifiez sa catégorie ou le type indiqué.`; }
     else if (!dateDebut) { status = 'error'; message = 'Date de début manquante ou invalide.'; }
@@ -11675,7 +11700,7 @@ function buildAbsencesPreviewRows(dataRows, mapping, categorie) {
       }
     }
     if (status === 'ok') acceptedInFile.push({ id: `import-${i}`, employeeId: employee.id, dateDebut, dateFin, demiJournee });
-    return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, commentaire, nbJours, status, message };
+    return { rowIndex: i + 2, idValue, employee, typeValue, type, dateDebut, dateFin, demiJournee, demiJourneeDebut, demiJourneeFin, commentaire, nbJours, status, message, licenceManquante, moduleManquant };
   });
 }
 
@@ -11828,7 +11853,29 @@ function openImportAbsencesHistoriqueModal(categorie) {
   function renderAbsencesPreview(preview, ignorees) {
     const okCount = preview.filter(r => r.status === 'ok').length;
     const errCount = preview.filter(r => r.status === 'error').length;
+    // Retour du 19/11/2026 (« je ne comprends pas, c'est une question d'abonnement ») : quand la cause est l'abonnement à la carte (le salarié n'a pas de licence
+    // « Congés »), on le dit une seule fois, clairement, avec le nom des salariés et le bouton qui mène à leur attribution, au lieu de répéter le message ligne par ligne.
+    const sansLicence = [];
+    preview.filter(r => r.licenceManquante && r.employee).forEach(r => { if (!sansLicence.some(e => e.id === r.employee.id)) sansLicence.push(r.employee); });
+    const peutGererLicences = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.GERER_ABONNEMENTS);
+    const moduleAbsent = preview.some(r => r.moduleManquant);
+    const encadreModule = moduleAbsent ? `
+      <div class="encadre-licences" role="alert">
+        <strong>${icon(ICONS.warningTriangle, 14)} Le module « Congés » n'est pas dans votre abonnement</strong>
+        <p>Votre abonnement est « à la carte » et ne contient pas (ou plus) le module Congés : aucun congé ne peut être enregistré, pour personne. Ce n'est pas une erreur de votre fichier.</p>
+        <p>${peutGererLicences ? 'Ouvrez Paramètres > Abonnement : vérifiez la liste des modules (« Modifier mes modules » pour ajouter Congés, ou « Actualiser mon abonnement » si vous l\'avez déjà payé), puis redéposez votre fichier.' : 'Demandez au propriétaire de vérifier l\'abonnement (Paramètres > Abonnement), puis redéposez votre fichier.'}</p>
+      </div>` : '';
+    const encadreLicences = sansLicence.length ? `
+      <div class="encadre-licences" role="alert">
+        <strong>${icon(ICONS.warningTriangle, 14)} ${sansLicence.length} salarié${sansLicence.length > 1 ? 's' : ''} sans licence « Congés »</strong>
+        <p>Votre abonnement est « à la carte » : pour qu'un salarié puisse avoir des congés enregistrés, il doit avoir une licence « Congés ». Ce n'est pas une erreur de votre fichier : c'est un réglage de l'abonnement.</p>
+        <p>Concernés : ${sansLicence.map(e => escapeHtml(e.prenom + ' ' + e.nom)).join(', ')}.</p>
+        ${peutGererLicences
+          ? '<p><button type="button" class="btn btn-secondary btn-sm" id="btn-import-gerer-licences">Attribuer les licences</button> Ouvre la gestion des accès ; ensuite, redéposez votre fichier.</p>'
+          : '<p>Demandez au propriétaire d\'attribuer ces licences (Paramètres > Abonnement > Gérer les accès), puis redéposez votre fichier.</p>'}
+      </div>` : '';
     document.getElementById('import-preview-zone').innerHTML = `
+      ${encadreModule}${encadreLicences}
       ${(ignorees || []).length ? `<p class="login-error" role="alert">${icon(ICONS.warningTriangle, 14)} Colonnes non reconnues, donc ignorées : ${ignorees.map(h => `« ${escapeHtml(h)} »`).join(', ')}. Colonnes attendues : Matricule (ou Email), Type, Date début, Date fin, Demi-journée début, Demi-journée fin, Commentaire.</p>` : ''}
       <p><span class="badge badge-success">${okCount} ligne${okCount > 1 ? 's' : ''} prête${okCount > 1 ? 's' : ''}</span> <span class="badge badge-danger">${errCount} erreur${errCount > 1 ? 's' : ''}</span></p>
       <div class="table-scroll">
@@ -11849,6 +11896,8 @@ function openImportAbsencesHistoriqueModal(categorie) {
         </table>
       </div>
     `;
+    const btnLicences = document.getElementById('btn-import-gerer-licences');
+    if (btnLicences) btnLicences.addEventListener('click', () => openGererLicencesModal('conges'));
     const confirmBtn = document.getElementById('btn-confirm-import');
     confirmBtn.style.display = okCount > 0 ? '' : 'none';
     confirmBtn.onclick = async () => {
