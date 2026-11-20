@@ -2714,13 +2714,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.7';
+const APP_VERSION = '2026.11.20.8';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Titres-restaurant : connecteur Swile, prêt mais pas encore activé. Dans Paramètres > Tickets restaurant, vous renseignez la clé d'API Swile (stockée sur le serveur, jamais ré-affichée), le produit titres-restaurant et l'adresse de commande. Nexus crée, met à jour et retire vos salariés chez Swile et les inscrit aux titres-restaurant (« Synchroniser maintenant », ou automatiquement une fois par jour). Sur l'écran Tickets de l'équipe, le nouveau bouton « Envoyer la commande » envoie par email le fichier de commande du mois au contact de commande, après confirmation, et garde la trace de l'envoi. Cela demande la mise à jour du serveur décrite dans docs/connecteur-titres-restaurant.md.",
       "Voiture de société : dans l'onglet Contrat de la fiche, une carte « Voiture de société » (bouton « Attribuer une voiture » pour ceux qui en ont une, rien pour les autres) : marque, modèle, immatriculation, énergie, mode de détention (LLD, LOA, achat), loueur, numéro de contrat, début et fin du contrat, kilométrage annuel prévu et à la remise, carte carburant, usage privé et notes. Le RH est prévenu 90, 30 et 7 jours avant la fin du contrat (notification et carte sur l'accueil).",
       "Calendrier de l'équipe : les colonnes des premiers jours du mois ne s'élargissent plus quand des vacances scolaires (par exemple celles de la Toussaint) ne couvrent que un ou deux jours du mois, et les lignes ne sont plus grisées en alternance (certains services paraissaient grisés, d'autres non). Le filtre « Tous les services » a la même taille que les deux boutons à côté, et le point de couleur devant le titre de chaque page ainsi que le liseré de couleur en haut de l'écran sont retirés. Les couleurs des types d'absence du calendrier sont plus franchement différentes (Maladie en rouge, Ancienneté en rose, Formation en vert, Télétravail en sarcelle) ; un type dont vous avez choisi la couleur dans Paramètres la garde.",
       "Le nom d'usage d'un salarié s'affiche maintenant partout dans l'application (fiche, listes, calendrier, notifications, recherche) à la place de son nom de naissance. Les documents officiels (registre, paie, attestations, contrats) et le journal d'audit gardent le nom légal.",
@@ -3463,6 +3464,8 @@ function showApp() {
   // ne bloque jamais l'affichage de l'app elle-même.
   const pendingCompanyId = DB.getCurrentCompanyId();
   if (pendingCompanyId) DB.retryPendingSyncNow(pendingCompanyId).then(() => renderSyncFailureBanner());
+  // Connecteur de prestataire de titres-restaurant : synchronisation des salariés, au plus une fois par jour (silencieuse).
+  setTimeout(() => lancerSynchroTicketsAuto(), 4000);
 }
 
 /** Après une première connexion avec un mot de passe temporaire (voir openCreerCompteConnexionModal
@@ -24326,11 +24329,13 @@ function renderParametresTicketsRestaurant() {
            entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
       <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
     </div>
+    <div class="card" id="connecteur-swile-carte"><h2>Prestataire de titres-restaurant (Swile)</h2><p class="text-muted">Chargement...</p></div>
     </div>
   `;
 }
 
 function bindParametresTicketsRestaurantEvents() {
+  chargerCarteConnecteurSwile();
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
@@ -24359,6 +24364,187 @@ function bindParametresTicketsRestaurantEvents() {
     ticketsPartEl.addEventListener('input', updateTicketsUrssafNote);
     updateTicketsUrssafNote();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Connecteur de prestataire de titres-restaurant (Swile) : synchronisation des salariés + commande mensuelle par email.
+// Les identifiants vivent côté serveur (voir supabase/functions/connecteur-tickets) : la clé secrète n'est jamais relue ici.
+// ---------------------------------------------------------------------------
+
+const connecteurSwileEtat = { config: null, secretPresent: false, indisponible: false, produits: [], message: '' };
+
+function libelleResumeSynchro(r) {
+  if (!r) return '';
+  const morceaux = [];
+  if (r.crees) morceaux.push(`${r.crees} créé${r.crees > 1 ? 's' : ''}`);
+  if (r.misAJour) morceaux.push(`${r.misAJour} mis à jour`);
+  if (r.inscrits) morceaux.push(`${r.inscrits} inscrit${r.inscrits > 1 ? 's' : ''} aux titres-restaurant`);
+  if (r.retires) morceaux.push(`${r.retires} retiré${r.retires > 1 ? 's' : ''}`);
+  if (r.dejaAJour) morceaux.push(`${r.dejaAJour} déjà à jour`);
+  return morceaux.join(' · ') || 'Rien à changer';
+}
+
+function renderCarteConnecteurSwile() {
+  const e = connecteurSwileEtat;
+  const c = e.config || { actif: false, clientId: '', produitId: '', synchroAuto: true, commandeEmail: '', commandeCopieEmail: '' };
+  if (e.indisponible) {
+    return `<h2>Prestataire de titres-restaurant (Swile)</h2>
+      <p class="text-muted">Cette fonction n'est pas encore activée sur le serveur de votre entreprise. Elle sera disponible dès que la mise à jour de la base de données aura été faite (migration 0078).</p>`;
+  }
+  const produits = e.produits.length ? e.produits : (c.produitId ? [{ id: c.produitId, name: 'Produit déjà choisi', kind: '' }] : []);
+  const resume = c.dernierSyncResume;
+  const erreurs = (resume && resume.erreurs) || [];
+  return `
+    <h2>Prestataire de titres-restaurant (Swile)</h2>
+    <p class="text-muted">Nexus crée, met à jour et retire vos salariés chez Swile, les inscrit aux titres-restaurant, et envoie la commande mensuelle par email. Dans Swile, ouvrez <strong>Intégrations &gt; Développeurs</strong>, créez une clé d'API avec les droits sur les collaborateurs (lecture, création, inscription, retrait) et collez-la ci-dessous.</p>
+    ${e.message ? `<p class="form-hint" role="status">${escapeHtml(e.message)}</p>` : ''}
+    <div class="form-grid" style="margin-top:10px;">
+      <div class="form-field"><label for="f-swile-client-id">Identifiant client (Client ID)</label><input class="input" type="text" id="f-swile-client-id" autocomplete="off" value="${escapeHtml(c.clientId)}"></div>
+      <div class="form-field"><label for="f-swile-secret">Clé secrète (Client secret)</label><input class="input" type="password" id="f-swile-secret" autocomplete="new-password" placeholder="${e.secretPresent ? '•••••••• enregistrée (laisser vide pour la garder)' : ''}"><p class="form-hint">Écrite sur le serveur, jamais affichée ensuite.</p></div>
+      <div class="form-field"><label for="f-swile-produit">Produit « titres-restaurant »</label>
+        <select class="input" id="f-swile-produit"><option value="">À choisir après « Tester la connexion »</option>${produits.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === c.produitId ? 'selected' : ''}>${escapeHtml(p.name)}${p.kind ? ' (' + escapeHtml(p.kind) + ')' : ''}</option>`).join('')}</select></div>
+      <div class="form-field"><label for="f-swile-commande-email">Adresse pour envoyer la commande mensuelle</label><input class="input" type="email" id="f-swile-commande-email" placeholder="commandes@..." value="${escapeHtml(c.commandeEmail)}"><p class="form-hint">À demander à votre contact Swile : c'est là que part le fichier de commande.</p></div>
+      <div class="form-field"><label for="f-swile-commande-copie">Copie de la commande à (facultatif)</label><input class="input" type="email" id="f-swile-commande-copie" value="${escapeHtml(c.commandeCopieEmail)}"></div>
+    </div>
+    <div class="form-field form-field-checkbox" style="margin-top:8px;"><label><input type="checkbox" id="f-swile-synchro-auto" ${c.synchroAuto ? 'checked' : ''}> Synchroniser automatiquement les salariés (au plus une fois par jour, à l'ouverture de Nexus par un RH)</label></div>
+    <div class="form-field form-field-checkbox" style="margin-top:4px;"><label><input type="checkbox" id="f-swile-actif" ${c.actif ? 'checked' : ''}> Connecteur activé</label></div>
+    <div class="badge-row" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-primary" id="btn-swile-enregistrer">Enregistrer</button>
+      <button type="button" class="btn btn-secondary" id="btn-swile-tester">Tester la connexion</button>
+      <button type="button" class="btn btn-secondary" id="btn-swile-synchroniser" ${c.actif && e.secretPresent ? '' : 'disabled'}>Synchroniser maintenant</button>
+    </div>
+    ${resume ? `<div class="text-muted" style="margin-top:12px; font-size:13px;">Dernière synchronisation le ${formatDate(toISODate(new Date(c.dernierSyncAt || resume.date)))} : ${escapeHtml(libelleResumeSynchro(resume))}${resume.nombreErreurs ? ` · <span class="text-danger">${resume.nombreErreurs} erreur${resume.nombreErreurs > 1 ? 's' : ''}</span>` : ''}.${erreurs.length ? `<ul style="margin:6px 0 0 18px;">${erreurs.slice(0, 5).map(x => `<li>${escapeHtml(x.message)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+  `;
+}
+
+async function chargerCarteConnecteurSwile() {
+  const carte = document.getElementById('connecteur-swile-carte');
+  if (!carte || !window.SupabaseSync || !window.SupabaseSync.connecteurTicketsLire) return;
+  const r = await window.SupabaseSync.connecteurTicketsLire('swile');
+  if (!document.getElementById('connecteur-swile-carte')) return; // l'écran a changé pendant le chargement
+  if (!r.success) { carte.innerHTML = `<h2>Prestataire de titres-restaurant (Swile)</h2><p class="text-danger">${escapeHtml(r.error || 'Lecture impossible.')}</p>`; return; }
+  connecteurSwileEtat.indisponible = Boolean(r.indisponible);
+  connecteurSwileEtat.config = r.config;
+  connecteurSwileEtat.secretPresent = Boolean(r.secretPresent);
+  afficherCarteConnecteurSwile();
+}
+
+function afficherCarteConnecteurSwile() {
+  const carte = document.getElementById('connecteur-swile-carte');
+  if (!carte) return;
+  carte.innerHTML = renderCarteConnecteurSwile();
+  const lire = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const cocher = (id) => { const el = document.getElementById(id); return Boolean(el && el.checked); };
+  const enregistrer = async () => {
+    const config = {
+      actif: cocher('f-swile-actif'), clientId: lire('f-swile-client-id'), produitId: lire('f-swile-produit'), synchroAuto: cocher('f-swile-synchro-auto'),
+      commandeEmail: lire('f-swile-commande-email'), commandeCopieEmail: lire('f-swile-commande-copie')
+    };
+    if (config.commandeEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.commandeEmail.trim())) { showToast('L\'adresse de commande n\'est pas valide.', 'error'); return false; }
+    const secret = lire('f-swile-secret').trim();
+    if (config.actif && !config.clientId.trim()) { showToast('Renseignez l\'identifiant client avant d\'activer le connecteur.', 'error'); return false; }
+    if (config.actif && !secret && !connecteurSwileEtat.secretPresent) { showToast('Renseignez la clé secrète avant d\'activer le connecteur.', 'error'); return false; }
+    const r = await window.SupabaseSync.connecteurTicketsEnregistrer(DB.getCurrentCompanyId(), 'swile', config, secret);
+    if (!r.success) { showToast(r.error || 'Enregistrement impossible.', 'error'); return false; }
+    auditLogRepository.logAudit('Modification', 'Connecteur titres-restaurant', 'Swile', config.actif ? 'activé' : 'désactivé');
+    return true;
+  };
+  document.getElementById('btn-swile-enregistrer')?.addEventListener('click', async () => {
+    if (await enregistrer()) { showToast('Connecteur enregistré.'); connecteurSwileEtat.message = ''; await chargerCarteConnecteurSwile(); }
+  });
+  document.getElementById('btn-swile-tester')?.addEventListener('click', async (evt) => {
+    const bouton = evt.currentTarget; bouton.disabled = true; bouton.textContent = 'Test en cours...';
+    try {
+      if (!(await enregistrer())) return;
+      const r = await window.SupabaseSync.connecteurTicketsAppeler('tester');
+      if (!r.success) { connecteurSwileEtat.message = r.error; showToast(r.error, 'error'); return; }
+      connecteurSwileEtat.produits = r.produits || [];
+      const titres = connecteurSwileEtat.produits.filter(p => p.kind === 'MEAL_VOUCHER');
+      connecteurSwileEtat.message = `Connexion réussie : ${connecteurSwileEtat.produits.length} produit${connecteurSwileEtat.produits.length > 1 ? 's' : ''} Swile trouvé${connecteurSwileEtat.produits.length > 1 ? 's' : ''}. ${titres.length ? 'Choisissez le produit titres-restaurant puis enregistrez.' : 'Aucun produit titres-restaurant (MEAL_VOUCHER) actif sur ce compte.'}`;
+      await chargerCarteConnecteurSwile();
+    } finally { const b = document.getElementById('btn-swile-tester'); if (b) { b.disabled = false; b.textContent = 'Tester la connexion'; } }
+  });
+  document.getElementById('btn-swile-synchroniser')?.addEventListener('click', async (evt) => {
+    const bouton = evt.currentTarget; bouton.disabled = true; bouton.textContent = 'Synchronisation...';
+    try {
+      const r = await lancerSynchroTickets();
+      if (!r.success) { connecteurSwileEtat.message = r.error; showToast(r.error, 'error'); }
+      else { connecteurSwileEtat.message = ''; showToast(`Synchronisation terminée : ${libelleResumeSynchro(r)}.`); }
+      await chargerCarteConnecteurSwile();
+    } finally { const b = document.getElementById('btn-swile-synchroniser'); if (b) { b.disabled = false; b.textContent = 'Synchroniser maintenant'; } }
+  });
+}
+
+/** Lance la synchronisation (en plusieurs passes si beaucoup de salariés restent à traiter) et regroupe le résultat. */
+async function lancerSynchroTickets() {
+  const total = { success: true, crees: 0, misAJour: 0, inscrits: 0, retires: 0, dejaAJour: 0, ignores: 0, nombreErreurs: 0 };
+  for (let passe = 0; passe < 10; passe++) {
+    const r = await window.SupabaseSync.connecteurTicketsAppeler('synchroniser');
+    if (!r.success) return r;
+    ['crees', 'misAJour', 'inscrits', 'retires', 'dejaAJour', 'ignores', 'nombreErreurs'].forEach(k => { total[k] += Number(r[k]) || 0; });
+    if (!r.restant) break;
+  }
+  return total;
+}
+
+/** Synchronisation automatique : au plus une fois par jour, à l'ouverture de Nexus par quelqu'un qui peut gérer les tickets, sans bruit en cas d'échec. */
+async function lancerSynchroTicketsAuto() {
+  if (window.__synchroTicketsAutoFaite) return;
+  window.__synchroTicketsAutoFaite = true;
+  try {
+    const user = authRepository.getCurrentUser();
+    if (!user || !hasModule('tickets') || !hasPermission(user, PERMISSIONS.CALCULER_TICKETS_RESTAURANT) || !window.SupabaseSync || !window.SupabaseSync.connecteurTicketsLire) return;
+    const r = await window.SupabaseSync.connecteurTicketsLire('swile');
+    const c = r && r.config;
+    if (!r.success || !c || !c.actif || !c.synchroAuto || !r.secretPresent) return;
+    if (c.dernierSyncAt && Date.now() - new Date(c.dernierSyncAt).getTime() < 24 * 3600 * 1000) return;
+    await lancerSynchroTickets();
+  } catch (err) {
+    console.error('Synchronisation automatique des tickets restaurant impossible.', err);
+  }
+}
+
+/** Envoie la commande mensuelle par email au contact de commande du prestataire (adresse enregistrée dans Paramètres), avec confirmation. */
+async function envoyerCommandeTickets() {
+  const rows = getTicketsRows();
+  const annee = state.ticketsYear;
+  const mois = state.ticketsMonth;
+  const periode = `${annee}-${String(mois + 1).padStart(2, '0')}`;
+  const lignes = rows.map(r => ({ matricule: r.employee.matricule || '', nom: nomAffiche(r.employee), prenom: r.employee.prenom || '', email: r.employee.email || '', nombreTitres: r.result.nbTickets }));
+  const nombreTitres = lignes.reduce((somme, l) => somme + l.nombreTitres, 0);
+  const nombreSalaries = lignes.filter(l => l.nombreTitres > 0).length;
+  if (!nombreTitres) { showToast('Aucun titre à commander pour ce mois.', 'error'); return; }
+  const r = await window.SupabaseSync.connecteurTicketsLire('swile');
+  if (!r.success || r.indisponible) { showToast(r.indisponible ? 'L\'envoi de la commande n\'est pas encore activé sur le serveur.' : (r.error || 'Lecture des réglages impossible.'), 'error'); return; }
+  const destinataire = r.config && r.config.commandeEmail;
+  if (!destinataire) { showToast('Renseignez d\'abord l\'adresse de commande dans Paramètres > Tickets restaurant.', 'error'); return; }
+  const deja = await window.SupabaseSync.commandesTicketsLire();
+  const precedente = (deja.commandes || []).find(c => c.periode === periode && c.statut === 'envoyee');
+  openConfirm({
+    title: 'Envoyer la commande ?',
+    message: `Commande de ${MONTH_NAMES[mois]} ${annee} : ${nombreTitres} titre${nombreTitres > 1 ? 's' : ''} pour ${nombreSalaries} salarié${nombreSalaries > 1 ? 's' : ''}, envoyée par email à ${destinataire}.${precedente ? ` Attention : une commande a déjà été envoyée pour ce mois le ${formatDate(toISODate(new Date(precedente.envoyeeLe)))}.` : ''}`,
+    confirmLabel: 'Envoyer la commande',
+    onConfirm: async () => {
+      const envoi = await window.SupabaseSync.connecteurTicketsAppeler('envoyer-commande', { periode, lignes });
+      if (!envoi.success) { showToast(envoi.error || 'Envoi impossible.', 'error'); return; }
+      // Même enregistrement que le fichier de commande : c'est lui qui permet la régularisation automatique si une absence est déclarée ensuite.
+      DB.enregistrerCommandeTickets(annee, mois, leaveRepository.getAll(), teleworkRepository.getAll());
+      auditLogRepository.logAudit('Export', 'Commande titres-restaurant envoyée', `${MONTH_NAMES[mois]} ${annee}`, `${nombreTitres} titres, ${nombreSalaries} salariés, ${envoi.destinataire || destinataire}`);
+      showToast(`Commande envoyée à ${envoi.destinataire || destinataire}.`);
+      render();
+    }
+  });
+}
+
+/** Historique des commandes déjà envoyées, affiché sous le titre de l'écran Tickets restaurant (lecture asynchrone, jamais bloquante). */
+async function afficherCommandesTicketsEnvoyees() {
+  const zone = document.getElementById('tickets-commandes-envoyees');
+  if (!zone || !window.SupabaseSync || !window.SupabaseSync.commandesTicketsLire) return;
+  const r = await window.SupabaseSync.commandesTicketsLire();
+  const periode = `${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}`;
+  const envoi = ((r && r.commandes) || []).find(c => c.periode === periode && c.statut === 'envoyee');
+  const cible = document.getElementById('tickets-commandes-envoyees');
+  if (cible && envoi) cible.innerHTML = `${icon(ICONS.upload, 13)} Commande envoyée le ${formatDate(toISODate(new Date(envoi.envoyeeLe)))} à ${escapeHtml(envoi.destinataire)} : ${envoi.nombreTitres} titres, ${envoi.nombreSalaries} salariés.`;
 }
 
 /** §correctif audit du 23/08/2026 (§6.2) : "Elles [les conventions collectives] figurent à la
@@ -30309,9 +30495,11 @@ function renderTicketsEquipe() {
         <button class="btn btn-secondary btn-sm" id="btn-tickets-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-tickets-next">Suivant →</button>
         <button class="btn btn-secondary" id="btn-export-tickets">Exporter CSV</button>
-        <button class="btn btn-primary" id="btn-fichier-commande-tickets">Fichier de commande</button>
+        <button class="btn btn-secondary" id="btn-fichier-commande-tickets">Fichier de commande</button>
+        <button class="btn btn-primary" id="btn-envoyer-commande-tickets">Envoyer la commande</button>
       </div>
     </div>
+    <p class="text-muted" id="tickets-commandes-envoyees" style="margin: -4px 0 12px;"></p>
 
     ${depassePlafond ? `
       <div class="card" style="border-left: 3px solid var(--color-danger); margin-bottom: 16px;">
@@ -30445,6 +30633,8 @@ function bindTicketsEquipeEvents() {
   });
   document.getElementById('btn-export-tickets').addEventListener('click', exportTicketsCSV);
   document.getElementById('btn-fichier-commande-tickets').addEventListener('click', genererFichierCommandeTickets);
+  document.getElementById('btn-envoyer-commande-tickets').addEventListener('click', envoyerCommandeTickets);
+  afficherCommandesTicketsEnvoyees();
 
   document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
     btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.corrigerTickets));

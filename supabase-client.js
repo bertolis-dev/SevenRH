@@ -1104,6 +1104,67 @@ async function invokeBilling(action, payload) {
   return { success: true, ...data };
 }
 
+// ---------------------------------------------------------------------------
+// Connecteurs de prestataires de titres-restaurant (0078 + fonction « connecteur-tickets »)
+// ---------------------------------------------------------------------------
+
+function connecteurTicketsFromRow(row) {
+  return {
+    fournisseur: row.fournisseur, actif: Boolean(row.actif), clientId: row.client_id || '', produitId: row.produit_id || '',
+    synchroAuto: row.synchro_auto !== false, commandeEmail: row.commande_email || '', commandeCopieEmail: row.commande_copie_email || '',
+    dernierSyncAt: row.dernier_sync_at || null, dernierSyncResume: row.dernier_sync_resume || null
+  };
+}
+
+/** Réglages du connecteur (jamais le secret : il n'est pas lisible depuis le navigateur). Table absente avant la migration : « indisponible », jamais une erreur. */
+async function connecteurTicketsLire(fournisseur) {
+  const { data, error } = await supabase.from('connecteurs_tickets').select('*').eq('fournisseur', fournisseur || 'swile').maybeSingle();
+  if (error) {
+    if (estTableAbsente(error)) return { success: true, indisponible: true, config: null, secretPresent: false };
+    return { success: false, error: error.message };
+  }
+  const { data: present } = await supabase.rpc('secret_connecteur_present', { p_fournisseur: fournisseur || 'swile' });
+  return { success: true, config: data ? connecteurTicketsFromRow(data) : null, secretPresent: present === true };
+}
+
+/** Enregistre les réglages ; `nouveauSecret` (facultatif) remplace la clé secrète, écrite sans jamais être relue. */
+async function connecteurTicketsEnregistrer(companyId, fournisseur, config, nouveauSecret) {
+  const ligne = {
+    company_id: companyId, fournisseur: fournisseur || 'swile', actif: Boolean(config.actif), client_id: (config.clientId || '').trim() || null,
+    produit_id: config.produitId || null, synchro_auto: config.synchroAuto !== false,
+    commande_email: (config.commandeEmail || '').trim() || null, commande_copie_email: (config.commandeCopieEmail || '').trim() || null
+  };
+  const { error } = await supabase.from('connecteurs_tickets').upsert(ligne, { onConflict: 'company_id,fournisseur' });
+  if (error) return { success: false, error: error.message };
+  if (nouveauSecret) {
+    const { error: errSecret } = await supabase.rpc('enregistrer_secret_connecteur', { p_fournisseur: fournisseur || 'swile', p_client_secret: nouveauSecret });
+    if (errSecret) return { success: false, error: errSecret.message };
+  }
+  return { success: true };
+}
+
+/** Appelle la fonction serveur « connecteur-tickets » : action = 'tester' | 'synchroniser' | 'envoyer-commande'. */
+async function connecteurTicketsAppeler(action, payload) {
+  const { data, error } = await supabase.functions.invoke('connecteur-tickets', { body: { action, fournisseur: 'swile', ...(payload || {}) } });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = await error.context.json();
+      if (ctx && ctx.error) message = ctx.error;
+    } catch { /* réponse non-JSON : on garde le message par défaut */ }
+    if (/not found|Failed to send a request|404/i.test(String(message))) message = "Le service de connexion aux prestataires n'est pas encore activé sur le serveur.";
+    return { success: false, error: message };
+  }
+  return { success: true, ...data };
+}
+
+/** Commandes mensuelles déjà envoyées (les plus récentes d'abord). */
+async function commandesTicketsLire() {
+  const { data, error } = await supabase.from('commandes_tickets').select('*').order('envoyee_le', { ascending: false }).limit(24);
+  if (error) return { success: !estTableAbsente(error), commandes: [], error: error.message };
+  return { success: true, commandes: (data || []).map(r => ({ id: r.id, periode: r.periode, envoyeeLe: r.envoyee_le, destinataire: r.destinataire, nombreSalaries: r.nombre_salaries, nombreTitres: r.nombre_titres, statut: r.statut })) };
+}
+
 /** Appelle la fonction serveur "manage-employee-account" — un Propriétaire/RH crée ("create") ou
  * réinitialise ("reset") directement le compte de connexion d'un salarié de son entreprise (voir
  * supabase/functions/manage-employee-account/index.ts). Renvoie le mot de passe (généré côté
@@ -1707,6 +1768,7 @@ window.SupabaseSync = {
   pushSupportTickets, updateTicketStatus, appendTicketComment, invokeBertolisTickets, notifyNewTicket, analyzeTicket, askBoussole,
   pushEntretiens, updateEntretien, pushFormations, updateFormation,
   pushIdees, toggleIdeeVote, setIdeeStatut,
+  connecteurTicketsLire, connecteurTicketsEnregistrer, connecteurTicketsAppeler, commandesTicketsLire,
   resolveWorkflowWithFallback, resolveValidatorEmployeeIdsForStep, assignMatriculeNumber, renumberCompanyMatricules,
   getCompanyIntegrations, saveCompanyIntegrations, getJournalPaie, saveJournalPaie, deleteJournalPaie, notifySlack, notifyRequestEmail,
   submitCandidature, getCandidatures, setCandidatureStatut, setCandidatureData, getCandidatureFileUrl, rejectCandidature, supprimerCandidature,

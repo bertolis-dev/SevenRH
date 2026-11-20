@@ -308,6 +308,7 @@ globalThis.__ideeRepository = ideeRepository;
 globalThis.__buildBoussoleContext = buildBoussoleContext;
 globalThis.__renderBoussole = renderBoussole;
 globalThis.__NAV_ITEMS = NAV_ITEMS;
+globalThis.__connecteurSwileEtat = connecteurSwileEtat;
 globalThis.__renderSidebar = renderSidebar;
 globalThis.__authRepository = authRepository;
 globalThis.__renderUserMenuPanel = renderUserMenuPanel;
@@ -697,6 +698,7 @@ globalThis.__QUICK_CREATE_TYPES = QUICK_CREATE_TYPES;
     buildBoussoleContext: sandbox.__buildBoussoleContext,
     renderBoussole: sandbox.__renderBoussole,
     NAV_ITEMS: sandbox.__NAV_ITEMS,
+    connecteurSwileEtat: sandbox.__connecteurSwileEtat,
     renderSidebar: sandbox.__renderSidebar,
     authRepository: sandbox.__authRepository,
     renderUserMenuPanel: sandbox.__renderUserMenuPanel,
