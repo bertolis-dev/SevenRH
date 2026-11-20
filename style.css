@@ -4758,3 +4758,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 .nav-plus-toggle { color: var(--color-text-muted); font-size: 13px; justify-content: space-between; }
 .nav-plus-toggle .nav-section-chevron { margin-left: auto; }
 .nav-plus-toggle[aria-expanded="true"] .nav-section-chevron { transform: rotate(225deg); }
+
+/* Retour du 20/11/2026 : carte repliable (Rapprochement bancaire), TVA d'une note de frais sous un lien « modifier », échéances vides regroupées. */
+.card-repliable > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; cursor: pointer; list-style: none; }
+.card-repliable > summary::-webkit-details-marker { display: none; }
+.card-repliable > summary::before { content: ''; flex: none; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s ease; align-self: center; }
+.card-repliable[open] > summary::before { transform: rotate(45deg); }
+.card-repliable[open] > summary { margin-bottom: 12px; }
+.card-repliable-titre { font-weight: 700; font-size: 16px; }
+.expense-tva-details { align-self: end; }
+.expense-tva-details > summary { cursor: pointer; font-size: 13px; color: var(--color-primary-text); padding: 6px 0; }
+.expense-tva-details[open] > summary { margin-bottom: 6px; }
+.echeances-vides { grid-column: 1 / -1; }

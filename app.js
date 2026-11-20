@@ -2711,13 +2711,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.2';
+const APP_VERSION = '2026.11.20.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Accueil du RH, du manager et du propriétaire : les « Accès rapides » sont maintenant sous le Centre d'action, et les rubriques d'échéances sans rien à montrer (fins de contrat, périodes d'essai, etc.) sont regroupées sur une seule ligne « Rien à signaler ». Notes de frais : plus de barre de filtres vide, la carte « Rapprochement bancaire » est repliée par défaut (elle s'ouvre seule s'il reste des lignes à rapprocher), et le taux de TVA du formulaire est rangé sous « TVA : 20 % (modifier) ».",
       "Plus simple à utiliser : sur l'accueil du salarié, « Demander un congé » est en haut (il ouvre directement le formulaire, avec « Congés payés » déjà choisi et le solde restant affiché juste sous les dates) ; seuls les soldes qui comptent au quotidien sont affichés, les autres sont sous « Voir les autres soldes ». La page Congés n'affiche plus de filtres inutiles à un salarié. Sur la page Salariés, un seul bouton plein (« + Nouveau salarié »), les imports, exports, registre et index égalité sont sous « Plus d'actions ». Dans le menu, les deux calendriers deviennent « Mon calendrier » et « Calendrier de l'équipe », et « Ma retraite » et « Formation » sont rangés sous « Plus ».",
       "Paramètres > Couleurs : les changements ne se voyaient pas quand l'écran était en thème sombre (le thème du système, par exemple). La couleur principale, la mise en avant et le fond s'appliquent maintenant aussi en thème sombre, adaptées pour rester lisibles ; seule la couleur du texte reste claire. Un aperçu s'affiche en direct pendant le choix, et un bouton permet de passer en thème clair pour voir les couleurs exactement comme choisies.",
       "Modèles d'import et exports Excel : les fichiers sont maintenant de vrais classeurs .xlsx. Ils portaient jusqu'ici l'extension « .xls » alors que leur contenu était du XML, ce qu'Excel signalait comme suspect et qui pouvait faire perdre la saisie. Mêmes couleurs, mêmes colonnes, première ligne figée. Les anciens modèles .xls restent importables.",
@@ -8860,21 +8861,38 @@ function renderOperationalDashboardBody(employees, employeeIds) {
     </div>
     ` : ''}
 
-    ${isVisible('echeances') ? `
-    <div class="dashboard-grid">
-      ${ifModule('rh', renderUpcomingBirthdaysCard(birthdays))}
-      ${ifModule('rh', renderUpcomingContractEndsCard(contractEnds))}
-      ${ifModule('rh', renderUpcomingProbationEndsCard(probationEnds))}
-      ${ifModule('rh', renderUpcomingSeniorityCard(seniorityAnniversaries))}
-      ${ifModule('entretiens', renderUpcomingEntretiensCard(entretiensProfessionnels, bilansSixAns))}
-      ${ifModule('rh', renderUpcomingVisitesMedicalesCard(visitesMedicales))}
-      ${ifModule('remuneration', renderContingentHeuresSupCard(contingentHeuresSup))}
-      ${ifModule('conges', renderLongAbsenceSuspensionCard(absencesLonguesDuree))}
-      ${ifModule('conges', renderVisitesRepriseCard(visitesReprise))}
-    </div>
-    ` : ''}
+    ${isVisible('echeances') ? renderEcheancesDashboard({ birthdays, contractEnds, probationEnds, seniorityAnniversaries, entretiensProfessionnels, bilansSixAns, visitesMedicales, contingentHeuresSup, absencesLonguesDuree, visitesReprise }) : ''}
 
     ${showPresenceCard ? renderPresenceCard() : ''}
+  `;
+}
+
+/** Blocs d'échéances de l'accueil (anniversaires, fins de contrat, visites médicales...) : seuls ceux qui ont quelque chose à montrer s'affichent en carte ;
+ * les autres sont regroupés dans une seule ligne « Rien à signaler », au lieu de quatre ou cinq cartes vides qui allongent la page. */
+function renderEcheancesDashboard(d) {
+  const blocs = [
+    { module: 'rh', nom: 'Anniversaires', vide: d.birthdays.length === 0, html: () => renderUpcomingBirthdaysCard(d.birthdays) },
+    { module: 'rh', nom: 'Fins de contrat', vide: d.contractEnds.length === 0, html: () => renderUpcomingContractEndsCard(d.contractEnds) },
+    { module: 'rh', nom: "Fins de période d'essai", vide: d.probationEnds.length === 0, html: () => renderUpcomingProbationEndsCard(d.probationEnds) },
+    { module: 'rh', nom: "Anniversaires d'ancienneté", vide: d.seniorityAnniversaries.length === 0, html: () => renderUpcomingSeniorityCard(d.seniorityAnniversaries) },
+    { module: 'entretiens', nom: 'Entretiens professionnels', vide: d.entretiensProfessionnels.length === 0 && d.bilansSixAns.length === 0, html: () => renderUpcomingEntretiensCard(d.entretiensProfessionnels, d.bilansSixAns) },
+    { module: 'rh', nom: 'Visites médicales', vide: d.visitesMedicales.length === 0, html: () => renderUpcomingVisitesMedicalesCard(d.visitesMedicales) },
+    { module: 'remuneration', nom: "Contingent d'heures sup.", vide: d.contingentHeuresSup.length === 0, html: () => renderContingentHeuresSupCard(d.contingentHeuresSup) },
+    { module: 'conges', nom: 'Absences longue durée', vide: d.absencesLonguesDuree.length === 0, html: () => renderLongAbsenceSuspensionCard(d.absencesLonguesDuree) }
+  ].filter(b => hasModule(b.module));
+  const cartes = blocs.filter(b => !b.vide).map(b => b.html()).join('') + (hasModule('conges') ? renderVisitesRepriseCard(d.visitesReprise) : '');
+  const vides = blocs.filter(b => b.vide).map(b => b.nom);
+  const resume = vides.length ? `
+      <div class="card echeances-vides">
+        <h2>Rien à signaler</h2>
+        <p class="text-muted">Aucune échéance dans les prochains jours pour : ${vides.map(escapeHtml).join(', ')}.</p>
+      </div>` : '';
+  if (!cartes && !resume) return '';
+  return `
+    <div class="dashboard-grid">
+      ${cartes}
+      ${resume}
+    </div>
   `;
 }
 
@@ -8986,7 +9004,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
 function renderDashboardShortcuts() {
   return `
     <div class="card">
-      <h2>Raccourcis</h2>
+      <h2>Accès rapides</h2>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
         <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
         ${ifModule('conges', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>`)}
@@ -9029,8 +9047,8 @@ function renderDashboardRH() {
     ${renderCarteMiseEnRoute()}
     ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
-    ${renderOperationalDashboardBody(employees, null)}
     ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
+    ${renderOperationalDashboardBody(employees, null)}
   `;
 }
 
@@ -9041,8 +9059,8 @@ function renderDashboardManager() {
   return `
     ${renderDashboardHero('Accueil', "Vue d'ensemble de votre équipe", renderDashboardCustomizeButton())}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, visibleIds) : ''}
-    ${renderOperationalDashboardBody(employees, visibleIds)}
     ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
+    ${renderOperationalDashboardBody(employees, visibleIds)}
   `;
 }
 
@@ -9167,6 +9185,7 @@ function renderDashboardProprietaire() {
     ${renderCarteMiseEnRoute()}
     ${hasModule('rh') ? renderRadarSeuilsCard(employees) : ''}
     ${isDashboardWidgetVisible(user, 'actionCenter') ? renderDashboardActionCenter(employees, null) : ''}
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
     ${renderOperationalDashboardBody(employees, null)}
 
     ${isDashboardWidgetVisible(user, 'indicateursDirection') ? `
@@ -9196,8 +9215,6 @@ function renderDashboardProprietaire() {
         : chartCard('Répartition Hommes / Femmes', '<p class="text-muted">Suivi désactivé dans les paramètres.</p>')}
     </div>
     ` : ''}
-
-    ${isDashboardWidgetVisible(user, 'shortcuts') ? renderDashboardShortcuts() : ''}
   `;
 }
 
@@ -28809,6 +28826,12 @@ function renderFrais() {
       ? 'Aucune note de frais ne correspond à ces filtres.'
       : 'Aucune note de frais pour l\'instant. Utilisez le bouton "+ Nouvelle note" ci-dessus pour créer la première.';
 
+  // Retour du 20/11/2026 : même règle que Congés — rien à filtrer (aucune note) ou un seul salarié dans le périmètre : pas de barre de filtres vide, ni recherche de salarié.
+  // Les éléments restent dans la page, masqués, pour que les écouteurs retrouvent leurs champs.
+  const filtresFraisActifs = Object.values(state.fraisFilters).some(Boolean) || Boolean(state.fraisSearch);
+  const barreFraisInutile = expenses.length === 0 && !filtresFraisActifs;
+  const masquerSoloFrais = employees.length <= 1 ? ' style="display:none"' : '';
+
   return `
     <div class="view-header view-header-row">
       <div>
@@ -28831,11 +28854,11 @@ function renderFrais() {
     ${renderExpenseDossiersCard()}
     ${canValider ? renderRapprochementBancaireCard() : ''}
 
-    <div class="toolbar card">
+    <div class="toolbar card"${barreFraisInutile ? ' style="display:none"' : ''}>
       <!-- §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche... Notes
            de frais") : recherche par nom, en complément du filtre déroulant ci-dessous. -->
-      <input type="text" id="frais-search" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state.fraisSearch)}">
-      <select id="frais-filter-employee" class="input">
+      <input type="text" id="frais-search" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state.fraisSearch)}"${masquerSoloFrais}>
+      <select id="frais-filter-employee" class="input"${masquerSoloFrais}>
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${state.fraisFilters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
       </select>
@@ -28964,11 +28987,13 @@ function renderRapprochementBancaireCard() {
   const candidatsCommuns = expenseRepository.getAll().filter(n => !expenseIdsDejaRapproches.has(n.id) && (n.statut === 'Remboursé' || n.statut === 'En attente'));
   const lignesTriees = releves.slice().sort((a, b) => (a.statut === 'rapproche') - (b.statut === 'rapproche'));
 
+  // Tâche rare (une fois par mois au plus) : repliée, sauf s'il reste des lignes de relevé à rapprocher.
+  const aRapprocher = releves.filter(l => l.statut !== 'rapproche').length;
   return `
-    <div class="card" style="margin-top: 0; margin-bottom: 16px;">
+    <details class="card card-repliable" style="margin-top: 0; margin-bottom: 16px;"${aRapprocher ? ' open' : ''}>
+      <summary><span class="card-repliable-titre">Rapprochement bancaire</span><span class="text-muted">${aRapprocher ? `${aRapprocher} ligne${aRapprocher > 1 ? 's' : ''} à rapprocher` : 'Vérifier les remboursements avec un relevé bancaire'}</span></summary>
       <div class="view-header-row">
         <div>
-          <h2>Rapprochement bancaire</h2>
           <p class="text-muted" style="margin: 4px 0 0;">Importez un relevé bancaire (fichier .csv : date, libellé, montant) pour vérifier que chaque remboursement a bien été payé. Sans compte externe (à la différence d'un flux bancaire automatique type Bridge) : à réimporter manuellement chaque mois.</p>
         </div>
         <div class="detail-header-actions">
@@ -29001,7 +29026,7 @@ function renderRapprochementBancaireCard() {
           }).join('')}
         </div>
       `}
-    </div>
+    </details>
   `;
 }
 
@@ -29401,12 +29426,14 @@ function openExpenseModal(presetEmployeeId, draft, editingExpense) {
                  déclenchait ensuite le pré-remplissage forfaitaire (voir updateExpenseCategoryFields)
                  qui écrasait silencieusement le vrai 0 saisi par l'utilisateur. -->
             ${textField('montantTTC', 'Montant TTC (€)', champs.montantTTC != null ? champs.montantTTC : '', false, 'number')}
-            <div class="form-field">
+            <!-- Retour du 20/11/2026 : le salarié ne connaît pas toujours le taux de TVA ; 20 % est choisi par défaut et le champ n'est visible qu'en dépliant « Modifier la TVA » (ouvert si le taux n'est pas le taux par défaut). -->
+            <details class="form-field expense-tva-details"${champs.tauxTVA !== undefined && Number(champs.tauxTVA) !== TVA_RATES[0] ? ' open' : ''}>
+              <summary id="expense-tva-resume">TVA : ${formatPercentFR(champs.tauxTVA !== undefined ? Number(champs.tauxTVA) : TVA_RATES[0])} (modifier)</summary>
               <label for="f-tauxTVA">Taux de TVA</label>
               <select class="input" id="f-tauxTVA" name="tauxTVA">
                 ${TVA_RATES.map(t => `<option value="${t}" ${champs.tauxTVA !== undefined && Number(champs.tauxTVA) === t ? 'selected' : ''}>${formatPercentFR(t)}</option>`).join('')}
               </select>
-            </div>
+            </details>
             <p class="text-muted" id="expense-ht-tva-hint" style="grid-column: 1 / -1; margin: 0;"></p>
           </div>
           <!-- §retour Betty du 14/09/2026 (Notes de frais point 3, "forfaits journaliers") : montant
@@ -29497,6 +29524,8 @@ function updateExpenseTvaHint() {
   const montant = document.getElementById('f-montantTTC');
   const taux = document.getElementById('f-tauxTVA');
   hint.textContent = ventilationTvaNote(montant ? montant.value : '', taux ? taux.value : 0).texte;
+  const resume = document.getElementById('expense-tva-resume');
+  if (resume && taux) resume.textContent = `TVA : ${formatPercentFR(Number(taux.value))} (modifier)`;
 }
 
 function updateExpenseJustificatifLabel() {
