@@ -607,6 +607,8 @@ const DEFAULT_SETTINGS = {
   // §8 sprint amélioration — personnalise un férié NATIONAL (jamais stocké tel quel, voir
   // getFrenchPublicHolidays) sans le dupliquer dans joursFeriesPersonnalises. Clé = date 'AAAA-MM-JJ'.
   feriesOverrides: {},
+  // Retour du 20/11/2026 : noms personnalisés des fériés nationaux, par nom d'origine (valable pour toutes les années, la date de Pâques/Pentecôte changeant chaque année) : { 'Lundi de Pentecôte': 'Journée de solidarité' }.
+  feriesNoms: {},
   // §9 sprint amélioration — fermetures d'entreprise (plage de dates, pas un jour isolé comme un
   // férié) : { id, nom, dateDebut, dateFin, exceptionsCategories }. Voir isJourTravaillePourSalarie().
   fermetures: [],
@@ -9795,11 +9797,14 @@ function calculerJoursRTTAutoForfaitJours(annee, nombreJoursForfait) {
  * (jamais stocké tel quel, seulement calculé) sans avoir à le dupliquer dans joursFeriesPersonnalises. */
 function getAllPublicHolidays(year, settings) {
   const overrides = settings?.feriesOverrides || {};
+  const noms = settings?.feriesNoms || {};
   const national = getFrenchPublicHolidays(year).map(h => ({
     travaillable: false,
     exceptionsCategories: [],
     ...h,
-    ...(overrides[h.date] || {})
+    labelOriginal: h.label,
+    ...(overrides[h.date] || {}),
+    label: noms[h.label] || h.label
   }));
   const custom = (settings?.joursFeriesPersonnalises || [])
     .filter(h => h.date && h.date.startsWith(String(year)))
@@ -9816,10 +9821,15 @@ function isJourTravaillePourSalarie(dateStr, employee, settings, categoriesSalar
   const empCategorieId = getEffectiveCategorieSalarieId(employee, categories);
 
   const year = Number(dateStr.slice(0, 4));
-  const holiday = getAllPublicHolidays(year, settings).find(h => h.date === dateStr);
-  if (holiday) {
-    const exception = (holiday.exceptionsCategories || []).find(ex => ex.categorieSalarieId === empCategorieId);
-    return exception ? exception.travaillable : holiday.travaillable;
+  // Plusieurs entrées peuvent tomber le même jour (par exemple « Lundi de Pentecôte » et un « Pentecôte cadres » ajouté à côté) : une exception prévue pour la catégorie du salarié
+  // dans N'IMPORTE LAQUELLE l'emporte ; à défaut, c'est la règle par défaut de la première entrée (le férié national s'il y en a un).
+  const feriesDuJour = getAllPublicHolidays(year, settings).filter(h => h.date === dateStr);
+  if (feriesDuJour.length) {
+    for (const h of feriesDuJour) {
+      const exception = (h.exceptionsCategories || []).find(ex => ex.categorieSalarieId === empCategorieId);
+      if (exception) return exception.travaillable;
+    }
+    return feriesDuJour[0].travaillable;
   }
 
   const fermeture = (settings.fermetures || []).find(f => dateStr >= f.dateDebut && dateStr <= f.dateFin);

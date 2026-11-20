@@ -2711,13 +2711,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.4';
+const APP_VERSION = '2026.11.20.5';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paramètres > Calendrier : le nom de chaque jour férié est modifiable (bouton « Modifier »), y compris les fériés nationaux : le nouveau nom s'applique à toutes les années. Quand deux entrées tombent le même jour (par exemple un « Pentecôte cadres » ajouté à côté du lundi de Pentecôte), l'exception prévue pour la catégorie du salarié dans l'une ou l'autre est maintenant bien prise en compte ; avant, seule la première entrée comptait et le bouton de la seconde ouvrait la première.",
+      "Tableau des compteurs : la colonne « Total RTT » affiche un tiret (et non « 0,00 j ») pour un salarié qui n'a aucun RTT. Quand le type de congé a des paliers d'ancienneté et qu'aucun ne s'applique à un salarié, le tableau l'explique sous le solde (« acquis 0,00 » ressemblait à une erreur de calcul), et la fenêtre du type signale l'absence de ligne « 0 an » avec un bouton pour l'ajouter.",
       "Finitions de design : les indicateurs et les cartes de l'accueil remplissent toute la largeur (plus de dernière ligne à moitié vide), les graphiques à barres ont des textes lisibles (ils étaient réduits à environ 9 px), les libellés trop longs sont raccourcis avec l'infobulle complète, et l'anneau « Répartition par type de contrat » distingue maintenant chaque segment (camaïeu marine et or, avec la même pastille dans la légende).",
       "Accueil du RH, du manager et du propriétaire : les « Accès rapides » sont maintenant sous le Centre d'action, et les rubriques d'échéances sans rien à montrer (fins de contrat, périodes d'essai, etc.) sont regroupées sur une seule ligne « Rien à signaler ». Notes de frais : plus de barre de filtres vide, la carte « Rapprochement bancaire » est repliée par défaut (elle s'ouvre seule s'il reste des lignes à rapprocher), et le taux de TVA du formulaire est rangé sous « TVA : 20 % (modifier) ».",
       "Plus simple à utiliser : sur l'accueil du salarié, « Demander un congé » est en haut (il ouvre directement le formulaire, avec « Congés payés » déjà choisi et le solde restant affiché juste sous les dates) ; seuls les soldes qui comptent au quotidien sont affichés, les autres sont sous « Voir les autres soldes ». La page Congés n'affiche plus de filtres inutiles à un salarié. Sur la page Salariés, un seul bouton plein (« + Nouveau salarié »), les imports, exports, registre et index égalité sont sous « Plus d'actions ». Dans le menu, les deux calendriers deviennent « Mon calendrier » et « Calendrier de l'équipe », et « Ma retraite » et « Formation » sont rangés sous « Plus ».",
@@ -10966,7 +10968,7 @@ function compteurNonConcerne(employee, type, balance) {
   return !(balance && (balance.acquis || balance.pris || balance.enAttente || balance.ajustement));
 }
 
-function renderTableauCompteursCell(b) {
+function renderTableauCompteursCell(b, employee, type) {
   if (b.disponible === Infinity) return `<div class="tc-disponible">Illimité</div>`;
   const detail = [`acquis ${formatDurationFR(b.acquis)}`, `pris ${formatDurationFR(b.pris)}`];
   if (b.enAttente) detail.push(`attente ${formatDurationFR(b.enAttente)}`);
@@ -10983,11 +10985,17 @@ function renderTableauCompteursCell(b) {
     ? `<div class="tc-convention text-muted">Dont ${formatDurationFR(b.conventionCollectiveBonus)} de congé(s) d'ancienneté (convention collective), à confirmer avec votre expert-comptable/juriste.</div>`
     : '';
   const niveau = b.disponible < 0 ? ' tc-solde-negatif' : b.disponible <= 1 ? ' tc-solde-bas' : '';
+  // Un type à paliers d'ancienneté qui ne donne AUCUN droit à ce salarié (aucune ligne « 0 an » applicable à sa catégorie, ou premier palier pas encore atteint) : on le dit ici, sinon
+  // « acquis 0,00 » ressemble à un bug de calcul alors que c'est le réglage du type.
+  const sansPalier = employee && type && (type.paliersAnciennete || []).length && resolveAncienneteAcquisAnnuel(type, employee, new Date()) === 0
+    ? `<div class="tc-alerte">Aucun palier d'ancienneté ne s'applique à ce salarié : aucun jour acquis. À vérifier dans Paramètres > Congés et absences > ${escapeHtml(type.nom)} (ajoutez une ligne « 0 an »).</div>`
+    : '';
   return `
     <div class="tc-disponible${niveau}">${formatDurationFR(b.disponible)}</div>
     ${periode}
     <div class="tc-detail text-muted">${detail.join(' · ')}</div>
     ${enCours}
+    ${sansPalier}
     ${conventionBonus}
   `;
 }
@@ -11013,7 +11021,9 @@ function renderTableauCompteurs() {
   const avecTotalRtt = colonnesRtt.length >= 2;
   const totalRtt = (balances, employee) => {
     const finis = colonnesRtt.filter(i => !(employee && leaveTypes[i].actif && compteurNonConcerne(employee, leaveTypes[i], balances[i]))).map(i => balances[i]).filter(b => b.disponible !== Infinity);
-    return { disponible: finis.reduce((somme, b) => somme + b.disponible, 0), pris: finis.reduce((somme, b) => somme + b.pris, 0) };
+    // aucunRtt : la personne n'est concernée par aucun type RTT (tous réservés à d'autres ou décochés) : un tiret plutôt qu'un « 0,00 j » trompeur.
+    const concernes = colonnesRtt.filter(i => !(employee && leaveTypes[i].actif && compteurNonConcerne(employee, leaveTypes[i], balances[i])));
+    return { aucunRtt: Boolean(employee) && concernes.length === 0, disponible: finis.reduce((somme, b) => somme + b.disponible, 0), pris: finis.reduce((somme, b) => somme + b.pris, 0) };
   };
 
   return `
@@ -11059,8 +11069,8 @@ function renderTableauCompteurs() {
                 ${pageItems.map(row => `
                   <tr>
                     <td data-label="Salarié" class="row-title">${personNameHtml(row.employee)}</td>
-                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif && !(b.pris || b.enAttente) ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b)}</td>`).join('')}
-                    ${avecTotalRtt ? (() => { const t = totalRtt(row.balances, row.employee); return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><div class="tc-disponible${t.disponible < 0 ? ' tc-solde-negatif' : t.disponible <= 1 ? ' tc-solde-bas' : ''}">${formatDurationFR(t.disponible)}</div><div class="tc-detail text-muted">pris ${formatDurationFR(t.pris)}</div></td>`; })() : ''}
+                    ${row.balances.map((b, i) => `<td data-label="${escapeHtml(leaveTypes[i].nom)}" style="text-align: right;" class="${leaveTypes[i].actif ? '' : 'tc-inactif'}">${!leaveTypes[i].actif && !(b.pris || b.enAttente) ? '<span class="text-muted" title="Type non activé : aucun droit n\'est ouvert aux salariés">—</span>' : leaveTypes[i].actif && compteurNonConcerne(row.employee, leaveTypes[i], b) ? '<span class="text-muted" title="Non concerné : ce type est réservé à d\'autres salariés (règle d\'éligibilité)">—</span>' : renderTableauCompteursCell(b, row.employee, leaveTypes[i])}</td>`).join('')}
+                    ${avecTotalRtt ? (() => { const t = totalRtt(row.balances, row.employee); if (t.aucunRtt) return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><span class="text-muted" title="Non concerné : aucun type RTT pour ce salarié">—</span></td>`; return `<td data-label="Total RTT" style="text-align: right;" class="tc-total-rtt"><div class="tc-disponible${t.disponible < 0 ? ' tc-solde-negatif' : t.disponible <= 1 ? ' tc-solde-bas' : ''}">${formatDurationFR(t.disponible)}</div><div class="tc-detail text-muted">pris ${formatDurationFR(t.pris)}</div></td>`; })() : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -20162,6 +20172,10 @@ function openLeaveTypeModal(id, categorie = 'conge') {
               <p class="form-hint"><strong>Exemple :</strong> 0 an → 25 jours, puis 20 ans → 27 jours. Ajoutez une ligne à <strong>0 an</strong> pour le droit de départ : sans elle, un salarié qui n'a pas encore atteint le premier palier n'acquiert rien. Le palier le plus élevé atteint s'applique. Avec une catégorie (Cadre, Non cadre...), la ligne ne concerne qu'elle ; « Toutes les catégories » concerne tout le monde.</p>
               <div id="paliers-anciennete-rows"></div>
               <p class="form-hint" id="paliers-resume" style="margin-top:8px;"></p>
+              <div class="alerte-paliers" id="paliers-alerte" style="display:none;" role="alert">
+                <strong>Aucune ligne « 0 an » pour toutes les catégories.</strong> Les salariés qui n'ont pas encore atteint le premier palier, ou dont la catégorie n'a pas de ligne, n'acquièrent aucun jour.
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-palier-depart">Ajouter la ligne « 0 an »</button>
+              </div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-add-palier" style="margin-top:8px;">+ Ajouter un palier</button>
             </div>
             <div class="form-grid" style="margin-top:14px;">
@@ -20352,7 +20366,17 @@ function openLeaveTypeModal(id, categorie = 'conge') {
         <button type="button" class="btn-icon" style="flex:0 0 auto; margin-bottom:6px;" data-remove-palier="${index}" aria-label="Retirer ce palier" title="Retirer ce palier">${icon(ICONS.close, 12)}</button>
       </div>
     `).join('') + (categories.length ? '' : '<p class="form-hint">Aucune catégorie de salarié n\'est créée : créez « Cadre » et « Non cadre » dans Paramètres > Référentiels pour les proposer ici.</p>');
-    const majResume = () => { const el = document.getElementById('paliers-resume'); if (el) el.innerHTML = resumePaliers(); };
+    const majResume = () => {
+      const el = document.getElementById('paliers-resume');
+      if (el) el.innerHTML = resumePaliers();
+      // Sans ligne de départ à 0 an pour « Toutes les catégories », un salarié qui n'a pas atteint le premier palier (ou dont la catégorie n'a aucune ligne) n'acquiert rien.
+      const alerte = document.getElementById('paliers-alerte');
+      if (alerte) {
+        const actifs = currentPaliers.filter(p => p.ancienneteMin || p.jours);
+        const aLigneDepart = actifs.some(p => !p.categorieSalarieId && !Number(p.ancienneteMin));
+        alerte.style.display = actifs.length && !aLigneDepart ? '' : 'none';
+      }
+    };
     majResume();
     document.querySelectorAll('[data-palier-min]').forEach(el => el.addEventListener('input', (e) => {
       currentPaliers[Number(e.target.dataset.palierMin)].ancienneteMin = Number(e.target.value) || 0;
@@ -20372,6 +20396,12 @@ function openLeaveTypeModal(id, categorie = 'conge') {
       updateAcquisitionUI();
     }));
   }
+  document.getElementById('btn-palier-depart').addEventListener('click', () => {
+    // Droit de départ : à ajuster (25 jours ouvrés pour des congés payés usuels) ; la ligne vide (0 an, 0 jour) serait ignorée à l'enregistrement.
+    currentPaliers.unshift({ ancienneteMin: 0, jours: 25, categorieSalarieId: '' });
+    renderPaliersRows();
+    updateAcquisitionUI();
+  });
   document.getElementById('btn-add-palier').addEventListener('click', () => {
     currentPaliers.push({ ancienneteMin: 0, jours: 0, categorieSalarieId: '' });
     renderPaliersRows();
@@ -24982,7 +25012,7 @@ function renderParametresFeries() {
       <div class="view-header-row" style="padding: 20px 20px 0;">
         <div>
           <h2>Jours fériés ${year}</h2>
-          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement, ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant. Par défaut, personne ne travaille un jour férié ; configurez des exceptions par catégorie si certains salariés doivent le travailler.</p>
+          <p class="text-muted">Les 11 fériés nationaux sont calculés automatiquement (leur nom peut être modifié avec « Modifier »), ajoutez-en d'autres si besoin (jour férié local, fermeture d'entreprise...), ils s'appliquent partout : calendriers, planning, tickets restaurant. Par défaut, personne ne travaille un jour férié ; configurez des exceptions par catégorie si certains salariés doivent le travailler.</p>
         </div>
         <div class="calendar-nav">
           <button class="btn btn-secondary btn-sm" id="btn-feries-prev">← ${year - 1}</button>
@@ -25004,7 +25034,7 @@ function renderParametresFeries() {
                   : '<span class="badge badge-muted">Non</span>'}</td>
               <td>${h.custom ? '<span class="badge badge-info">Ajouté</span>' : ''}</td>
               <td>
-                <button type="button" class="btn-link" data-configure-jour-ferie="${escapeHtml(h.date)}">Configurer</button>
+                <button type="button" class="btn-link" data-configure-jour-ferie="${escapeHtml(h.date)}" data-configure-jour-ferie-label="${escapeHtml(h.label)}">Modifier</button>
                 ${h.custom ? `<button type="button" class="btn-link" data-remove-jour-ferie="${escapeHtml(h.date)}" data-remove-jour-ferie-label="${escapeHtml(h.label)}">Supprimer</button>` : ''}
               </td>
             </tr>
@@ -25021,7 +25051,8 @@ function bindParametresFeriesEvents() {
   document.getElementById('btn-add-jour-ferie').addEventListener('click', () => openJourFerieModal());
   document.querySelectorAll('[data-configure-jour-ferie]').forEach(btn => {
     const year = state.parametresFeriesYear;
-    const holiday = getAllPublicHolidays(year, settingsRepository.getSettings()).find(h => h.date === btn.dataset.configureJourFerie);
+    // Date ET libellé : deux entrées peuvent tomber le même jour (voir getAllPublicHolidays), la date seule ouvrait toujours la première.
+    const holiday = getAllPublicHolidays(year, settingsRepository.getSettings()).find(h => h.date === btn.dataset.configureJourFerie && h.label === btn.dataset.configureJourFerieLabel);
     btn.addEventListener('click', () => openJourFerieModal(holiday));
   });
   document.querySelectorAll('[data-remove-jour-ferie]').forEach(btn => {
@@ -25059,7 +25090,7 @@ function openJourFerieModal(existingHoliday) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>${isNew ? 'Ajouter un jour férié' : 'Configurer ce jour férié'}</h2>
+        <h2>${isNew ? 'Ajouter un jour férié' : 'Modifier ce jour férié'}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="jour-ferie-form">
@@ -25070,7 +25101,8 @@ function openJourFerieModal(existingHoliday) {
           </div>
           <div class="form-field" style="margin-top: 12px;">
             <label for="f-jour-ferie-label">Libellé *</label>
-            <input class="input" type="text" id="f-jour-ferie-label" value="${escapeHtml(existingHoliday?.label || '')}" placeholder="Ex. Vendredi Saint, Fermeture entreprise..." ${!isNew && !existingHoliday.custom ? 'readonly' : ''} required>
+            <input class="input" type="text" id="f-jour-ferie-label" value="${escapeHtml(existingHoliday?.label || '')}" placeholder="Ex. Vendredi Saint, Fermeture entreprise..." required>
+            ${!isNew && !existingHoliday.custom ? `<p class="form-hint">Jour férié national${existingHoliday.labelOriginal && existingHoliday.labelOriginal !== existingHoliday.label ? ` (nom d'origine : ${escapeHtml(existingHoliday.labelOriginal)})` : ''} : le nouveau nom s'applique à toutes les années. Pour revenir au nom d'origine, saisissez-le à nouveau.</p>` : ''}
           </div>
           <div class="form-field form-field-checkbox" style="margin-top: 12px;">
             <input type="checkbox" id="f-jour-ferie-travaillable" ${existingHoliday?.travaillable ? 'checked' : ''}>
@@ -25111,6 +25143,11 @@ function openJourFerieModal(existingHoliday) {
       ];
     } else {
       settings.feriesOverrides = { ...(settings.feriesOverrides || {}), [date]: { travaillable, exceptionsCategories } };
+      // Nom : mémorisé par nom d'origine (valable pour toutes les années) ; le nom d'origine retiré de la liste des noms personnalisés.
+      const original = existingHoliday.labelOriginal || existingHoliday.label;
+      const noms = { ...(settings.feriesNoms || {}) };
+      if (label && label !== original) noms[original] = label; else delete noms[original];
+      settings.feriesNoms = noms;
     }
     settingsRepository.saveSettings(settings);
     state.parametresFeriesYear = Number(date.slice(0, 4));
