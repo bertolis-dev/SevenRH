@@ -4770,3 +4770,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 .expense-tva-details > summary { cursor: pointer; font-size: 13px; color: var(--color-primary-text); padding: 6px 0; }
 .expense-tva-details[open] > summary { margin-bottom: 6px; }
 .echeances-vides { grid-column: 1 / -1; }
+
+/* Retour du 20/11/2026 (finitions de design) : les grilles d'indicateurs et de cartes remplissent toute la largeur, au lieu de laisser une dernière ligne à moitié vide. */
+.kpi-grid { display: flex; flex-wrap: wrap; }
+.kpi-grid > * { flex: 1 1 150px; min-width: 0; }
+.kpi-grid > .kpi-card-hero { flex: 2 1 300px; }
+@media (max-width: 480px) { .kpi-grid > .kpi-card-hero { flex-basis: 100%; } }
+.dashboard-grid { display: flex; flex-wrap: wrap; }
+.dashboard-grid > * { flex: 1 1 320px; min-width: 0; }
+.dashboard-grid > .echeances-vides { flex-basis: 100%; }
+/* Un bouton d'action isolé dans une grille de formulaire garde sa largeur naturelle, il ne s'étire plus sur toute la ligne. */
+.form-grid > #btn-utiliser-comme-siege { justify-self: start; }
+.chart-line { max-width: 560px; margin: 0 auto; }

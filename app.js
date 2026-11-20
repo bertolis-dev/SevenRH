@@ -2711,13 +2711,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.3';
+const APP_VERSION = '2026.11.20.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Finitions de design : les indicateurs et les cartes de l'accueil remplissent toute la largeur (plus de dernière ligne à moitié vide), les graphiques à barres ont des textes lisibles (ils étaient réduits à environ 9 px), les libellés trop longs sont raccourcis avec l'infobulle complète, et l'anneau « Répartition par type de contrat » distingue maintenant chaque segment (camaïeu marine et or, avec la même pastille dans la légende).",
       "Accueil du RH, du manager et du propriétaire : les « Accès rapides » sont maintenant sous le Centre d'action, et les rubriques d'échéances sans rien à montrer (fins de contrat, périodes d'essai, etc.) sont regroupées sur une seule ligne « Rien à signaler ». Notes de frais : plus de barre de filtres vide, la carte « Rapprochement bancaire » est repliée par défaut (elle s'ouvre seule s'il reste des lignes à rapprocher), et le taux de TVA du formulaire est rangé sous « TVA : 20 % (modifier) ».",
       "Plus simple à utiliser : sur l'accueil du salarié, « Demander un congé » est en haut (il ouvre directement le formulaire, avec « Congés payés » déjà choisi et le solde restant affiché juste sous les dates) ; seuls les soldes qui comptent au quotidien sont affichés, les autres sont sous « Voir les autres soldes ». La page Congés n'affiche plus de filtres inutiles à un salarié. Sur la page Salariés, un seul bouton plein (« + Nouveau salarié »), les imports, exports, registre et index égalité sont sous « Plus d'actions ». Dans le menu, les deux calendriers deviennent « Mon calendrier » et « Calendrier de l'équipe », et « Ma retraite » et « Formation » sont rangés sous « Plus ».",
       "Paramètres > Couleurs : les changements ne se voyaient pas quand l'écran était en thème sombre (le thème du système, par exemple). La couleur principale, la mise en avant et le fond s'appliquent maintenant aussi en thème sombre, adaptées pour rester lisibles ; seule la couleur du texte reste claire. Un aperçu s'affiche en direct pendant le choix, et un bouton permet de passer en thème clair pour voir les couleurs exactement comme choisies.",
@@ -9227,6 +9228,9 @@ function renderDashboardProprietaire() {
 // CHART_COLORS[i % CHART_COLORS.length] retombe donc toujours sur cette même teinte.
 const CHART_COLORS = ['var(--color-primary)'];
 
+// Anneaux (répartition par contrat, par genre) : même famille marine + or, mais en camaïeu pour que chaque segment se reconnaisse, avec sa pastille dans la légende.
+const DONUT_COLORS = ['var(--color-primary)', 'var(--color-gold)', 'color-mix(in srgb, var(--color-primary) 55%, white)', 'color-mix(in srgb, var(--color-gold) 55%, white)', 'color-mix(in srgb, var(--color-primary) 30%, white)'];
+
 function getServiceBreakdown(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const counts = {};
@@ -9243,7 +9247,7 @@ function getContratBreakdown(employees) {
   employees = employees || employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
   const counts = {};
   employees.forEach(e => { counts[e.typeContrat] = (counts[e.typeContrat] || 0) + 1; });
-  return Object.entries(counts).map(([label, value], i) => ({ label, value, color: CHART_COLORS[i % CHART_COLORS.length] }));
+  return Object.entries(counts).map(([label, value], i) => ({ label, value, color: DONUT_COLORS[i % DONUT_COLORS.length] }));
 }
 
 function getCongesParType(employeeIds) {
@@ -9768,19 +9772,20 @@ function chartCard(title, subtitleOrContent, maybeContent) {
 }
 
 function renderBarChartSVG(data) {
-  const width = 480;
-  const barHeight = 10;
-  const gap = 18;
-  const labelWidth = 130;
+  // Dessiné à ~la largeur d'affichage (360) : les textes restent à leur taille réelle (12-13 px) au lieu d'être réduits à ~9 px.
+  const width = 360;
+  const barHeight = 12;
+  const gap = 16;
+  const labelWidth = 118;
   const maxValue = Math.max(...data.map(d => d.value), 1);
-  const chartWidth = width - labelWidth - 46;
+  const chartWidth = width - labelWidth - 34;
   const height = data.length * (barHeight + gap) + gap;
 
   const bars = data.map((d, i) => {
     const y = gap + i * (barHeight + gap);
     const barW = Math.max((d.value / maxValue) * chartWidth, 2);
     return `
-      <text x="${labelWidth - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" class="chart-label">${escapeHtml(d.label)}</text>
+      <text x="${labelWidth - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" class="chart-label"><title>${escapeHtml(d.label)}</title>${escapeHtml(String(d.label).length > 17 ? String(d.label).slice(0, 16) + '…' : d.label)}</text>
       <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${escapeHtml(d.color)}" />
       <text x="${labelWidth + barW + 8}" y="${y + barHeight / 2 + 4}" class="chart-value">${d.value}</text>
     `;
@@ -9852,7 +9857,7 @@ function renderLineChartSVG(points) {
   const labels = coords.map(c => `<text x="${c.x}" y="${height - padding + 18}" text-anchor="middle" class="chart-axis-label">${escapeHtml(c.label)}</text>`).join('');
 
   return `
-    <svg viewBox="0 0 ${width} ${height}" class="chart-svg">
+    <svg viewBox="0 0 ${width} ${height}" class="chart-svg chart-line">
       <path d="${areaD}" fill="var(--color-primary-soft)" stroke="none" />
       <path d="${pathD}" fill="none" stroke="var(--color-primary)" stroke-width="2" />
       ${dots}
