@@ -381,8 +381,44 @@ function couleursEntrepriseEffectives() {
   };
 }
 
-/** CSS des couleurs choisies par l'entreprise. Les couleurs générales (principale, texte, mise en avant, fond) ne s'appliquent qu'au thème clair :
- * en thème sombre elles pourraient rendre le texte illisible. Les couleurs des espaces valent pour les deux thèmes. */
+/** Luminance relative (WCAG) et rapport de contraste entre deux couleurs hexadécimales. */
+function luminanceHex(hex) {
+  const [r, g, b] = hexVersRgb(hex).map(v => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrasteHex(a, b) {
+  const la = luminanceHex(a), lb = luminanceHex(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+/** Éclaircit `hex` (mélange avec du blanc) jusqu'à atteindre `min` de contraste face à `fond` ; inchangé s'il l'atteint déjà. */
+function eclaircirJusquAuContraste(hex, fond, min) {
+  for (let ratio = 0; ratio <= 1.0001; ratio += 0.05) {
+    const c = melangerHex(hex, '#ffffff', Math.min(ratio, 1));
+    if (contrasteHex(c, fond) >= min) return c;
+  }
+  return '#ffffff';
+}
+
+/** Fonds du thème sombre (mêmes valeurs que style.css) : les couleurs choisies sont adaptées à ces fonds, jamais posées telles quelles. */
+const SOMBRE_FOND = '#14161a';
+const SOMBRE_SURFACE = '#1c1f26';
+
+/** Les couleurs générales choisies, adaptées au thème sombre : une couleur claire de fond ou de texte y serait illisible,
+ * donc le texte reste clair, le fond devient une version sombre de la teinte choisie, et la couleur principale / de mise en avant
+ * est éclaircie juste ce qu'il faut pour rester lisible (boutons visibles sur les cartes, liens lisibles). */
+function genererCssGeneralesSombre(c) {
+  let css = '';
+  if (couleurHexValide(c.principale)) {
+    const bouton = eclaircirJusquAuContraste(c.principale, SOMBRE_SURFACE, 2.5);
+    css += `--color-primary:${bouton};--color-primary-hover:${melangerHex(bouton, '#000000', 0.2)};--color-primary-soft:${melangerHex(bouton, SOMBRE_SURFACE, 0.82)};--color-primary-text:${eclaircirJusquAuContraste(c.principale, SOMBRE_SURFACE, 4.5)};--color-chip-bg:${melangerHex(bouton, SOMBRE_SURFACE, 0.45)};`;
+  }
+  if (couleurHexValide(c.miseEnAvant)) css += `--color-gold:${eclaircirJusquAuContraste(c.miseEnAvant, SOMBRE_SURFACE, 3)};--color-gold-soft:${melangerHex(c.miseEnAvant, SOMBRE_FOND, 0.85)};`;
+  if (couleurHexValide(c.fond)) css += `--color-bg:${melangerHex(c.fond, '#0c0d10', 0.95)};`;
+  return css;
+}
+
+/** CSS des couleurs choisies par l'entreprise, pour le thème clair (telles quelles) ET le thème sombre (adaptées, voir genererCssGeneralesSombre ;
+ * seule la couleur du texte n'y est pas reprise, il doit rester clair). Les couleurs des espaces valent pour les deux thèmes. */
 function genererCssCouleursEntreprise(couleurs) {
   const c = couleurs || {};
   let generales = '';
@@ -398,7 +434,17 @@ function genererCssCouleursEntreprise(couleurs) {
   }).join('');
   let css = espaces ? `:root{${espaces}}` : '';
   if (generales) css += `@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){${generales}}}:root[data-theme="light"]{${generales}}`;
+  const sombre = genererCssGeneralesSombre(c);
+  if (sombre) css += `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${sombre}}}:root[data-theme="dark"]{${sombre}}`;
   return css;
+}
+
+/** Vrai si l'écran est actuellement en thème sombre (choix manuel, ou thème du système quand rien n'est choisi). */
+function themeSombreActif() {
+  const choix = document.documentElement.getAttribute('data-theme');
+  if (choix === 'dark') return true;
+  if (choix === 'light') return false;
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) { return false; }
 }
 
 function appliquerCouleursEntreprise() {
@@ -442,6 +488,7 @@ function renderParametresCouleurs() {
     <div class="card">
       <h2>Couleurs</h2>
       <p class="text-muted">Personnalisez l'apparence de Nexus aux couleurs de votre entreprise. Chaque changement s'applique tout de suite à tous vos salariés.</p>
+      ${themeSombreActif() ? `<p class="form-hint" id="couleurs-info-sombre"><strong>Votre écran est en thème sombre.</strong> Les couleurs s'y adaptent (fond assombri, couleurs éclaircies pour rester lisibles) et la couleur du texte n'y est pas reprise. Pour voir vos couleurs exactement comme choisies : <button type="button" class="btn btn-secondary btn-sm" id="btn-couleurs-theme-clair">Passer en thème clair</button></p>` : ''}
       <div class="couleurs-generales">
         ${champ('principale', 'Principale (boutons et actions)', 'Boutons, liens et éléments actifs')}
         ${champ('menuTexte', 'Texte et menu', 'Couleur du texte principal')}
@@ -455,14 +502,21 @@ function renderParametresCouleurs() {
         <span class="couleurs-apercu-miseenavant">Mise en avant</span>
       </div>
       ${ESPACES_COULEURS.map(ligne).join('')}
-      <p class="form-hint">La palette d'un espace colore le liseré en haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Les couleurs d'état (validé, en attente, refusé) restent fixes pour être reconnues partout. Les couleurs générales s'appliquent au thème clair ; le thème sombre garde ses couleurs pour rester lisible.</p>
+      <p class="form-hint">La palette d'un espace colore le liseré en haut de l'écran, l'élément actif du menu, la ligne des titres de ses tableaux et une ligne sur deux. Les couleurs d'état (validé, en attente, refusé) restent fixes pour être reconnues partout. En thème sombre, vos couleurs sont adaptées automatiquement pour rester lisibles (la couleur du texte y reste claire).</p>
       <div style="margin-top: 14px;"><button type="button" class="btn btn-secondary btn-sm" id="btn-couleurs-reinitialiser">Revenir aux couleurs de Nexus</button></div>
     </div>
   `;
 }
 
 function bindParametresCouleursEvents() {
+  const themeClair = document.getElementById('btn-couleurs-theme-clair');
+  if (themeClair) themeClair.addEventListener('click', () => { applyThemePreference('light'); render(); });
   document.querySelectorAll('[data-couleur]').forEach(champ => {
+    // Aperçu en direct pendant qu'on déplace le curseur du sélecteur (rien n'est enregistré avant la validation du choix).
+    champ.addEventListener('input', () => {
+      const balise = document.getElementById('couleurs-entreprise');
+      if (balise && couleurHexValide(champ.value)) balise.textContent = genererCssCouleursEntreprise(Object.assign({}, couleursEntrepriseEffectives(), { [champ.dataset.couleur]: champ.value }));
+    });
     champ.addEventListener('change', () => {
       enregistrerCouleursEntreprise({ [champ.dataset.couleur]: champ.value });
       showToast('Couleur enregistrée.');
@@ -2657,13 +2711,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.19.6';
+const APP_VERSION = '2026.11.20.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Paramètres > Couleurs : les changements ne se voyaient pas quand l'écran était en thème sombre (le thème du système, par exemple). La couleur principale, la mise en avant et le fond s'appliquent maintenant aussi en thème sombre, adaptées pour rester lisibles ; seule la couleur du texte reste claire. Un aperçu s'affiche en direct pendant le choix, et un bouton permet de passer en thème clair pour voir les couleurs exactement comme choisies.",
       "Modèles d'import et exports Excel : les fichiers sont maintenant de vrais classeurs .xlsx. Ils portaient jusqu'ici l'extension « .xls » alors que leur contenu était du XML, ce qu'Excel signalait comme suspect et qui pouvait faire perdre la saisie. Mêmes couleurs, mêmes colonnes, première ligne figée. Les anciens modèles .xls restent importables.",
       "Import des salariés : une colonne « Sexe » (Homme/Femme, H/F, M/Mme, ou une colonne « Civilité ») est maintenant reconnue et reprise sur la fiche, qui n'a plus à être complétée à la main avant de pouvoir la modifier. Le modèle téléchargeable l'inclut, et l'écran de fin signale les fiches créées sans sexe. L'historique d'une demande refusée nomme maintenant qui a refusé (« Refusé (par Manager) »), comme pour une validation.",
       "Tableau des compteurs : un type décoché dans « Types d'absences autorisés » de la fiche d'un salarié (par exemple les deux RTT) n'affiche plus de solde dans le tableau, comme c'était déjà le cas dans sa fiche. Les totaux (Total RTT, pied de tableau) et l'export Excel suivent la même règle. Le compteur reste visible s'il y a des jours pris, une demande en attente ou un ajustement manuel.",
