@@ -769,6 +769,7 @@ const NAV_ITEMS = [
   // voir ni créer aucun salarié — donc jamais poser aucune demande de congé non plus, ce qui rendait
   // le module congés invendable seul. Le module 'rh' reste sur organigramme/export-paie/mes-documents
   // (coffre-fort, préparation de paie), qui restent des fonctionnalités RH à part entière.
+  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe', navParams: { ticketsRestaurantVue: 'equipe' }, module: 'tickets' },
   { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
   // §retour QA du 26/08/2026 (point 7.2) : vue d'ensemble des soldes de congés, un manager ne voit
   // que son équipe (même portée que "Salariés" ci-dessus, via getVisibleEmployeeIdsForCurrentUser).
@@ -795,7 +796,8 @@ const NAV_ITEMS = [
   // §sprint refonte UX §10 : ouvert à tous désormais (vue personnelle par défaut) — RH/Comptabilité/
   // Propriétaire gardent la vue équipe existante via la même bascule Moi/Équipe (§9), plutôt que 2
   // entrées de menu distinctes pour un même écran.
-  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'tickets' },
+  // Retour du 20/11/2026 : « Tickets restaurant » de Mon espace ouvrait la vue ÉQUIPE (valeur par défaut de ticketsRestaurantVue) ; même patron que Calendrier : une entrée par vue.
+  { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', navParams: { ticketsRestaurantVue: 'personnel' }, module: 'tickets' },
   // §demande Betty du 11/09/2026 : pointage arrivée/départ par QR — ouvert à TOUT rôle (chacun
   // pointe pour soi-même, même patron que "Tickets restaurant" ci-dessus), gated par le nouveau
   // module "pointage" (voir LANDING_ALACARTE_MODULES).
@@ -2711,13 +2713,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.5';
+const APP_VERSION = '2026.11.20.6';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tickets restaurant : « Mes tickets restaurant » (Mon espace) ouvre maintenant votre vue personnelle ; il ouvrait la vue de l'équipe. La vue de l'équipe a sa propre entrée, « Tickets de l'équipe », dans Mon équipe (comme pour le calendrier), et les liens de l'accueil vers les tickets y mènent directement.",
       "Paramètres > Calendrier : le nom de chaque jour férié est modifiable (bouton « Modifier »), y compris les fériés nationaux : le nouveau nom s'applique à toutes les années. Quand deux entrées tombent le même jour (par exemple un « Pentecôte cadres » ajouté à côté du lundi de Pentecôte), l'exception prévue pour la catégorie du salarié dans l'une ou l'autre est maintenant bien prise en compte ; avant, seule la première entrée comptait et le bouton de la seconde ouvrait la première.",
       "Tableau des compteurs : la colonne « Total RTT » affiche un tiret (et non « 0,00 j ») pour un salarié qui n'a aucun RTT. Quand le type de congé a des paliers d'ancienneté et qu'aucun ne s'applique à un salarié, le tableau l'explique sous le solde (« acquis 0,00 » ressemblait à une erreur de calcul), et la fenêtre du type signale l'absence de ligne « 0 an » avec un bouton pour l'ajouter.",
       "Finitions de design : les indicateurs et les cartes de l'accueil remplissent toute la largeur (plus de dernière ligne à moitié vide), les graphiques à barres ont des textes lisibles (ils étaient réduits à environ 9 px), les libellés trop longs sont raccourcis avec l'infobulle complète, et l'anneau « Répartition par type de contrat » distingue maintenant chaque segment (camaïeu marine et or, avec la même pastille dans la légende).",
@@ -8237,6 +8240,7 @@ function renderSidebar() {
   const renderItem = (item, index) => {
     let label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
     if (item.key === 'calendrier' && aSectionEquipe) label = item.group === 'equipe' ? "Calendrier de l'équipe" : 'Mon calendrier';
+    if (item.key === 'tickets' && aSectionEquipe) label = item.group === 'equipe' ? "Tickets de l'équipe" : 'Mes tickets restaurant';
     return `
     <button class="nav-item ${isNavItemActive(item, items) ? 'active' : ''}" data-nav-index="${index}" aria-label="${escapeHtml(label)}">
       <span class="nav-icon">${item.icon}</span>
@@ -8983,7 +8987,7 @@ function renderDashboardActionCenter(employees, employeeIds) {
     const settings = settingsRepository.getSettings();
     const totalTickets = employees.filter(e => e.statut === 'Actif')
       .reduce((sum, e) => sum + calculateTicketsRestaurant(e, now.getFullYear(), now.getMonth(), leaveRequests, teleworkRequests, settings).nbTickets, 0);
-    items.push({ icon: ICONS.utensils, label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: {} });
+    items.push({ icon: ICONS.utensils, label: `${totalTickets} tickets restaurant ce mois-ci à vérifier`, nav: 'tickets', navParams: { ticketsRestaurantVue: 'equipe' } });
   }
 
   if (!items.length) return '';
@@ -9013,7 +9017,7 @@ function renderDashboardShortcuts() {
         ${ifModule('conges', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>`)}
         ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Gérer le télétravail</button>`)}
         ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>`)}
-        ${ifModule('tickets', `<button class="btn btn-secondary" data-nav="tickets">Voir les tickets restaurant</button>`)}
+        ${ifModule('tickets', `<button class="btn btn-secondary" data-nav="tickets" data-nav-params='{"ticketsRestaurantVue":"equipe"}'>Voir les tickets restaurant</button>`)}
       </div>
     </div>
   `;
