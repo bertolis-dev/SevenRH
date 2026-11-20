@@ -858,6 +858,7 @@ const SOURCE_KEY_MODULE_RULES = [
   { prefix: 'probation-end-', module: 'rh' },
   { prefix: 'visite-medicale-', module: 'rh' },
   { prefix: 'document-expiry-', module: 'rh' },
+  { prefix: 'voiture-fin-', module: 'rh' },
   { prefix: 'entretien-', module: 'entretiens' },
   { prefix: 'formation-', module: 'entretiens' },
   { prefix: 'ticket-status-', module: null }, // support : fonctionnalité de base, jamais liée à un module à la carte
@@ -1085,7 +1086,7 @@ async function releaseModuleLicensesForDeparture(employee) {
   const labels = liberees.map(key => (LANDING_ALACARTE_MODULES.find(m => m.key === key) || {}).label || key);
   notificationRepository.addNotificationsIfNew([
     makeNotification(`licence-liberee-${employee.id}-${Date.now()}`, ICONS.card, 'Licence(s) libérée(s)',
-      `${employee.prenom} ${employee.nom} a quitté l'entreprise : accès retiré pour ${labels.join(', ')}. Le siège reste disponible pour un autre salarié.`,
+      `${nomCompletAffiche(employee)} a quitté l'entreprise : accès retiré pour ${labels.join(', ')}. Le siège reste disponible pour un autre salarié.`,
       'parametres', { parametresTab: 'abonnement' }, employee.id)
   ]);
   updateNotifBadge();
@@ -2713,13 +2714,17 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.6';
+const APP_VERSION = '2026.11.20.7';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Voiture de société : dans l'onglet Contrat de la fiche, une carte « Voiture de société » (bouton « Attribuer une voiture » pour ceux qui en ont une, rien pour les autres) : marque, modèle, immatriculation, énergie, mode de détention (LLD, LOA, achat), loueur, numéro de contrat, début et fin du contrat, kilométrage annuel prévu et à la remise, carte carburant, usage privé et notes. Le RH est prévenu 90, 30 et 7 jours avant la fin du contrat (notification et carte sur l'accueil).",
+      "Calendrier de l'équipe : les colonnes des premiers jours du mois ne s'élargissent plus quand des vacances scolaires (par exemple celles de la Toussaint) ne couvrent que un ou deux jours du mois, et les lignes ne sont plus grisées en alternance (certains services paraissaient grisés, d'autres non). Le filtre « Tous les services » a la même taille que les deux boutons à côté, et le point de couleur devant le titre de chaque page ainsi que le liseré de couleur en haut de l'écran sont retirés. Les couleurs des types d'absence du calendrier sont plus franchement différentes (Maladie en rouge, Ancienneté en rose, Formation en vert, Télétravail en sarcelle) ; un type dont vous avez choisi la couleur dans Paramètres la garde.",
+      "Le nom d'usage d'un salarié s'affiche maintenant partout dans l'application (fiche, listes, calendrier, notifications, recherche) à la place de son nom de naissance. Les documents officiels (registre, paie, attestations, contrats) et le journal d'audit gardent le nom légal.",
+      "Message d'échec de synchronisation : il indique maintenant la cause technique, pour pouvoir la corriger.",
       "Tickets restaurant : « Mes tickets restaurant » (Mon espace) ouvre maintenant votre vue personnelle ; il ouvrait la vue de l'équipe. La vue de l'équipe a sa propre entrée, « Tickets de l'équipe », dans Mon équipe (comme pour le calendrier), et les liens de l'accueil vers les tickets y mènent directement.",
       "Paramètres > Calendrier : le nom de chaque jour férié est modifiable (bouton « Modifier »), y compris les fériés nationaux : le nouveau nom s'applique à toutes les années. Quand deux entrées tombent le même jour (par exemple un « Pentecôte cadres » ajouté à côté du lundi de Pentecôte), l'exception prévue pour la catégorie du salarié dans l'une ou l'autre est maintenant bien prise en compte ; avant, seule la première entrée comptait et le bouton de la seconde ouvrait la première.",
       "Tableau des compteurs : la colonne « Total RTT » affiche un tiret (et non « 0,00 j ») pour un salarié qui n'a aucun RTT. Quand le type de congé a des paliers d'ancienneté et qu'aucun ne s'applique à un salarié, le tableau l'explique sous le solde (« acquis 0,00 » ressemblait à une erreur de calcul), et la fenêtre du type signale l'absence de ligne « 0 an » avec un bouton pour l'ajouter.",
@@ -7407,11 +7412,11 @@ function performGlobalSearch(term) {
   const isVisible = (employeeId) => visibleIds === null || visibleIds.includes(employeeId);
 
   employeeRepository.getAll().filter(e => !e.archive && isVisible(e.id)).forEach(e => {
-    const haystack = normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste} ${e.service}`);
+    const haystack = normalizeForSearch(`${e.prenom} ${e.nom} ${e.nomUsage || ''} ${e.matricule} ${e.email} ${e.poste} ${e.service}`);
     if (haystack.includes(q)) {
       results.push({
         icon: favoriteRepository.isFavoriteEmployee(e.id) ? ICONS.star : ICONS.person,
-        label: `${e.prenom} ${e.nom}`,
+        label: `${nomCompletAffiche(e)}`,
         sublabel: getPosteAccorde(e, settings) || e.service || 'Salarié',
         nav: 'employee-detail',
         params: { currentEmployeeId: e.id }
@@ -7428,11 +7433,11 @@ function performGlobalSearch(term) {
     const employee = employeeRepository.getById(r.employeeId);
     const type = leaveTypeRepository.getLeaveTypeById(r.typeId);
     if (!employee || !type || !isVisible(employee.id)) return;
-    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${type.nom} congé`);
+    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''} ${type.nom} congé`);
     if (haystack.includes(q)) {
       results.push({
         icon: type.icone,
-        label: `${employee.prenom} ${employee.nom} · ${type.nom}`,
+        label: `${nomCompletAffiche(employee)} · ${type.nom}`,
         sublabel: `Congé · ${formatDate(r.dateDebut)} · ${r.statut}`,
         nav: 'absences',
         params: { absencesHubTab: 'conges', congesTab: 'demandes' }
@@ -7443,10 +7448,10 @@ function performGlobalSearch(term) {
   if (hasModule('planning')) teleworkRepository.getAll().forEach(r => {
     const employee = employeeRepository.getById(r.employeeId);
     if (!employee || !isVisible(employee.id)) return;
-    if (normalizeForSearch(`${employee.prenom} ${employee.nom} télétravail`).includes(q)) {
+    if (normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''} télétravail`).includes(q)) {
       results.push({
         icon: ICONS.laptop,
-        label: `${employee.prenom} ${employee.nom}`,
+        label: `${nomCompletAffiche(employee)}`,
         sublabel: `Télétravail · ${formatDate(r.dateDebut)} · ${r.statut}`,
         nav: 'absences',
         params: { absencesHubTab: 'teletravail', teletravailTab: 'demandes' }
@@ -7457,11 +7462,11 @@ function performGlobalSearch(term) {
   if (hasModule('frais')) expenseRepository.getAll().forEach(n => {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee || !isVisible(employee.id)) return;
-    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${n.categorie} ${n.libelle}`);
+    const haystack = normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''} ${n.categorie} ${n.libelle}`);
     if (haystack.includes(q)) {
       results.push({
         icon: ICONS.receipt,
-        label: `${employee.prenom} ${employee.nom} · ${n.libelle}`,
+        label: `${nomCompletAffiche(employee)} · ${n.libelle}`,
         sublabel: `Note de frais · ${formatCurrencyFR(n.montantTTC)} · ${n.statut}`,
         nav: 'frais',
         params: {}
@@ -7738,14 +7743,14 @@ async function pushRelanceNotificationsForRequest(candidates, request, domain, n
   const validatorIds = await resolveValidatorEmployeeIdsForStep(request.employeeId, role, overrideIds);
 
   candidates.push(makeNotification(`relance-${request.id}`, ICONS.clock, 'Demande en attente depuis plusieurs jours',
-    `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
+    `${nomCompletAffiche(employee)} · ${typeLabel} · en attente depuis ${joursEnAttente} jours`, nav, navParams, request.employeeId));
   if (!notificationRepository.getNotifications().some(n => n.sourceKey === `relance-${request.id}`)) {
     window.SupabaseSync.notifyRequestEmail(request.id, domain, 'relance').catch(() => {});
   }
 
   if (joursEnAttente < ESCALADE_APRES_JOURS) return;
   candidates.push(makeNotification(`escalade-${request.id}`, ICONS.warningTriangle, 'Demande en attente, remontée',
-    `${employee.prenom} ${employee.nom} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
+    `${nomCompletAffiche(employee)} · ${typeLabel} · en attente depuis ${joursEnAttente} jours, aucune action du validateur habituel`, nav, navParams, request.employeeId));
   if (!notificationRepository.getNotifications().some(n => n.sourceKey === `escalade-${request.id}`) && validatorIds.length) {
     window.SupabaseSync.notifyRequestEmail(request.id, domain, 'relance').catch(() => {});
   }
@@ -7794,7 +7799,7 @@ async function syncNotifications() {
     if (!employee || !type) return;
     const navParams = { absencesHubTab: type.categorie === 'autre' ? 'autres' : 'conges', congesTab: 'demandes' };
     candidates.push(makeNotification(`leave-${r.id}`, ICONS.sun, 'Demande de congé en attente',
-      `${employee.prenom} ${employee.nom} · ${type.nom}`, 'absences', navParams, employee.id));
+      `${nomCompletAffiche(employee)} · ${type.nom}`, 'absences', navParams, employee.id));
     relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'conge', 'absences', navParams, type.nom));
   });
 
@@ -7803,7 +7808,7 @@ async function syncNotifications() {
     if (!employee) return;
     const navParams = { absencesHubTab: 'teletravail', teletravailTab: 'demandes' };
     candidates.push(makeNotification(`telework-${r.id}`, ICONS.laptop, 'Demande de télétravail en attente',
-      `${employee.prenom} ${employee.nom}`, 'absences', navParams, employee.id));
+      `${nomCompletAffiche(employee)}`, 'absences', navParams, employee.id));
     relancePromises.push(pushRelanceNotificationsForRequest(candidates, r, 'teletravail', 'absences', navParams, 'Télétravail'));
   });
 
@@ -7811,7 +7816,7 @@ async function syncNotifications() {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
-      `${employee.prenom} ${employee.nom} · ${n.libelle}`, 'frais', {}, employee.id));
+      `${nomCompletAffiche(employee)} · ${n.libelle}`, 'frais', {}, employee.id));
     relancePromises.push(pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', {}, n.libelle || n.categorie || 'Note de frais'));
   });
 
@@ -7840,7 +7845,7 @@ async function syncNotifications() {
         // Deux paliers (brief du 12/10/2026, C3) : au délai réglé, puis 14 jours avant — chacun notifié une fois.
         // Le premier palier garde l'ancienne clé pour ne pas dupliquer les rappels déjà envoyés.
         const cle = `cloture-perte-${type.id}-${employee.id}-${toISODate(current.periodEnd)}`;
-        const texte = `${employee.prenom} ${employee.nom} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`;
+        const texte = `${nomCompletAffiche(employee)} · ${type.nom} · ${formatDurationFR(perdu)} non pris, perdus si non utilisés avant le ${formatDate(toISODate(current.periodEnd))}`;
         candidates.push(makeNotification(cle, ICONS.warningTriangle, 'Congés à perdre avant la clôture', texte, 'absences', { absencesHubTab: 'conges' }, employee.id));
         if (joursAvantCloture <= 14) candidates.push(makeNotification(`${cle}-j14`, ICONS.warningTriangle, 'Dernière chance : congés à perdre sous 14 jours', texte, 'absences', { absencesHubTab: 'conges' }, employee.id));
       });
@@ -7856,7 +7861,7 @@ async function syncNotifications() {
     if (!employee) return;
     candidates.push(makeNotification(`ticket-status-${t.id}-${t.statut}-${t.dateModification}`, ICONS.ticket,
       t.statut === 'livre' ? 'Ticket livré' : 'Ticket résolu',
-      `${employee.prenom} ${employee.nom} · ${t.titre}`, 'mes-tickets', {}, employee.id));
+      `${nomCompletAffiche(employee)} · ${t.titre}`, 'mes-tickets', {}, employee.id));
   });
 
   // Un entretien planifié par RH ne devait auparavant être découvert qu'en visitant "Entretiens" —
@@ -7867,7 +7872,7 @@ async function syncNotifications() {
     const employee = employeeRepository.getById(e.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`entretien-${e.id}-${e.dateCreation}`, ICONS.notepad, 'Entretien planifié',
-      `${employee.prenom} ${employee.nom} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${e.heurePrevue}` : ''}`, 'entretiens', {}, employee.id));
+      `${nomCompletAffiche(employee)} · ${ENTRETIEN_TYPE_LABELS[e.type] || e.type} le ${formatDate(e.datePrevue)}${e.heurePrevue ? ` à ${e.heurePrevue}` : ''}`, 'entretiens', {}, employee.id));
   });
 
   // Formation (retour du 21/10/2026) : une demande à traiter prévient le manager/RH (le salarié concerné en est le sujet), une décision prévient le salarié.
@@ -7876,10 +7881,10 @@ async function syncNotifications() {
     if (!employee) return;
     if (f.statut === 'demandee') {
       candidates.push(makeNotification(`formation-demande-${f.id}`, ICONS.graduation, 'Demande de formation',
-        `${employee.prenom} ${employee.nom} · ${f.intitule}`, 'formation', {}, employee.id));
+        `${nomCompletAffiche(employee)} · ${f.intitule}`, 'formation', {}, employee.id));
     } else if ((f.statut === 'acceptee' || f.statut === 'refusee') && f.decisionDate) {
       candidates.push(makeNotification(`formation-decision-${f.id}-${f.statut}`, ICONS.graduation, f.statut === 'acceptee' ? 'Formation acceptée' : 'Formation refusée',
-        `${employee.prenom} ${employee.nom} · ${f.intitule}`, 'formation', {}, employee.id));
+        `${nomCompletAffiche(employee)} · ${f.intitule}`, 'formation', {}, employee.id));
     }
   });
 
@@ -7892,24 +7897,24 @@ async function syncNotifications() {
   // — celui-ci l'a simplement été, pas les sept ci-dessous).
   if (hasModule('rh')) getUpcomingBirthdays(7, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`birthday-${x.employee.id}-${x.next.getFullYear()}`, ICONS.cake, 'Anniversaire à venir',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+      `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingSeniorityAnniversaries(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`seniority-${x.employee.id}-${x.years}`, ICONS.medal, `${x.years} ans d'ancienneté`,
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+      `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingContractEnds(14, undefined, Infinity).forEach(e => {
     const titre = e.dateFinContrat < toISODate(new Date()) ? 'Fin de contrat dépassée' : 'Fin de contrat proche';
     candidates.push(makeNotification(`contract-end-${e.id}-${e.dateFinContrat}`, ICONS.document, titre,
-      `${e.prenom} ${e.nom} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
+      `${nomCompletAffiche(e)} · ${formatDate(e.dateFinContrat)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
   if (hasModule('rh')) getUpcomingProbationEnds(14, undefined, Infinity).forEach(e => {
     const titre = e.dateFinPeriodeEssai < toISODate(new Date()) ? 'Fin de période d\'essai dépassée' : 'Fin de période d\'essai proche';
     candidates.push(makeNotification(`probation-end-${e.id}-${e.dateFinPeriodeEssai}`, ICONS.document, titre,
-      `${e.prenom} ${e.nom} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
+      `${nomCompletAffiche(e)} · ${formatDate(e.dateFinPeriodeEssai)}`, 'employee-detail', { currentEmployeeId: e.id }, e.id));
   });
 
   // Brief du 12/10/2026 (C4) : trois rappels distincts par échéance (30 jours, dernière semaine, retard) au lieu
@@ -7919,18 +7924,26 @@ async function syncNotifications() {
   if (hasModule('rh')) getUpcomingEntretiensProfessionnels(30, undefined, Infinity).forEach(x => {
     const palier = echelonRappel(x.daysUntil);
     candidates.push(makeNotification(`entretien-pro-${x.employee.id}-${toISODate(x.next)}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Entretien professionnel ${palier.etat}` : 'Entretien professionnel à programmer',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
+      `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
     const palier = echelonRappel(x.daysUntil);
     candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Bilan à 6 ans ${palier.etat}` : 'Bilan à 6 ans à réaliser',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
+      `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
   if (hasModule('rh')) getUpcomingVisitesMedicales(30, undefined, Infinity).forEach(x => {
     candidates.push(makeNotification(`visite-medicale-${x.employee.id}-${toISODate(x.next)}`, ICONS.stethoscope, x.premiereVisite ? 'Visite médicale d\'embauche à programmer' : 'Visite médicale à programmer',
-      `${x.employee.prenom} ${x.employee.nom} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+      `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id }, x.employee.id));
+  });
+
+  // Voiture de société : rappels 90 jours, 30 jours et 7 jours avant la fin du contrat (puis en retard), chacun notifié une fois.
+  if (hasModule('rh')) getUpcomingVoitureFins(90, undefined, Infinity).forEach(e => {
+    const jours = Math.round((new Date(e.voiture.dateFin + 'T00:00:00') - new Date(toISODate(new Date()) + 'T00:00:00')) / 86400000);
+    const palier = jours < 0 ? { suffixe: '-retard', titre: 'Contrat de voiture de société terminé' } : jours <= 7 ? { suffixe: '-j7', titre: 'Contrat de voiture de société : moins de 7 jours' } : jours <= 30 ? { suffixe: '-j30', titre: 'Contrat de voiture de société : moins de 30 jours' } : { suffixe: '-j90', titre: 'Contrat de voiture de société à renouveler' };
+    candidates.push(makeNotification(`voiture-fin-${e.id}-${e.voiture.dateFin}${palier.suffixe}`, ICONS.document, palier.titre,
+      `${nomCompletAffiche(e)} · ${e.voiture.marque} ${e.voiture.modele}${e.voiture.immatriculation ? ' (' + e.voiture.immatriculation + ')' : ''} · ${formatDate(e.voiture.dateFin)}`, 'employee-detail', { currentEmployeeId: e.id, employeeDetailTab: 'contrat' }, e.id));
   });
 
   if (hasModule('rh')) documentRepository.getAll().filter(d => d.dateExpiration).forEach(d => {
@@ -7946,7 +7959,7 @@ async function syncNotifications() {
     if (!employee) return;
     const title = daysUntil < 0 ? 'Document expiré' : 'Document arrivant à expiration';
     candidates.push(makeNotification(`document-expiry-${d.id}`, ICONS.document, title,
-      `${employee.prenom} ${employee.nom} · ${d.categorie} · ${d.nom} · ${formatDate(d.dateExpiration)}`,
+      `${nomCompletAffiche(employee)} · ${d.categorie} · ${d.nom} · ${formatDate(d.dateExpiration)}`,
       'employee-detail', { currentEmployeeId: employee.id, employeeDetailTab: 'documents' }, employee.id));
   });
 
@@ -8829,6 +8842,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
   const entretiensProfessionnels = getUpcomingEntretiensProfessionnels(60, employees);
   const bilansSixAns = getUpcomingBilansSixAns(60, employees);
   const visitesMedicales = getUpcomingVisitesMedicales(60, employees);
+  const voituresFin = getUpcomingVoitureFins(90, employees);
   const contingentHeuresSup = getEmployeesNearingContingentHeuresSup(employees);
   const absencesLonguesDuree = hasModule('conges') ? getEmployeesOnLongAbsence(employees) : [];
   const visitesReprise = hasModule('conges') ? getVisitesRepriseAFaire(employees, leaveRepository.getAll(), settingsRepository.getSettings()) : [];
@@ -8868,7 +8882,7 @@ function renderOperationalDashboardBody(employees, employeeIds) {
     </div>
     ` : ''}
 
-    ${isVisible('echeances') ? renderEcheancesDashboard({ birthdays, contractEnds, probationEnds, seniorityAnniversaries, entretiensProfessionnels, bilansSixAns, visitesMedicales, contingentHeuresSup, absencesLonguesDuree, visitesReprise }) : ''}
+    ${isVisible('echeances') ? renderEcheancesDashboard({ birthdays, contractEnds, probationEnds, seniorityAnniversaries, entretiensProfessionnels, bilansSixAns, visitesMedicales, contingentHeuresSup, absencesLonguesDuree, visitesReprise, voituresFin }) : ''}
 
     ${showPresenceCard ? renderPresenceCard() : ''}
   `;
@@ -8884,6 +8898,7 @@ function renderEcheancesDashboard(d) {
     { module: 'rh', nom: "Anniversaires d'ancienneté", vide: d.seniorityAnniversaries.length === 0, html: () => renderUpcomingSeniorityCard(d.seniorityAnniversaries) },
     { module: 'entretiens', nom: 'Entretiens professionnels', vide: d.entretiensProfessionnels.length === 0 && d.bilansSixAns.length === 0, html: () => renderUpcomingEntretiensCard(d.entretiensProfessionnels, d.bilansSixAns) },
     { module: 'rh', nom: 'Visites médicales', vide: d.visitesMedicales.length === 0, html: () => renderUpcomingVisitesMedicalesCard(d.visitesMedicales) },
+    { module: 'rh', nom: 'Voitures de société', vide: (d.voituresFin || []).length === 0, html: () => renderUpcomingVoituresCard(d.voituresFin || []) },
     { module: 'remuneration', nom: "Contingent d'heures sup.", vide: d.contingentHeuresSup.length === 0, html: () => renderContingentHeuresSupCard(d.contingentHeuresSup) },
     { module: 'conges', nom: 'Absences longue durée', vide: d.absencesLonguesDuree.length === 0, html: () => renderLongAbsenceSuspensionCard(d.absencesLonguesDuree) }
   ].filter(b => hasModule(b.module));
@@ -9989,6 +10004,100 @@ function renderUpcomingContractEndsCard(contractEnds) {
   `;
 }
 
+/** Formulaire de la voiture de société d'un salarié (création ou modification). */
+function openVoitureModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) return;
+  const v = employee.voiture || { detention: 'lld', energie: 'essence' };
+  const val = (x) => escapeHtml(x == null ? '' : String(x));
+  const options = (libelles, choisi) => Object.keys(libelles).map(k => `<option value="${k}" ${k === choisi ? 'selected' : ''}>${escapeHtml(libelles[k])}</option>`).join('');
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>${employee.voiture ? 'Modifier la voiture de société' : 'Attribuer une voiture de société'}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <form id="voiture-form">
+        <div class="modal-body">
+          <p class="text-muted" style="margin-top:0;">${personNameHtml(employee)}</p>
+          <div class="form-grid">
+            <div class="form-field"><label for="f-voiture-marque">Marque *</label><input class="input" type="text" id="f-voiture-marque" maxlength="60" value="${val(v.marque)}" required></div>
+            <div class="form-field"><label for="f-voiture-modele">Modèle *</label><input class="input" type="text" id="f-voiture-modele" maxlength="60" value="${val(v.modele)}" required></div>
+            <div class="form-field"><label for="f-voiture-immat">Immatriculation</label><input class="input" type="text" id="f-voiture-immat" maxlength="20" placeholder="AB-123-CD" value="${val(v.immatriculation)}"></div>
+            <div class="form-field"><label for="f-voiture-energie">Énergie</label><select class="input" id="f-voiture-energie">${options(VOITURE_ENERGIE_LIBELLES, v.energie)}</select></div>
+          </div>
+          <fieldset class="form-section" style="margin-top:14px;">
+            <legend>Contrat</legend>
+            <div class="form-grid">
+              <div class="form-field"><label for="f-voiture-detention">Mode de détention</label><select class="input" id="f-voiture-detention">${options(VOITURE_DETENTION_LIBELLES, v.detention)}</select></div>
+              <div class="form-field"><label for="f-voiture-loueur">Loueur / société de leasing</label><input class="input" type="text" id="f-voiture-loueur" maxlength="100" value="${val(v.loueur)}"></div>
+              <div class="form-field"><label for="f-voiture-contrat">N° de contrat</label><input class="input" type="text" id="f-voiture-contrat" maxlength="60" value="${val(v.numeroContrat)}"></div>
+              <div class="form-field"><label for="f-voiture-debut">Début du contrat</label><input class="input" type="date" id="f-voiture-debut" value="${val(v.dateDebut)}"></div>
+              <div class="form-field"><label for="f-voiture-fin">Fin du contrat</label><input class="input" type="date" id="f-voiture-fin" value="${val(v.dateFin)}"></div>
+              <div class="form-field"><label for="f-voiture-km-annuel">Kilométrage annuel prévu (km)</label><input class="input" type="text" inputmode="numeric" id="f-voiture-km-annuel" value="${val(v.kmAnnuel)}"></div>
+              <div class="form-field"><label for="f-voiture-km-depart">Kilométrage à la remise (km)</label><input class="input" type="text" inputmode="numeric" id="f-voiture-km-depart" value="${val(v.kmDepart)}"></div>
+            </div>
+            <p class="form-hint" id="f-voiture-alerte-fin" style="margin-top:8px;"></p>
+          </fieldset>
+          <fieldset class="form-section" style="margin-top:14px;">
+            <legend>Usage</legend>
+            <div class="form-field form-field-checkbox"><label><input type="checkbox" id="f-voiture-carte" ${v.carteCarburant ? 'checked' : ''}> Carte carburant remise au salarié</label></div>
+            <div class="form-field" id="f-voiture-carte-bloc" style="margin-top:8px;"><label for="f-voiture-carte-numero">N° de la carte carburant</label><input class="input" type="text" id="f-voiture-carte-numero" maxlength="40" value="${val(v.numeroCarteCarburant)}"></div>
+            <div class="form-field form-field-checkbox" style="margin-top:8px;"><label><input type="checkbox" id="f-voiture-prive" ${v.usagePrive ? 'checked' : ''}> Usage privé autorisé (avantage en nature à déclarer en paie)</label></div>
+          </fieldset>
+          <div class="form-field" style="margin-top:14px;"><label for="f-voiture-notes">Notes (entretien, assurance, options...)</label><textarea class="input" id="f-voiture-notes" rows="3" maxlength="1000">${val(v.notes)}</textarea></div>
+          <div id="f-voiture-erreur" class="form-error" role="alert" style="margin-top:8px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const lire = (id) => document.getElementById(id).value;
+  const majFormulaire = () => {
+    document.getElementById('f-voiture-carte-bloc').style.display = document.getElementById('f-voiture-carte').checked ? '' : 'none';
+    const fin = lire('f-voiture-fin');
+    const debut = lire('f-voiture-debut');
+    const alerte = document.getElementById('f-voiture-alerte-fin');
+    if (debut && fin && fin < debut) alerte.textContent = 'La fin du contrat est avant son début.';
+    else if (fin) alerte.textContent = `Un rappel sera envoyé au RH 90, 30 et 7 jours avant la fin du contrat (${formatDate(fin)}) pour prévoir la restitution ou le renouvellement.`;
+    else alerte.textContent = 'Sans date de fin, aucun rappel ne sera envoyé.';
+  };
+  ['f-voiture-carte', 'f-voiture-debut', 'f-voiture-fin'].forEach(id => document.getElementById(id).addEventListener('change', majFormulaire));
+  majFormulaire();
+  document.getElementById('voiture-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const controle = validerVoitureSociete({
+      marque: lire('f-voiture-marque'), modele: lire('f-voiture-modele'), immatriculation: lire('f-voiture-immat'), energie: lire('f-voiture-energie'),
+      detention: lire('f-voiture-detention'), loueur: lire('f-voiture-loueur'), numeroContrat: lire('f-voiture-contrat'),
+      dateDebut: lire('f-voiture-debut'), dateFin: lire('f-voiture-fin'), kmAnnuel: lire('f-voiture-km-annuel'), kmDepart: lire('f-voiture-km-depart'),
+      carteCarburant: document.getElementById('f-voiture-carte').checked, numeroCarteCarburant: lire('f-voiture-carte-numero'),
+      usagePrive: document.getElementById('f-voiture-prive').checked, notes: lire('f-voiture-notes')
+    });
+    if (!controle.ok) { document.getElementById('f-voiture-erreur').textContent = controle.error; return; }
+    employeeRepository.update(employeeId, { voiture: controle.voiture });
+    closeModal();
+    showToast('Voiture de société enregistrée.');
+    render();
+  });
+}
+
+/** Voitures de société dont le contrat se termine dans les `daysAhead` jours (ou est déjà terminé), les plus proches d'abord. */
+function getUpcomingVoitureFins(daysAhead = 90, employees, limit = 5) {
+  employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.voiture && e.voiture.dateFin);
+  const limitStr = toISODate(addDays(new Date(), daysAhead));
+  return employees
+    .filter(e => e.voiture.dateFin <= limitStr)
+    .sort((a, b) => a.voiture.dateFin.localeCompare(b.voiture.dateFin))
+    .slice(0, limit);
+}
+
 /** Même champ/notification que "Fins de contrat" (getUpcomingProbationEnds, déjà câblé — voir
  * date-report de session) mais sans carte au tableau de bord jusqu'ici, donc invisible tant qu'on
  * n'ouvre pas le centre de notifications. */
@@ -10017,6 +10126,22 @@ function renderUpcomingProbationEndsCard(probationEnds) {
         </div>
         <p class="form-hint" style="margin-top:10px;">Délai de prévenance estimé (article L1221-25 du Code du travail), à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>
       `}
+    </div>
+  `;
+}
+
+function renderUpcomingVoituresCard(voitures) {
+  return `
+    <div class="card">
+      <h2>Voitures de société : fin de contrat</h2>
+      <div class="mini-list">
+        ${voitures.map(e => `
+          <div class="mini-list-item">
+            <span>${personNameHtml(e)} · ${escapeHtml(e.voiture.marque)} ${escapeHtml(e.voiture.modele)}</span>
+            <span class="${e.voiture.dateFin < toISODate(new Date()) ? 'text-danger' : 'text-muted'}">${formatDate(e.voiture.dateFin)}</span>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
@@ -10130,7 +10255,7 @@ function renderPresenceCard() {
       ${rows.length === 0 ? '<p class="text-muted">Aucun salarié à afficher.</p>' : `
         <div class="presence-avatars">
           ${visibleRows.map(r => `
-            <div class="presence-avatar-item" title="${escapeHtml(`${r.employee.prenom} ${r.employee.nom} · ${r.status.label}`)}">
+            <div class="presence-avatar-item" title="${escapeHtml(`${nomCompletAffiche(r.employee)} · ${r.status.label}`)}">
               <div class="avatar-ring avatar-ring-${r.status.level}">${renderAvatar(r.employee)}</div>
               <span class="presence-avatar-name">${escapeHtml(r.employee.prenom)}</span>
             </div>
@@ -10210,7 +10335,7 @@ function getFilteredSortedEmployees() {
   const term = normalizeForSearch(state.search.trim());
   if (term) {
     list = list.filter(e =>
-      normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule} ${e.email} ${e.poste}`).includes(term)
+      normalizeForSearch(`${e.prenom} ${e.nom} ${e.nomUsage || ''} ${e.matricule} ${e.email} ${e.poste}`).includes(term)
     );
   }
   if (state.filters.etablissementId) list = list.filter(e => e.etablissementId === state.filters.etablissementId);
@@ -10785,7 +10910,7 @@ function getTableauCompteursEmployees() {
   if (filters.service) employees = employees.filter(e => e.service === filters.service);
   if (filters.etablissementId) employees = employees.filter(e => e.etablissementId === filters.etablissementId);
   const term = normalizeForSearch(state.tableauCompteursSearch.trim());
-  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.matricule}`).includes(term));
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.nomUsage || ''} ${e.matricule}`).includes(term));
   return sortListBy(employees, (e) => `${e.nom} ${e.prenom}`, state.tableauCompteursSortDir);
 }
 
@@ -12045,7 +12170,7 @@ function openImportAbsencesHistoriqueModal(categorie) {
       <div class="encadre-licences" role="alert">
         <strong>${icon(ICONS.warningTriangle, 14)} ${sansLicence.length} salarié${sansLicence.length > 1 ? 's' : ''} sans licence « Congés »</strong>
         <p>Votre abonnement est « à la carte » : pour qu'un salarié puisse avoir des congés enregistrés, il doit avoir une licence « Congés ». Ce n'est pas une erreur de votre fichier : c'est un réglage de l'abonnement.</p>
-        <p>Concernés : ${sansLicence.map(e => escapeHtml(e.prenom + ' ' + e.nom)).join(', ')}.</p>
+        <p>Concernés : ${sansLicence.map(e => escapeHtml(nomCompletAffiche(e))).join(', ')}.</p>
         ${peutGererLicences
           ? '<p><button type="button" class="btn btn-secondary btn-sm" id="btn-import-gerer-licences">Attribuer les licences</button> Ouvre la gestion des accès ; ensuite, redéposez votre fichier.</p>'
           : '<p>Demandez au propriétaire d\'attribuer ces licences (Paramètres > Abonnement > Gérer les accès), puis redéposez votre fichier.</p>'}
@@ -12269,7 +12394,7 @@ function renderAvatar(e) {
   if (e.photo) {
     return `<img class="avatar" data-photo-path="${escapeHtml(e.photo)}" alt="">`;
   }
-  return `<div class="avatar avatar-initials ${getAvatarColorClass(e.prenom, e.nom)}">${escapeHtml(getInitials(e.prenom, e.nom))}</div>`;
+  return `<div class="avatar avatar-initials ${getAvatarColorClass(e.prenom, nomAffiche(e))}">${escapeHtml(getInitials(e.prenom, nomAffiche(e)))}</div>`;
 }
 
 /** §retour Betty du 11/09/2026 (point 3) : employee-photos est un bucket privé, e.photo ne contient
@@ -12535,7 +12660,7 @@ function getFilteredOrganigrammeEmployees() {
   let employees = employeeRepository.getAll().filter(e => !e.archive && e.statut === 'Actif');
 
   const term = normalizeForSearch(f.search.trim());
-  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.poste}`).includes(term));
+  if (term) employees = employees.filter(e => normalizeForSearch(`${e.prenom} ${e.nom} ${e.nomUsage || ''} ${e.poste}`).includes(term));
   if (f.etablissementId) employees = employees.filter(e => e.etablissementId === f.etablissementId);
   if (f.service) employees = employees.filter(e => e.service === f.service);
   if (f.equipe) employees = employees.filter(e => e.equipe === f.equipe);
@@ -12784,7 +12909,7 @@ function exportOrganigrammeExcel() {
   const etablissementNomById = new Map(etablissementRepository.getAll().map(et => [et.id, et.nom]));
   const headers = ['Nom', 'Prénom', 'Poste', 'Manager(s)', 'Service', 'Équipe', 'Établissement'];
   const rows = employees.map(e => {
-    const managers = (e.managerIds || []).map(id => employeesById.get(id)).filter(Boolean).map(m => `${m.prenom} ${m.nom}`);
+    const managers = (e.managerIds || []).map(id => employeesById.get(id)).filter(Boolean).map(m => `${nomCompletAffiche(m)}`);
     return [
       e.nom, e.prenom, getPosteAccorde(e, settings) || '', managers.length ? managers.join(', ') : '—', e.service, e.equipe,
       etablissementNomById.get(e.etablissementId) || ''
@@ -13439,7 +13564,7 @@ function renderTicketRow(t, showAuthor) {
       <span>
         <span class="badge badge-${TICKET_STATUT_BADGE_CLASS[t.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[t.statut] || t.statut)}</span>
         ${escapeHtml(t.titre)}
-        ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+        ${author ? ` · ${escapeHtml(nomCompletAffiche(author))}` : ''}
       </span>
       <span class="detail-header-actions">
         <span class="text-muted">${formatDate(t.dateCreation)}</span>
@@ -13588,7 +13713,7 @@ function renderTicketDetail(id) {
         <p class="view-subtitle">
           <span class="badge badge-${TICKET_STATUT_BADGE_CLASS[ticket.statut] || 'muted'}">${escapeHtml(TICKET_STATUT_LABELS[ticket.statut] || ticket.statut)}</span>
           · ${escapeHtml(ticket.categorie || '—')} · Priorité ${escapeHtml(ticket.priorite)}
-          ${canManage && author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+          ${canManage && author ? ` · ${escapeHtml(nomCompletAffiche(author))}` : ''}
           · ${formatDateTime(ticket.dateCreation)}
         </p>
       </div>
@@ -13665,7 +13790,7 @@ function getFilteredEntretiens(showEmployee) {
     if (term) {
       list = list.filter(e => {
         const employee = employeeRepository.getById(e.employeeId);
-        return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+        return employee && normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''}`).includes(term);
       });
     }
   }
@@ -13673,7 +13798,7 @@ function getFilteredEntretiens(showEmployee) {
   return sortListBy(list, (e) => {
     if (state.entretiensSortBy === 'employee') {
       const employee = employeeRepository.getById(e.employeeId);
-      return employee ? `${employee.prenom} ${employee.nom}` : '';
+      return employee ? `${nomCompletAffiche(employee)}` : '';
     }
     if (state.entretiensSortBy === 'type') return ENTRETIEN_TYPE_LABELS[e.type] || e.type;
     if (state.entretiensSortBy === 'statut') return ENTRETIEN_STATUT_LABELS[e.statut] || e.statut;
@@ -13781,7 +13906,7 @@ function exportEntretiensExcel() {
   const rows = filtered.map(e => {
     const employee = showEmployee ? employeeRepository.getById(e.employeeId) : null;
     return [
-      ...(showEmployee ? [employee ? `${employee.prenom} ${employee.nom}` : '—'] : []),
+      ...(showEmployee ? [employee ? `${nomCompletAffiche(employee)}` : '—'] : []),
       ENTRETIEN_TYPE_LABELS[e.type] || e.type,
       ENTRETIEN_STATUT_LABELS[e.statut] || e.statut,
       formatDate(e.datePrevue),
@@ -13897,7 +14022,7 @@ function openPlanEntretienModal() {
           <div class="form-field">
             <label for="f-entretien-employee">Salarié *</label>
             <select class="input" id="f-entretien-employee" required>
-              ${employees.map(e => `<option value="${e.id}">${escapeHtml(e.prenom + ' ' + e.nom)}</option>`).join('')}
+              ${employees.map(e => `<option value="${e.id}">${escapeHtml(nomCompletAffiche(e))}</option>`).join('')}
             </select>
           </div>
           <div class="form-grid" style="margin-top:12px;">
@@ -14024,7 +14149,7 @@ function renderEntretienDetail(id) {
         <h1>${escapeHtml(ENTRETIEN_TYPE_LABELS[entretien.type] || entretien.type)}</h1>
         <p class="view-subtitle">
           <span class="badge badge-${ENTRETIEN_STATUT_BADGE_CLASS[entretien.statut] || 'muted'}">${escapeHtml(ENTRETIEN_STATUT_LABELS[entretien.statut] || entretien.statut)}</span>
-          ${employee ? ` · ${escapeHtml(employee.prenom + ' ' + employee.nom)}` : ''}
+          ${employee ? ` · ${escapeHtml(nomCompletAffiche(employee))}` : ''}
           · Prévu le ${formatDate(entretien.datePrevue)}${entretien.heurePrevue ? ` à ${escapeHtml(entretien.heurePrevue)}` : ''}
           ${entretien.dateRealisee ? ` · Réalisé le ${formatDate(entretien.dateRealisee)}` : ''}
         </p>
@@ -14670,7 +14795,7 @@ function openFormationDocumentsModal(formationId, typeInitial) {
   if (f.financement === 'cpf' && f.pendantTempsTravail !== false) types.push({ cle: 'absence-cpf', libelle: "Autorisation d'absence (CPF)" });
   if (f.statut === 'acceptee' || f.statut === 'refusee' || f.statut === 'realisee') types.push({ cle: 'reponse', libelle: 'Réponse à la demande' });
   const type = types.some(t => t.cle === typeInitial) ? typeInitial : types[0].cle;
-  const decideur = user.prenom + ' ' + user.nom;
+  const decideur = nomCompletAffiche(user);
   const lettre = genererDocumentFormation({ type, demande: f, employee, entreprise: DB.getCurrentCompany(), decideur, maintenant: new Date() });
   const html = `
     <div class="modal">
@@ -14830,7 +14955,7 @@ function renderIdeeDetail(id) {
         <h1>${escapeHtml(idee.titre)}</h1>
         <p class="view-subtitle">
           <span class="badge badge-${IDEE_STATUT_BADGE_CLASS[idee.statut] || 'muted'}">${escapeHtml(IDEE_STATUT_LABELS[idee.statut] || idee.statut)}</span>
-          ${author ? ` · ${escapeHtml(author.prenom + ' ' + author.nom)}` : ''}
+          ${author ? ` · ${escapeHtml(nomCompletAffiche(author))}` : ''}
           · ${formatDateTime(idee.dateCreation)}
         </p>
       </div>
@@ -15261,8 +15386,53 @@ function renderEmployeeContratTab(e, canEdit) {
           </div>
         `}
       </div>
+      ${renderEmployeeVoitureCard(e, canEdit)}
     </div>
   `;
+}
+
+/** Carte « Voiture de société » de l'onglet Contrat : n'affiche un formulaire que pour les salariés qui en ont une (retour du 20/11/2026). */
+function renderEmployeeVoitureCard(e, canEdit) {
+  const v = e.voiture;
+  if (!v) {
+    return `
+      <div class="card">
+        <div class="view-header-row">
+          <h2>Voiture de société</h2>
+          ${canEdit ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-voiture-ajouter">+ Attribuer une voiture</button>` : ''}
+        </div>
+        <p class="text-muted">Aucune voiture de société pour ce salarié.</p>
+      </div>`;
+  }
+  const aujourdhui = toISODate(new Date());
+  const joursRestants = v.dateFin ? Math.round((new Date(v.dateFin + 'T00:00:00') - new Date(aujourdhui + 'T00:00:00')) / 86400000) : null;
+  const etat = !v.dateFin ? '<span class="badge badge-muted">Sans date de fin</span>'
+    : joursRestants < 0 ? '<span class="badge badge-danger">Contrat terminé</span>'
+    : joursRestants <= 90 ? `<span class="badge badge-warning">Fin dans ${joursRestants} jour${joursRestants > 1 ? 's' : ''}</span>`
+    : '<span class="badge badge-success">Contrat en cours</span>';
+  const ligne = (libelle, valeur) => valeur ? `<div class="mini-list-item"><span class="text-muted">${escapeHtml(libelle)}</span><span>${valeur}</span></div>` : '';
+  const km = (n) => `${Math.round(n).toLocaleString('fr-FR')} km`;
+  return `
+    <div class="card">
+      <div class="view-header-row">
+        <h2>Voiture de société</h2>
+        ${canEdit ? `<div class="badge-row"><button type="button" class="btn btn-secondary btn-sm" id="btn-voiture-modifier">Modifier</button><button type="button" class="btn btn-secondary btn-sm" id="btn-voiture-retirer">Retirer</button></div>` : ''}
+      </div>
+      <p style="margin: 0 0 10px;"><strong>${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</strong>${v.immatriculation ? ` · <span class="badge badge-muted">${escapeHtml(v.immatriculation)}</span>` : ''} ${etat}</p>
+      <div class="mini-list">
+        ${ligne('Énergie', escapeHtml(VOITURE_ENERGIE_LIBELLES[v.energie] || ''))}
+        ${ligne('Détention', escapeHtml(VOITURE_DETENTION_LIBELLES[v.detention] || ''))}
+        ${ligne('Loueur', escapeHtml(v.loueur || ''))}
+        ${ligne('N° de contrat', escapeHtml(v.numeroContrat || ''))}
+        ${ligne('Début du contrat', v.dateDebut ? formatDate(v.dateDebut) : '')}
+        ${ligne('Fin du contrat', v.dateFin ? formatDate(v.dateFin) : '')}
+        ${ligne('Kilométrage annuel prévu', v.kmAnnuel != null ? km(v.kmAnnuel) : '')}
+        ${ligne('Kilométrage à la remise', v.kmDepart != null ? km(v.kmDepart) : '')}
+        ${ligne('Carte carburant', v.carteCarburant ? `Oui${v.numeroCarteCarburant ? ' · ' + escapeHtml(v.numeroCarteCarburant) : ''}` : 'Non')}
+        ${ligne('Usage privé', v.usagePrive ? 'Autorisé (avantage en nature à déclarer en paie)' : 'Non')}
+      </div>
+      ${v.notes ? `<p class="text-muted" style="margin: 10px 0 0;">${escapeHtml(v.notes)}</p>` : ''}
+    </div>`;
 }
 
 /** §retour Betty du 22/09/2026 (point 3.1, "le modèle de contrat est trop pauvre") : champs partagés
@@ -16091,8 +16261,8 @@ function renderEmployeeDetail(id) {
 
   return `
     ${renderBreadcrumb(viaListeSalaries
-      ? [{ label: 'Salariés', nav: 'employees' }, { label: `${e.prenom} ${e.nom}` }]
-      : [{ label: 'Accueil', nav: 'dashboard' }, { label: `${e.prenom} ${e.nom}` }])}
+      ? [{ label: 'Salariés', nav: 'employees' }, { label: `${nomCompletAffiche(e)}` }]
+      : [{ label: 'Accueil', nav: 'dashboard' }, { label: `${nomCompletAffiche(e)}` }])}
     ${viaListeSalaries ? renderEmployeeDetailPrevNext(e) : ''}
 
     <div class="detail-header card">
@@ -16154,9 +16324,9 @@ function renderEmployeeDetailPrevNext(e) {
   const next = position < visible.length - 1 ? visible[position + 1] : null;
   return `
     <div class="employee-detail-prev-next">
-      <button type="button" class="btn-icon" id="btn-employee-prev" data-employee-id="${prev ? prev.id : ''}" ${prev ? '' : 'disabled'} title="${prev ? escapeHtml(`${prev.prenom} ${prev.nom}`) : 'Premier de la liste'}" aria-label="Salarié précédent">‹</button>
+      <button type="button" class="btn-icon" id="btn-employee-prev" data-employee-id="${prev ? prev.id : ''}" ${prev ? '' : 'disabled'} title="${prev ? escapeHtml(`${nomCompletAffiche(prev)}`) : 'Premier de la liste'}" aria-label="Salarié précédent">‹</button>
       <span class="text-muted" style="font-size: 13px;">${position + 1} sur ${visible.length}</span>
-      <button type="button" class="btn-icon" id="btn-employee-next" data-employee-id="${next ? next.id : ''}" ${next ? '' : 'disabled'} title="${next ? escapeHtml(`${next.prenom} ${next.nom}`) : 'Dernier de la liste'}" aria-label="Salarié suivant">›</button>
+      <button type="button" class="btn-icon" id="btn-employee-next" data-employee-id="${next ? next.id : ''}" ${next ? '' : 'disabled'} title="${next ? escapeHtml(`${nomCompletAffiche(next)}`) : 'Dernier de la liste'}" aria-label="Salarié suivant">›</button>
     </div>
   `;
 }
@@ -17305,7 +17475,7 @@ function managerNames(managerIds) {
   const names = (managerIds || [])
     .map(id => employeeRepository.getById(id))
     .filter(Boolean)
-    .map(m => `${m.prenom} ${m.nom}`);
+    .map(m => `${nomCompletAffiche(m)}`);
   return names.length ? names.join(', ') : '—';
 }
 
@@ -17873,6 +18043,17 @@ function bindEmployeeDetailEvents() {
     btn.addEventListener('click', () => deleteEnfant(state.currentEmployeeId, btn.dataset.deleteEnfant));
   });
 
+  const voitureAjouter = document.getElementById('btn-voiture-ajouter');
+  if (voitureAjouter) voitureAjouter.addEventListener('click', () => openVoitureModal(state.currentEmployeeId));
+  const voitureModifier = document.getElementById('btn-voiture-modifier');
+  if (voitureModifier) voitureModifier.addEventListener('click', () => openVoitureModal(state.currentEmployeeId));
+  const voitureRetirer = document.getElementById('btn-voiture-retirer');
+  if (voitureRetirer) voitureRetirer.addEventListener('click', () => {
+    if (!confirm('Retirer la voiture de société de cette fiche ? Les informations saisies seront effacées.')) return;
+    employeeRepository.update(state.currentEmployeeId, { voiture: null });
+    showToast('Voiture retirée de la fiche.');
+    render();
+  });
   const avenantBtn = document.getElementById('btn-ajouter-avenant');
   if (avenantBtn) avenantBtn.addEventListener('click', () => openAjouterAvenantModal(state.currentEmployeeId));
   const nouveauContratBtn = document.getElementById('btn-nouveau-contrat');
@@ -17908,8 +18089,8 @@ function bindEmployeeDetailEvents() {
     openConfirm({
       title: willArchive ? 'Archiver ce salarié ?' : 'Réactiver ce salarié ?',
       message: willArchive
-        ? `${e.prenom} ${e.nom} sera marqué comme inactif et archivé. Ses données restent conservées.`
-        : `${e.prenom} ${e.nom} sera réactivé et repassera au statut actif.`,
+        ? `${nomCompletAffiche(e)} sera marqué comme inactif et archivé. Ses données restent conservées.`
+        : `${nomCompletAffiche(e)} sera réactivé et repassera au statut actif.`,
       confirmLabel: willArchive ? 'Archiver' : 'Réactiver',
       onConfirm: () => {
         employeeRepository.archive(e.id, willArchive);
@@ -18071,7 +18252,7 @@ function getFilteredLeaveRequests(categorie = 'conge') {
   if (term) {
     filtered = filtered.filter(r => {
       const employee = employeeRepository.getById(r.employeeId);
-      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''}`).includes(term);
     });
   }
 
@@ -18435,7 +18616,7 @@ function handleDeleteLeaveRequest(id) {
   const periode = `${formatDate(request.dateDebut)}${request.dateFin !== request.dateDebut ? ' → ' + formatDate(request.dateFin) : ''}`;
   openConfirm({
     title: 'Supprimer cette demande ?',
-    message: `${employee ? employee.prenom + ' ' + employee.nom + ' · ' : ''}${type ? type.nom + ' · ' : ''}${periode}. La demande disparaît définitivement de la liste et du compteur, sans historique. Pour garder une trace, utilisez plutôt « Annuler » ; pour changer des dates, « Régulariser ».`,
+    message: `${employee ? nomCompletAffiche(employee) + ' · ' : ''}${type ? type.nom + ' · ' : ''}${periode}. La demande disparaît définitivement de la liste et du compteur, sans historique. Pour garder une trace, utilisez plutôt « Annuler » ; pour changer des dates, « Régulariser ».`,
     confirmLabel: 'Supprimer définitivement',
     danger: true,
     onConfirm: async () => {
@@ -18994,7 +19175,7 @@ function openAttestationSalaireModal(requestId) {
 
 function auditLabelForEmployee(employeeId) {
   const employee = employeeRepository.getById(employeeId);
-  return employee ? `${employee.prenom} ${employee.nom}` : '—';
+  return employee ? `${nomCompletAffiche(employee)}` : '—';
 }
 
 /** §correctif QA du 26/08/2026 : jusqu'ici, valider/refuser une demande de congé/télétravail/note
@@ -19010,7 +19191,7 @@ function currentActorRoleLabel() {
 function auditDetailsForActor() {
   const user = authRepository.getCurrentUser();
   if (!user) return '';
-  return `Par ${user.prenom} ${user.nom} (${currentActorRoleLabel()})`;
+  return `Par ${nomCompletAffiche(user)} (${currentActorRoleLabel()})`;
 }
 
 /** §correctif audit du 23/08/2026 (§7.4) : notifie le SALARIÉ par email seulement à l'issue finale
@@ -19246,7 +19427,7 @@ function employeeFieldForRequest(presetEmployeeId, employees, kind = 'absence') 
   // tiret vide — user.id fait toujours partie de `scoped` (requestTargetIdsForCurrentUser inclut
   // toujours soi-même), donc jamais une valeur hors liste. Vaut pour les 4 formulaires qui passent
   // par cette fonction (congés, autres absences, télétravail, notes de frais).
-  return selectField('employeeId', 'Salarié', null, presetEmployeeId || user.id || '', scoped.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })));
+  return selectField('employeeId', 'Salarié', null, presetEmployeeId || user.id || '', scoped.map(e => ({ value: e.id, label: `${nomCompletAffiche(e)}` })));
 }
 
 /** Sprint SIRH premium §10 : `draft` (optionnel) = brouillon repris via "Reprendre" dans la liste
@@ -19525,7 +19706,7 @@ function updateLeaveRequestHints() {
         // de devoir aller chercher l'information ailleurs.
         const dejaAbsents = getAbsentsForQuota(quota, dateStr, employee.id);
         if (dejaAbsents.length + 1 >= quota.maxSimultane) {
-          const noms = dejaAbsents.map(e => `${e.prenom} ${e.nom}`).join(', ');
+          const noms = dejaAbsents.map(e => `${nomCompletAffiche(e)}`).join(', ');
           quotaWarning = ` · ⚠ Quota « ${quota.nom} » atteint le ${formatDate(dateStr)} (max ${quota.maxSimultane} absent${quota.maxSimultane > 1 ? 's' : ''} simultané${quota.maxSimultane > 1 ? 's' : ''}${noms ? ` : déjà absent${dejaAbsents.length > 1 ? 's' : ''} ce jour-là, ${noms}` : ''})`;
           break;
         }
@@ -19577,7 +19758,7 @@ async function submitLeaveRequestForm(evt) {
   // le vrai verrou côté serveur (policy leave_requests_insert) — ce contrôle évite seulement une
   // erreur brute au moment de l'enregistrement, jamais un contournement possible depuis ici.
   if (!hasModuleLicense(employee, 'conges')) {
-    showToast(`${employee.prenom} ${employee.nom} n'a pas d'accès au module Congés : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
+    showToast(`${nomCompletAffiche(employee)} n'a pas d'accès au module Congés : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
     return;
   }
 
@@ -19976,7 +20157,7 @@ function describeWorkflow(workflow, overrides) {
     if (!Array.isArray(overrideIds) || !overrideIds.length) return ROLE_LABELS[role] || role;
     const names = overrideIds.map(eid => {
       const e = employeeRepository.getById(eid);
-      return e ? `${e.prenom} ${e.nom}` : null;
+      return e ? `${nomCompletAffiche(e)}` : null;
     }).filter(Boolean);
     // §retour QA du 26/08/2026 (point 6.7) : signale qu'une étape n'est plus résolue par rôle —
     // sans ce libellé, un RH voit "Manager puis RH" sans se rendre compte que "Manager" a en
@@ -21008,6 +21189,24 @@ function renderLigneVacancesScolaires(days, vacances, zone) {
   return `<tr class="absence-cal-vacances-row"><th class="absence-cal-vacances-titre">Vacances scolaires <span class="text-muted">zone ${escapeHtml(zone)}</span></th>${cellules.join('')}</tr>`;
 }
 
+/** Couleurs d'origine des types fournis par Nexus → couleur plus distincte dans le calendrier de l'équipe (retour du 20/11/2026 : plusieurs bleus et verts voisins se confondaient).
+ * Seule la couleur d'ORIGINE est remplacée : un type dont la couleur a été choisie dans Paramètres garde la sienne. Rien n'est réécrit en base (affichage seulement). */
+const COULEURS_CALENDRIER_DISTINCTES = {
+  'Congés payés': ['#2563eb', '#2563eb'],
+  'RTT': ['#7c3aed', '#7c3aed'],
+  'Ancienneté': ['#0891b2', '#db2777'],
+  'Maladie': ['#16a34a', '#dc2626'],
+  'Formation': ['#059669', '#16a34a'],
+  'Proche aidant': ['#8b5cf6', '#a16207']
+};
+
+function couleurCalendrierType(type) {
+  if (!type) return 'var(--color-text-muted)';
+  const regle = Object.entries(COULEURS_CALENDRIER_DISTINCTES).find(([nom]) => leaveTypeNameMatches(type.nom, nom));
+  if (regle && String(type.couleur || '').toLowerCase() === regle[1][0]) return regle[1][1];
+  return type.couleur;
+}
+
 function renderAbsenceCalendarBoard(sharedData) {
   const year = state.calendarYear;
   const month = state.calendarMonth;
@@ -21034,7 +21233,7 @@ function renderAbsenceCalendarBoard(sharedData) {
            d'"Exceptionnel" (voir DB.getLeaveTypes, data.js) n'apparaissent plus ICI individuellement
            — une entrée par couleur réellement distincte, pas une par type. Une absence de ce type
            garde bien sa case colorée dans la grille ci-dessous, seule la légende change. -->
-      ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(t.couleur)}"></span>${escapeHtml(t.nom)}</span>`).join('')}
+      ${leaveTypeRepository.getLeaveTypes().filter(t => !NOMS_EVENEMENTS_FAMILIAUX_UNIFIES.some(nom => leaveTypeNameMatches(t.nom, nom))).map(t => `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch" style="background:${escapeHtml(couleurCalendrierType(t))}"></span>${escapeHtml(t.nom)}</span>`).join('')}
       ${hasModule('planning') ? '<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-telework"></span>Télétravail</span>' : ''}
       ${vacancesMois.segments.length ? `<span class="absence-cal-legend-item"><span class="absence-cal-legend-swatch absence-cal-legend-vacances"></span>Vacances scolaires (zone ${escapeHtml(sharedData.schoolZone)})</span>` : ''}
       ${utilisateurPeutEditerCongesDepuisCalendrier() ? '<span class="absence-cal-legend-item absence-cal-hint">Double-cliquez sur un congé pour le modifier ou le supprimer.</span>' : ''}
@@ -21127,7 +21326,7 @@ function renderAbsenceCalendarRow(employee, dayNumbers, dayMeta, leaveRequests, 
       // est coupée en deux par la diagonale (matin = triangle en haut à gauche, après-midi = triangle
       // en bas à droite). Sur une période, seule l'extrémité concernée est taillée en biais (début
       // l'après-midi = bord gauche oblique, fin le matin = bord droit oblique).
-      const couleurFond = escapeHtml(type ? type.couleur : 'var(--color-text-muted)');
+      const couleurFond = escapeHtml(couleurCalendrierType(type));
       const titre = `${escapeHtml(type ? type.nom : 'Congé')}${escapeHtml(titleSuffix)}${pending ? ' (en attente)' : ''}`;
       const pendingCls = pending ? ' absence-cal-bar-pending' : '';
       const editable = peutModifierCongeDepuisCalendrier(seg.leave);
@@ -21455,13 +21654,13 @@ function renderCalendarCell(cell, sharedData) {
   const teletravailEnAttente = info.teletravail.filter(t => t.statut !== 'Validé');
 
   const badges = [
-    congesValides.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesValides.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}`)) : '',
-    congesEnAttente.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesEnAttente.map(c => `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''} (en attente)`), true) : '',
-    teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailValide.map(t => `${t.emp.prenom} ${t.emp.nom}`)) : '',
-    teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailEnAttente.map(t => `${t.emp.prenom} ${t.emp.nom} (en attente)`), true) : '',
-    info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', ICONS.cake, info.anniversaires.map(e => `${e.prenom} ${e.nom}`)) : '',
-    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', ICONS.rocket, info.arrivees.map(e => `${e.prenom} ${e.nom} (arrivée)`)) : '',
-    info.departs.length && filters.depart !== false ? calendarBadge('depart', ICONS.exitDoor, info.departs.map(e => `${e.prenom} ${e.nom} (départ)`)) : ''
+    congesValides.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesValides.map(c => `${nomCompletAffiche(c.emp)} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}`)) : '',
+    congesEnAttente.length && filters.conge !== false ? calendarBadge('conge', ICONS.sun, congesEnAttente.map(c => `${nomCompletAffiche(c.emp)} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''} (en attente)`), true) : '',
+    teletravailValide.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailValide.map(t => `${nomCompletAffiche(t.emp)}`)) : '',
+    teletravailEnAttente.length && filters.teletravail !== false ? calendarBadge('teletravail', ICONS.laptop, teletravailEnAttente.map(t => `${nomCompletAffiche(t.emp)} (en attente)`), true) : '',
+    info.anniversaires.length && filters.anniversaire !== false ? calendarBadge('anniversaire', ICONS.cake, info.anniversaires.map(e => `${nomCompletAffiche(e)}`)) : '',
+    info.arrivees.length && filters.arrivee !== false ? calendarBadge('arrivee', ICONS.rocket, info.arrivees.map(e => `${nomCompletAffiche(e)} (arrivée)`)) : '',
+    info.departs.length && filters.depart !== false ? calendarBadge('depart', ICONS.exitDoor, info.departs.map(e => `${nomCompletAffiche(e)} (départ)`)) : ''
   ].join('');
 
   // §correctif audit du 23/08/2026 (§7.6) : "repère visible dans le calendrier" — uniquement en vue
@@ -21532,11 +21731,11 @@ function openCalendarDayModal(dateStr) {
   // chaîne qu'une icône ICONS.xxx de confiance (SVG, jamais échappée) sous peine de casser l'une
   // des deux en forçant un traitement unique.
   const sections = [
-    { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${c.emp.prenom} ${c.emp.nom} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
-    { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${t.emp.prenom} ${t.emp.nom}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
-    { label: 'Anniversaires', items: info.anniversaires.map(e => ({ icon: ICONS.cake, text: `${e.prenom} ${e.nom}` })) },
-    { label: 'Arrivées', items: info.arrivees.map(e => ({ icon: ICONS.rocket, text: `${e.prenom} ${e.nom}` })) },
-    { label: 'Départs', items: info.departs.map(e => ({ icon: ICONS.exitDoor, text: `${e.prenom} ${e.nom}` })) }
+    { label: 'Congés / absences', items: info.conges.map(c => ({ icon: c.type.icone, text: `${nomCompletAffiche(c.emp)} · ${c.type.nom}${c.demiJournee ? ` (${c.demiJournee === 'matin' ? 'matin' : 'après-midi'})` : ''}${c.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    { label: 'Télétravail', items: info.teletravail.map(t => ({ icon: ICONS.laptop, text: `${nomCompletAffiche(t.emp)}${t.statut !== 'Validé' ? ' (en attente)' : ''}` })) },
+    { label: 'Anniversaires', items: info.anniversaires.map(e => ({ icon: ICONS.cake, text: `${nomCompletAffiche(e)}` })) },
+    { label: 'Arrivées', items: info.arrivees.map(e => ({ icon: ICONS.rocket, text: `${nomCompletAffiche(e)}` })) },
+    { label: 'Départs', items: info.departs.map(e => ({ icon: ICONS.exitDoor, text: `${nomCompletAffiche(e)}` })) }
   ].filter(s => s.items.length);
 
   const html = `
@@ -21907,7 +22106,7 @@ function openDelegationModal() {
             <label for="f-delegation-employee">À qui ? *</label>
             <select class="input" id="f-delegation-employee" required>
               <option value="">Sélectionner...</option>
-              ${collegues.map(e => `<option value="${e.id}">${escapeHtml(e.prenom + ' ' + e.nom)}</option>`).join('')}
+              ${collegues.map(e => `<option value="${e.id}">${escapeHtml(nomCompletAffiche(e))}</option>`).join('')}
             </select>
           </div>
           <div class="form-grid" style="margin-top: 12px;">
@@ -22021,7 +22220,7 @@ function bindParametresMonCompteEvents() {
       openConfirm({
         title: 'Supprimer cette délégation ?',
         message: delegation
-          ? `${delegataire ? `${delegataire.prenom} ${delegataire.nom}` : 'Cette personne'} ne pourra plus valider à votre place du ${formatDate(delegation.dateDebut)} au ${formatDate(delegation.dateFin)}.`
+          ? `${delegataire ? `${nomCompletAffiche(delegataire)}` : 'Cette personne'} ne pourra plus valider à votre place du ${formatDate(delegation.dateDebut)} au ${formatDate(delegation.dateFin)}.`
           : 'Cette délégation sera retirée.',
         confirmLabel: 'Supprimer',
         danger: true,
@@ -23260,7 +23459,7 @@ function renderEtablissementCard(etab) {
       ${infoRow('Adresse', [etab.adresse, etab.codePostal, etab.ville, etab.pays].filter(Boolean).join(', '))}
       ${infoRow('Email', etab.email)}
       ${infoRow('Téléphone', etab.telephone)}
-      ${infoRow('Responsable', responsable ? `${responsable.prenom} ${responsable.nom}` : '—')}
+      ${infoRow('Responsable', responsable ? `${nomCompletAffiche(responsable)}` : '—')}
     </div>
   `;
 }
@@ -23427,7 +23626,7 @@ function openEtablissementModal(id) {
             ${textField('pays', 'Pays', etab.pays)}
             ${textField('email', 'Email', etab.email, false, 'email')}
             ${textField('telephone', 'Téléphone', etab.telephone)}
-            ${selectField('responsableId', 'Responsable', null, etab.responsableId, employees.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })))}
+            ${selectField('responsableId', 'Responsable', null, etab.responsableId, employees.map(e => ({ value: e.id, label: `${nomCompletAffiche(e)}` })))}
           </div>
           <div class="form-grid" style="margin-top: 12px;">
             ${checkboxField('principal', 'Établissement principal', etab.principal)}
@@ -23517,7 +23716,7 @@ function renderServiceCard(service) {
 
 function managerShortName(employeeId) {
   const m = employeeRepository.getById(employeeId);
-  return m ? `${m.prenom} ${m.nom}` : '?';
+  return m ? `${nomCompletAffiche(m)}` : '?';
 }
 
 function bindParametresServicesEvents() {
@@ -23629,7 +23828,7 @@ function openEquipeManagersModal(serviceId, equipeId) {
       </div>
       <form id="equipe-managers-form">
         <div class="modal-body">
-          ${multiSelectField('managerIds', 'Managers de l\'équipe', employees.map(e => ({ value: e.id, label: `${e.prenom} ${e.nom}` })), equipe.managerIds)}
+          ${multiSelectField('managerIds', 'Managers de l\'équipe', employees.map(e => ({ value: e.id, label: `${nomCompletAffiche(e)}` })), equipe.managerIds)}
           <p class="text-muted" style="margin-top: 10px;">Ceci renseigne l'organisation de l'équipe ; pour changer le(s) manager(s) d'un salarié précis, modifiez sa fiche.</p>
         </div>
         <div class="modal-footer">
@@ -26783,7 +26982,7 @@ function renderShiftSwapCard(user, employeesVisibles) {
   const requests = shiftSwapRepository.getAll().filter(r => r.statut !== 'refusé' && r.statut !== 'validé'
     && (visibleIds.has(r.employeeId) || (estSalarie && (r.statut === 'proposé' || r.employeeId === user.id || r.destinataireId === user.id))));
   if (!requests.length) return '';
-  const nomDe = (id) => { const e = visibleIds.has(id) ? employeeRepository.getById(id) : null; return e ? `${e.prenom} ${e.nom}` : 'un collègue'; };
+  const nomDe = (id) => { const e = visibleIds.has(id) ? employeeRepository.getById(id) : null; return e ? `${nomCompletAffiche(e)}` : 'un collègue'; };
   const describeShift = (shiftId) => {
     const shift = shiftRepository.getById(shiftId);
     return shift ? `${shift.weekday} ${shift.heureDebut}-${shift.heureFin}` : 'Quart supprimé';
@@ -27150,9 +27349,9 @@ function openShiftModal(shift, preset) {
     const violations = verifierControlesLegauxPlanning(data.employeeId, shiftRepository.getAll(), seuilsPlanningDepuisReglages(settingsRepository.getSettings()));
     if (violations.length) {
       const suffixe = violations.length > 1 ? ` (+${violations.length - 1} autre${violations.length > 2 ? 's' : ''} contrôle${violations.length > 2 ? 's' : ''})` : '';
-      showToast(`Attention, ${employeeConcerne.prenom} ${employeeConcerne.nom} : ${violations[0].message}${suffixe}`, 'error');
+      showToast(`Attention, ${nomCompletAffiche(employeeConcerne)} : ${violations[0].message}${suffixe}`, 'error');
     } else if (shiftChevaucheIndisponibilite(savedShift, employeeConcerne.indisponibilitesRecurrentes)) {
-      showToast(`Attention : ce quart chevauche une indisponibilité déclarée par ${employeeConcerne.prenom} ${employeeConcerne.nom}.`, 'error');
+      showToast(`Attention : ce quart chevauche une indisponibilité déclarée par ${nomCompletAffiche(employeeConcerne)}.`, 'error');
     }
     render();
   });
@@ -27694,7 +27893,7 @@ async function submitTeleworkRequestForm(evt) {
 
   // §retour Betty du 18/09/2026 (point 8) : voir le même contrôle dans submitLeaveRequestForm.
   if (!hasModuleLicense(employee, 'planning')) {
-    showToast(`${employee.prenom} ${employee.nom} n'a pas d'accès au module Planning : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
+    showToast(`${nomCompletAffiche(employee)} n'a pas d'accès au module Planning : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
     return;
   }
 
@@ -28816,7 +29015,7 @@ function getFilteredExpenses() {
   if (term) {
     filtered = filtered.filter(n => {
       const employee = employeeRepository.getById(n.employeeId);
-      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom}`).includes(term);
+      return employee && normalizeForSearch(`${employee.prenom} ${employee.nom} ${employee.nomUsage || ''}`).includes(term);
     });
   }
 
@@ -29056,7 +29255,7 @@ function renderRapprochementBancaireCard() {
               <div class="mini-list-item" style="align-items: flex-start;">
                 <span>
                   ${formatDate(l.date)} · ${escapeHtml(l.libelle || '—')} · ${formatCurrencyFR(l.montant)}
-                  ${l.statut === 'rapproche' ? `<br><span class="text-muted">↳ ${expense ? `${escapeHtml(expense.libelle)}${employee ? ' · ' + escapeHtml(employee.prenom + ' ' + employee.nom) : ''}` : 'note introuvable (supprimée depuis)'}</span>` : ''}
+                  ${l.statut === 'rapproche' ? `<br><span class="text-muted">↳ ${expense ? `${escapeHtml(expense.libelle)}${employee ? ' · ' + escapeHtml(nomCompletAffiche(employee)) : ''}` : 'note introuvable (supprimée depuis)'}</span>` : ''}
                 </span>
                 <span style="display: flex; align-items: center; gap: 8px;">
                   ${l.statut === 'rapproche'
@@ -29680,7 +29879,7 @@ async function submitExpenseForm(evt) {
   // uniquement à la création (expenses_insert, 0059), jamais sur la modification d'une note déjà
   // enregistrée, qui reste possible même si l'accès a été retiré depuis.
   if (!isEditing && !hasModuleLicense(employeeForDate, 'frais')) {
-    showToast(`${employeeForDate.prenom} ${employeeForDate.nom} n'a pas d'accès au module Notes de frais : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
+    showToast(`${nomCompletAffiche(employeeForDate)} n'a pas d'accès au module Notes de frais : demandez à un Propriétaire/RH de lui attribuer une licence (Paramètres > Abonnement > Gérer les accès).`, 'error');
     return;
   }
 
@@ -30288,7 +30487,7 @@ function exportTicketsCSV() {
   // aligné à gauche) — voir excelXmlCell.
   const data = rows.map(r => [
     r.employee.matricule,
-    `${r.employee.prenom} ${r.employee.nom}`,
+    `${nomCompletAffiche(r.employee)}`,
     r.result.nbTickets,
     r.result.montantTotal,
     r.result.partEmployeur,
@@ -31126,14 +31325,14 @@ function renderRemuneration() {
         <tbody>
           ${renseignes.map(e => `
             <tr class="table-row" data-open-employee="${e.id}">
-              <td>${escapeHtml(e.prenom + ' ' + e.nom)}</td>
+              <td>${escapeHtml(nomCompletAffiche(e))}</td>
               <td>${escapeHtml(e.service || '—')}</td>
               <td>${formatCurrencyFR(e.salaireBrutMensuel)}</td>
             </tr>
           `).join('')}
           ${nonRenseignes.map(e => `
             <tr class="table-row" data-open-employee="${e.id}">
-              <td>${escapeHtml(e.prenom + ' ' + e.nom)}</td>
+              <td>${escapeHtml(nomCompletAffiche(e))}</td>
               <td>${escapeHtml(e.service || '—')}</td>
               <td class="text-muted">Non renseigné</td>
             </tr>
@@ -31164,7 +31363,7 @@ function renderRevisionSalarialeCard() {
       return `
         <div class="mini-list-item" style="align-items:flex-start;">
           <span>
-            <strong>${escapeHtml(employee.prenom + ' ' + employee.nom)}</strong>
+            <strong>${escapeHtml(nomCompletAffiche(employee))}</strong>
             <span class="badge badge-${REVISION_STATUT_BADGE_CLASS[p.statut]}">${escapeHtml(REVISION_STATUT_LABELS[p.statut])}</span><br>
             ${formatCurrencyFR(p.salaireActuel)} → ${p.salairePropose != null ? formatCurrencyFR(p.salairePropose) : '<span class="text-muted">à proposer</span>'}
             ${p.motif ? `· ${escapeHtml(p.motif)}` : ''}
@@ -31249,7 +31448,7 @@ function openProposerRevisionModal(campagneId, employeeId) {
   const html = `
     <div class="modal modal-small">
       <div class="modal-header">
-        <h2>Révision salariale : ${escapeHtml(employee ? employee.prenom + ' ' + employee.nom : '')}</h2>
+        <h2>Révision salariale : ${escapeHtml(employee ? nomCompletAffiche(employee) : '')}</h2>
         <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
       </div>
       <form id="revision-form">
@@ -32718,7 +32917,7 @@ function openEmployeeModal(id, prefill, candidatureId, cvUrl) {
                    déjà saisis dans l'onglet Identité — se recalcule en direct si l'un des deux
                    change, voir updatePosteOptionsAccordees ci-dessous. -->
               ${!isEdit ? selectField('poste', 'Poste', null, employee.poste, (settings.postes || []).map(p => ({ value: p.neutre, label: libellePosteAccordePourCivilite(p, employee.civilite, getSexe(employee)) })), 'Intitulé accordé d\'après la civilité/le sexe déjà saisis ci-dessus ; la valeur enregistrée reste la forme neutre (voir Paramètres &gt; Référentiels &gt; Postes).', 'postes') : ''}
-              ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${m.prenom} ${m.nom}` })), employee.managerIds)}
+              ${multiSelectField('managerIds', 'Manager(s)', managers.map(m => ({ value: m.id, label: `${nomCompletAffiche(m)}` })), employee.managerIds)}
               ${conventionCollectiveAutocompleteField('conventionCollective', 'Convention collective', employee.conventionCollective)}
               ${selectField('categorieSalarieId', 'Catégorie de salarié', null, getEffectiveCategorieSalarieId(employee, categoriesSalarie), categoriesSalarie.map(c => ({ value: c.id, label: c.nom })), undefined, undefined, 'categoriesSalarie')}
               ${!isEdit ? selectField('typeContrat', 'Type de contrat', settings.typesContrat, employee.typeContrat, null, undefined, 'typesContrat') : ''}
@@ -34011,7 +34210,17 @@ function escapeHtml(value) {
 // réécrit à la main une soixantaine de fois dans ce fichier (salarié, candidature, compte admin...),
 // contrairement aux autres formatages (dates, devises, pourcentages) qui passent déjà par un helper
 // central. Fonctionne pour toute entité {prenom, nom} — pas seulement un salarié.
+/** Nom affiché dans l'application : le nom d'usage quand le salarié en a un, sinon son nom. Les documents officiels (registre, paie, DSN, attestations, contrats) gardent le nom légal. */
+function nomAffiche(p) {
+  return (p && String(p.nomUsage || '').trim()) || (p && p.nom) || '';
+}
+
+/** « Prénom Nom d'usage » en texte brut (à échapper par l'appelant si besoin). */
+function nomCompletAffiche(p) {
+  return p ? `${p.prenom || ''} ${nomAffiche(p)}`.trim() : '';
+}
+
 function personNameHtml(p) {
-  return `${escapeHtml(p.prenom)} ${escapeHtml(p.nom)}`;
+  return `${escapeHtml(p.prenom)} ${escapeHtml(nomAffiche(p))}`;
 }
 

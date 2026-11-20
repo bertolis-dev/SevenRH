@@ -2154,7 +2154,9 @@ const DB = {
         return false;
       }
       if (descriptor && sectionKey) this._markPendingSync(descriptor.companyId, sectionKey, existing => this._mergeDescriptor(existing, descriptor), err);
-      if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.');
+      // La cause technique est affichée dans le message (elle n'était visible que dans la console) : sans elle, impossible de savoir pourquoi le serveur refuse.
+      const cause = err && (err.message || err.code) ? ' Cause technique : ' + String(err.message || err.code).slice(0, 220) + '.' : '';
+      if (this.onSaveError) this.onSaveError('Échec de synchronisation en ligne : cette modification n\'est peut-être enregistrée que dans ce navigateur, sans garantie d\'envoi au serveur. Ne fermez pas cette page tant que l\'avertissement en haut de l\'écran n\'a pas disparu.' + cause);
     });
   },
 
@@ -8368,6 +8370,54 @@ const FORMATION_STATUT_LIBELLES = { demandee: 'Demandée', acceptee: 'Acceptée'
 const FORMATION_FINANCEMENT_LIBELLES = { entreprise: "Financée par l'entreprise", cpf: 'Compte personnel de formation (CPF)' };
 
 /** Contrôle et normalise la saisie d'une demande de formation. Retourne { ok, demande } ou { ok:false, error } (en français). */
+/** Voiture de société (retour du 20/11/2026) : stockée dans la fiche du salarié (employee.voiture), sans table dédiée. */
+const VOITURE_DETENTION_LIBELLES = { lld: 'Location longue durée (LLD)', loa: 'Location avec option d\'achat (LOA)', achat: 'Achat par l\'entreprise', autre: 'Autre' };
+const VOITURE_ENERGIE_LIBELLES = { essence: 'Essence', diesel: 'Diesel', hybride: 'Hybride', electrique: 'Électrique', autre: 'Autre' };
+
+/** Contrôle et nettoie la saisie d'une voiture de société. Retourne { ok: true, voiture } ou { ok: false, error }. */
+function validerVoitureSociete(saisie) {
+  const s = saisie || {};
+  const texte = (v, max, nom) => {
+    const t = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+    return t.length > max ? { erreur: `${nom} est trop long (${max} caractères au plus).` } : { t };
+  };
+  const marque = texte(s.marque, 60, 'La marque'); if (marque.erreur) return { ok: false, error: marque.erreur };
+  const modele = texte(s.modele, 60, 'Le modèle'); if (modele.erreur) return { ok: false, error: modele.erreur };
+  if (!marque.t) return { ok: false, error: 'Indiquez la marque du véhicule.' };
+  if (!modele.t) return { ok: false, error: 'Indiquez le modèle du véhicule.' };
+  const immat = texte(s.immatriculation, 20, "L'immatriculation"); if (immat.erreur) return { ok: false, error: immat.erreur };
+  const loueur = texte(s.loueur, 100, 'Le nom du loueur'); if (loueur.erreur) return { ok: false, error: loueur.erreur };
+  const numeroContrat = texte(s.numeroContrat, 60, 'Le numéro de contrat'); if (numeroContrat.erreur) return { ok: false, error: numeroContrat.erreur };
+  const carte = texte(s.numeroCarteCarburant, 40, 'Le numéro de carte carburant'); if (carte.erreur) return { ok: false, error: carte.erreur };
+  const notes = texte(s.notes, 1000, 'Les notes'); if (notes.erreur) return { ok: false, error: notes.erreur };
+  const dateOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(new Date(v + 'T00:00:00').getTime());
+  const dateDebut = String(s.dateDebut || '').trim();
+  const dateFin = String(s.dateFin || '').trim();
+  if (dateDebut && !dateOk(dateDebut)) return { ok: false, error: 'La date de début du contrat est invalide.' };
+  if (dateFin && !dateOk(dateFin)) return { ok: false, error: 'La date de fin du contrat est invalide.' };
+  if (dateDebut && dateFin && dateFin < dateDebut) return { ok: false, error: 'La fin du contrat ne peut pas être avant son début.' };
+  const nombre = (v, nom) => {
+    const brut = String(v == null ? '' : v).trim().replace(/\s/g, '').replace(',', '.');
+    if (brut === '') return { n: null };
+    const n = Number(brut);
+    return Number.isFinite(n) && n >= 0 ? { n } : { erreur: `${nom} doit être un nombre positif.` };
+  };
+  const kmAnnuel = nombre(s.kmAnnuel, 'Le kilométrage annuel'); if (kmAnnuel.erreur) return { ok: false, error: kmAnnuel.erreur };
+  const kmDepart = nombre(s.kmDepart, 'Le kilométrage au départ'); if (kmDepart.erreur) return { ok: false, error: kmDepart.erreur };
+  const detention = VOITURE_DETENTION_LIBELLES[s.detention] ? s.detention : 'lld';
+  const energie = VOITURE_ENERGIE_LIBELLES[s.energie] ? s.energie : 'essence';
+  return {
+    ok: true,
+    voiture: {
+      marque: marque.t, modele: modele.t, immatriculation: immat.t.toUpperCase(), energie, detention,
+      loueur: loueur.t, numeroContrat: numeroContrat.t, dateDebut, dateFin,
+      kmAnnuel: kmAnnuel.n, kmDepart: kmDepart.n,
+      carteCarburant: Boolean(s.carteCarburant), numeroCarteCarburant: Boolean(s.carteCarburant) ? carte.t : '',
+      usagePrive: Boolean(s.usagePrive), notes: notes.t
+    }
+  };
+}
+
 function validerDemandeFormation(saisie) {
   const s = saisie || {};
   const intitule = String(s.intitule || '').trim().replace(/\s+/g, ' ');

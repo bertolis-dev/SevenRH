@@ -275,11 +275,8 @@ button.nav-section-toggle:hover { opacity: 1; background: var(--color-muted-soft
 :root[data-espace="administration"] { --espace-accent: var(--espace-administration); }
 :root[data-espace="parametres"] { --espace-accent: var(--espace-parametres); }
 :root[data-espace] #main-column { background: color-mix(in srgb, var(--espace-accent) 6%, var(--color-bg)); }
-:root[data-espace] #topbar { border-top: 4px solid var(--espace-accent); }
-:root[data-espace] #view-root > .view-header:first-child h1::before {
-  content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 10px;
-  border-radius: 50%; background: var(--espace-accent); vertical-align: middle;
-}
+/* Le liseré de couleur en haut de l'écran, qui changeait avec la page, est retiré (retour du 20/11/2026). */
+/* Le point de couleur devant le titre de chaque page a été retiré (retour du 20/11/2026) : le liseré du haut et le menu suffisent à situer l'espace. */
 .nav-item.disabled { opacity: 0.6; }
 
 /* §retour du 21/08/2026 : marine/or gardés comme base de la charte plutôt qu'une couleur différente
@@ -2259,13 +2256,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 .absence-cal-bar-half { padding: 2px 3px; justify-content: flex-start; align-items: flex-start; }
 .absence-cal-half-apres-midi { justify-content: flex-end; align-items: flex-end; }
 .absence-cal-half-mark { font-size: 11px; font-weight: 700; line-height: 1; }
-.absence-cal-bar-telework { background: var(--color-primary); }
+.absence-cal-bar-telework { background: #0f766e; }
 .absence-cal-bar-pending { opacity: 0.55; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 6px, transparent 6px 12px); }
 
 .absence-cal-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
 .absence-cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-muted); }
 .absence-cal-legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
-.absence-cal-legend-telework { background: var(--color-primary); }
+.absence-cal-legend-telework { background: #0f766e; }
 
 /* §demande Betty du 09/09/2026 : avatar + total hebdomadaire, comme le modèle Agendrix (photo/
    initiales à gauche du nom, colonne "Total" à droite de la semaine) — même avatar déjà utilisé
@@ -4629,7 +4626,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 :root[data-espace] .nav-item.active { background: color-mix(in srgb, var(--espace-accent) 14%, transparent); box-shadow: inset 3px 0 0 var(--espace-accent); }
 :root[data-espace] .table thead th { background: color-mix(in srgb, var(--espace-accent) 11%, var(--color-surface)); border-bottom: 2px solid var(--espace-accent); }
 @media (min-width: 861px) {
-  :root[data-espace] .table:not(.mobile-cards) tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--espace-accent) 4%, transparent); }
+  :root[data-espace] .table:not(.mobile-cards):not(.planning-table) tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--espace-accent) 4%, transparent); }
 }
 .couleurs-generales { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px 24px; margin: 16px 0; }
 .couleur-champ { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
@@ -4709,7 +4706,10 @@ textarea.input { resize: vertical; font-family: inherit; }
 :root { --couleur-vacances: #2563eb; }
 .absence-cal-vacances-row th { border-color: transparent !important; background: transparent !important; padding: 0 2px; font-size: 11px; font-weight: 700; color: var(--couleur-vacances); vertical-align: bottom; }
 .absence-cal-vacances-titre { text-align: left; white-space: nowrap; font-weight: 600 !important; }
+/* Le libellé est posé en absolu : un texte long (« Vacances de la Toussaint ») sur une période qui ne couvre que un ou deux jours du mois élargissait ces colonnes (retour du 20/11/2026, le 1er novembre). */
+.absence-cal-vacances-bloc { position: relative; height: 22px; padding: 0 !important; }
 .absence-cal-vacances-bloc span {
+  position: absolute; inset: 0; box-sizing: border-box;
   display: block; padding: 2px 6px 1px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   border: 2px solid var(--couleur-vacances); border-bottom: 0; border-radius: 8px 8px 0 0; height: 22px; line-height: 17px;
 }
@@ -4784,3 +4784,11 @@ textarea.input { resize: vertical; font-family: inherit; }
 .chart-line { max-width: 560px; margin: 0 auto; }
 .tc-alerte { margin-top: 4px; font-size: 12px; color: var(--color-warning); }
 .alerte-paliers { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--color-warning-soft); border: 1px solid var(--color-warning); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+
+/* Calendrier entreprise (retour du 20/11/2026) : le filtre « Tous les services » et les deux boutons à côté ont la même taille. */
+.calendar-nav:has(#absence-cal-filter-service) > .btn-sm,
+.calendar-nav #absence-cal-filter-service {
+  box-sizing: border-box; width: 156px; height: 37px; min-height: 0; padding-top: 0; padding-bottom: 0;
+  font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
+}
+.calendar-nav #absence-cal-filter-service { display: inline-block; padding-left: 12px; padding-right: 30px; text-align-last: left; }
