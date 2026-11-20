@@ -205,6 +205,11 @@ async function run() {
 
     state.congesFilters = { employeeId: '', typeId: '', statut: '' };
     state.congesPage = 1;
+    // Retour du 20/11/2026 : sans aucune demande, il n'y a rien à filtrer, la barre de filtres n'est donc pas proposée.
+    assert.ok(!renderCongesDemandes('conge').includes('data-toggle-filters="conges-filters"'), "Congés & absences : pas de barre de filtres quand il n'y a aucune demande");
+    const societe = DB.getCurrentCompany();
+    societe.leaveRequests = [{ id: 'lr-filtre', employeeId: rh.id, typeId: DB.getLeaveTypes()[0].id, dateDebut: '2026-06-01', dateFin: '2026-06-01', nbJours: 1, statut: 'En attente', etapeIndex: 0, workflow: ['manager'], historique: [], demiJournee: null }];
+    DB.saveCurrentCompany(societe);
     const htmlConges = renderCongesDemandes('conge');
     assert.ok(htmlConges.includes('data-toggle-filters="conges-filters"'), 'Congés & absences : bouton de repli des filtres présent');
 

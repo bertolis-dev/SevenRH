@@ -2711,13 +2711,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.1';
+const APP_VERSION = '2026.11.20.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Plus simple à utiliser : sur l'accueil du salarié, « Demander un congé » est en haut (il ouvre directement le formulaire, avec « Congés payés » déjà choisi et le solde restant affiché juste sous les dates) ; seuls les soldes qui comptent au quotidien sont affichés, les autres sont sous « Voir les autres soldes ». La page Congés n'affiche plus de filtres inutiles à un salarié. Sur la page Salariés, un seul bouton plein (« + Nouveau salarié »), les imports, exports, registre et index égalité sont sous « Plus d'actions ». Dans le menu, les deux calendriers deviennent « Mon calendrier » et « Calendrier de l'équipe », et « Ma retraite » et « Formation » sont rangés sous « Plus ».",
       "Paramètres > Couleurs : les changements ne se voyaient pas quand l'écran était en thème sombre (le thème du système, par exemple). La couleur principale, la mise en avant et le fond s'appliquent maintenant aussi en thème sombre, adaptées pour rester lisibles ; seule la couleur du texte reste claire. Un aperçu s'affiche en direct pendant le choix, et un bouton permet de passer en thème clair pour voir les couleurs exactement comme choisies.",
       "Modèles d'import et exports Excel : les fichiers sont maintenant de vrais classeurs .xlsx. Ils portaient jusqu'ici l'extension « .xls » alors que leur contenu était du XML, ce qu'Excel signalait comme suspect et qui pouvait faire perdre la saisie. Mêmes couleurs, mêmes colonnes, première ligne figée. Les anciens modèles .xls restent importables.",
       "Import des salariés : une colonne « Sexe » (Homme/Femme, H/F, M/Mme, ou une colonne « Civilité ») est maintenant reconnue et reprise sur la fiche, qui n'a plus à être complétée à la main avant de pouvoir la modifier. Le modèle téléchargeable l'inclut, et l'écran de fin signale les fiches créées sans sexe. L'historique d'une demande refusée nomme maintenant qui a refusé (« Refusé (par Manager) »), comme pour une validation.",
@@ -5829,14 +5830,14 @@ GUIDE_THEMES.push(
         ) },
       { id: 's-import', q: 'Comment importer plusieurs salariés depuis Excel ?', vue: 'employees', mots: 'import importer excel xlsx fichier salariés masse colonnes csv chargement reprise',
         r: gShot('import-salaries', "Fenêtre « Importer des salariés (Excel) » qui liste les colonnes reconnues et propose de choisir un fichier") + gFig.importSalaries() + gEtapes(
-          `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer Excel</strong>.`,
+          `Dans <strong>Salariés</strong>, cliquez sur <strong>Plus d'actions</strong>, puis sur <strong>Importer des salariés (Excel)</strong>.`,
           `Choisissez votre fichier (.xlsx). Les colonnes sont reconnues par leur en-tête : Matricule, Nom, Prénom, Email, Téléphone, Poste, Service, Équipe, Type de contrat, Date d'embauche, Date de naissance.`,
           `<strong>Nom, Prénom, Email et Date d'embauche sont obligatoires.</strong> Cochez « Conserver les matricules du fichier » seulement si vous y tenez : sinon ils sont attribués automatiquement (recommandé).`,
           `Contrôlez l'aperçu affiché, puis cliquez sur <strong>Importer</strong>.`
         ) },
       { id: 's-import-soldes', q: 'Comment reprendre les soldes de congés de départ ?', module: 'conges', vue: 'employees', mots: 'import soldes initiaux reprise compteurs congés payés rtt excel départ démarrage ancien logiciel',
         r: gShot('import-soldes', "Fenêtre « Importer les soldes initiaux » avec le choix entre le solde à avoir aujourd'hui et des jours à ajouter ou retirer") + gFig.importSoldes() + gEtapes(
-          `Dans <strong>Salariés</strong>, cliquez sur <strong>Importer les soldes initiaux</strong>.`,
+          `Dans <strong>Salariés</strong>, cliquez sur <strong>Plus d'actions</strong>, puis sur <strong>Importer les soldes initiaux</strong>.`,
           `Préparez un fichier Excel avec une colonne d'identification (Matricule ou Email) et <strong>une colonne par type de congé</strong>, nommée comme le type (« Congés payés », « RTT »...).`,
           `Dites ce que représentent les chiffres : <strong>le solde à avoir aujourd'hui</strong> (recommandé : Nexus calcule lui-même l'ajustement pour afficher exactement ce solde) ou <strong>des jours à ajouter ou retirer</strong> au solde calculé (cette option remplace l'ajustement précédent du compteur).`,
           `Vérifiez l'aperçu puis cliquez sur <strong>Importer</strong>.`
@@ -8227,8 +8228,11 @@ function renderSidebar() {
   nav.classList.remove('open');
   document.getElementById('btn-mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
 
+  // Retour du 20/11/2026 : deux entrées « Calendrier » côte à côte se confondaient ; quand l'utilisateur a les deux, elles se distinguent (Mon calendrier / Calendrier de l'équipe).
+  const aSectionEquipe = items.some(i => i.group === 'equipe');
   const renderItem = (item, index) => {
-    const label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
+    let label = item.key === 'employees' && user.role === 'manager' ? 'Mon équipe' : item.label;
+    if (item.key === 'calendrier' && aSectionEquipe) label = item.group === 'equipe' ? "Calendrier de l'équipe" : 'Mon calendrier';
     return `
     <button class="nav-item ${isNavItemActive(item, items) ? 'active' : ''}" data-nav-index="${index}" aria-label="${escapeHtml(label)}">
       <span class="nav-icon">${item.icon}</span>
@@ -8252,10 +8256,23 @@ function renderSidebar() {
 
   const showGroups = scrollable.some(x => x.item.group === 'personnel') && scrollable.some(x => x.item.group === 'equipe');
 
+  // Retour du 20/11/2026 : « Ma retraite » et « Formation » servent rarement ; rangées sous « Plus » (replié par défaut, ouvert si l'écran courant en fait partie).
+  const CLES_RARES = ['retraite', 'formation'];
+  const plusOuvert = (() => { try { return window.localStorage.getItem('nexus_menu_plus_ouvert') === '1'; } catch (err) { return false; } })();
+  const plusHtml = (rares) => {
+    if (!rares.length) return '';
+    const courante = rares.find(x => isNavItemActive(x.item, items));
+    const ouvert = plusOuvert || Boolean(courante);
+    return `<button type="button" class="nav-item nav-plus-toggle" aria-expanded="${ouvert ? 'true' : 'false'}"><span class="nav-label">${ouvert ? 'Moins' : 'Plus'}</span><span class="nav-section-chevron" aria-hidden="true"></span></button>` +
+      (ouvert ? rares.map(x => renderItem(x.item, x.index)).join('') : '');
+  };
+
   let scrollableHtml;
   if (showGroups) {
     const dashboard = scrollable.filter(x => !x.item.group && x.item.key === 'dashboard');
-    const personnel = scrollable.filter(x => x.item.group === 'personnel');
+    const personnelTous = scrollable.filter(x => x.item.group === 'personnel');
+    const personnel = personnelTous.filter(x => !CLES_RARES.includes(x.item.key));
+    const personnelRares = personnelTous.filter(x => CLES_RARES.includes(x.item.key));
     const equipe = scrollable.filter(x => x.item.group === 'equipe');
     const administration = scrollable.filter(x => x.item.group === 'administration');
     const reste = scrollable.filter(x => !x.item.group && x.item.key !== 'dashboard');
@@ -8272,11 +8289,13 @@ function renderSidebar() {
     scrollableHtml =
       dashboard.map(x => renderItem(x.item, x.index)).join('') +
       sectionHtml('personnel', 'Mon espace', personnel) +
+      (replies.has('personnel') ? '' : plusHtml(personnelRares)) +
       sectionHtml('equipe', 'Mon équipe', equipe) +
       (administration.length ? sectionHtml('administration', 'Administration', administration) : '') +
       reste.map(x => renderItem(x.item, x.index)).join('');
   } else {
-    scrollableHtml = scrollable.map(x => renderItem(x.item, x.index)).join('');
+    const principaux = scrollable.filter(x => !CLES_RARES.includes(x.item.key));
+    scrollableHtml = principaux.map(x => renderItem(x.item, x.index)).join('') + plusHtml(scrollable.filter(x => CLES_RARES.includes(x.item.key)));
   }
 
   if (MOBILE_NAV_QUERY.matches) {
@@ -8303,8 +8322,20 @@ function renderSidebar() {
     });
   });
 
+  nav.querySelectorAll('.nav-plus-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      try { window.localStorage.setItem('nexus_menu_plus_ouvert', btn.getAttribute('aria-expanded') === 'true' ? '0' : '1'); } catch (err) { /* stockage indisponible : le choix ne survit pas au rechargement */ }
+      const etaitOuvert = nav.classList.contains('open');
+      renderSidebar();
+      if (etaitOuvert) {
+        nav.classList.add('open');
+        document.getElementById('btn-mobile-nav-toggle')?.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
   [nav, pinnedNav].forEach(container => {
-    container.querySelectorAll('.nav-item').forEach(btn => {
+    container.querySelectorAll('.nav-item[data-nav-index]').forEach(btn => {
       btn.addEventListener('click', () => {
         const item = items[Number(btn.dataset.navIndex)];
         navigateTo(item.key, item.navParams || {});
@@ -8622,6 +8653,9 @@ function bindDashboardEvents() {
   const btn = document.getElementById('btn-customize-dashboard');
   if (btn) btn.addEventListener('click', openDashboardCustomizeModal);
   bindVisitesRepriseEvents();
+  // Le formulaire s'ouvre directement depuis l'accueil : un clic au lieu de deux (page Congés puis « Nouvelle demande »).
+  const demanderCongeBtn = document.getElementById('btn-accueil-demander-conge');
+  if (demanderCongeBtn) demanderCongeBtn.addEventListener('click', () => openLeaveRequestModal(authRepository.getCurrentUser().id, 'conge'));
 
   const declarerInterventionBtn = document.getElementById('btn-declarer-intervention-astreinte');
   if (declarerInterventionBtn) {
@@ -9035,6 +9069,18 @@ function renderDashboardSalarie(user) {
   return `
     ${renderDashboardHero(`Bonjour ${user.prenom}`, 'Votre espace personnel', renderDashboardCustomizeButton())}
 
+    ${isDashboardWidgetVisible(user, 'shortcuts') ? `
+    <div class="card raccourcis-accueil">
+      <h2>Que souhaitez-vous faire ?</h2>
+      <div class="raccourcis-accueil-boutons">
+      ${ifModule('conges', `<button class="btn btn-primary btn-lg" id="btn-accueil-demander-conge">Demander un congé</button>`)}
+      ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Déclarer du télétravail</button>`)}
+      ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Déposer une note de frais</button>`)}
+      ${ifModule('rh', `<button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>`)}
+      </div>
+    </div>
+    ` : ''}
+
     <div class="kpi-grid">
       ${kpiCard('Statut aujourd\'hui', today.label, today.icon, true)}
       ${kpiCard('Demandes en attente', enAttente.length, ICONS.hourglass)}
@@ -9044,7 +9090,7 @@ function renderDashboardSalarie(user) {
     ${isDashboardWidgetVisible(user, 'soldes') ? `
     <div class="card">
       <h2>Mes soldes de congés</h2>
-      ${renderEmployeeBalances(user)}
+      ${renderEmployeeBalances(user, false, true)}
     </div>
     ` : ''}
 
@@ -9079,15 +9125,6 @@ function renderDashboardSalarie(user) {
     </div>
     ` : ''}
 
-    ${isDashboardWidgetVisible(user, 'shortcuts') ? `
-    <div class="card">
-      <h2>Raccourcis</h2>
-      ${ifModule('conges', `<button class="btn btn-primary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Demander un congé</button>`)}
-      ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Déclarer du télétravail</button>`)}
-      ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Déposer une note de frais</button>`)}
-      ${ifModule('rh', `<button class="btn btn-secondary" data-nav="mes-documents">Mes documents</button>`)}
-    </div>
-    ` : ''}
   `;
 }
 
@@ -10107,6 +10144,17 @@ function kpiCard(label, value, icon, hero) {
  * sinon la liste exacte des ids autorisés (soi-même, + son équipe pour un manager).
  */
 /** Salariés à proposer dans un filtre/sélecteur, restreints au périmètre de l'utilisateur courant. */
+/** Menus « Plus d'actions » (<details class="menu-actions">) : se referment après un choix, un clic ailleurs ou la touche Échap. */
+function bindMenusActions() {
+  document.querySelectorAll('details.menu-actions').forEach(menu => {
+    menu.addEventListener('click', (evt) => { if (evt.target.closest('.menu-actions-item')) menu.removeAttribute('open'); });
+  });
+  if (window.__menusActionsGlobal) return;
+  window.__menusActionsGlobal = true;
+  document.addEventListener('click', (evt) => document.querySelectorAll('details.menu-actions[open]').forEach(m => { if (!m.contains(evt.target)) m.removeAttribute('open'); }));
+  document.addEventListener('keydown', (evt) => { if (evt.key === 'Escape') document.querySelectorAll('details.menu-actions[open]').forEach(m => m.removeAttribute('open')); });
+}
+
 function getScopedEmployeesForFilters() {
   const employees = employeeRepository.getAll().filter(e => !e.archive);
   const visibleIds = getVisibleEmployeeIdsForCurrentUser();
@@ -10189,17 +10237,23 @@ function renderEmployeesList() {
         <p class="view-subtitle">${visible.length} salarié${visible.length > 1 ? 's' : ''}</p>
       </div>
       <div class="detail-header-actions">
-        <button class="btn btn-secondary" id="btn-export-employees">Exporter Excel</button>
+        <!-- Retour du 20/11/2026 : un seul bouton plein (+ Nouveau salarié) ; les imports, exports et documents légaux sont rangés dans « Plus d'actions » (mêmes identifiants, mêmes écouteurs). -->
+        ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
+        <details class="menu-actions">
+          <summary class="btn btn-secondary">Plus d'actions</summary>
+          <div class="menu-actions-liste">
+        ${canCreate ? '<button class="menu-actions-item" id="btn-import-employees">Importer des salariés (Excel)</button>' : ''}
+        ${canImportSoldes ? '<button class="menu-actions-item" id="btn-import-soldes">Importer les soldes initiaux</button>' : ''}
+        <button class="menu-actions-item" id="btn-export-employees">Exporter la liste (Excel)</button>
         <!-- §retour Betty du 17/09/2026 (audit "millimètre par millimètre") : le Registre du personnel
              est aussi un onglet de Paramètres (PARAMETRES_TABS, clé 'registre-personnel'), lui
              explicitement réservé au module RH (isVisible: canManageParametres() && hasModule('rh'))
              — ce bouton, sur l'écran Salariés (jamais gaté par aucun module, "socle commun"), donnait
              donc un second accès à la MÊME donnée sans jamais vérifier ce module. -->
-        ${canSeeRegistrePersonnel && hasModule('rh') ? `<button class="btn btn-secondary" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
-        ${canSeeRegistrePersonnel ? `<button class="btn btn-secondary" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
-        ${canCreate ? '<button class="btn btn-secondary" id="btn-import-employees">Importer Excel</button>' : ''}
-        ${canImportSoldes ? '<button class="btn btn-secondary" id="btn-import-soldes">Importer les soldes initiaux</button>' : ''}
-        ${canCreate ? '<button class="btn btn-primary" id="btn-new-employee">+ Nouveau salarié</button>' : ''}
+        ${canSeeRegistrePersonnel && hasModule('rh') ? `<button class="menu-actions-item" id="btn-registre-personnel">${icon(ICONS.clipboard, 14)} Registre du personnel</button>` : ''}
+        ${canSeeRegistrePersonnel ? `<button class="menu-actions-item" id="btn-index-egalite">${icon(ICONS.scale, 14)} Index égalité pro</button>` : ''}
+          </div>
+        </details>
       </div>
     </div>
     ${indexEgaliteRappel ? `
@@ -12343,6 +12397,7 @@ function bindEmployeesListEvents() {
   if (importSoldesBtn) importSoldesBtn.addEventListener('click', openImportSoldesInitiauxModal);
 
   document.getElementById('btn-export-employees').addEventListener('click', exportEmployeesExcel);
+  bindMenusActions();
   const registreBtn = document.getElementById('btn-registre-personnel');
   if (registreBtn) registreBtn.addEventListener('click', openRegistreUniquePersonnelModal);
   const indexEgaliteBtn = document.getElementById('btn-index-egalite');
@@ -17041,7 +17096,12 @@ function renderConfidentialEmployeeCard(e, user) {
   `;
 }
 
-function renderEmployeeBalances(employee, canAdjust = false) {
+/** Types dont le solde n'intéresse le salarié qu'en cas de besoin (événements familiaux, sans solde, maladie...) : sur son accueil ils sont rangés sous « Voir les autres soldes »,
+ * sauf s'il y a déjà des jours pris, une demande en attente ou un ajustement. Un type personnalisé n'est jamais rangé : il reste affiché. */
+const NOMS_SOLDES_SECONDAIRES = [...NOMS_EVENEMENTS_FAMILIAUX_UNIFIES, 'Exceptionnel', 'Sans solde', 'Maladie', 'Proche aidant', 'Formation'];
+
+/** `compact` : seuls les soldes qui comptent au quotidien (congés payés, RTT...) sont affichés d'emblée ; les autres sont dans un bloc repliable. */
+function renderEmployeeBalances(employee, canAdjust = false, compact = false) {
   // Liste complète (pas seulement les types actifs/visibles ci-dessous) : getLeaveBalance en a besoin
   // pour retrouver les types "deduireRTT/CP" même désactivés depuis, sans re-fetch à chaque type.
   const allLeaveTypes = leaveTypeRepository.getLeaveTypes();
@@ -17059,9 +17119,7 @@ function renderEmployeeBalances(employee, canAdjust = false) {
   const types = allLeaveTypes.filter(t => t.actif && t.visibleSalarie && !(desactives.has(t.id) && !aDesDemandes(t)) && concerne(t));
   if (types.length === 0) return `<p class="text-muted">Aucun type de congé actif.</p>`;
 
-  return `
-    <div class="balance-grid">
-      ${types.map(t => {
+  const cartes = (liste) => liste.map(t => {
         const balance = getLeaveBalance(employee, t, requests, allLeaveTypes);
         const disponibleLabel = balance.disponible === Infinity ? 'Illimité' : formatDurationFR(balance.disponible);
         // §correctif retour QA du 27/08/2026 (point 1) : "disponible" et "en cours d'acquisition"
@@ -17081,8 +17139,28 @@ function renderEmployeeBalances(employee, canAdjust = false) {
             ${balance.reportPerdu ? `<div class="balance-sub text-danger">${formatDurationFR(balance.reportPerdu)} de report perdu (échéance dépassée)</div>` : ''}
           </div>
         `;
-      }).join('')}
-    </div>
+      }).join('');
+
+  if (compact) {
+    const secondaire = (t) => {
+      if (!NOMS_SOLDES_SECONDAIRES.some(nom => leaveTypeNameMatches(t.nom, nom))) return false;
+      const b = getLeaveBalance(employee, t, requests, allLeaveTypes);
+      return !(b.pris || b.enAttente || b.ajustement);
+    };
+    const principaux = types.filter(t => !secondaire(t));
+    const autres = types.filter(secondaire);
+    if (principaux.length && autres.length) {
+      return `
+    <div class="balance-grid">${cartes(principaux)}</div>
+    <details class="balance-autres">
+      <summary>Voir les autres soldes (${autres.length})</summary>
+      <div class="balance-grid">${cartes(autres)}</div>
+    </details>
+  `;
+    }
+  }
+  return `
+    <div class="balance-grid">${cartes(types)}</div>
   `;
 }
 
@@ -18007,6 +18085,13 @@ function renderCongesDemandes(categorie = 'conge') {
     ? 'Aucune demande ne correspond à ces filtres.'
     : `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant. Utilisez le bouton "+ Nouvelle demande" ci-dessus pour créer la première.`;
 
+  // Retour du 20/11/2026 : rien à filtrer (aucune demande) ou un seul salarié dans le périmètre (un simple salarié ne voit que lui-même) : on n'affiche ni la barre de filtres vide,
+  // ni « Rechercher un salarié » / « Tous les salariés » (les éléments restent dans la page, masqués, pour que les écouteurs trouvent toujours leurs champs).
+  const filtresActifs = Object.values(filters).some(Boolean) || Boolean(state[searchKey]);
+  const barreFiltresInutile = requests.length === 0 && !filtresActifs;
+  const perimetreSolo = employees.length <= 1;
+  const masquerSolo = perimetreSolo ? ' style="display:none"' : '';
+
   return `
     <div class="view-header-row">
       <p class="view-subtitle">${requests.length} demande${requests.length > 1 ? 's' : ''}</p>
@@ -18024,13 +18109,13 @@ function renderCongesDemandes(categorie = 'conge') {
 
     ${renderDraftsCard(categorie === 'conge' ? 'conge' : 'autre-absence')}
 
-    ${renderFilterToggleBar('conges-filters', [state[searchKey], filters.employeeId, filters.typeId, filters.statut, filters.periode].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
-    <div class="toolbar card toolbar-collapsible" id="conges-filters">
+    ${barreFiltresInutile ? '' : renderFilterToggleBar('conges-filters', [state[searchKey], filters.employeeId, filters.typeId, filters.statut, filters.periode].filter(Boolean).length, categorie === 'conge' ? 'conges' : 'autres-absences')}
+    <div class="toolbar card toolbar-collapsible" id="conges-filters"${barreFiltresInutile ? ' style="display:none"' : ''}>
       <!-- §retour Betty du 19/09/2026 (revue de la livraison, point 3, "restent sans recherche") :
            recherche par nom, en complément du filtre déroulant ci-dessous (gardé, plus pratique pour
            choisir un salarié précis dans une petite équipe). -->
-      <input type="text" id="${searchInputId}" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state[searchKey])}">
-      <select id="conges-filter-employee" class="input">
+      <input type="text" id="${searchInputId}" class="input" placeholder="Rechercher un salarié..." value="${escapeHtml(state[searchKey])}"${masquerSolo}>
+      <select id="conges-filter-employee" class="input"${masquerSolo}>
         <option value="">Tous les salariés</option>
         ${employees.map(e => `<option value="${e.id}" ${filters.employeeId === e.id ? 'selected' : ''}>${personNameHtml(e)}</option>`).join('')}
       </select>
@@ -18059,7 +18144,7 @@ function renderCongesDemandes(categorie = 'conge') {
     <div class="card table-card">
       ${requests.length === 0 ? (Object.values(filters).some(Boolean) || state[searchKey]
         ? renderEtatVide({ icone: 'search', titre: 'Aucun résultat', texte: 'Aucune demande ne correspond à ces filtres. Essayez de les élargir.' })
-        : renderEtatVide({ icone: 'sun', titre: `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant`, texte: 'Les demandes des salariés apparaîtront ici. Vous pouvez aussi en saisir une vous-même.', action: { label: '+ Nouvelle demande', clickId: 'btn-new-leave-request' } })) : `
+        : renderEtatVide({ icone: 'sun', titre: `Aucune demande ${categorie === 'conge' ? 'de congé' : 'd\'absence'} pour l'instant`, texte: perimetreSolo ? 'Cliquez sur « Nouvelle demande » pour poser votre premier congé.' : 'Les demandes des salariés apparaîtront ici. Vous pouvez aussi en saisir une vous-même.', action: { label: '+ Nouvelle demande', clickId: 'btn-new-leave-request' } })) : `
         <table class="table mobile-cards">
           <thead>
             <tr>
@@ -19163,6 +19248,11 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
     champs.dateDebut = presetDate;
     champs.dateFin = presetDate;
   }
+  // Nouvelle demande de congé : « Congés payés » déjà choisi (le cas de loin le plus fréquent), au lieu d'une liste vide à ouvrir.
+  if (!draft && !champs.typeId && categorie !== 'autre') {
+    const parDefaut = types.find(t => leaveTypeNameMatches(t.nom, 'Congés payés'));
+    if (parDefaut) champs.typeId = parDefaut.id;
+  }
   state.pendingAttachment = champs.justificatif || null;
   beginDraftEdit(draft);
 
@@ -19193,6 +19283,7 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
             ${textField('dateDebut', 'Date de début', champs.dateDebut || '', true, 'date')}
             ${textField('dateFin', 'Date de fin', champs.dateFin || '', true, 'date')}
           </div>
+          <p class="leave-balance-hint" id="leave-balance-hint" role="status" aria-live="polite"></p>
           <div class="form-field" id="field-demi-journee" style="margin-top:14px; display:none;">
             <label>Demi-journée</label>
             <select class="input" id="f-demiJournee" name="demiJournee">
@@ -19246,7 +19337,6 @@ function openLeaveRequestModal(presetEmployeeId, categorie, draft, presetDate) {
             <input class="input" type="file" id="f-justificatif">
             ${champs.justificatif ? `<p class="text-muted" style="margin-top:4px;">Fichier repris du brouillon : ${escapeHtml(champs.justificatif.nom)}</p>` : ''}
           </div>
-          <p class="text-muted" id="leave-balance-hint" style="margin-top:12px;"></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
