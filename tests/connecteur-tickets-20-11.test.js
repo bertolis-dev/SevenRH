@@ -16,7 +16,7 @@ const finClient = source.indexOf('Deno.serve(');
 assert.ok(debutClient > 0 && finClient > debutClient, 'client Swile repéré');
 
 const code = source.slice(debutCoeur, finCoeur) + '\n' + source.slice(debutClient, finClient) + `
-  return { doitEtreProvisionne, estParti, profilSouhaite, differences, synchroniser, periodeLibelle, echapperCsv, validerLignesCommande, construireCsvCommande, clientSwile, nettoyerEnTete, MAX_CHANGEMENTS_PAR_APPEL };`;
+  return { doitEtreProvisionne, estParti, profilSouhaite, differences, synchroniser, periodeLibelle, echapperCsv, validerLignesCommande, construireCsvCommande, validerFichierCommande, entierBorne, clientSwile, nettoyerEnTete, MAX_CHANGEMENTS_PAR_APPEL };`;
 const C = new Function(code)();
 
 const AUJ = '2026-11-20';
@@ -142,6 +142,17 @@ const rows = [
   assert.ok(csv.startsWith('﻿Matricule;Nom;Prénom;Email;Nombre de titres\r\n'), 'en-têtes et BOM pour Excel');
   assert.ok(csv.includes('SRH-1;DUPONT;Léa;lea@exemple.fr;18') && csv.includes('SRH-3;MARTIN;Paul;paul@exemple.fr;21'));
   assert.ok(!csv.includes('SRH-2'), 'un salarié à 0 titre n\'est pas dans la commande');
+  // Fichier de commande déjà prêt (format Swile) : nom et taille contrôlés
+  assert.ok(C.validerFichierCommande({ nom: 'COMMANDE_SWILE_ABC123.csv', base64: 'QUJD' }).ok);
+  assert.ok(!C.validerFichierCommande({ nom: '../../etc/passwd', base64: 'QUJD' }).ok, 'nom de fichier invalide refusé');
+  assert.ok(!C.validerFichierCommande({ nom: 'COMMANDE_X.exe', base64: 'QUJD' }).ok, 'extension refusée');
+  assert.ok(!C.validerFichierCommande({ nom: 'COMMANDE_X.csv', base64: 'a'.repeat(600001) }).ok, 'fichier trop volumineux refusé');
+  assert.ok(!C.validerFichierCommande({ nom: 'COMMANDE_X.csv', base64: 'pas du base64 !' }).ok, 'contenu non base64 refusé');
+  assert.ok(!C.validerFichierCommande(null).ok);
+  assert.strictEqual(C.entierBorne('12', 100), 12);
+  assert.strictEqual(C.entierBorne(-1, 100), null);
+  assert.strictEqual(C.entierBorne(1.5, 100), null);
+  assert.strictEqual(C.entierBorne(101, 100), null);
   assert.strictEqual(C.nettoyerEnTete('Ma "Société"\r\nBCC: x'), 'Ma SociétéBCC: x', 'pas d\'injection dans l\'en-tête de l\'email');
 
   // ---- Client Swile : jeton mis en cache, pagination par curseur ----

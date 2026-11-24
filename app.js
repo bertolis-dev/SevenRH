@@ -2714,13 +2714,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.24.1';
+const APP_VERSION = '2026.11.24.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tickets restaurant, commande Swile : le bouton « Commande Swile » (Tickets de l'équipe) ouvre un aperçu propre de la commande du mois (bénéficiaires, jours à charger, montant), signale ce qui manque dans les fiches (email, date de naissance, civilité) et télécharge le fichier au format exact du modèle Swile (COMMANDE_SWILE_code.csv : même consigne en première ligne, mêmes colonnes, MR/MME, date JJ/MM/AAAA, nombre de jours à charger, encodage Windows-1252). Il suffit ensuite de le déposer sur le site Swile. Le « Fichier de commande » devient un « Tableau de commande » Excel plus propre (mêmes colonnes, service, total). Le code client Swile et la valeur de la colonne MATRICULE se règlent dans Paramètres > Tickets restaurant.",
       "Tickets restaurant (revue du 24/11, demandes 22 et 23) : une demi-journée en début (après-midi) ou en fin (matin) d'une période de congé ne retire plus de ticket, comme une demi-journée isolée. Nouvelle colonne « Pointage » dans Tickets de l'équipe, après « Part salarié » : jours d'absence cumulés depuis le 1er janvier (hors demi-journées), tickets distribués, écart, et le bouton « Contrôler » qui propose la correction avec les jours concernés (par exemple « 14/10/2026 - Congés payés, déposé le 03/11/2026 »). Rien ne s'applique sans la validation du RH, qui peut valider telle quelle, modifier le nombre ou refuser : la régularisation automatique du mois précédent est supprimée et passe par cette validation. Pour les mois commandés hors de Nexus, le bouton « Saisir les tickets distribués » permet de les contrôler aussi.",
       "Export Excel du calendrier de l'équipe (revue du 24/11, demande 21) : à la fin de chaque ligne, pour chaque type d'absence et le télétravail, le total du mois et le cumul depuis le 1er janvier (les demi-journées comptent 0,5 jour), puis deux colonnes à part avec le nombre de demi-journées de congés payés et de RTT (du mois et cumulé).",
       "Titres-restaurant : connecteur Swile, prêt mais pas encore activé. Dans Paramètres > Tickets restaurant, vous renseignez la clé d'API Swile (stockée sur le serveur, jamais ré-affichée), le produit titres-restaurant et l'adresse de commande. Nexus crée, met à jour et retire vos salariés chez Swile et les inscrit aux titres-restaurant (« Synchroniser maintenant », ou automatiquement une fois par jour). Sur l'écran Tickets de l'équipe, le nouveau bouton « Envoyer la commande » envoie par email le fichier de commande du mois au contact de commande, après confirmation, et garde la trace de l'envoi. Cela demande la mise à jour du serveur décrite dans docs/connecteur-titres-restaurant.md.",
@@ -24374,6 +24375,14 @@ function renderParametresTicketsRestaurant() {
            entreprise pouvait dépasser le plafond sans jamais être avertie dans l'application réelle. -->
       <p class="text-muted" id="tickets-urssaf-note" style="margin-top: 10px;"></p>
     </div>
+    <div class="card">
+      <h2>Commande Swile (fichier à déposer)</h2>
+      <p class="text-muted">Nexus prépare le fichier de commande au format du modèle Swile (COMMANDE_SWILE_...csv) : prénom, nom, email, date de naissance et nombre de jours à charger pour chaque salarié.</p>
+      <div class="form-grid">
+        <div class="form-field"><label for="f-swile-code-client">Code client Swile</label><input class="input" type="text" id="f-swile-code-client" maxlength="20" placeholder="Ex. CZPUAQ" value="${escapeHtml(settings.ticketsSwileCodeClient || '')}"><p class="form-hint">Sert à nommer le fichier (COMMANDE_SWILE_CODE.csv), comme celui fourni par Swile.</p></div>
+        <div class="form-field"><label for="f-swile-matricule">Valeur de la colonne MATRICULE</label><select class="input" id="f-swile-matricule"><option value="nom" ${settings.ticketsSwileMatricule !== 'matricule' ? 'selected' : ''}>Le nom de famille (comme votre fichier Swile actuel)</option><option value="matricule" ${settings.ticketsSwileMatricule === 'matricule' ? 'selected' : ''}>Le matricule Nexus</option></select></div>
+      </div>
+    </div>
     <div class="card" id="connecteur-swile-carte"><h2>Prestataire de titres-restaurant (Swile)</h2><p class="text-muted">Chargement...</p></div>
     </div>
   `;
@@ -24381,6 +24390,21 @@ function renderParametresTicketsRestaurant() {
 
 function bindParametresTicketsRestaurantEvents() {
   chargerCarteConnecteurSwile();
+  const codeClientSwile = document.getElementById('f-swile-code-client');
+  if (codeClientSwile) codeClientSwile.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.ticketsSwileCodeClient = e.target.value.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase();
+    settingsRepository.saveSettings(settings);
+    e.target.value = settings.ticketsSwileCodeClient;
+    showToast('Code client Swile enregistré.');
+  });
+  const matriculeSwile = document.getElementById('f-swile-matricule');
+  if (matriculeSwile) matriculeSwile.addEventListener('change', (e) => {
+    const settings = settingsRepository.getSettings();
+    settings.ticketsSwileMatricule = e.target.value === 'matricule' ? 'matricule' : 'nom';
+    settingsRepository.saveSettings(settings);
+    showToast('Réglage enregistré.');
+  });
   bindNumberField('f-tickets-valeur', 'ticketsValeurFaciale', 0, 'Valeur faciale mise à jour.');
   bindNumberField('f-tickets-part', 'ticketsPartEmployeurPct', 0, 'Part employeur mise à jour.');
   bindCheckboxField('f-tickets-teletravail', 'ticketsInclureTeletravail', 'Règle mise à jour.');
@@ -24547,38 +24571,6 @@ async function lancerSynchroTicketsAuto() {
   } catch (err) {
     console.error('Synchronisation automatique des tickets restaurant impossible.', err);
   }
-}
-
-/** Envoie la commande mensuelle par email au contact de commande du prestataire (adresse enregistrée dans Paramètres), avec confirmation. */
-async function envoyerCommandeTickets() {
-  const rows = getTicketsRows();
-  const annee = state.ticketsYear;
-  const mois = state.ticketsMonth;
-  const periode = `${annee}-${String(mois + 1).padStart(2, '0')}`;
-  const lignes = rows.map(r => ({ matricule: r.employee.matricule || '', nom: nomAffiche(r.employee), prenom: r.employee.prenom || '', email: r.employee.email || '', nombreTitres: r.result.nbTickets }));
-  const nombreTitres = lignes.reduce((somme, l) => somme + l.nombreTitres, 0);
-  const nombreSalaries = lignes.filter(l => l.nombreTitres > 0).length;
-  if (!nombreTitres) { showToast('Aucun titre à commander pour ce mois.', 'error'); return; }
-  const r = await window.SupabaseSync.connecteurTicketsLire('swile');
-  if (!r.success || r.indisponible) { showToast(r.indisponible ? 'L\'envoi de la commande n\'est pas encore activé sur le serveur.' : (r.error || 'Lecture des réglages impossible.'), 'error'); return; }
-  const destinataire = r.config && r.config.commandeEmail;
-  if (!destinataire) { showToast('Renseignez d\'abord l\'adresse de commande dans Paramètres > Tickets restaurant.', 'error'); return; }
-  const deja = await window.SupabaseSync.commandesTicketsLire();
-  const precedente = (deja.commandes || []).find(c => c.periode === periode && c.statut === 'envoyee');
-  openConfirm({
-    title: 'Envoyer la commande ?',
-    message: `Commande de ${MONTH_NAMES[mois]} ${annee} : ${nombreTitres} titre${nombreTitres > 1 ? 's' : ''} pour ${nombreSalaries} salarié${nombreSalaries > 1 ? 's' : ''}, envoyée par email à ${destinataire}.${precedente ? ` Attention : une commande a déjà été envoyée pour ce mois le ${formatDate(toISODate(new Date(precedente.envoyeeLe)))}.` : ''}`,
-    confirmLabel: 'Envoyer la commande',
-    onConfirm: async () => {
-      const envoi = await window.SupabaseSync.connecteurTicketsAppeler('envoyer-commande', { periode, lignes });
-      if (!envoi.success) { showToast(envoi.error || 'Envoi impossible.', 'error'); return; }
-      // Même enregistrement que le fichier de commande : c'est lui qui permet la régularisation automatique si une absence est déclarée ensuite.
-      DB.enregistrerCommandeTickets(annee, mois, leaveRepository.getAll(), teleworkRepository.getAll());
-      auditLogRepository.logAudit('Export', 'Commande titres-restaurant envoyée', `${MONTH_NAMES[mois]} ${annee}`, `${nombreTitres} titres, ${nombreSalaries} salariés, ${envoi.destinataire || destinataire}`);
-      showToast(`Commande envoyée à ${envoi.destinataire || destinataire}.`);
-      render();
-    }
-  });
 }
 
 /** Historique des commandes déjà envoyées, affiché sous le titre de l'écran Tickets restaurant (lecture asynchrone, jamais bloquante). */
@@ -30526,8 +30518,8 @@ function renderTicketsEquipe() {
         <button class="btn btn-secondary btn-sm" id="btn-tickets-today">Ce mois-ci</button>
         <button class="btn btn-secondary btn-sm" id="btn-tickets-next">Suivant →</button>
         <button class="btn btn-secondary" id="btn-export-tickets">Exporter CSV</button>
-        <button class="btn btn-secondary" id="btn-fichier-commande-tickets">Fichier de commande</button>
-        <button class="btn btn-primary" id="btn-envoyer-commande-tickets">Envoyer la commande</button>
+        <button class="btn btn-secondary" id="btn-fichier-commande-tickets">Tableau de commande</button>
+        <button class="btn btn-primary" id="btn-envoyer-commande-tickets">Commande Swile</button>
       </div>
     </div>
     <p class="text-muted" id="tickets-commandes-envoyees" style="margin: -4px 0 12px;"></p>
@@ -30665,7 +30657,7 @@ function bindTicketsEquipeEvents() {
   });
   document.getElementById('btn-export-tickets').addEventListener('click', exportTicketsCSV);
   document.getElementById('btn-fichier-commande-tickets').addEventListener('click', genererFichierCommandeTickets);
-  document.getElementById('btn-envoyer-commande-tickets').addEventListener('click', envoyerCommandeTickets);
+  document.getElementById('btn-envoyer-commande-tickets').addEventListener('click', openCommandeSwileModal);
   afficherCommandesTicketsEnvoyees();
 
   document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
@@ -30678,20 +30670,180 @@ function bindTicketsEquipeEvents() {
   });
 }
 
-/** §retour Betty du 14/09/2026 (point 1, "fichier de commande mensuel") : export allégé, aux seuls
- * champs utiles pour déposer une commande chez un émetteur (Swile/Edenred/Up...) — contrairement à
- * exportTicketsCSV (comptabilité, tous les montants). Chaque émetteur a son propre format exact de
- * dépôt ; ce fichier couvre le socle commun (identité + nombre de titres), à adapter si besoin.
- * Enregistre aussi le nombre commandé pour CE mois (voir DB.enregistrerCommandeTickets) : c'est ce
- * qui permet ensuite de proposer une régularisation automatique si une absence est déclarée après. */
+/** Fichier de commande de titres-restaurant au format du modèle fourni par Swile (COMMANDE_SWILE_<code>.csv), à déposer sur le site Swile :
+ * deux lignes d'en-tête (la première est une consigne de Swile, reprise telle quelle), puis une ligne par bénéficiaire. Texte en Windows-1252, séparateur point-virgule, fins de ligne CRLF. */
+const COMMANDE_SWILE_LIGNE_CONSIGNE = "Remplir le tableau ci dessous avec l'aide du site;;;;;;";
+const COMMANDE_SWILE_ENTETE = ['MR ou MME', 'PRENOM', 'NOM', 'EMAIL', 'DATE NAISSANCE (JJ/MM/AAAA)', 'NOMBRE JOURS À CHARGER', 'MATRICULE'];
+
+/** Texte → octets Windows-1252 (l'encodage du fichier Swile : un « À » d'en-tête y vaut l'octet 0xC0, pas deux octets UTF-8). Un caractère absent de cet alphabet devient « ? ». */
+function encoderWindows1252(texte) {
+  const speciaux = { 0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+    0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F };
+  const octets = [];
+  for (const caractere of String(texte)) {
+    const code = caractere.codePointAt(0);
+    if (code < 0x80 || (code >= 0xA0 && code <= 0xFF)) octets.push(code);
+    else octets.push(speciaux[code] !== undefined ? speciaux[code] : 0x3F);
+  }
+  return new Uint8Array(octets);
+}
+
+function civiliteCommandeSwile(employee) {
+  const sexe = getSexe(employee);
+  if (sexe === 'Homme') return 'MR';
+  if (sexe === 'Femme') return 'MME';
+  if (employee.civilite === 'Monsieur') return 'MR';
+  if (employee.civilite === 'Madame') return 'MME';
+  return '';
+}
+
+function dateJJMMAAAA(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+
+function cellulePointVirgule(valeur) {
+  const t = String(valeur == null ? '' : valeur).replace(/[\r\n]+/g, ' ').trim();
+  return /[";]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+
+/** Lignes de la commande Swile du mois affiché : un bénéficiaire par ligne, avec les problèmes qui empêcheraient Swile de l'accepter (email, date de naissance, civilité). */
+function lignesCommandeSwile(rows, settings) {
+  const modeMatricule = settings && settings.ticketsSwileMatricule === 'matricule' ? 'matricule' : 'nom';
+  return rows.map(r => {
+    const e = r.employee;
+    const ligne = {
+      employeeId: e.id,
+      civilite: civiliteCommandeSwile(e),
+      prenom: String(e.prenom || '').toUpperCase(),
+      nom: String(nomAffiche(e) || '').toUpperCase(),
+      email: String(e.email || '').trim().toLowerCase(),
+      naissance: dateJJMMAAAA(e.dateNaissance),
+      jours: r.result.nbTickets,
+      matricule: modeMatricule === 'matricule' ? String(e.matricule || '') : String(e.nom || '').toUpperCase(),
+      service: e.service || ''
+    };
+    ligne.problemes = [];
+    if (!ligne.email) ligne.problemes.push('adresse email manquante');
+    if (!ligne.naissance) ligne.problemes.push('date de naissance manquante');
+    if (!ligne.civilite) ligne.problemes.push('civilité à renseigner dans la fiche');
+    return ligne;
+  });
+}
+
+/** Le fichier à déposer chez Swile, tel quel : { texte, octets, nombreSalaries, nombreJours }. */
+function construireFichierCommandeSwile(lignes) {
+  const corps = lignes.map(l => [l.civilite, l.prenom, l.nom, l.email, l.naissance, l.jours, l.matricule].map(cellulePointVirgule).join(';'));
+  const texte = [COMMANDE_SWILE_LIGNE_CONSIGNE, COMMANDE_SWILE_ENTETE.join(';'), ...corps].join('\r\n') + '\r\n';
+  return { texte, octets: encoderWindows1252(texte), nombreSalaries: lignes.filter(l => l.jours > 0).length, nombreJours: lignes.reduce((somme, l) => somme + l.jours, 0) };
+}
+
+function nomFichierCommandeSwile(settings, annee, mois) {
+  const code = String((settings && settings.ticketsSwileCodeClient) || '').replace(/[^A-Za-z0-9_-]/g, '').toUpperCase();
+  return `COMMANDE_SWILE_${code || annee + '-' + String(mois + 1).padStart(2, '0')}.csv`;
+}
+
+function telechargerOctets(octets, nom, mime) {
+  const blob = new Blob([octets], { type: mime || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nom;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Tableau de commande propre (Excel), mêmes colonnes que le fichier Swile, avec le service et le total : pour relire, imprimer ou archiver. Enregistre aussi le nombre commandé pour
+ * CE mois (voir DB.enregistrerCommandeTickets) : c'est ce qui permet ensuite au pointage de repérer une absence déposée après la commande. */
 function genererFichierCommandeTickets() {
   const rows = getTicketsRows();
-  const headers = ['Matricule', 'Nom', 'Prénom', 'Email', 'Nombre de titres'];
-  const data = rows.map(r => [r.employee.matricule, r.employee.nom, r.employee.prenom, r.employee.email, r.result.nbTickets]);
+  const lignes = lignesCommandeSwile(rows, settingsRepository.getSettings());
+  const total = lignes.reduce((somme, l) => somme + l.jours, 0);
+  const headers = ['Civilité', 'Prénom', 'Nom', 'Email', 'Date de naissance', 'Nombre de jours à charger', 'Matricule', 'Service'];
+  const data = lignes.map(l => [l.civilite, l.prenom, l.nom, l.email, l.naissance, l.jours, l.matricule, l.service]);
+  data.push(['TOTAL', '', '', '', '', total, '', '']);
   exportRowsToCSV(headers, data, `commande-tickets-restaurant-${state.ticketsYear}-${String(state.ticketsMonth + 1).padStart(2, '0')}.csv`);
   DB.enregistrerCommandeTickets(state.ticketsYear, state.ticketsMonth, leaveRepository.getAll(), teleworkRepository.getAll());
-  showToast('Fichier de commande généré.');
+  showToast('Tableau de commande généré.');
   render();
+}
+
+/** Fenêtre « Commande Swile » : aperçu propre de la commande du mois, contrôles avant dépôt, puis téléchargement du fichier Swile, du tableau Excel ou envoi par email. */
+async function openCommandeSwileModal() {
+  const settings = settingsRepository.getSettings();
+  const annee = state.ticketsYear;
+  const mois = state.ticketsMonth;
+  const lignes = lignesCommandeSwile(getTicketsRows(), settings);
+  const fichier = construireFichierCommandeSwile(lignes);
+  const nomFichier = nomFichierCommandeSwile(settings, annee, mois);
+  const problemes = lignes.filter(l => l.problemes.length);
+  const connecteur = window.SupabaseSync && window.SupabaseSync.connecteurTicketsLire ? await window.SupabaseSync.connecteurTicketsLire('swile') : null;
+  const emailCommande = connecteur && connecteur.success && connecteur.config ? connecteur.config.commandeEmail : '';
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Commande Swile : ${escapeHtml(MONTH_NAMES[mois])} ${annee}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="kpi-grid" style="margin-bottom:12px;">
+          ${kpiCard('Bénéficiaires', lignes.length, ICONS.people)}
+          ${kpiCard('Jours à charger', fichier.nombreJours, ICONS.utensils)}
+          ${kpiCard('Montant', formatCurrencyFR(round2(fichier.nombreJours * (Number(settings.ticketsValeurFaciale) || 0))), ICONS.coin)}
+        </div>
+        ${problemes.length ? `<div class="alerte-paliers" role="alert" style="display:block;"><strong>${problemes.length} bénéficiaire${problemes.length > 1 ? 's' : ''} à compléter avant le dépôt :</strong>
+          <ul style="margin:6px 0 0 18px;">${problemes.map(l => `<li>${escapeHtml(l.prenom + ' ' + l.nom)} : ${escapeHtml(l.problemes.join(', '))}</li>`).join('')}</ul></div>` : ''}
+        <div class="card table-card" style="max-height:300px; overflow:auto; margin-top:12px;">
+          <table class="table">
+            <thead><tr><th>Civ.</th><th>Prénom</th><th>Nom</th><th>Email</th><th>Naissance</th><th class="cell-numeric">Jours</th><th>Matricule</th></tr></thead>
+            <tbody>${lignes.map(l => `<tr><td>${escapeHtml(l.civilite || '—')}</td><td>${escapeHtml(l.prenom)}</td><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(l.email || '—')}</td><td>${escapeHtml(l.naissance || '—')}</td><td class="cell-numeric"><strong>${l.jours}</strong></td><td>${escapeHtml(l.matricule)}</td></tr>`).join('')}</tbody>
+            <tfoot><tr><td colspan="5"><strong>Total</strong></td><td class="cell-numeric"><strong>${fichier.nombreJours}</strong></td><td></td></tr></tfoot>
+          </table>
+        </div>
+        <p class="form-hint" style="margin-top:12px;">Pour passer la commande : téléchargez le fichier <strong>${escapeHtml(nomFichier)}</strong> puis déposez-le sur le site Swile (même format que le modèle fourni par Swile). Le nombre de jours à charger est celui calculé par Nexus pour le mois (jours travaillés, hors congés, fériés et demi-journées).</p>
+      </div>
+      <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
+        <button type="button" class="btn btn-secondary" id="btn-commande-excel">Tableau Excel</button>
+        ${emailCommande ? `<button type="button" class="btn btn-secondary" id="btn-commande-email">Envoyer par email à ${escapeHtml(emailCommande)}</button>` : ''}
+        <button type="button" class="btn btn-primary" id="btn-commande-fichier-swile">Télécharger le fichier Swile</button>
+      </div>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const enregistrerCommande = () => {
+    DB.enregistrerCommandeTickets(annee, mois, leaveRepository.getAll(), teleworkRepository.getAll());
+    auditLogRepository.logAudit('Export', 'Commande Swile', `${MONTH_NAMES[mois]} ${annee}`, `${fichier.nombreJours} jours pour ${fichier.nombreSalaries} salariés`);
+  };
+  document.getElementById('btn-commande-fichier-swile').addEventListener('click', () => {
+    telechargerOctets(fichier.octets, nomFichier, 'text/csv');
+    enregistrerCommande();
+    showToast('Fichier de commande Swile téléchargé : déposez-le sur le site Swile.');
+    closeModal();
+    render();
+  });
+  document.getElementById('btn-commande-excel').addEventListener('click', () => { closeModal(); genererFichierCommandeTickets(); });
+  const boutonEmail = document.getElementById('btn-commande-email');
+  if (boutonEmail) boutonEmail.addEventListener('click', async () => {
+    boutonEmail.disabled = true;
+    const periode = `${annee}-${String(mois + 1).padStart(2, '0')}`;
+    let binaire = '';
+    fichier.octets.forEach(o => { binaire += String.fromCharCode(o); });
+    const envoi = await window.SupabaseSync.connecteurTicketsAppeler('envoyer-commande', {
+      periode, fichier: { nom: nomFichier, base64: btoa(binaire) }, nombreSalaries: fichier.nombreSalaries, nombreTitres: fichier.nombreJours
+    });
+    boutonEmail.disabled = false;
+    if (!envoi.success) { showToast(envoi.error || 'Envoi impossible.', 'error'); return; }
+    enregistrerCommande();
+    showToast(`Commande envoyée à ${envoi.destinataire || emailCommande}.`);
+    closeModal();
+    render();
+  });
 }
 
 /** Cellule « Pointage » du tableau des tickets de l'équipe : cumul des absences, tickets distribués, écart, et accès au contrôle quand une correction est proposée. */

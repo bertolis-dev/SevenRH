@@ -254,6 +254,19 @@ function validerLignesCommande(lignes) {
   return { ok: true, lignes: propres };
 }
 
+/** Fichier de commande déjà prêt (format Swile, fabriqué par l'application) : nom et taille contrôlés ; le contenu est celui que le RH a lui-même sous les yeux dans l'application. */
+function validerFichierCommande(fichier) {
+  if (!fichier || typeof fichier.nom !== "string" || typeof fichier.base64 !== "string") return { ok: false, error: "Fichier de commande manquant." };
+  if (!/^COMMANDE_[A-Za-z0-9_-]{1,60}\.csv$/.test(fichier.nom)) return { ok: false, error: "Nom de fichier invalide." };
+  if (fichier.base64.length === 0 || fichier.base64.length > 600000 || !/^[A-Za-z0-9+/=]+$/.test(fichier.base64)) return { ok: false, error: "Fichier de commande invalide ou trop volumineux." };
+  return { ok: true, nom: fichier.nom, base64: fichier.base64 };
+}
+
+function entierBorne(v, max) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
+}
+
 function construireCsvCommande(lignes) {
   const entetes = ["Matricule", "Nom", "Prénom", "Email", "Nombre de titres"];
   const corps = lignes.filter((l) => l.nombreTitres > 0).map((l) => [l.matricule, l.nom, l.prenom, l.email, l.nombreTitres].map(echapperCsv).join(";"));
@@ -417,23 +430,34 @@ Deno.serve(async (req) => {
       if (!libelle) return reponse({ error: "Période invalide." }, 400);
       if (!config || !config.commande_email) return reponse({ error: "Renseignez l'adresse de commande dans Paramètres > Tickets restaurant." }, 409);
       if (!RESEND) return reponse({ error: "Envoi d'email non configuré (RESEND_API_KEY)." }, 500);
-      const controle = validerLignesCommande(corps.lignes);
-      if (!controle.ok) return reponse({ error: controle.error }, 400);
+      // Deux formes : un fichier déjà prêt (format Swile) avec ses totaux, ou une liste de lignes avec laquelle la fonction fabrique un CSV simple.
+      let nomFichier, base64, nombreSalaries, nombreTitres;
+      if (corps.fichier) {
+        const f = validerFichierCommande(corps.fichier);
+        if (!f.ok) return reponse({ error: f.error }, 400);
+        nombreSalaries = entierBorne(corps.nombreSalaries, 5000);
+        nombreTitres = entierBorne(corps.nombreTitres, 200000);
+        if (nombreSalaries === null || nombreTitres === null) return reponse({ error: "Totaux de la commande invalides." }, 400);
+        nomFichier = f.nom;
+        base64 = f.base64;
+      } else {
+        const controle = validerLignesCommande(corps.lignes);
+        if (!controle.ok) return reponse({ error: controle.error }, 400);
+        nombreSalaries = controle.lignes.filter((l) => l.nombreTitres > 0).length;
+        nombreTitres = controle.lignes.reduce((s, l) => s + l.nombreTitres, 0);
+        nomFichier = `commande-titres-restaurant-${corps.periode}.csv`;
+        base64 = btoa(String.fromCharCode(...new TextEncoder().encode(construireCsvCommande(controle.lignes))));
+      }
 
       const { data: societe } = await admin.from("companies").select("raison_sociale").eq("id", companyId).maybeSingle();
       const { data: moi } = await admin.from("employees").select("prenom, nom, email").eq("id", moiId).maybeSingle();
-      const nombreSalaries = controle.lignes.filter((l) => l.nombreTitres > 0).length;
-      const nombreTitres = controle.lignes.reduce((s, l) => s + l.nombreTitres, 0);
-      const csv = construireCsvCommande(controle.lignes);
       const nomSociete = nettoyerEnTete(societe && societe.raison_sociale) || "Nexus RH";
       const expediteur = moi ? `${nettoyerEnTete(moi.prenom)} ${nettoyerEnTete(moi.nom)}`.trim() : "";
-      const base64 = btoa(String.fromCharCode(...new TextEncoder().encode(csv)));
-      const nomFichier = `commande-titres-restaurant-${corps.periode}.csv`;
       const html = `
         <p>Bonjour,</p>
         <p>Veuillez trouver ci-joint la commande de titres-restaurant de <strong>${echapperHtml(nomSociete)}</strong> pour <strong>${echapperHtml(libelle)}</strong> :
         <strong>${nombreTitres}</strong> titre${nombreTitres > 1 ? "s" : ""} pour <strong>${nombreSalaries}</strong> salarié${nombreSalaries > 1 ? "s" : ""}.</p>
-        <p>Fichier : ${echapperHtml(nomFichier)} (CSV, séparateur point-virgule).</p>
+        <p>Fichier : ${echapperHtml(nomFichier)} (CSV, séparateur point-virgule). Nombre de jours à charger par salarié.</p>
         <p>Cordialement,<br>${echapperHtml(expediteur || nomSociete)}</p>`;
       const destinataires = [config.commande_email];
       const copie = config.commande_copie_email ? [config.commande_copie_email] : [];

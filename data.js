@@ -587,6 +587,9 @@ const DEFAULT_SETTINGS = {
   // l'ouverture de l'écran (voir renderTicketsHub) : 'debut' propose le mois SUIVANT (on commande
   // d'avance), 'fin' propose le mois EN COURS (on attend qu'il soit presque écoulé).
   ticketsDistribution: 'fin', // 'debut' | 'fin'
+  // Commande Swile (24/11/2026) : code client (nom du fichier à déposer, ex. CZPUAQ) et valeur de la colonne MATRICULE du fichier ('nom' : le nom de famille, comme le fichier fourni par Swile ; 'matricule' : le matricule Nexus).
+  ticketsSwileCodeClient: '',
+  ticketsSwileMatricule: 'nom',
   // Chaînes de validation par défaut (voir advanceWorkflow) : modifiables dans Paramètres.
   // workflowCongesDefault sert de modèle pré-rempli à la création d'un nouveau type de congé.
   workflowCongesDefault: ['manager', 'rh'],

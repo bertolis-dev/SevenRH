@@ -7,7 +7,8 @@ Ajouté le 20/11/2026. Premier prestataire : **Swile** (https://integrations.swi
 1. **Synchronise les salariés** : Nexus crée le salarié chez Swile à l'embauche, met à jour ses informations (nom d'usage, civilité, date de naissance, matricule, manager),
    l'inscrit au produit « titres-restaurant » (les nouveaux reçoivent l'invitation Swile ; un salarié déjà connu de Swile est inscrit sans nouvelle invitation) et le retire
    au départ ou à l'archivage. Un salarié de Swile inconnu de Nexus n'est **jamais** touché.
-2. **Envoie la commande mensuelle** par email, avec le fichier de commande en pièce jointe (CSV, séparateur point-virgule : matricule, nom, prénom, email, nombre de titres),
+2. **Prépare la commande mensuelle Swile** (aucun serveur nécessaire) : bouton « Commande Swile » dans Tickets de l'équipe. Il télécharge le fichier au format exact du modèle Swile (COMMANDE_SWILE_<code>.csv : consigne en première ligne, colonnes MR ou MME / PRENOM / NOM / EMAIL / DATE NAISSANCE / NOMBRE JOURS À CHARGER / MATRICULE, Windows-1252, séparateur point-virgule) à déposer sur le site Swile. Le code client et la valeur de la colonne MATRICULE se règlent dans Paramètres > Tickets restaurant.
+3. **Envoie la commande mensuelle** par email, avec le fichier de commande en pièce jointe (CSV, séparateur point-virgule : matricule, nom, prénom, email, nombre de titres),
    à l'adresse de commande enregistrée dans Paramètres. L'API Swile ne reçoit pas de commande : c'est la raison de l'envoi par email.
    Le nombre commandé est enregistré (comme pour le fichier de commande), ce qui permet la régularisation automatique du mois suivant.
 
