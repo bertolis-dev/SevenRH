@@ -532,6 +532,7 @@ const DEFAULT_SETTINGS = {
   // Date (AAAA-MM-JJ) à laquelle le fichier de commande des tickets restaurant a été généré, par mois (clé AAAA-MM) : sert de
   // « date de commande » dans l'export vers Nexus Gestion. Vide pour les mois commandés avant ce suivi.
   ticketsCommandesDates: {},
+  ticketsCommandesInstants: {}, // instant exact de chaque commande (ISO), voir enregistrerCommandeTickets et calculerPointageTickets
   // Brief du 12/10/2026 (C1) : barème kilométrique de l'ENTREPRISE, par année et par motorisation, vide tant que
   // l'entreprise n'a pas saisi et confirmé ses valeurs ({ '2026': { valide: true, voiture: [...], moto: [...] } }).
   // Tant qu'il est vide, le barème indicatif de la plateforme (BAREMES_KILOMETRIQUES) sert de repli, signalé non validé.
@@ -4067,6 +4068,51 @@ const DB = {
     return { success: true };
   },
 
+  /** Demande n° 23 du 20/11/2026 : décision du RH sur une proposition de correction du pointage. `decision` : 'validee' (telle quelle), 'modifiee' (autre nombre) ou 'refusee'.
+   * Ne s'applique jamais seule : la correction validée s'ajoute au nombre de tickets du mois cible (voir calculateTicketsRestaurant). L'écart examiné n'est plus reproposé. */
+  traiterRegularisationTickets(employeeId, cleSource, { decision, delta, ecart, moisCible, auteurId }) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    if (!['validee', 'modifiee', 'refusee'].includes(decision)) return { success: false, error: 'Décision inconnue.' };
+    const ecartExamine = Number(ecart);
+    if (!Number.isInteger(ecartExamine) || ecartExamine === 0) return { success: false, error: 'Écart invalide.' };
+    const correction = decision === 'refusee' ? 0 : Number(delta);
+    if (!Number.isInteger(correction) || Math.abs(correction) > 100) return { success: false, error: 'La correction doit être un nombre entier de tickets.' };
+    if (decision !== 'refusee' && correction === 0) return { success: false, error: 'Une correction de 0 ticket revient à refuser : utilisez « Refuser ».' };
+    if (decision !== 'refusee' && !/^\d{4}-\d{2}$/.test(String(moisCible || ''))) return { success: false, error: 'Mois d\'application invalide.' };
+    const entree = { id: generateId('regul'), source: cleSource, ecartTraite: ecartExamine, delta: correction, appliqueAuMois: decision === 'refusee' ? null : moisCible, decision, par: auteurId || null, le: new Date().toISOString() };
+    this.updateEmployee(employeeId, { ticketsRegularisations: [...(employee.ticketsRegularisations || []), entree] });
+    this.logAudit('Modification', 'Tickets restaurant', `${employee.prenom} ${employee.nom} · ${cleSource} · pointage ${decision === 'refusee' ? 'refusé' : decision === 'modifiee' ? 'corrigé' : 'validé'}`,
+      decision === 'refusee' ? `écart de ${ecartExamine >= 0 ? '+' : ''}${ecartExamine} non appliqué` : `${correction >= 0 ? '+' : ''}${correction} ticket(s) appliqué(s) à ${moisCible}`);
+    return { success: true };
+  },
+
+  /** Demande n° 23 : mois commandé hors de Nexus — le RH saisit le nombre de tickets distribués pour que ce mois entre aussi dans le pointage. */
+  saisirCommandeTicketsMois(employeeId, cleMois, nombre) {
+    const employee = this.getEmployeeById(employeeId);
+    if (!employee) return { success: false, error: 'Salarié introuvable.' };
+    const n = Number(nombre);
+    if (!/^\d{4}-\d{2}$/.test(String(cleMois || '')) || !Number.isInteger(n) || n < 0 || n > 400) return { success: false, error: 'Nombre de tickets invalide.' };
+    this.updateEmployee(employeeId, { ticketsCommandesEnregistrees: Object.assign({}, employee.ticketsCommandesEnregistrees, { [cleMois]: n }) });
+    this.logAudit('Modification', 'Tickets restaurant', `${employee.prenom} ${employee.nom} · ${cleMois}`, `tickets distribués saisis : ${n}`);
+    return { success: true };
+  },
+
+  /** Demande n° 23 : saisie groupée des tickets distribués pour un mois commandé hors de Nexus. `valeurs` : { employeeId: nombre }. Une seule écriture et une seule ligne de journal. */
+  saisirCommandesTicketsMois(cleMois, valeurs) {
+    if (!/^\d{4}-\d{2}$/.test(String(cleMois || ''))) return { success: false, error: 'Mois invalide.' };
+    const entrees = Object.entries(valeurs || {});
+    if (!entrees.length) return { success: false, error: 'Saisissez au moins un nombre de tickets.' };
+    if (entrees.some(([, n]) => !Number.isInteger(n) || n < 0 || n > 400)) return { success: false, error: 'Chaque nombre de tickets doit être un entier entre 0 et 400.' };
+    const ids = new Set(entrees.map(([id]) => id));
+    const misesAJour = this.getEmployees().map(e => ids.has(e.id)
+      ? Object.assign({}, e, { ticketsCommandesEnregistrees: Object.assign({}, e.ticketsCommandesEnregistrees, { [cleMois]: valeurs[e.id] }) })
+      : e);
+    this.saveEmployees(misesAJour);
+    this.logAudit('Modification', 'Tickets restaurant', cleMois, `tickets distribués saisis pour ${entrees.length} salarié(s)`);
+    return { success: true, nombre: entrees.length };
+  },
+
   /** §retour Betty du 14/09/2026 (Tickets restaurant point 3) : snapshot du nombre de titres
    * calculé pour CHAQUE salarié à l'instant où le fichier de commande est généré — voir
    * calculerEcartRegularisationTickets, qui compare ce nombre au calcul refait plus tard pour
@@ -4084,7 +4130,11 @@ const DB = {
     this.saveEmployees(misesAJour);
     // Écriture directe des réglages (pas saveSettings) : pour ne pas ajouter une fausse ligne « Modification Paramètres » au journal.
     const company = this.getCurrentCompany();
-    company.settings = Object.assign({}, this.getSettings(), { ticketsCommandesDates: Object.assign({}, this.getSettings().ticketsCommandesDates, { [monthKey]: toISODate(new Date()) }) });
+    // L'instant exact de la commande est gardé en plus de la date : il permet au pointage de distinguer une absence déposée AVANT la commande (déjà décomptée) d'une absence déposée APRÈS le même jour.
+    company.settings = Object.assign({}, this.getSettings(), {
+      ticketsCommandesDates: Object.assign({}, this.getSettings().ticketsCommandesDates, { [monthKey]: toISODate(new Date()) }),
+      ticketsCommandesInstants: Object.assign({}, this.getSettings().ticketsCommandesInstants, { [monthKey]: new Date().toISOString() })
+    });
     this.saveCurrentCompany(company);
     this._pushInBackground(window.SupabaseSync.pushSettings(company.id, company.settings), { kind: 'blob', blob: 'settings', companyId: company.id });
     this.logAudit('Export', 'Fichier de commande tickets restaurant', monthKey);
@@ -5910,6 +5960,8 @@ const employeeRepository = {
   delete: (id) => DB.deleteEmployee(id),
   ajusterCompteur: (employeeId, typeId, montant, motif) => DB.ajusterCompteurConge(employeeId, typeId, montant, motif),
   ajusterTickets: (employeeId, year, month, delta, motif) => DB.ajusterTicketsRestaurant(employeeId, year, month, delta, motif),
+  traiterRegularisationTickets: (employeeId, cleSource, decision) => DB.traiterRegularisationTickets(employeeId, cleSource, decision),
+  saisirCommandeTicketsMois: (employeeId, cleMois, nombre) => DB.saisirCommandeTicketsMois(employeeId, cleMois, nombre),
   ajusterVariables: (employeeId, year, month, montant, motif) => DB.ajusterVariablesPaie(employeeId, year, month, montant, motif),
   ajusterHeuresSup: (employeeId, year, month, heures, motif) => DB.ajusterHeuresSupplementaires(employeeId, year, month, heures, motif),
   ajusterReposCompensateurPris: (employeeId, year, month, heures, motif) => DB.ajusterReposCompensateurPris(employeeId, year, month, heures, motif),
@@ -6576,6 +6628,7 @@ function makeEmptyEmployee() {
 
     compteurs: {},
     ticketsAjustements: {}, // § CORRIGER_TICKETS_RESTAURANT : { 'AAAA-MM': delta }, voir calculateTicketsRestaurant()
+    ticketsRegularisations: [], // Demande n° 23 du 20/11/2026 : décisions du RH sur le pointage, [{ id, source: 'AAAA-MM', ecartTraite, delta, appliqueAuMois, decision, par, le }]
     // §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois
     // précédent") : { 'AAAA-MM': nbTickets } — nombre de titres tel que calculé au moment où le
     // fichier de commande a été généré pour ce mois (voir enregistrerCommandeTickets). Si une
@@ -7536,10 +7589,10 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
 
     if (!isJourTravaillePourSalarie(dateStr, employee, settings)) { joursFeriesFermetures += 1; continue; }
 
-    // Une demi-journée (matin OU après-midi, sur une date isolée) ne prive pas du ticket restaurant
-    // du jour — seule une absence sur la journée entière compte comme "non travaillé" ici.
+    // Une demi-journée (matin OU après-midi) ne prive pas du ticket restaurant du jour : jour isolé, mais aussi premier jour d'une période qui commence l'après-midi
+    // ou dernier jour d'une période qui finit le matin (demande n° 22 du 20/11/2026). Seule une absence sur la journée entière compte comme "non travaillé" ici.
     const onLeave = employeeLeaves.some(r =>
-      dateStr >= r.dateDebut && dateStr <= r.dateFin && !(r.demiJournee && r.dateDebut === r.dateFin));
+      dateStr >= r.dateDebut && dateStr <= r.dateFin && !demiJourneeSansRetraitDeTicket(r, dateStr));
     if (onLeave) { joursAbsences += 1; continue; }
 
     const remote = employeeTelework.some(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
@@ -7557,24 +7610,134 @@ function calculateTicketsRestaurant(employee, year, month, leaveRequests, telewo
   // action manuelle requise. Un seul mois en arrière (pas de chaîne remontée explicitement) : si M-1
   // a lui-même intégré la régularisation de M-2, cette valeur est déjà comprise dans son propre
   // nbTickets, donc dans l'écart recalculé ici — rien à répéter.
-  const moisPrecedent = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
-  const regularisationMoisPrecedent = calculerEcartRegularisationTickets(
-    employee, moisPrecedent.year, moisPrecedent.month, leaveRequests, teleworkRequests, settings
-  );
+  // Demande n° 23 du 20/11/2026 : la régularisation n'est plus appliquée automatiquement. Elle est proposée au RH dans la colonne « Pointage » (voir calculerPointageTickets),
+  // qui la valide telle quelle, la modifie ou la refuse. Seules les corrections validées (employee.ticketsRegularisations) s'ajoutent ici, au mois auquel le RH les a appliquées.
+  const regularisationsValidees = regularisationsAppliqueesAuMois(employee, ticketsMonthKey(year, month));
+  const regularisationTotal = regularisationsValidees.reduce((somme, r) => somme + r.delta, 0);
 
   // Correction manuelle (§ CORRIGER_TICKETS_RESTAURANT) : ex. jour férié local non reconnu par le
   // calcul standard, déplacement professionnel sans droit à ticket... Remplace, n'ajoute pas, une
   // éventuelle correction précédente pour ce même mois — voir DB.ajusterTicketsRestaurant().
   const ajustement = (employee.ticketsAjustements && employee.ticketsAjustements[ticketsMonthKey(year, month)]) || 0;
-  const nbTickets = Math.max(0, theorique + (regularisationMoisPrecedent ? regularisationMoisPrecedent.ecart : 0) + ajustement);
+  const nbTickets = Math.max(0, theorique + regularisationTotal + ajustement);
 
   const montantTotal = round2(nbTickets * settings.ticketsValeurFaciale);
   const partEmployeur = round2(montantTotal * settings.ticketsPartEmployeurPct / 100);
   const partSalarie = round2(montantTotal - partEmployeur);
   return {
     nbTickets, montantTotal, partEmployeur, partSalarie, ajustement,
-    joursOuvres, joursFeriesFermetures, joursAbsences, theorique, regularisationMoisPrecedent
+    joursOuvres, joursFeriesFermetures, joursAbsences, theorique, regularisationsValidees, regularisationTotal
   };
+}
+
+/** Corrections de tickets VALIDÉES par le RH et appliquées au mois `cleMois` : [{ source: 'AAAA-MM', delta }]. Les refus (delta 0) n'y figurent pas. */
+function regularisationsAppliqueesAuMois(employee, cleMois) {
+  return (employee.ticketsRegularisations || [])
+    .filter(r => r.appliqueAuMois === cleMois && Number(r.delta) !== 0)
+    .map(r => ({ source: r.source, delta: Number(r.delta), decision: r.decision, par: r.par || null, le: r.le || null }));
+}
+
+/** Part de l'écart d'un mois déjà examinée par le RH (validée, modifiée ou refusée) : l'écart restant à proposer en est déduit. */
+function ecartDejaTraiteTickets(employee, cleSource) {
+  return (employee.ticketsRegularisations || []).filter(r => r.source === cleSource).reduce((somme, r) => somme + (Number(r.ecartTraite) || 0), 0);
+}
+
+/** Jours d'absence COMPLETS d'un salarié sur un mois : ceux qui retirent un ticket restaurant (la demi-journée, isolée ou en début / fin de période, n'en retire jamais,
+ * voir demiJourneeSansRetraitDeTicket). Chaque jour porte son libellé (type de congé, ou « Télétravail » si le réglage le retire) et la date de dépôt de la demande. */
+function absencesCompletesDuMois(employee, year, month, leaveRequests, teleworkRequests, settings, leaveTypes) {
+  const jours = [];
+  const dayLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const typesParId = new Map((leaveTypes || []).map(t => [t.id, t]));
+  const conges = (leaveRequests || []).filter(r => r.employeeId === employee.id && r.statut === 'Validé');
+  const teletravail = (teleworkRequests || []).filter(r => r.employeeId === employee.id && r.statut === 'Validé');
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const dateStr = toISODate(date);
+    if (employee.dateEmbauche && dateStr < employee.dateEmbauche) continue;
+    if (employee.dateDepart && dateStr > employee.dateDepart) continue;
+    if (!(employee.joursTravailles || []).includes(dayLabels[date.getDay()])) continue;
+    if (!isJourTravaillePourSalarie(dateStr, employee, settings)) continue;
+    const conge = conges.find(r => dateStr >= r.dateDebut && dateStr <= r.dateFin && !demiJourneeSansRetraitDeTicket(r, dateStr));
+    if (conge) {
+      const type = typesParId.get(conge.typeId);
+      jours.push({ date: dateStr, libelle: type ? type.nom : 'Congé', creeLe: conge.dateCreation || null, demandeId: conge.id });
+      continue;
+    }
+    const distant = teletravail.find(r => dateStr >= r.dateDebut && dateStr <= r.dateFin);
+    if (distant && settings.ticketsInclureTeletravail === false) jours.push({ date: dateStr, libelle: 'Télétravail', creeLe: distant.dateCreation || null, demandeId: distant.id });
+  }
+  return jours;
+}
+
+/** Demi-journées de congé (CP, RTT...) d'un salarié sur un mois, pour l'export du calendrier et le pointage : [{ date, libelle, moment: 'matin'|'apres-midi' }]. */
+function demiJourneesDuMois(employee, year, month, leaveRequests, leaveTypes) {
+  const typesParId = new Map((leaveTypes || []).map(t => [t.id, t]));
+  const resultat = [];
+  const debutMois = toISODate(new Date(year, month, 1));
+  const finMois = toISODate(new Date(year, month + 1, 0));
+  (leaveRequests || []).filter(r => r.employeeId === employee.id && r.statut === 'Validé' && r.dateFin >= debutMois && r.dateDebut <= finMois).forEach(r => {
+    const type = typesParId.get(r.typeId);
+    const candidats = r.dateDebut === r.dateFin ? [r.dateDebut] : [r.dateDebut, r.dateFin];
+    candidats.forEach(dateStr => {
+      if (dateStr < debutMois || dateStr > finMois) return;
+      const moment = getHalfDayForDate(r, dateStr);
+      if (moment) resultat.push({ date: dateStr, libelle: type ? type.nom : 'Congé', moment });
+    });
+  });
+  return resultat.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Mois (clé AAAA-MM) auquel une correction validée est appliquée : le premier mois, à partir du mois affiché et après le mois corrigé, dont la commande n'est pas encore passée. */
+function moisCibleRegularisationTickets(employee, year, moisAffiche, anneeSource, moisSource) {
+  let cursor = new Date(year, moisAffiche, 1);
+  const apresSource = new Date(anneeSource, moisSource + 1, 1);
+  if (cursor < apresSource) cursor = apresSource;
+  for (let i = 0; i < 24; i++) {
+    const cle = ticketsMonthKey(cursor.getFullYear(), cursor.getMonth());
+    if (!employee.ticketsCommandesEnregistrees || employee.ticketsCommandesEnregistrees[cle] == null) return cle;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return ticketsMonthKey(cursor.getFullYear(), cursor.getMonth());
+}
+
+/**
+ * Pointage des tickets restaurant d'un salarié, du 1er janvier de `year` jusqu'au mois affiché (demande n° 23 du 20/11/2026) :
+ *  - cumul des jours d'absence complets (hors demi-journées) ;
+ *  - tickets distribués en cumul (commandes enregistrées dans Nexus) face aux tickets dus d'après les absences connues aujourd'hui ;
+ *  - propositions de correction par mois commandé, avec les jours qui constituent l'écart (date, type, date de dépôt) ; elles ne sont JAMAIS appliquées d'office.
+ * Un mois sans commande enregistrée (commandé hors de Nexus) est signalé : le RH peut y saisir le nombre distribué pour le contrôler aussi.
+ */
+function calculerPointageTickets(employee, year, moisAffiche, leaveRequests, teleworkRequests, settings, leaveTypes) {
+  const dates = (settings && settings.ticketsCommandesDates) || {};
+  const instants = (settings && settings.ticketsCommandesInstants) || {};
+  const pointage = { joursAbsence: 0, demiJournees: 0, distribues: 0, dus: 0, ecartCumul: 0, moisSansCommande: [], propositions: [] };
+  for (let m = 0; m <= moisAffiche; m++) {
+    const cle = ticketsMonthKey(year, m);
+    const actuel = calculateTicketsRestaurant(employee, year, m, leaveRequests, teleworkRequests, settings);
+    const absences = absencesCompletesDuMois(employee, year, m, leaveRequests, teleworkRequests, settings, leaveTypes);
+    pointage.joursAbsence += absences.length;
+    pointage.demiJournees += demiJourneesDuMois(employee, year, m, leaveRequests, leaveTypes).length * 1;
+    const commande = employee.ticketsCommandesEnregistrees ? employee.ticketsCommandesEnregistrees[cle] : null;
+    if (commande == null) { pointage.moisSansCommande.push({ cle, annee: year, mois: m }); continue; }
+    pointage.distribues += commande;
+    pointage.dus += actuel.nbTickets;
+    const ecart = actuel.nbTickets - commande;
+    const restant = ecart - ecartDejaTraiteTickets(employee, cle);
+    if (restant === 0) continue;
+    // Jours déposés APRÈS la commande de ce mois : ce sont eux qui expliquent un écart négatif. Date de commande inconnue (mois saisi à la main) : tous les jours du mois, à vérifier.
+    const dateCommande = dates[cle] || null;
+    const lignes = absences
+      .filter(j => !dateCommande || (j.creeLe && (instants[cle] ? String(j.creeLe) > instants[cle] : String(j.creeLe).slice(0, 10) > dateCommande)))
+      .map(j => ({ date: j.date, libelle: j.libelle, creeLe: j.creeLe ? String(j.creeLe).slice(0, 10) : null }));
+    pointage.propositions.push({
+      cle, annee: year, mois: m, commande, actuel: actuel.nbTickets, ecart, restant, lignes, dateCommande,
+      incertain: !dateCommande,
+      moisCible: moisCibleRegularisationTickets(employee, year, moisAffiche, year, m)
+    });
+  }
+  pointage.ecartCumul = pointage.dus - pointage.distribues;
+  return pointage;
 }
 
 /** §retour Betty du 14/09/2026 (Tickets restaurant point 3, "régularisation automatique du mois
@@ -8173,6 +8336,28 @@ function markExpensePaid(expense) {
  * jours (ex. vendredi après-midi au mercredi matin), là où `demiJournee` seul n'agit que si
  * dateDebut === dateFin. Ignorés si la période est mono-jour (demiJournee ci-dessus s'applique
  * alors seul) — les deux mécanismes ne se cumulent jamais sur le même jour. */
+/** §demande Betty du 10/09/2026 ("que ce soit affiché dans le planning équipe et calendrier
+ * entreprise") : une demi-journée de congé se pose déjà (openLeaveRequestModal, `demiJournee` pour
+ * un jour isolé ou `demiJourneeDebut`/`demiJourneeFin` pour le premier/dernier jour d'une période),
+ * mais rien ne le signalait sur ces deux écrans — seul le nom du type de congé y apparaissait, comme
+ * pour une journée complète. Renvoie 'matin'/'apres-midi' pour LA date précise concernée (jamais pour
+ * un jour intermédiaire d'une période à cheval sur plusieurs jours, qui reste bien une journée
+ * complète), ou null sinon — réutilisé à la fois par le Planning (par jour) et le Calendrier des
+ * absences (sur les jours de début/fin d'un segment). */
+function getHalfDayForDate(request, dateStr) {
+  if (!request) return null;
+  if (request.demiJournee && request.dateDebut === request.dateFin && dateStr === request.dateDebut) return request.demiJournee;
+  if (request.demiJourneeDebut === 'apres-midi' && dateStr === request.dateDebut) return 'apres-midi';
+  if (request.demiJourneeFin === 'matin' && dateStr === request.dateFin) return 'matin';
+  return null;
+}
+
+/** Cette demande ne retire-t-elle PAS la journée `dateStr` du ticket restaurant ? (retour du 20/11/2026, demande n° 22) : une demi-journée de congé ou de RTT ne retire jamais de ticket,
+ * qu'elle soit isolée (un seul jour) ou au début (après-midi) ou à la fin (matin) d'une période de plusieurs jours. */
+function demiJourneeSansRetraitDeTicket(request, dateStr) {
+  return Boolean(getHalfDayForDate(request, dateStr));
+}
+
 function computeWorkingDays(dateDebut, dateFin, demiJournee, employee, settings, unite = 'ouvres', demiJourneeDebut, demiJourneeFin) {
   if (!dateDebut || !dateFin) return 0;
   const start = parseISODateLocal(dateDebut);

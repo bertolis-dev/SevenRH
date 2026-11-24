@@ -96,7 +96,7 @@ async function runCalendrierRessembleAUnCalendrier() {
   const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
   const calendarFnStart = appSource.indexOf('function exportAbsenceCalendarExcel(');
-  const calendarFnBody = appSource.slice(calendarFnStart, calendarFnStart + 3200);
+  const calendarFnBody = appSource.slice(calendarFnStart, calendarFnStart + 9000);
   assert.ok(calendarFnBody.includes('buildCalendarExcelXmlWorkbook'), 'exportAbsenceCalendarExcel doit générer son fichier via buildCalendarExcelXmlWorkbook (bordures/week-ends), plus via XLSX/SheetJS qui ne permet aucune mise en forme en version gratuite');
   assert.ok(calendarFnBody.includes('WEEKDAY_LABELS'), 'chaque en-tête de jour doit aussi porter le jour de la semaine (ex. "1 Lun"), pour ressembler à un vrai calendrier');
 

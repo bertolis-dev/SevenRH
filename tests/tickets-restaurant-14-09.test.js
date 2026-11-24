@@ -130,19 +130,30 @@ async function runRegularisationRepliesAutomatiquementDansLeMoisSuivant() {
   // Une absence est déclarée APRÈS la commande, sur septembre — le calcul réel de septembre baisse.
   await leaveRepository.create({ employeeId: salarie.id, typeId: leaveTypeRepository.getLeaveTypes()[0].id, dateDebut: '2030-09-02', dateFin: '2030-09-06', nbJours: 5 });
 
-  // §retour Betty du 22/09/2026 : l'écart doit apparaître SUR LA LIGNE DU MOIS SUIVANT (octobre),
-  // intégré au total commandé — jamais seulement un bouton à cliquer sur la ligne de septembre.
-  const resultatOctobre = calculateTicketsRestaurant(employeeRepository.getById(salarie.id), 2030, 9, leaveRepository.getAll(), [], DB.getSettings());
-  assert.ok(resultatOctobre.regularisationMoisPrecedent, 'octobre doit porter la régularisation de septembre, automatiquement');
-  assert.strictEqual(resultatOctobre.regularisationMoisPrecedent.commande, commandeSeptembre);
-  assert.ok(resultatOctobre.regularisationMoisPrecedent.ecart < 0, 'une absence en plus sur septembre doit produire un écart négatif');
-  assert.strictEqual(
-    resultatOctobre.nbTickets,
-    resultatOctobre.theorique + resultatOctobre.regularisationMoisPrecedent.ecart,
-    'la régularisation doit être intégrée au total commandé d\'octobre, sans action manuelle'
-  );
+  // Demande n° 23 du 20/11/2026 : la régularisation n'est plus appliquée automatiquement. Octobre ne porte rien tant que le RH n'a pas validé la correction proposée par le pointage.
+  const employeeApresAbsence = employeeRepository.getById(salarie.id);
+  const resultatOctobre = calculateTicketsRestaurant(employeeApresAbsence, 2030, 9, leaveRepository.getAll(), [], DB.getSettings());
+  assert.strictEqual(resultatOctobre.regularisationTotal, 0, 'aucune régularisation appliquée sans validation');
+  assert.strictEqual(resultatOctobre.nbTickets, resultatOctobre.theorique, 'octobre = calcul du mois, sans correction d\'office');
 
-  console.log('OK — tickets-restaurant-14-09.test.js (la régularisation du mois précédent se replie automatiquement dans le mois suivant, sans validation manuelle)');
+  const pointage = sandbox.calculerPointageTickets(employeeApresAbsence, 2030, 9, leaveRepository.getAll(), [], DB.getSettings(), leaveTypeRepository.getLeaveTypes());
+  const propositionSeptembre = pointage.propositions.find(p => p.cle === '2030-09');
+  assert.ok(propositionSeptembre, 'le pointage propose une correction pour septembre');
+  assert.ok(propositionSeptembre.restant < 0, 'une absence en plus sur septembre produit un écart négatif');
+  assert.strictEqual(propositionSeptembre.commande, commandeSeptembre);
+  assert.strictEqual(propositionSeptembre.moisCible, '2030-10', 'appliquée à la commande suivante');
+  assert.ok(propositionSeptembre.lignes.length >= 1 && propositionSeptembre.lignes.every(l => l.creeLe), 'les jours qui constituent l\'écart sont listés avec leur date de dépôt');
+
+  // Le RH valide telle quelle : la correction s'ajoute alors à octobre, et septembre n'est plus reproposé.
+  const decision = DB.traiterRegularisationTickets(salarie.id, '2030-09', { decision: 'validee', delta: propositionSeptembre.restant, ecart: propositionSeptembre.restant, moisCible: '2030-10', auteurId: rh.id });
+  assert.ok(decision.success);
+  const octobreValide = calculateTicketsRestaurant(employeeRepository.getById(salarie.id), 2030, 9, leaveRepository.getAll(), [], DB.getSettings());
+  assert.strictEqual(octobreValide.regularisationTotal, propositionSeptembre.restant);
+  assert.strictEqual(octobreValide.nbTickets, octobreValide.theorique + propositionSeptembre.restant, 'la correction validée est intégrée au total d\'octobre');
+  const apres = sandbox.calculerPointageTickets(employeeRepository.getById(salarie.id), 2030, 9, leaveRepository.getAll(), [], DB.getSettings(), leaveTypeRepository.getLeaveTypes());
+  assert.ok(!apres.propositions.some(p => p.cle === '2030-09'), 'un écart déjà examiné n\'est pas reproposé');
+
+  console.log('OK — tickets-restaurant-14-09.test.js (la régularisation n\'est plus automatique : proposée par le pointage, appliquée seulement après validation du RH)');
 }
 
 async function runUi() {

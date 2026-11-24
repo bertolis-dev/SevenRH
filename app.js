@@ -2714,13 +2714,15 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.20.8';
+const APP_VERSION = '2026.11.24.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tickets restaurant (revue du 24/11, demandes 22 et 23) : une demi-journée en début (après-midi) ou en fin (matin) d'une période de congé ne retire plus de ticket, comme une demi-journée isolée. Nouvelle colonne « Pointage » dans Tickets de l'équipe, après « Part salarié » : jours d'absence cumulés depuis le 1er janvier (hors demi-journées), tickets distribués, écart, et le bouton « Contrôler » qui propose la correction avec les jours concernés (par exemple « 14/10/2026 - Congés payés, déposé le 03/11/2026 »). Rien ne s'applique sans la validation du RH, qui peut valider telle quelle, modifier le nombre ou refuser : la régularisation automatique du mois précédent est supprimée et passe par cette validation. Pour les mois commandés hors de Nexus, le bouton « Saisir les tickets distribués » permet de les contrôler aussi.",
+      "Export Excel du calendrier de l'équipe (revue du 24/11, demande 21) : à la fin de chaque ligne, pour chaque type d'absence et le télétravail, le total du mois et le cumul depuis le 1er janvier (les demi-journées comptent 0,5 jour), puis deux colonnes à part avec le nombre de demi-journées de congés payés et de RTT (du mois et cumulé).",
       "Titres-restaurant : connecteur Swile, prêt mais pas encore activé. Dans Paramètres > Tickets restaurant, vous renseignez la clé d'API Swile (stockée sur le serveur, jamais ré-affichée), le produit titres-restaurant et l'adresse de commande. Nexus crée, met à jour et retire vos salariés chez Swile et les inscrit aux titres-restaurant (« Synchroniser maintenant », ou automatiquement une fois par jour). Sur l'écran Tickets de l'équipe, le nouveau bouton « Envoyer la commande » envoie par email le fichier de commande du mois au contact de commande, après confirmation, et garde la trace de l'envoi. Cela demande la mise à jour du serveur décrite dans docs/connecteur-titres-restaurant.md.",
       "Voiture de société : dans l'onglet Contrat de la fiche, une carte « Voiture de société » (bouton « Attribuer une voiture » pour ceux qui en ont une, rien pour les autres) : marque, modèle, immatriculation, énergie, mode de détention (LLD, LOA, achat), loueur, numéro de contrat, début et fin du contrat, kilométrage annuel prévu et à la remise, carte carburant, usage privé et notes. Le RH est prévenu 90, 30 et 7 jours avant la fin du contrat (notification et carte sur l'accueil).",
       "Calendrier de l'équipe : les colonnes des premiers jours du mois ne s'élargissent plus quand des vacances scolaires (par exemple celles de la Toussaint) ne couvrent que un ou deux jours du mois, et les lignes ne sont plus grisées en alternance (certains services paraissaient grisés, d'autres non). Le filtre « Tous les services » a la même taille que les deux boutons à côté, et le point de couleur devant le titre de chaque page ainsi que le liseré de couleur en haut de l'écran sont retirés. Les couleurs des types d'absence du calendrier sont plus franchement différentes (Maladie en rouge, Ancienneté en rose, Formation en vert, Télétravail en sarcelle) ; un type dont vous avez choisi la couleur dans Paramètres la garde.",
@@ -21476,7 +21478,46 @@ function exportAbsenceCalendarExcel() {
     if (weekday === 0 || weekday === 6) weekendColumnIndexes.add(2 + i);
   });
 
-  const headers = ['Salarié', 'Service', ...days.map(day => `${day} ${WEEKDAY_LABELS[(new Date(year, month, day).getDay() + 6) % 7]}`)];
+  // Demande n° 21 de la revue du 24/11/2026 : en fin de ligne, pour chaque type d'absence (et le télétravail), le total du mois et le cumul depuis le 1er janvier, en jours
+  // (les demi-journées comptent 0,5), puis le nombre de demi-journées de CP/RTT à part (elles ne retirent pas de ticket restaurant).
+  const settingsCumul = settingsRepository.getSettings();
+  const typesDeConge = leaveTypeRepository.getLeaveTypes();
+  const validesConges = leaveRequests.filter(r => r.statut === 'Validé');
+  const validesTeletravail = teleworkRequests.filter(r => r.statut === 'Validé');
+  const joursPourMois = (r, e, mois, unite) => countRequestDaysInMonth(r.dateDebut, r.dateFin, r.demiJournee, year, mois, e, settingsCumul, unite, r.demiJourneeDebut, r.demiJourneeFin);
+  const cumulPourType = (e, type) => {
+    const demandes = validesConges.filter(r => r.employeeId === e.id && r.typeId === type.id);
+    let moisCourant = 0; let cumul = 0;
+    for (let m = 0; m <= month; m++) {
+      const n = demandes.reduce((somme, r) => somme + joursPourMois(r, e, m, type.uniteDecompte), 0);
+      cumul += n;
+      if (m === month) moisCourant = n;
+    }
+    return { moisCourant, cumul };
+  };
+  const cumulTeletravail = (e) => {
+    const demandes = validesTeletravail.filter(r => r.employeeId === e.id);
+    let moisCourant = 0; let cumul = 0;
+    for (let m = 0; m <= month; m++) {
+      const n = demandes.reduce((somme, r) => somme + joursPourMois(r, e, m, 'ouvres'), 0);
+      cumul += n;
+      if (m === month) moisCourant = n;
+    }
+    return { moisCourant, cumul };
+  };
+  const idsCpRtt = new Set(typesDeConge.filter(t => leaveTypeNameMatches(t.nom, 'Congés payés') || leaveTypeNameMatches(t.nom, 'RTT')).map(t => t.id));
+  const demiJourneesCpRtt = (e, mois) => demiJourneesDuMois(e, year, mois, validesConges.filter(r => idsCpRtt.has(r.typeId)), typesDeConge).length;
+  // Types présents dans le fichier : ceux dont au moins un salarié affiché a des jours sur le mois ou depuis le 1er janvier.
+  const colonnesTypes = [];
+  typesDeConge.forEach(t => {
+    if (employees.some(e => { const c = cumulPourType(e, t); return c.moisCourant > 0 || c.cumul > 0; })) colonnesTypes.push({ nom: t.nom, calcul: (e) => cumulPourType(e, t) });
+  });
+  if (hasModule('planning') && employees.some(e => { const c = cumulTeletravail(e); return c.moisCourant > 0 || c.cumul > 0; })) colonnesTypes.push({ nom: 'Télétravail', calcul: cumulTeletravail });
+  const enTetesCumul = [];
+  colonnesTypes.forEach(c => { enTetesCumul.push(`${c.nom} (${MONTH_NAMES[month].toLowerCase()})`, `${c.nom} (cumul depuis le 1er janvier ${year})`); });
+  enTetesCumul.push(`Demi-journées CP/RTT (${MONTH_NAMES[month].toLowerCase()})`, `Demi-journées CP/RTT (cumul depuis le 1er janvier ${year})`);
+
+  const headers = ['Salarié', 'Service', ...days.map(day => `${day} ${WEEKDAY_LABELS[(new Date(year, month, day).getDay() + 6) % 7]}`), ...enTetesCumul];
   const rows = [];
   groupEmployeesByServiceAndEquipe(employees).forEach(g => {
     g.equipes.forEach(eq => {
@@ -21497,6 +21538,10 @@ function exportAbsenceCalendarExcel() {
           }
           row.push(label);
         });
+        colonnesTypes.forEach(c => { const v = c.calcul(e); row.push(v.moisCourant, v.cumul); });
+        let demisCumul = 0;
+        for (let m = 0; m <= month; m++) demisCumul += demiJourneesCpRtt(e, m);
+        row.push(demiJourneesCpRtt(e, month), demisCumul);
         rows.push(row);
       });
     });
@@ -26024,22 +26069,6 @@ function exportAuditLogCSV() {
 // Vue : Planning des absences (semaine / mois / année, tous types confondus)
 // ---------------------------------------------------------------------------
 
-/** §demande Betty du 10/09/2026 ("que ce soit affiché dans le planning équipe et calendrier
- * entreprise") : une demi-journée de congé se pose déjà (openLeaveRequestModal, `demiJournee` pour
- * un jour isolé ou `demiJourneeDebut`/`demiJourneeFin` pour le premier/dernier jour d'une période),
- * mais rien ne le signalait sur ces deux écrans — seul le nom du type de congé y apparaissait, comme
- * pour une journée complète. Renvoie 'matin'/'apres-midi' pour LA date précise concernée (jamais pour
- * un jour intermédiaire d'une période à cheval sur plusieurs jours, qui reste bien une journée
- * complète), ou null sinon — réutilisé à la fois par le Planning (par jour) et le Calendrier des
- * absences (sur les jours de début/fin d'un segment). */
-function getHalfDayForDate(request, dateStr) {
-  if (!request) return null;
-  if (request.demiJournee && request.dateDebut === request.dateFin && dateStr === request.dateDebut) return request.demiJournee;
-  if (request.demiJourneeDebut === 'apres-midi' && dateStr === request.dateDebut) return 'apres-midi';
-  if (request.demiJourneeFin === 'matin' && dateStr === request.dateFin) return 'matin';
-  return null;
-}
-
 /** Statut d'un salarié à une date donnée, tous types d'absence confondus (congé ou télétravail).
  * Sprint SIRH premium §2 : `leaveRequests`/`teleworkRequests` peuvent désormais inclure des demandes
  * "En attente" (pas seulement "Validé") — `pending: true` permet à l'affichage de les distinguer
@@ -30363,9 +30392,9 @@ function renderMesTicketsRestaurant() {
       <p class="text-muted" style="margin: 6px 0 0;">${renderTicketsDetailText(result, year, month)}</p>
     </details>
 
-    ${result.regularisationMoisPrecedent ? `
+    ${result.regularisationsValidees && result.regularisationsValidees.length ? `
       <div class="card" style="margin-top: 12px;">
-        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation automatique de ${MONTH_NAMES[month === 0 ? 11 : month - 1]} : <strong>${result.regularisationMoisPrecedent.ecart >= 0 ? '+' : ''}${result.regularisationMoisPrecedent.ecart} ticket${Math.abs(result.regularisationMoisPrecedent.ecart) > 1 ? 's' : ''}</strong> (${result.regularisationMoisPrecedent.commande} commandés ce mois-là, ${result.regularisationMoisPrecedent.actuel} calculés depuis).</p>
+        <p style="margin: 0;">${icon(ICONS.scale, 14)} Régularisation validée par le RH : <strong>${result.regularisationTotal >= 0 ? '+' : ''}${result.regularisationTotal} ticket${Math.abs(result.regularisationTotal) > 1 ? 's' : ''}</strong> (${result.regularisationsValidees.map(r => `${MONTH_NAMES[Number(r.source.slice(5, 7)) - 1]} : ${r.delta >= 0 ? '+' : ''}${r.delta}`).join(', ')}).</p>
       </div>
     ` : ''}
 
@@ -30451,12 +30480,14 @@ function getTicketsRows() {
   const settings = settingsRepository.getSettings();
   const leaveRequests = leaveRepository.getAll();
   const teleworkRequests = teleworkRepository.getAll();
+  const leaveTypes = leaveTypeRepository.getLeaveTypes();
 
   return employees.map(e => ({
     employee: e,
     result: calculateTicketsRestaurant(e, year, month, leaveRequests, teleworkRequests, settings),
     // §retour Betty du 14/09/2026 (point 3, "régularisation automatique") : null si rien à régulariser.
-    ecartRegularisation: calculerEcartRegularisationTickets(e, year, month, leaveRequests, teleworkRequests, settings),
+    // Demande n° 23 du 20/11/2026 : colonne « Pointage » (cumul depuis le 1er janvier, propositions de correction à valider par le RH).
+    pointage: calculerPointageTickets(e, year, month, leaveRequests, teleworkRequests, settings, leaveTypes),
     // §retour Betty du 14/09/2026 (point 2, "suivi des bénéficiaires") : entrée/sortie DANS le mois affiché.
     entreeDansLeMois: e.dateEmbauche >= monthStart && e.dateEmbauche <= monthEnd ? e.dateEmbauche : null,
     sortieDansLeMois: e.dateDepart && e.dateDepart >= monthStart && e.dateDepart <= monthEnd ? e.dateDepart : null
@@ -30500,6 +30531,7 @@ function renderTicketsEquipe() {
       </div>
     </div>
     <p class="text-muted" id="tickets-commandes-envoyees" style="margin: -4px 0 12px;"></p>
+    ${canCorriger && rows.some(r => r.pointage.moisSansCommande.length) ? '<p class="text-muted" style="margin: 0 0 12px;">Le pointage ne contrôle que les mois dont la commande est connue de Nexus. <button type="button" class="btn-link" id="btn-saisie-tickets-distribues">Saisir les tickets distribués d\'un mois commandé ailleurs</button></p>' : ''}
 
     ${depassePlafond ? `
       <div class="card" style="border-left: 3px solid var(--color-danger); margin-bottom: 16px;">
@@ -30516,7 +30548,7 @@ function renderTicketsEquipe() {
 
     <div class="card table-card">
       <table class="table mobile-cards">
-        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
+        <thead><tr><th>Salarié</th><th class="cell-numeric">Tickets</th><th class="cell-numeric">Montant total</th><th class="cell-numeric">Part employeur</th><th class="cell-numeric">Part salarié</th><th>Pointage</th>${canCorriger ? '<th></th>' : ''}</tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
@@ -30527,11 +30559,11 @@ function renderTicketsEquipe() {
                   <summary class="text-muted" style="font-size: 12px;">Détail</summary>
                   <p class="text-muted" style="font-size: 12px; margin: 4px 0 0; text-align: left;">${renderTicketsDetailText(r.result, state.ticketsYear, state.ticketsMonth)}</p>
                 </details>
-                ${r.ecartRegularisation ? `<div class="text-muted" style="font-size: 12px;" title="${r.ecartRegularisation.commande} commandés, ${r.ecartRegularisation.actuel} calculés maintenant.">${icon(ICONS.warningTriangle, 11)} ${r.ecartRegularisation.ecart >= 0 ? '+' : ''}${r.ecartRegularisation.ecart} depuis la commande, sera repris le mois suivant</div>` : ''}
               </td>
               <td class="cell-numeric" data-label="Montant total">${formatCurrencyFR(r.result.montantTotal)}</td>
               <td class="cell-numeric" data-label="Part employeur">${formatCurrencyFR(r.result.partEmployeur)}</td>
               <td class="cell-numeric" data-label="Part salarié">${formatCurrencyFR(r.result.partSalarie)}</td>
+              <td data-label="Pointage">${renderPointageTicketsCellule(r.employee, r.pointage, canCorriger)}</td>
               ${canCorriger ? `<td class="table-actions"><button class="btn-link" data-corriger-tickets="${r.employee.id}">Corriger</button></td>` : ''}
             </tr>
           `).join('')}
@@ -30551,8 +30583,8 @@ function renderTicketsDetailText(result, year, month) {
     `− ${result.joursFeriesFermetures} férié${result.joursFeriesFermetures > 1 ? 's' : ''}/fermeture${result.joursFeriesFermetures > 1 ? 's' : ''}`,
     `− ${result.joursAbsences} congé${result.joursAbsences > 1 ? 's' : ''}`
   ];
-  if (result.regularisationMoisPrecedent) {
-    parts.push(`${result.regularisationMoisPrecedent.ecart >= 0 ? '+' : ''}${result.regularisationMoisPrecedent.ecart} (régularisation ${MONTH_NAMES[moisPrecedentIndex]})`);
+  if (result.regularisationTotal) {
+    parts.push(`${result.regularisationTotal >= 0 ? '+' : ''}${result.regularisationTotal} (régularisation validée)`);
   }
   if (result.ajustement) {
     parts.push(`${result.ajustement >= 0 ? '+' : ''}${result.ajustement} (correction manuelle)`);
@@ -30639,6 +30671,11 @@ function bindTicketsEquipeEvents() {
   document.querySelectorAll('[data-corriger-tickets]').forEach(btn => {
     btn.addEventListener('click', () => openCorrigerTicketsModal(btn.dataset.corrigerTickets));
   });
+  const saisieDistribues = document.getElementById('btn-saisie-tickets-distribues');
+  if (saisieDistribues) saisieDistribues.addEventListener('click', openSaisieTicketsDistribuesModal);
+  document.querySelectorAll('[data-pointage-tickets]').forEach(btn => {
+    btn.addEventListener('click', () => openPointageTicketsModal(btn.dataset.pointageTickets));
+  });
 }
 
 /** §retour Betty du 14/09/2026 (point 1, "fichier de commande mensuel") : export allégé, aux seuls
@@ -30655,6 +30692,134 @@ function genererFichierCommandeTickets() {
   DB.enregistrerCommandeTickets(state.ticketsYear, state.ticketsMonth, leaveRepository.getAll(), teleworkRepository.getAll());
   showToast('Fichier de commande généré.');
   render();
+}
+
+/** Cellule « Pointage » du tableau des tickets de l'équipe : cumul des absences, tickets distribués, écart, et accès au contrôle quand une correction est proposée. */
+function renderPointageTicketsCellule(employee, p, peutCorriger) {
+  const moisAffiches = state.ticketsMonth + 1;
+  // Aucune commande enregistrée dans Nexus sur la période (entreprise arrivée en cours d'année) : rien à comparer, on le dit simplement.
+  if (p.moisSansCommande.length === moisAffiches && !p.propositions.length) {
+    return `<div class="text-muted" style="font-size:12px;">Aucune commande enregistrée dans Nexus${p.joursAbsence ? ` · ${p.joursAbsence} j d'absence` : ''}</div>`;
+  }
+  const ecart = p.ecartCumul;
+  const badge = ecart === 0 ? '<span class="badge badge-success">Aucun écart</span>'
+    : ecart > 0 ? `<span class="badge badge-warning" title="Pas assez de tickets distribués">+${ecart} à distribuer</span>`
+      : `<span class="badge badge-danger" title="Trop de tickets distribués">${ecart} en trop</span>`;
+  return `
+    <div style="font-size:12px;" class="text-muted">${p.joursAbsence} j d'absence · ${p.distribues} ticket${p.distribues > 1 ? 's' : ''} distribué${p.distribues > 1 ? 's' : ''}${p.demiJournees ? ` · ${p.demiJournees} demi-journée${p.demiJournees > 1 ? 's' : ''}` : ''}</div>
+    <div>${badge}</div>
+    ${p.propositions.length ? `<button type="button" class="btn-link" data-pointage-tickets="${escapeHtml(employee.id)}">Contrôler (${p.propositions.length})</button>` : ''}
+    ${p.moisSansCommande.length ? `<div class="text-muted" style="font-size:11px;" title="Mois commandés hors de Nexus : non contrôlés tant que le nombre distribué n'est pas saisi (bouton « Saisir les tickets distribués » en haut de l'écran).">${p.moisSansCommande.length} mois non contrôlé${p.moisSansCommande.length > 1 ? 's' : ''}</div>` : ''}
+  `;
+}
+
+/** Fenêtre de contrôle du pointage d'un salarié : chaque proposition de correction est validée telle quelle, modifiée ou refusée par le RH. Rien ne s'applique tout seul. */
+function openPointageTicketsModal(employeeId) {
+  const employee = employeeRepository.getById(employeeId);
+  if (!employee) { showToast('Ce salarié n\'est plus disponible.', 'error'); return; }
+  const peutCorriger = hasPermission(authRepository.getCurrentUser(), PERMISSIONS.CORRIGER_TICKETS_RESTAURANT);
+  const p = calculerPointageTickets(employee, state.ticketsYear, state.ticketsMonth, leaveRepository.getAll(), teleworkRepository.getAll(), settingsRepository.getSettings(), leaveTypeRepository.getLeaveTypes());
+  const libelleMois = (cle) => `${MONTH_NAMES[Number(cle.slice(5, 7)) - 1]} ${cle.slice(0, 4)}`;
+  const signe = (n) => `${n >= 0 ? '+' : ''}${n}`;
+  const propositions = p.propositions.map((prop, i) => `
+    <div class="card" style="margin:0 0 12px;" data-proposition="${i}">
+      <h3 style="margin:0 0 6px;">${escapeHtml(libelleMois(prop.cle))} : ${prop.commande} commandé${prop.commande > 1 ? 's' : ''}, ${prop.actuel} dû${prop.actuel > 1 ? 's' : ''} d'après les absences connues</h3>
+      <p style="margin:0 0 6px;">Écart à examiner : <strong>${signe(prop.restant)} ticket${Math.abs(prop.restant) > 1 ? 's' : ''}</strong> (${prop.restant < 0 ? 'trop de tickets distribués' : 'pas assez de tickets distribués'}).</p>
+      ${prop.lignes.length ? `<ul style="margin:0 0 8px 18px;">${prop.lignes.map(l => `<li>${formatDate(l.date)} - ${escapeHtml(l.libelle)}${l.creeLe ? `, déposé le ${formatDate(l.creeLe)}` : ''}</li>`).join('')}</ul>
+        ${prop.incertain ? '<p class="form-hint">Date de commande inconnue pour ce mois : tous les jours d\'absence du mois sont listés, à vérifier.</p>' : ''}` : '<p class="form-hint">Aucune absence déposée après la commande : l\'écart vient d\'une absence annulée ou modifiée depuis, ou d\'une correction manuelle.</p>'}
+      <p class="text-muted" style="margin:0 0 8px;">La correction s'appliquerait à la commande de <strong>${escapeHtml(libelleMois(prop.moisCible))}</strong>.</p>
+      ${peutCorriger ? `
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <label for="f-pointage-delta-${i}" class="text-muted">Correction (tickets)</label>
+          <input class="input" type="number" step="1" id="f-pointage-delta-${i}" value="${prop.restant}" style="width:90px;">
+          <button type="button" class="btn btn-primary btn-sm" data-pointage-valider="${i}">Valider</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-pointage-refuser="${i}">Refuser</button>
+        </div>` : '<p class="form-hint">Seul un RH ou un propriétaire peut valider une correction.</p>'}
+    </div>`).join('');
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Pointage des tickets : ${personNameHtml(employee)}</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-top:0;">Du 1er janvier ${state.ticketsYear} à ${escapeHtml(MONTH_NAMES[state.ticketsMonth])} : ${p.joursAbsence} jour${p.joursAbsence > 1 ? 's' : ''} d'absence (les demi-journées ne retirent pas de ticket${p.demiJournees ? ` : ${p.demiJournees} cette année` : ''}), ${p.distribues} ticket${p.distribues > 1 ? 's' : ''} distribué${p.distribues > 1 ? 's' : ''} pour ${p.dus} dû${p.dus > 1 ? 's' : ''}.</p>
+        ${propositions || '<p>Aucune correction en attente de votre décision.</p>'}
+        <p class="form-hint" style="margin-top:12px;">Rien n'est appliqué sans votre validation. Une correction validée s'ajoute au nombre de tickets du mois indiqué.</p>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button></div>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const auteurId = authRepository.getCurrentUser().id;
+  const traiter = (i, decision) => {
+    const prop = p.propositions[i];
+    const saisi = Number(document.getElementById('f-pointage-delta-' + i).value);
+    const resolue = decision === 'refusee' ? 'refusee' : (saisi === prop.restant ? 'validee' : 'modifiee');
+    const r = employeeRepository.traiterRegularisationTickets(employeeId, prop.cle, { decision: resolue, delta: saisi, ecart: prop.restant, moisCible: prop.moisCible, auteurId });
+    if (!r.success) { showToast(r.error, 'error'); return; }
+    showToast(decision === 'refusee' ? 'Correction refusée : elle ne sera plus proposée.' : 'Correction validée.');
+    closeModal();
+    render();
+    openPointageTicketsModal(employeeId);
+  };
+  document.querySelectorAll('[data-pointage-valider]').forEach(btn => btn.addEventListener('click', () => traiter(Number(btn.dataset.pointageValider), 'validee')));
+  document.querySelectorAll('[data-pointage-refuser]').forEach(btn => btn.addEventListener('click', () => traiter(Number(btn.dataset.pointageRefuser), 'refusee')));
+}
+
+/** Saisie groupée : nombre de tickets distribués à chaque salarié pour un mois commandé hors de Nexus (le pointage ne peut contrôler que les mois dont il connaît la commande). */
+function openSaisieTicketsDistribuesModal() {
+  const rows = getTicketsRows();
+  const mois = [];
+  for (let m = 0; m <= state.ticketsMonth; m++) {
+    const cle = ticketsMonthKey(state.ticketsYear, m);
+    if (rows.some(r => !r.employee.ticketsCommandesEnregistrees || r.employee.ticketsCommandesEnregistrees[cle] == null)) mois.push({ cle, m });
+  }
+  if (!mois.length) { showToast('Tous les mois de l\'année ont une commande enregistrée.'); return; }
+  const html = `
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h2>Saisir les tickets distribués</h2>
+        <button class="btn-icon" id="btn-close-modal" aria-label="Fermer" title="Fermer">${icon(ICONS.close, 14)}</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-top:0;">Pour un mois commandé hors de Nexus, saisissez le nombre de tickets distribués à chaque salarié : le pointage pourra alors le contrôler. Les cases laissées vides ne sont pas modifiées.</p>
+        <div class="form-field" style="max-width:260px;"><label for="f-saisie-mois">Mois</label>
+          <select class="input" id="f-saisie-mois">${mois.map(x => `<option value="${x.cle}">${escapeHtml(MONTH_NAMES[x.m])} ${state.ticketsYear}</option>`).join('')}</select></div>
+        <div id="saisie-tickets-lignes" style="margin-top:12px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="btn-saisie-tickets-enregistrer">Enregistrer</button>
+      </div>
+    </div>`;
+  const modalRoot = document.getElementById('modal-root');
+  modalRoot.innerHTML = html;
+  modalRoot.classList.add('open');
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  const afficher = () => {
+    const cle = document.getElementById('f-saisie-mois').value;
+    document.getElementById('saisie-tickets-lignes').innerHTML = rows.map(r => {
+      const existant = r.employee.ticketsCommandesEnregistrees && r.employee.ticketsCommandesEnregistrees[cle];
+      return `<div style="display:flex; gap:10px; align-items:center; margin:4px 0;"><label for="f-saisie-${escapeHtml(r.employee.id)}" style="flex:1;">${personNameHtml(r.employee)}</label>${existant != null ? `<span class="text-muted" style="width:150px;">${existant} (déjà enregistré)</span>` : `<input class="input" type="number" min="0" max="400" step="1" id="f-saisie-${escapeHtml(r.employee.id)}" data-saisie-employe="${escapeHtml(r.employee.id)}" style="width:150px;">`}</div>`;
+    }).join('');
+  };
+  document.getElementById('f-saisie-mois').addEventListener('change', afficher);
+  afficher();
+  document.getElementById('btn-saisie-tickets-enregistrer').addEventListener('click', () => {
+    const cle = document.getElementById('f-saisie-mois').value;
+    const valeurs = {};
+    document.querySelectorAll('[data-saisie-employe]').forEach(champ => { if (champ.value !== '') valeurs[champ.dataset.saisieEmploye] = Number(champ.value); });
+    const r = DB.saisirCommandesTicketsMois(cle, valeurs);
+    if (!r.success) { showToast(r.error, 'error'); return; }
+    showToast(`Tickets distribués enregistrés pour ${r.nombre} salarié${r.nombre > 1 ? 's' : ''}.`);
+    closeModal();
+    render();
+  });
 }
 
 function shiftTicketsMonth(delta) {
