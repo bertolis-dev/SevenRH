@@ -553,6 +553,14 @@ const DEFAULT_SETTINGS = {
   priseEnMainEtapes: {},
   // Revue du 13/10/2026 : carence du maintien de salaire par l'employeur en maladie ordinaire (jours). 7 = à partir du 8e jour (D1226-3) ; distinct des 3 jours de carence des IJ Sécurité sociale. Valeur à valider (docs/regles-a-valider.md).
   carenceMaintienMaladieJours: 7,
+  // Audit du 26/11/2026 : SMIC brut mensuel (35 h) qui sert au plafond des IJ (1,4 SMIC depuis le 01/04/2025). À mettre à jour à chaque revalorisation ; valeur par défaut non validée.
+  smicMensuelBrut: 1823.03,
+  // Audit du 26/11/2026 (loi n° 2025-989 du 24/10/2025) : entretien de parcours professionnel dans l'année qui suit l'arrivée, puis tous les 4 ans ; état des lieux récapitulatif tous les 8 ans. Réglables (un accord peut prévoir mieux, jamais plus de 4 ans).
+  entretienProfessionnelPremierAnnees: 1,
+  entretienProfessionnelPeriodiciteAnnees: 4,
+  bilanRecapitulatifAnnees: 8,
+  // Audit du 26/11/2026 : calcul corrigé du solde de congés (un jour pris pendant la période close ne s'impute plus deux fois). Désactivé tant que l'expert-comptable n'a pas validé le comparatif des soldes (Tableau des compteurs).
+  soldeCongesSansDoubleDecompte: false,
   // Brief du 12/10/2026 (B1) : congés par anticipation. 'interdit' : une demande ne peut pas dépasser le solde
   // immédiatement disponible ; 'autorise_acquis_a_date' : elle peut aller jusqu'aux jours déjà acquis à date sur la
   // période en cours. Règle à valider (docs/regles-a-valider.md) — le code ne tranche pas la question juridique.
@@ -8808,7 +8816,8 @@ function resolveAncienneteAcquisAnnuel(leaveType, employee, refDate) {
   // Le palier le plus élevé ATTEINT s'applique ; à ancienneté égale, celui propre à la catégorie du salarié passe avant celui de « toutes les catégories ».
   const atteints = applicables.filter(p => years >= Number(p.ancienneteMin))
     .sort((a, b) => (Number(b.ancienneteMin) - Number(a.ancienneteMin)) || (Number(Boolean(b.categorieSalarieId)) - Number(Boolean(a.categorieSalarieId))));
-  return atteints.length ? Number(atteints[0].jours) || 0 : 0;
+  // Audit du 26/11/2026 : sous le premier palier, la base annuelle (nombreAnnuel) s'applique au lieu de 0 (« 25 jours, puis 27 à partir de 15 ans » ne laisse plus personne sans droit).
+  return atteints.length ? Number(atteints[0].jours) || 0 : (Number(leaveType.nombreAnnuel) || 0);
 }
 
 // §"Simulateur convention collective" (roadmap différenciation #9, PILOTE du 01/09/2026, une seule
@@ -9086,7 +9095,13 @@ function isArretTravailType(leaveType) {
 // approximer le plafond légal de l'IJ sécurité sociale (1,8 SMIC), même esprit que les barèmes
 // kilométriques moto/cyclomoteur : valeur affichée comme estimation, jamais comme un montant CPAM
 // garanti.
-const SMIC_MENSUEL_BRUT_INDICATIF = 1801.80;
+const SMIC_MENSUEL_BRUT_INDICATIF = 1823.03; // SMIC brut mensuel 35 h au 01/01/2026 ; l'entreprise le met à jour dans Paramètres (settings.smicMensuelBrut)
+
+/** Plafond des IJ maladie en multiple du SMIC : 1,8 jusqu'au 31/03/2025, 1,4 pour les arrêts commencés à partir du 01/04/2025 (décret n° 2025-160 du 20/02/2025, art. R323-4 CSS). */
+function coefficientPlafondIJ(dateDebutArret) {
+  const date = String(dateDebutArret || toISODate(new Date()));
+  return date >= '2025-04-01' ? 1.4 : 1.8;
+}
 
 const CARENCE_JOURS_MALADIE_ORDINAIRE = 3;
 // Maintien de salaire par l'EMPLOYEUR (art. L1226-1, D1226-3) : en maladie ordinaire il ne démarre qu'au 8e jour d'absence
@@ -9140,13 +9155,14 @@ function calculerSalaireJournalierBase(salaireBrutMensuel) {
   return round2(salaireBrutMensuel * 3 / 91.25);
 }
 
-function calculerPlafondSJBIndicatif() {
-  return round2(SMIC_MENSUEL_BRUT_INDICATIF * 1.8 * 3 / 91.25);
+function calculerPlafondSJBIndicatif(dateDebutArret, smicMensuelBrut) {
+  const smic = Number(smicMensuelBrut) > 0 ? Number(smicMensuelBrut) : SMIC_MENSUEL_BRUT_INDICATIF;
+  return round2(smic * coefficientPlafondIJ(dateDebutArret) * 3 / 91.25);
 }
 
-function calculerIJSecuEstimee(typeArret, salaireBrutMensuel, nbJoursIndemnisables) {
+function calculerIJSecuEstimee(typeArret, salaireBrutMensuel, nbJoursIndemnisables, options) {
   if (nbJoursIndemnisables <= 0) return 0;
-  const sjb = Math.min(calculerSalaireJournalierBase(salaireBrutMensuel), calculerPlafondSJBIndicatif());
+  const sjb = Math.min(calculerSalaireJournalierBase(salaireBrutMensuel), calculerPlafondSJBIndicatif(options && options.dateDebut, options && options.smicMensuelBrut));
   if (isArretSansCarence(typeArret)) {
     const joursInitiaux = Math.min(nbJoursIndemnisables, SEUIL_JOURS_ATMP_TAUX_MAJORE);
     const joursApres = Math.max(0, nbJoursIndemnisables - SEUIL_JOURS_ATMP_TAUX_MAJORE);
@@ -9219,7 +9235,8 @@ function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests, 
   const nbJoursCalendaires = Math.round((fin - debut) / 86400000) + 1;
   const joursCarence = calculerJoursCarenceArret(arret.typeArret);
   const joursIndemnisables = Math.max(0, nbJoursCalendaires - joursCarence);
-  const ijSecuEstimee = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, joursIndemnisables);
+  const optionsIJ = { dateDebut: request.dateDebut, smicMensuelBrut: options && options.smicMensuelBrut };
+  const ijSecuEstimee = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, joursIndemnisables, optionsIJ);
   const carenceMaladie = options && options.carenceMaintienMaladie;
   const joursCarenceMaintien = calculerJoursCarenceMaintien(arret.typeArret, carenceMaladie);
   const joursMaintien = Math.max(0, nbJoursCalendaires - joursCarenceMaintien);
@@ -9228,7 +9245,7 @@ function calculerEstimationIndemnitesArret(request, employee, allLeaveRequests, 
   const maintien = calculerMaintienSalaireEstime(ancienneteAnneesEntieres, joursMaintien, joursDejaConsommes, employee.salaireBrutMensuel);
   // Le complément employeur compare le maintien et l'IJ sur LES MÊMES jours (ceux que l'employeur maintient), pas sur tous
   // les jours indemnisés par la Sécurité sociale.
-  const ijSurJoursMaintenus = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, Math.min(joursMaintien, joursIndemnisables));
+  const ijSurJoursMaintenus = calculerIJSecuEstimee(arret.typeArret, employee.salaireBrutMensuel, Math.min(joursMaintien, joursIndemnisables), optionsIJ);
   const complementEmployeurEstime = Math.max(0, round2(maintien.montant - ijSurJoursMaintenus));
   return {
     nbJoursCalendaires, joursCarence, joursIndemnisables, ijSecuEstimee,
@@ -9281,7 +9298,7 @@ function getLeaveTypeIdsByName(leaveTypes, nom) {
  * "en direct"). getPaieAnomalies doit impérativement passer la fin du mois qu'on prépare, sinon le
  * solde évalué est toujours celui d'AUJOURD'HUI — préparer la paie de mars en juillet vérifierait
  * alors le solde de juillet, pas celui de mars. */
-function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate, categoriesSalarie) {
+function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDate, categoriesSalarie, options) {
   const types = allLeaveTypes || DB.getLeaveTypes();
 
   // §3 sprint amélioration : un salarié inéligible (règles non satisfaites) n'a simplement rien
@@ -9436,7 +9453,30 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   const requestsDisponible = requestsFor(previous.periodStart, current.periodEnd);
   const pris = requestsDisponible.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, current.periodEnd), 0);
   const enAttente = requestsDisponible.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, current.periodEnd), 0);
-  const disponible = acquis === Infinity ? Infinity : round2(acquis - pris - enAttente + ajustement);
+  // Audit du 26/11/2026 : un jour pris pendant la période close (previous) a d'abord consommé le droit de la période d'avant (previous2),
+  // dont la fenêtre de consommation court jusqu'à la fin de previous ; le compter une seconde fois contre le droit de previous l'imputait deux fois
+  // (surtout avec un report « aucun »). Correctif : le reliquat de previous2 non reporté absorbe d'abord les jours pris dans previous (premier entré, premier sorti).
+  // Désactivé par défaut (settings.soldeCongesSansDoubleDecompte) tant que l'expert-comptable n'a pas validé le comparatif des soldes.
+  const sansDoubleDecompte = options && options.sansDoubleDecompte !== undefined ? !!options.sansDoubleDecompte : !!settings.soldeCongesSansDoubleDecompte;
+  let creditDoubleDecompte = 0;
+  let prisRetenu = pris;
+  let enAttenteRetenu = enAttente;
+  if (sansDoubleDecompte && acquis !== Infinity) {
+    const acquisPrecedent2Fifo = calculateAcquisition(employee, leaveType, previous2.periodEnd, previous2, allRequests, types);
+    const prisPrecedent2Fifo = requestsFor(previous2.periodStart, previous2.periodEnd).reduce((sum, r) => sum + daysInPeriod(r, previous2.periodStart, previous2.periodEnd), 0);
+    const residuel2 = Math.max(0, round2(acquisPrecedent2Fifo - prisPrecedent2Fifo));
+    creditDoubleDecompte = Math.max(0, round2(residuel2 - report));
+    if (creditDoubleDecompte > 0) {
+      const dansPrevious = requestsFor(previous.periodStart, previous.periodEnd);
+      const prisDansPrevious = dansPrevious.filter(r => r.statut === 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, previous.periodEnd), 0);
+      const enAttenteDansPrevious = dansPrevious.filter(r => r.statut !== 'Validé').reduce((sum, r) => sum + daysInPeriod(r, previous.periodStart, previous.periodEnd), 0);
+      const imputeValide = Math.min(creditDoubleDecompte, prisDansPrevious);
+      const imputeAttente = Math.min(creditDoubleDecompte - imputeValide, enAttenteDansPrevious);
+      prisRetenu = round2(pris - imputeValide);
+      enAttenteRetenu = round2(enAttente - imputeAttente);
+    }
+  }
+  const disponible = acquis === Infinity ? Infinity : round2(acquis - prisRetenu - enAttenteRetenu + ajustement);
 
   // Brief du 12/10/2026 (C3) : à la clôture du compteur en cours, le solde disponible sort de la fenêtre de
   // consommation — perdu en totalité (report « aucun ») ou pour l'excédent d'un report plafonné. `expiration`
@@ -9450,13 +9490,37 @@ function getLeaveBalance(employee, leaveType, allRequests, allLeaveTypes, refDat
   const expiration = perteALaCloture > 0 ? { date: toISODate(current.periodEnd), jours: perteALaCloture, motif: 'cloture' } : null;
 
   return {
-    acquis, pris, enAttente, disponible, ajustement, report, reportPerdu, fractionnement, conventionCollectiveBonus, expiration,
+    acquis, pris: prisRetenu, enAttente: enAttenteRetenu, disponible, ajustement, report, reportPerdu, fractionnement, conventionCollectiveBonus, expiration, creditDoubleDecompte,
     periodeDisponible: { debut: toISODate(previous.periodStart), fin: toISODate(previous.periodEnd) },
     enCoursAcquisition: {
       acquis: acquisEnCours,
       periode: { debut: toISODate(current.periodStart), fin: toISODate(current.periodEnd) }
     }
   };
+}
+
+/** Audit du 26/11/2026 : comparatif des soldes de congés AVANT / APRÈS la correction du double décompte, salarié par salarié et type par type
+ * (types à clôture de compteur seulement : les autres ne sont pas concernés). À faire valider par l'expert-comptable avant d'activer le réglage. */
+function comparerSoldesDoubleDecompte(employees, leaveTypes, allRequests, allLeaveTypes, refDate) {
+  const types = (allLeaveTypes || leaveTypes).filter(t => t.categorie === 'conge' && t.dateClotureCompteur);
+  const lignes = [];
+  employees.forEach(e => {
+    const demandes = allRequests.filter(r => r.employeeId === e.id);
+    types.forEach(t => {
+      const avant = getLeaveBalance(e, t, demandes, allLeaveTypes || leaveTypes, refDate, undefined, { sansDoubleDecompte: false });
+      const apres = getLeaveBalance(e, t, demandes, allLeaveTypes || leaveTypes, refDate, undefined, { sansDoubleDecompte: true });
+      if (avant.acquis === 0 && avant.pris === 0 && avant.enAttente === 0 && !avant.ajustement) return;
+      lignes.push({
+        employee: e, leaveType: t,
+        acquis: avant.acquis,
+        prisAvant: avant.pris, enAttenteAvant: avant.enAttente, disponibleAvant: avant.disponible,
+        prisApres: apres.pris, enAttenteApres: apres.enAttente, disponibleApres: apres.disponible,
+        ecart: avant.disponible === Infinity ? 0 : round2(apres.disponible - avant.disponible),
+        creditDoubleDecompte: apres.creditDoubleDecompte || 0
+      });
+    });
+  });
+  return lignes;
 }
 
 /** Jours d'une demande VALIDÉE qui tombent hors de la fenêtre légale du 1er mai au 31 octobre de

@@ -1996,7 +1996,7 @@ const LANDING_FEATURES = [
       "Planification d'un entretien (date, participants) par RH ou manager",
       "Auto-évaluation complétée par le salarié avant la date, puis verrouillée à la clôture",
       "Retour du manager, puis clôture par RH pour garder une trace fidèle de l'échange",
-      "Rappel automatique quand le bilan à 6 ans (obligation légale récurrente) approche"
+      "Rappel automatique quand le bilan récapitulatif (obligation légale récurrente) approche"
     ],
     howItWorks: [
       "RH ou le manager planifie l'entretien avec une date et les participants.",
@@ -2006,17 +2006,17 @@ const LANDING_FEATURES = [
     audience: [
       { role: 'Salarié', text: "Prépare et complète son auto-évaluation directement dans l'application." },
       { role: 'Manager', text: "Planifie et mène les entretiens de son équipe, avec l'historique déjà à portée de main." },
-      { role: 'RH', text: "Ne rate plus un bilan à 6 ans, rappelé automatiquement avant l'échéance légale." }
+      { role: 'RH', text: "Ne rate plus un bilan récapitulatif, rappelé automatiquement avant l'échéance légale." }
     ],
     related: [0, 5],
     screenshot: 'landing-feature-entretiens.png',
     mock: {
       title: 'Entretiens',
-      kpis: [['3', 'Entretiens ce trimestre'], ['1', 'Auto-évaluation en attente'], ['1', 'Bilan à 6 ans à prévoir']],
+      kpis: [['3', 'Entretiens ce trimestre'], ['1', 'Auto-évaluation en attente'], ['1', 'Bilan récapitulatif à prévoir']],
       rows: [
         [ICONS.notepad, 'Entretien annuel : S. Benali', 'info', 'Planifié'],
         [ICONS.checkCircle, 'Auto-évaluation complétée', 'success', 'Prêt pour le manager'],
-        [ICONS.warningTriangle, 'Bilan à 6 ans : échéance proche', 'warning', 'À planifier']
+        [ICONS.warningTriangle, 'Bilan récapitulatif : échéance proche', 'warning', 'À planifier']
       ]
     }
   },
@@ -2245,7 +2245,7 @@ const ABOUT_CATEGORIES = [
       "Fiche complète par salarié : contrat, coordonnées, documents, historique",
       "Organigramme hiérarchique généré automatiquement à partir des managers",
       "Catégories de salariés personnalisables",
-      "Alertes automatiques : anniversaires d'ancienneté (médailles du travail), entretiens professionnels (tous les 2 ans) et bilans (tous les 6 ans)",
+      "Alertes automatiques : anniversaires d'ancienneté (médailles du travail), entretiens de parcours professionnel (tous les 4 ans) et bilans récapitulatifs (tous les 8 ans)",
       "Import en masse de salariés depuis un fichier CSV/Excel",
       "Embauche : candidatures reçues par QR code ou lien, converties en fiche salarié en un clic"
     ]
@@ -2714,13 +2714,17 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.24.2';
+const APP_VERSION = '2026.11.27.1';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Calculs (audit du 26/11) : le plafond des indemnités journalières de la Sécurité sociale passe à 1,4 SMIC pour les arrêts commencés à partir du 01/04/2025 (1,8 avant), et le SMIC est réglable dans Paramètres > Congés et absences (valeur par défaut à faire valider).",
+      "Entretiens professionnels : l'échéance suit la loi du 24/10/2025, un entretien de parcours tous les 4 ans (premier dans l'année qui suit l'arrivée) et un bilan récapitulatif tous les 8 ans ; ces intervalles sont réglables (Paramètres > Congés et absences). Les libellés et rappels sont mis à jour.",
+      "Congés payés : quand un type a des paliers d'ancienneté (ex. 25 jours, puis 27 à partir de 15 ans), la base annuelle s'applique aussi sous le premier palier au lieu de 0.",
+      "Congés payés : calcul corrigé du double décompte (un jour pris pendant la période close n'est plus retiré deux fois). Désactivé par défaut : Paramètres > Congés et absences propose le comparatif des soldes avant / après, salarié par salarié (Excel), à faire valider par l'expert-comptable avant d'activer le réglage.",
       "Tickets restaurant, commande Swile : le bouton « Commande Swile » (Tickets de l'équipe) ouvre un aperçu propre de la commande du mois (bénéficiaires, jours à charger, montant), signale ce qui manque dans les fiches (email, date de naissance, civilité) et télécharge le fichier au format exact du modèle Swile (COMMANDE_SWILE_code.csv : même consigne en première ligne, mêmes colonnes, MR/MME, date JJ/MM/AAAA, nombre de jours à charger, encodage Windows-1252). Il suffit ensuite de le déposer sur le site Swile. Le « Fichier de commande » devient un « Tableau de commande » Excel plus propre (mêmes colonnes, service, total). Le code client Swile et la valeur de la colonne MATRICULE se règlent dans Paramètres > Tickets restaurant.",
       "Tickets restaurant (revue du 24/11, demandes 22 et 23) : une demi-journée en début (après-midi) ou en fin (matin) d'une période de congé ne retire plus de ticket, comme une demi-journée isolée. Nouvelle colonne « Pointage » dans Tickets de l'équipe, après « Part salarié » : jours d'absence cumulés depuis le 1er janvier (hors demi-journées), tickets distribués, écart, et le bouton « Contrôler » qui propose la correction avec les jours concernés (par exemple « 14/10/2026 - Congés payés, déposé le 03/11/2026 »). Rien ne s'applique sans la validation du RH, qui peut valider telle quelle, modifier le nombre ou refuser : la régularisation automatique du mois précédent est supprimée et passe par cette validation. Pour les mois commandés hors de Nexus, le bouton « Saisir les tickets distribués » permet de les contrôler aussi.",
       "Export Excel du calendrier de l'équipe (revue du 24/11, demande 21) : à la fin de chaque ligne, pour chaque type d'absence et le télétravail, le total du mois et le cumul depuis le 1er janvier (les demi-journées comptent 0,5 jour), puis deux colonnes à part avec le nombre de demi-journées de congés payés et de RTT (du mois et cumulé).",
@@ -5242,7 +5246,7 @@ const HELP_CONTENT = {
   },
   entretiens: {
     title: 'Entretiens',
-    body: `<p>Planification et suivi des entretiens professionnels et entretiens annuels. RH/Manager planifient un entretien (date, participants), le salarié complète son auto-évaluation avant la date, le manager son retour, RH clôture. Un rappel apparaît automatiquement si le bilan à 6 ans (obligation légale récurrente) approche.</p>`,
+    body: `<p>Planification et suivi des entretiens professionnels et entretiens annuels. RH/Manager planifient un entretien (date, participants), le salarié complète son auto-évaluation avant la date, le manager son retour, RH clôture. Un rappel apparaît automatiquement si le bilan récapitulatif (obligation légale récurrente) approche.</p>`,
     faq: [{ q: 'Le salarié ne peut plus modifier son auto-évaluation ?', r: 'Elle se verrouille une fois l\'entretien clôturé par RH, pour garder une trace fidèle de ce qui a été échangé ce jour-là.' }]
   },
   idees: {
@@ -5750,7 +5754,7 @@ const GUIDE_THEMES = [
         r: gP(`Dans <strong>Entretiens</strong> (menu Équipe), choisissez de planifier un entretien : indiquez le salarié, la date et les participants. Le salarié prépare son auto-évaluation avant la date, vous ajoutez votre retour, puis les RH clôturent.`) },
       { id: 'e-campagne', q: 'Comment lancer une campagne d\'entretiens pour toute l\'entreprise ?', module: 'entretiens', pour: GUIDE_GESTION, vue: 'entretiens', mots: 'campagne entretiens annuels tous trame questions masse lancer',
         r: gP(`Dans <strong>Entretiens</strong>, utilisez « Lancer une campagne » pour planifier d'un coup les entretiens d'un groupe de salariés. « Gérer les trames » permet de rédiger les questions posées au salarié et au manager.`) },
-      { id: 'e-bilan6', q: 'Qu\'est-ce que le rappel « bilan à 6 ans » ?', module: 'entretiens', pour: GUIDE_EQUIPE, mots: 'bilan 6 ans entretien professionnel obligation légale rappel état des lieux',
+      { id: 'e-bilan6', q: 'Qu\'est-ce que le rappel « bilan récapitulatif » ?', module: 'entretiens', pour: GUIDE_EQUIPE, mots: 'bilan 6 ans 8 ans entretien professionnel obligation légale rappel état des lieux',
         r: gP(`C'est une obligation légale qui revient périodiquement pour chaque salarié. Un rappel apparaît automatiquement quand l'échéance approche, pour que vous n'oubliez ni la date ni l'entretien.`) },
       { id: 'i-idee', q: 'Comment proposer une idée ou voter ?', vue: 'idees', mots: 'idée suggestion proposition boîte à idées vote voter amélioration',
         r: gP(`Ouvrez la <strong>Boîte à idées</strong> et proposez la vôtre. Chacun voit toutes les idées et peut voter ; cliquer à nouveau sur le vote le retire. Les idées avancent de colonne en colonne (nouvelle, à l'étude, en cours, livrée, non retenue), ce qui permet à tous de suivre leur sort.`) }
@@ -6087,7 +6091,7 @@ GUIDE_THEMES.push(
       { id: 'g-etablissement', q: 'Établissement, service, équipe', mots: 'établissement service équipe organisation site département', r: gP(`Le <strong>établissement</strong> est un lieu de travail ; le <strong>service</strong> un département ; l'<strong>équipe</strong> un groupe plus petit, avec un ou plusieurs managers.`) },
       { id: 'g-cpf', q: 'CPF (compte personnel de formation)', mots: 'cpf compte personnel de formation financement droits formation', r: gP(`Un droit à formation attaché à la personne, utilisable avec ou sans l'accord de l'employeur selon que la formation a lieu pendant ou hors du temps de travail. Nexus prépare la demande et les lettres associées.`) },
       { id: 'g-prevenance', q: 'Délai de prévenance', mots: 'délai prévenance préavis cpf avance demande', r: gP(`Le temps à respecter entre votre demande et le début de la formation. Le formulaire le calcule d'après la durée et vous alerte s'il n'est pas tenu, sans jamais bloquer l'envoi.`) },
-      { id: 'g-entretien-pro', q: 'Entretien professionnel et bilan à 6 ans', mots: 'entretien professionnel annuel bilan 6 ans évaluation obligation', r: gP(`Un échange régulier sur votre parcours et vos besoins de formation, qui se tient tous les deux ans et fait l'objet d'un bilan tous les six ans. Nexus rappelle les échéances.`) },
+      { id: 'g-entretien-pro', q: 'Entretien professionnel et bilan récapitulatif', mots: 'entretien professionnel annuel bilan 6 ans évaluation obligation', r: gP(`Un échange régulier sur votre parcours et vos besoins de formation, qui se tient tous les quatre ans et fait l'objet d'un état des lieux récapitulatif tous les huit ans (loi du 24/10/2025). Nexus rappelle les échéances.`) },
       { id: 'g-auto-eval', q: 'Auto-évaluation et trame', mots: 'auto-évaluation trame questions entretien préparer campagne', r: gP(`L'<strong>auto-évaluation</strong> est ce que vous écrivez avant l'entretien. La <strong>trame</strong> est la liste de questions fixée par l'entreprise.`) },
       { id: 'g-variables', q: 'Variables de paie', mots: 'variables paie prime élément ponctuel', r: gP(`Les éléments qui changent d'un mois à l'autre (primes...), saisis dans la préparation de paie.`) },
       { id: 'g-heures-sup', q: 'Heures supplémentaires, contingent, repos compensateur', mots: 'heures sup contingent repos compensateur majoration', r: gP(`Les <strong>heures supplémentaires</strong> sont les heures au-delà de la durée normale. Le <strong>contingent</strong> est le plafond annuel fixé pour l'entreprise. Le <strong>repos compensateur</strong> est un temps de repos accordé en remplacement ou en complément.`) },
@@ -7935,7 +7939,7 @@ async function syncNotifications() {
 
   if (hasModule('rh')) getUpcomingBilansSixAns(30, undefined, Infinity).forEach(x => {
     const palier = echelonRappel(x.daysUntil);
-    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Bilan à 6 ans ${palier.etat}` : 'Bilan à 6 ans à réaliser',
+    candidates.push(makeNotification(`bilan-six-ans-${x.employee.id}-${x.years}${palier.suffixe}`, ICONS.notepad, palier.etat ? `Bilan récapitulatif ${palier.etat}` : 'Bilan récapitulatif à réaliser',
       `${nomCompletAffiche(x.employee)} · ${formatDate(toISODate(x.next))}`, 'employee-detail', { currentEmployeeId: x.employee.id, employeeDetailTab: 'parcours' }, x.employee.id));
   });
 
@@ -9368,9 +9372,8 @@ function getUpcomingSeniorityAnniversaries(daysAhead = 60, employees, limit = 5)
     .slice(0, limit);
 }
 
-/** Entretien professionnel obligatoire (Code du travail, art. L6315-1) : au moins tous les 2 ans,
- * à défaut de date connue on part de l'embauche (= "jamais fait" équivaut à "le premier est dû 2 ans
- * après l'arrivée"). Contrairement à getUpcomingBilansSixAns, on ne recalcule pas une échéance
+/** Entretien de parcours professionnel (Code du travail, art. L6315-1, loi n° 2025-989 du 24/10/2025) : tous les 4 ans (réglage entretienProfessionnelPeriodiciteAnnees),
+ * à défaut de date connue on part de l'embauche (= "jamais fait" équivaut à "le premier est dû dans l'année qui suit l'arrivée", réglage entretienProfessionnelPremierAnnees). Contrairement à getUpcomingBilansSixAns, on ne recalcule pas une échéance
  * future à partir d'un jalon manqué : un entretien en retard doit apparaître EN RETARD (daysUntil
  * négatif, trié en premier), pas être silencieusement reporté à la prochaine échéance théorique. */
 function getUpcomingEntretiensProfessionnels(daysAhead = 60, employees, limit = 5) {
@@ -9379,8 +9382,12 @@ function getUpcomingEntretiensProfessionnels(daysAhead = 60, employees, limit = 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
+      // Loi du 24/10/2025 : premier entretien dans l'année qui suit l'arrivée, puis tous les 4 ans (réglages de l'entreprise).
+      const reglages = settingsRepository.getSettings();
+      const premier = Number(reglages.entretienProfessionnelPremierAnnees) || 1;
+      const periodicite = Number(reglages.entretienProfessionnelPeriodiciteAnnees) || 4;
       const baseline = parseISODateLocal(e.dateDernierEntretienProfessionnel || e.dateEmbauche);
-      const next = new Date(baseline.getFullYear() + 2, baseline.getMonth(), baseline.getDate());
+      const next = new Date(baseline.getFullYear() + (e.dateDernierEntretienProfessionnel ? periodicite : premier), baseline.getMonth(), baseline.getDate());
       return { employee: e, next, daysUntil: Math.round((next - today) / 86400000) };
     })
     .filter(x => x.daysUntil <= daysAhead)
@@ -9388,27 +9395,29 @@ function getUpcomingEntretiensProfessionnels(daysAhead = 60, employees, limit = 
     .slice(0, limit);
 }
 
-/** Bilan à 6 ans (Code du travail, art. L6315-1 II) : récapitulatif obligatoire tous les 6 ans
+/** Bilan récapitulatif (Code du travail, art. L6315-1 II, loi n° 2025-989 du 24/10/2025) : tous les 8 ans (réglage bilanRecapitulatifAnnees ; 6 ans avant la loi)
  * d'ancienneté, distinct de l'entretien biennal — pénalités (abondement CPF) si manqué dans les
- * entreprises de 50 salariés et plus. Calculé sur des multiples de 6 ans depuis l'embauche. */
+ * entreprises de 50 salariés et plus. Calculé sur des multiples de l'intervalle depuis l'embauche. */
 function getUpcomingBilansSixAns(daysAhead = 60, employees, limit = 5) {
+  // Nom historique (« six ans ») conservé : l'intervalle est maintenant celui du réglage bilanRecapitulatifAnnees (8 ans depuis la loi du 24/10/2025).
+  const pasBilan = Number(settingsRepository.getSettings().bilanRecapitulatifAnnees) || 8;
   employees = (employees || employeeRepository.getAll()).filter(e => !e.archive && e.statut === 'Actif' && e.dateEmbauche);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return employees
     .map(e => {
       // Un bilan réalisé (dateDernierBilanSixAns, posée à la clôture d'un entretien « bilan ») : la prochaine
-      // échéance est 6 ans plus tard, un bilan manqué reste en retard (jamais reporté en silence).
+      // échéance est un intervalle plus tard, un bilan manqué reste en retard (jamais reporté en silence).
       if (e.dateDernierBilanSixAns) {
         const dernier = parseISODateLocal(e.dateDernierBilanSixAns);
-        const prochain = new Date(dernier.getFullYear() + 6, dernier.getMonth(), dernier.getDate());
-        const annees = Math.max(6, Math.round((prochain - parseISODateLocal(e.dateEmbauche)) / (365.25 * 86400000)));
+        const prochain = new Date(dernier.getFullYear() + pasBilan, dernier.getMonth(), dernier.getDate());
+        const annees = Math.max(pasBilan, Math.round((prochain - parseISODateLocal(e.dateEmbauche)) / (365.25 * 86400000)));
         return { employee: e, next: prochain, years: annees, daysUntil: Math.round((prochain - today) / 86400000) };
       }
       const hire = parseISODateLocal(e.dateEmbauche);
-      let years = 6;
+      let years = pasBilan;
       let next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate());
-      while (next < today) { years += 6; next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate()); }
+      while (next < today) { years += pasBilan; next = new Date(hire.getFullYear() + years, hire.getMonth(), hire.getDate()); }
       return { employee: e, next, years, daysUntil: Math.round((next - today) / 86400000) };
     })
     .filter(x => x.daysUntil <= daysAhead)
@@ -9978,7 +9987,7 @@ function renderUpcomingEntretiensCard(entretiens, bilans) {
   return `
     <div class="card">
       <h2>Entretiens professionnels à programmer</h2>
-      ${items.length === 0 ? `<p class="text-muted">Aucun entretien professionnel ou bilan à 6 ans dans les 60 prochains jours.</p>` : `
+      ${items.length === 0 ? `<p class="text-muted">Aucun entretien professionnel ou bilan récapitulatif dans les 60 prochains jours.</p>` : `
         <div class="mini-list">
           ${items.map(x => `
             <div class="mini-list-item">
@@ -11292,6 +11301,22 @@ function exportTableauCompteursExcel() {
   const xml = buildExcelXmlWorkbook(headers, excelRows, 'Tableau des compteurs', { zebra: true });
   downloadExcelXmlFile(xml, 'tableau-compteurs.xls');
   auditLogRepository.logAudit('Export', 'Tableau des compteurs', `${rows.length} salarié${rows.length > 1 ? 's' : ''}`);
+}
+
+/** Audit du 26/11/2026 : comparatif Excel des soldes de congés avant / après la correction du double décompte, tous les salariés actifs (sans filtre d'écran). */
+function exportComparatifDoubleDecompteExcel() {
+  const employees = employeeRepository.getAll().filter(e => !e.archive);
+  const types = leaveTypeRepository.getLeaveTypes();
+  const lignes = comparerSoldesDoubleDecompte(employees, types, leaveRepository.getAll(), types, new Date());
+  if (!lignes.length) { showToast('Aucun type de congé à clôture de compteur : le correctif ne change aucun solde.', 'error'); return; }
+  const fmt = (n) => n === Infinity ? 'Illimité' : n;
+  const headers = ['Matricule', 'Salarié', 'Service', 'Type', 'Acquis', 'Pris (avant)', 'En attente (avant)', 'Solde avant', 'Pris (après)', 'En attente (après)', 'Solde après', 'Écart', 'Jours imputés sur la période précédente'];
+  const donnees = lignes.map(l => [l.employee.matricule, nomCompletAffiche(l.employee), l.employee.service, l.leaveType.nom, fmt(l.acquis), l.prisAvant, l.enAttenteAvant, fmt(l.disponibleAvant), l.prisApres, l.enAttenteApres, fmt(l.disponibleApres), l.ecart, l.creditDoubleDecompte]);
+  const xml = buildExcelXmlWorkbook(headers, donnees, 'Comparatif des soldes', { zebra: true });
+  downloadExcelXmlFile(xml, 'comparatif-soldes-conges-avant-apres.xls');
+  const nbEcarts = lignes.filter(l => l.ecart !== 0).length;
+  auditLogRepository.logAudit('Export', 'Comparatif des soldes de congés', lignes.length + ' ligne(s) · ' + nbEcarts + ' écart(s)');
+  showToast(nbEcarts ? nbEcarts + ' solde(s) changeraient avec le calcul corrigé.' : 'Aucun solde ne change avec le calcul corrigé.');
 }
 
 /** §retour Betty du 21/09/2026 (relecture par rôle, point 3, "fuite de cloisonnement sur le type de
@@ -13442,7 +13467,7 @@ const TICKET_CATEGORIES = ['Anomalie', 'Question', 'Suggestion', 'Autre'];
 
 const ENTRETIEN_STATUT_LABELS = { a_planifier: 'À faire', auto_evaluation_faite: 'En cours', cloture: 'Clôturé' };
 const ENTRETIEN_STATUT_BADGE_CLASS = { a_planifier: 'warning', auto_evaluation_faite: 'info', cloture: 'success' };
-const ENTRETIEN_TYPE_LABELS = { professionnel: 'Entretien professionnel', bilan: 'Bilan (6 ans)' };
+const ENTRETIEN_TYPE_LABELS = { professionnel: 'Entretien professionnel', bilan: 'Bilan récapitulatif (8 ans)' };
 // §retour Betty du 14/09/2026 (Entretiens points 1 et 2, "trames/campagnes par population") :
 // critère volontairement simple (statutPro contient "cadre", rôle manager) — pas un moteur de
 // segmentation complet, cohérent avec la taille de ce chantier v1.
@@ -14036,7 +14061,7 @@ function openPlanEntretienModal() {
               <label for="f-entretien-type">Type</label>
               <select class="input" id="f-entretien-type">
                 <option value="professionnel">Entretien professionnel</option>
-                <option value="bilan">Bilan (6 ans)</option>
+                <option value="bilan">Bilan récapitulatif (8 ans)</option>
               </select>
             </div>
             <div class="form-field">
@@ -14409,7 +14434,7 @@ function openLancerCampagneModal() {
               <label for="f-campagne-type">Type</label>
               <select class="input" id="f-campagne-type">
                 <option value="professionnel">Entretien professionnel</option>
-                <option value="bilan">Bilan (6 ans)</option>
+                <option value="bilan">Bilan récapitulatif (8 ans)</option>
               </select>
             </div>
             <div class="form-field">
@@ -16389,7 +16414,7 @@ function renderEmployeeFicheTab(e, user, settings, age, canSeeContractuel, canEd
         })()}
         ${canSeeContractuel && e.dateFinPeriodeEssai ? `<p class="form-hint">Délai de prévenance estimé (article L1221-25 du Code du travail), à confirmer avec votre expert-comptable/juriste avant toute rupture de période d'essai.</p>` : ''}
         ${canSeeContractuel && e.dateDernierEntretienProfessionnel ? infoRow('Dernier entretien professionnel', formatDate(e.dateDernierEntretienProfessionnel)) : ''}
-        ${canSeeContractuel && e.dateDernierBilanSixAns ? infoRow('Dernier bilan à 6 ans', formatDate(e.dateDernierBilanSixAns)) : ''}
+        ${canSeeContractuel && e.dateDernierBilanSixAns ? infoRow('Dernier bilan récapitulatif', formatDate(e.dateDernierBilanSixAns)) : ''}
       </div>
 
       ${ifModule('rh', renderVisitesMedicalesCard(e, canEdit))}
@@ -19104,7 +19129,7 @@ function renderEstimationIndemnitesArret(r, employee) {
     return `<h2>Estimation des indemnités</h2><p class="text-muted">Non calculable : aucun salaire brut mensuel renseigné sur la fiche salarié.</p>`;
   }
   const allRequestsEmployee = leaveRepository.getForEmployee(employee.id);
-  const estimation = calculerEstimationIndemnitesArret(r, employee, allRequestsEmployee, { carenceMaintienMaladie: settingsRepository.getSettings().carenceMaintienMaladieJours });
+  const estimation = calculerEstimationIndemnitesArret(r, employee, allRequestsEmployee, { carenceMaintienMaladie: settingsRepository.getSettings().carenceMaintienMaladieJours, smicMensuelBrut: settingsRepository.getSettings().smicMensuelBrut });
   if (!estimation) return '';
   const m = estimation.maintien;
   return `
@@ -22522,6 +22547,26 @@ function renderParametresTypesAbsences() {
           <label for="f-carence-maintien-maladie">Carence employeur (jours)</label>
           <input class="input" type="number" min="0" max="30" step="1" id="f-carence-maintien-maladie" value="${escapeHtml(settings.carenceMaintienMaladieJours)}">
         </div>
+        <div class="form-field">
+          <label for="f-smic-mensuel">SMIC brut mensuel (35 h, en €)</label>
+          <input class="input" type="number" min="0" step="0.01" id="f-smic-mensuel" value="${escapeHtml(settings.smicMensuelBrut)}">
+          <p class="form-hint">Sert au plafond des indemnités journalières de la Sécurité sociale (1,4 SMIC pour les arrêts commencés depuis le 01/04/2025, décret 2025-160). À mettre à jour à chaque revalorisation du SMIC. Valeur par défaut non validée.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Calcul du solde de congés (double décompte)</h2>
+      <p class="text-muted">Avec un compteur à clôture, un jour pris pendant la période close pouvait être retiré deux fois : une fois du droit de la période d'avant, une seconde fois du droit de la période close (surtout sans report). Le calcul corrigé impute d'abord ces jours sur le reliquat de la période d'avant. <strong>Ne l'activez qu'après validation de votre expert-comptable</strong> : le comparatif ci-dessous liste, salarié par salarié, le solde avant et après.</p>
+      <label class="checkbox-label"><input type="checkbox" id="f-solde-sans-double-decompte" ${settings.soldeCongesSansDoubleDecompte ? 'checked' : ''}> Appliquer le calcul corrigé</label>
+      <div style="margin-top: 8px;"><button type="button" class="btn btn-secondary" id="btn-comparatif-double-decompte">Télécharger le comparatif avant / après (Excel)</button></div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Entretiens professionnels</h2>
+      <p class="text-muted">Loi du 24/10/2025 : un entretien de parcours professionnel tous les 4 ans, un état des lieux récapitulatif tous les 8 ans. Un accord de branche ou d'entreprise peut prévoir plus fréquent, jamais plus espacé. Valeurs à faire valider par votre juriste avant les décrets d'application.</p>
+      <div class="form-grid" style="max-width: 520px;">
+        <div class="form-field"><label for="f-entretien-premier">Premier entretien : années après l'arrivée</label><input class="input" type="number" min="1" max="4" step="1" id="f-entretien-premier" value="${escapeHtml(settings.entretienProfessionnelPremierAnnees)}"></div>
+        <div class="form-field"><label for="f-entretien-periodicite">Entretien : tous les (années)</label><input class="input" type="number" min="1" max="4" step="1" id="f-entretien-periodicite" value="${escapeHtml(settings.entretienProfessionnelPeriodiciteAnnees)}"></div>
+        <div class="form-field"><label for="f-bilan-recapitulatif">Bilan récapitulatif : tous les (années)</label><input class="input" type="number" min="1" max="8" step="1" id="f-bilan-recapitulatif" value="${escapeHtml(settings.bilanRecapitulatifAnnees)}"></div>
       </div>
     </div>
     <div class="card" style="margin-bottom: 16px;">
@@ -22559,6 +22604,31 @@ function bindParametresTypesAbsencesEvents() {
   bindWorkflowField('f-workflow-conges-default', 'workflowCongesDefault', 'Modèle de validation des congés mis à jour.');
   bindNumberField('f-rappel-perte-conges', 'delaiRappelPerteCongesJours', 60, 'Délai de rappel mis à jour.');
   bindNumberField('f-carence-maintien-maladie', 'carenceMaintienMaladieJours', 7, 'Carence du maintien de salaire mise à jour.');
+  bindNumberField('f-smic-mensuel', 'smicMensuelBrut', 1823.03, 'SMIC mis à jour.');
+  bindNumberField('f-entretien-premier', 'entretienProfessionnelPremierAnnees', 1, 'Délai du premier entretien mis à jour.');
+  bindNumberField('f-entretien-periodicite', 'entretienProfessionnelPeriodiciteAnnees', 4, 'Périodicité de l\'entretien mise à jour.');
+  bindNumberField('f-bilan-recapitulatif', 'bilanRecapitulatifAnnees', 8, 'Périodicité du bilan mise à jour.');
+  const caseDoubleDecompte = document.getElementById('f-solde-sans-double-decompte');
+  if (caseDoubleDecompte) caseDoubleDecompte.addEventListener('change', () => {
+    const veutActiver = caseDoubleDecompte.checked;
+    caseDoubleDecompte.checked = !veutActiver;
+    openConfirm({
+      title: veutActiver ? 'Appliquer le calcul corrigé des soldes ?' : 'Revenir au calcul d\'origine ?',
+      message: veutActiver ? 'Les soldes de congés de tous les salariés seront recalculés (jours pris pendant la période close imputés d\'abord sur le reliquat de la période précédente). Téléchargez et faites valider le comparatif avant d\'activer.' : 'Les soldes seront de nouveau calculés comme avant la correction.',
+      confirmLabel: veutActiver ? 'Appliquer' : 'Revenir',
+      danger: veutActiver,
+      onConfirm: () => {
+        const reglages = settingsRepository.getSettings();
+        reglages.soldeCongesSansDoubleDecompte = veutActiver;
+        settingsRepository.saveSettings(reglages);
+        auditLogRepository.logAudit('Modification', 'Paramètres', 'Calcul du solde de congés : ' + (veutActiver ? 'double décompte corrigé' : 'calcul d\'origine'));
+        showToast(veutActiver ? 'Calcul corrigé appliqué.' : 'Calcul d\'origine rétabli.');
+        render();
+      }
+    });
+  });
+  const boutonComparatif = document.getElementById('btn-comparatif-double-decompte');
+  if (boutonComparatif) boutonComparatif.addEventListener('click', exportComparatifDoubleDecompteExcel);
   const miseEnServiceActiver = document.getElementById('btn-mise-en-service-activer');
   if (miseEnServiceActiver) miseEnServiceActiver.addEventListener('click', () => {
     const resultat = activerMiseEnService(document.getElementById('f-mise-en-service-jours').value);

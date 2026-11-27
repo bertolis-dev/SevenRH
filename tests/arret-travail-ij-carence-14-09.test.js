@@ -21,20 +21,20 @@ async function run() {
   // ---- IJ sécu estimée : 50% pour maladie ordinaire, 60% puis 80% après le 28e jour pour AT/MP ----
   {
     const { calculerIJSecuEstimee, calculerSalaireJournalierBase } = loadDataJs();
-    const sjb = calculerSalaireJournalierBase(3000); // 3000 * 3 / 91.25
-    assert.ok(Math.abs(sjb - 98.63) < 0.5, 'sanity : SJB approximatif cohérent avec la méthode CPAM (3 mois / 91,25)');
+    const sjb = calculerSalaireJournalierBase(2000); // 2000 * 3 / 91.25 (sous le plafond de 1,4 SMIC)
+    assert.ok(Math.abs(sjb - 65.75) < 0.5, 'sanity : SJB approximatif cohérent avec la méthode CPAM (3 mois / 91,25)');
 
-    const ijOrdinaire = calculerIJSecuEstimee('maladie', 3000, 10);
+    const ijOrdinaire = calculerIJSecuEstimee('maladie', 2000, 10);
     assert.ok(Math.abs(ijOrdinaire - 10 * sjb * 0.5) < 0.01, 'maladie ordinaire : 50% du SJB sur tous les jours indemnisables');
 
-    const ijAtmpCourt = calculerIJSecuEstimee('accidentTravail', 3000, 20);
+    const ijAtmpCourt = calculerIJSecuEstimee('accidentTravail', 2000, 20);
     assert.ok(Math.abs(ijAtmpCourt - 20 * sjb * 0.6) < 0.01, 'AT/MP sous 28 jours : 60% sur tous les jours');
 
-    const ijAtmpLong = calculerIJSecuEstimee('accidentTravail', 3000, 40);
+    const ijAtmpLong = calculerIJSecuEstimee('accidentTravail', 2000, 40);
     const attendu = 28 * sjb * 0.6 + 12 * sjb * 0.8;
     assert.ok(Math.abs(ijAtmpLong - attendu) < 0.01, 'AT/MP au-delà de 28 jours : 60% puis 80%, jamais 80% dès le 1er jour');
 
-    assert.strictEqual(calculerIJSecuEstimee('maladie', 3000, 0), 0, 'aucun jour indemnisable (tout en carence) : IJ nulle');
+    assert.strictEqual(calculerIJSecuEstimee('maladie', 2000, 0), 0, 'aucun jour indemnisable (tout en carence) : IJ nulle');
   }
 
   // ---- Plafonnement au SMIC : un très haut salaire ne fait pas grimper l'IJ indéfiniment ----
@@ -43,6 +43,15 @@ async function run() {
     const ijPlafonnee = calculerIJSecuEstimee('maladie', 15000, 10);
     const plafond = calculerPlafondSJBIndicatif();
     assert.ok(Math.abs(ijPlafonnee - 10 * plafond * 0.5) < 0.01, 'un salaire très élevé doit être plafonné, pas calculé sur le SJB brut réel');
+
+    // Audit du 26/11/2026 : plafond à 1,4 SMIC pour les arrêts commencés à partir du 01/04/2025 (décret 2025-160), 1,8 SMIC avant ; SMIC paramétrable.
+    const smic = 1800;
+    const avant = calculerPlafondSJBIndicatif('2025-03-31', smic);
+    const apres = calculerPlafondSJBIndicatif('2025-04-01', smic);
+    assert.ok(Math.abs(avant - smic * 1.8 * 3 / 91.25) < 0.01, 'arrêt commencé avant le 01/04/2025 : 1,8 SMIC');
+    assert.ok(Math.abs(apres - smic * 1.4 * 3 / 91.25) < 0.01, 'arrêt commencé à partir du 01/04/2025 : 1,4 SMIC');
+    const ij = calculerIJSecuEstimee('maladie', 15000, 10, { dateDebut: '2026-06-01', smicMensuelBrut: 2000 });
+    assert.ok(Math.abs(ij - 10 * calculerPlafondSJBIndicatif('2026-06-01', 2000) * 0.5) < 0.01, 'le SMIC saisi dans les paramètres est utilisé');
   }
 
   // ---- Cumul 12 mois glissants : un arrêt validé de plus de 12 mois ne compte plus, ni celui d'un

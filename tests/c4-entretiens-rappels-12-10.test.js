@@ -25,18 +25,18 @@ function setup() {
 function runLEntretienProfessionnelEstDuDeuxAnsApresLeDernier() {
   const api = setup();
   const s = api.DB.getEmployees().find(e => e.role === 'salarie');
-  // dernier entretien il y a 2 ans moins 20 jours -> dû dans 20 jours
+  // dernier entretien il y a 4 ans moins 20 jours -> dû dans 20 jours (loi du 24/10/2025 : tous les 4 ans)
   api.employeeRepository.update(s.id, { dateEmbauche: '2015-01-01' });
-  const dernier = decale(20, -2);
+  const dernier = decale(20, -4);
   api.employeeRepository.update(s.id, { dateDernierEntretienProfessionnel: iso(dernier) });
   const liste = api.sandbox.getUpcomingEntretiensProfessionnels(60, undefined, Infinity).filter(x => x.employee.id === s.id);
   assert.strictEqual(liste.length, 1);
   assert.ok(Math.abs(liste[0].daysUntil - 20) <= 1, `échéance à ~20 jours, obtenu ${liste[0].daysUntil}`);
 
-  api.employeeRepository.update(s.id, { dateDernierEntretienProfessionnel: iso(decale(-5, -2)) });
+  api.employeeRepository.update(s.id, { dateDernierEntretienProfessionnel: iso(decale(-5, -4)) });
   const enRetard = api.sandbox.getUpcomingEntretiensProfessionnels(60, undefined, Infinity).find(x => x.employee.id === s.id);
   assert.ok(enRetard.daysUntil < 0, 'un entretien manqué apparaît EN RETARD, jamais reporté en silence');
-  console.log('OK — c4-entretiens-rappels-12-10.test.js (entretien pro : 2 ans après le dernier, en retard visible)');
+  console.log('OK — c4-entretiens-rappels-12-10.test.js (entretien pro : 4 ans après le dernier, en retard visible)');
 }
 
 async function runLaClotureMetAJourLaDateDuDernierEntretien() {
@@ -55,8 +55,8 @@ async function runLaClotureMetAJourLaDateDuDernierEntretien() {
 async function runLeBilanSixAnsRealiseDecaleLEcheance() {
   const api = setup();
   const s = api.DB.getEmployees().find(e => e.role === 'salarie');
-  // embauché il y a 6 ans moins 10 jours : bilan dû dans 10 jours
-  api.employeeRepository.update(s.id, { dateEmbauche: iso(decale(10, -6)), dateDernierBilanSixAns: '' });
+  // embauché il y a 8 ans moins 10 jours : bilan dû dans 10 jours
+  api.employeeRepository.update(s.id, { dateEmbauche: iso(decale(10, -8)), dateDernierBilanSixAns: '' });
   let b = api.sandbox.getUpcomingBilansSixAns(60, undefined, Infinity).find(x => x.employee.id === s.id);
   assert.ok(b && Math.abs(b.daysUntil - 10) <= 1, 'bilan dû dans ~10 jours');
   const entretien = api.DB.addEntretien({ employeeId: s.id, type: 'bilan', datePrevue: iso(new Date()) });
@@ -64,14 +64,14 @@ async function runLeBilanSixAnsRealiseDecaleLEcheance() {
   const apres = api.employeeRepository.getById(s.id);
   assert.strictEqual(apres.dateDernierBilanSixAns, iso(new Date()), 'la clôture d\'un bilan enregistre sa date');
   b = api.sandbox.getUpcomingBilansSixAns(60, undefined, Infinity).find(x => x.employee.id === s.id);
-  assert.ok(!b, 'une fois le bilan réalisé, la prochaine échéance est 6 ans plus tard : plus de rappel');
-  console.log('OK — c4-entretiens-rappels-12-10.test.js (bilan à 6 ans réalisé : suivi et prochaine échéance repoussée de 6 ans)');
+  assert.ok(!b, 'une fois le bilan réalisé, la prochaine échéance est 8 ans plus tard : plus de rappel');
+  console.log('OK — c4-entretiens-rappels-12-10.test.js (bilan récapitulatif réalisé : suivi et prochaine échéance repoussée de 8 ans)');
 }
 
 async function runLesRappelsSontEchelonnes() {
   const api = setup();
   const s = api.DB.getEmployees().find(e => e.role === 'salarie');
-  const reglerDernier = (joursAvantEcheance) => api.employeeRepository.update(s.id, { dateEmbauche: '2015-01-01', dateDernierEntretienProfessionnel: iso(decale(joursAvantEcheance, -2)) });
+  const reglerDernier = (joursAvantEcheance) => api.employeeRepository.update(s.id, { dateEmbauche: '2015-01-01', dateDernierEntretienProfessionnel: iso(decale(joursAvantEcheance, -4)) });
   const cles = () => api.DB.getNotifications().filter(n => n.sourceKey.startsWith('entretien-pro-' + s.id)).map(n => n.sourceKey);
 
   reglerDernier(25);
