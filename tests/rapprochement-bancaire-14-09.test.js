@@ -134,7 +134,8 @@ async function runRapprochementManuel() {
 }
 
 async function runEcran() {
-  const { DB, sandbox, releveBancaireRepository, renderRapprochementBancaireCard, renderFrais } = loadAppJs();
+  const { DB, sandbox, releveBancaireRepository, renderRapprochementBancaireCard, renderFrais, state } = loadAppJs();
+  state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
   sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
   DB.init();
   activerFrais(DB);

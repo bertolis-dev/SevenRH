@@ -128,6 +128,7 @@ async function runCongesToolbarExposeLaRechercheEtLesEnTetesTriables() {
 
 async function runFraisRechercheParNomEtTriParColonne() {
   const { employeeRepository, expenseRepository, getFilteredExpenses, state } = setup();
+  state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
   const sarah = employeeRepository.getAll().find(e => e.prenom === 'Sarah');
   const lea = employeeRepository.getAll().find(e => e.prenom === 'Léa');
 
@@ -148,7 +149,8 @@ async function runFraisRechercheParNomEtTriParColonne() {
 }
 
 async function runFraisToolbarExposeLaRechercheEtLesEnTetesTriables() {
-  const { employeeRepository, expenseRepository, renderFrais } = setup();
+  const { employeeRepository, expenseRepository, renderFrais, state } = setup();
+  state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
   const sarah = employeeRepository.getAll().find(e => e.prenom === 'Sarah');
   await expenseRepository.create({ employeeId: sarah.id, categorie: 'Repas', libelle: 'Déjeuner', montantTTC: 20, date: '2026-09-01' });
 

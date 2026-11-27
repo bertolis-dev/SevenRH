@@ -146,6 +146,7 @@ async function run() {
   // ---- Tableaux en carte sur mobile, généralisés au-delà du seul Tableau des compteurs ----
   {
     const { DB, sandbox, renderEmployeesList, renderCongesDemandes, renderFrais, renderTeletravailDemandes, state } = loadAppJs();
+    state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');

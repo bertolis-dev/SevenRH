@@ -42,6 +42,7 @@ async function run() {
   state.congesFilters = { employeeId: '', typeId: '', statut: '' };
   state.teletravailFilters = { employeeId: '', statut: '' };
   state.fraisFilters = { employeeId: '', categorie: '', statut: '' };
+  state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
 
   const conges = getFilteredLeaveRequests('conge');
   assert.ok(conges.some(r => r.id === 'lr-team'), 'le manager doit voir la demande de son équipe');

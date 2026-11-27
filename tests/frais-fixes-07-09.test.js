@@ -96,6 +96,7 @@ async function run() {
   //      ne veut plus rien dire dès qu'un refus se mélange dans le total. ----
   {
     const { DB, sandbox, renderFrais, state } = loadAppJs();
+    state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');
@@ -124,6 +125,7 @@ async function run() {
   //      salarié qui reçoit validerNoteFrais par surcharge individuelle doit voir le bouton. ----
   {
     const { DB, sandbox, renderFrais, state } = loadAppJs();
+    state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     state.fraisFilters = { employeeId: '', categorie: '', statut: '' };
@@ -240,6 +242,7 @@ async function run() {
   // ---- Point 13 : filtre par période + totaux par statut, séparés du total dû unique (point 6). ----
   {
     const { DB, sandbox, renderFrais, state } = loadAppJs();
+    state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
     sandbox.window.SupabaseSync = new Proxy({}, { get: () => async () => ({ success: true }) });
     DB.init();
     const rh = DB.getEmployees().find(e => e.role === 'rh');

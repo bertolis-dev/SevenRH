@@ -59,7 +59,8 @@ async function runExportCongesNombresEtDatesCorrects() {
 }
 
 async function runExportNotesDeFraisNombresEtDatesCorrects() {
-  const { DB, employeeRepository, exportExpensesCSV, getCapturedXml } = setupAvecCapture();
+  const { DB, employeeRepository, exportExpensesCSV, getCapturedXml, state } = setupAvecCapture();
+  state.fraisVue = 'equipe'; // les écrans testés ici sont ceux de l'équipe (Mon espace est strictement personnel depuis le 27/11/2026)
   const employee = employeeRepository.getAll().find(e => !e.archive);
   const now = new Date().toISOString();
   DB.saveExpenses([...DB.getExpenses(), {

@@ -215,6 +215,8 @@ function getInitialViewState() {
     fraisSortDir: 'desc',
     ticketsYear: new Date().getFullYear(),
     ticketsMonth: new Date().getMonth(),
+    // Audit du 26/11/2026 : « Notes de frais » de Mon espace est strictement personnel ('personnel') ; la vue de l'équipe a sa propre entrée dans Équipe ('equipe').
+    fraisVue: 'personnel',
     ticketsRestaurantVue: 'equipe', // §sprint refonte UX §9-10 : 'equipe' | 'personnel', même principe que calendrierVue/planningVue
     mesTicketsYear: new Date().getFullYear(),
     mesTicketsMonth: new Date().getMonth(),
@@ -557,7 +559,7 @@ function applyThemePreference(value) {
  * pour que les deux points d'entrée vers le même filtre ne puissent pas silencieusement diverger. */
 const NAVPARAMS_CONGES_A_VALIDER = { absencesHubTab: 'conges', congesTab: 'demandes', congesFilters: { employeeId: '', typeId: '', statut: 'En attente', periode: '' } };
 const NAVPARAMS_TELETRAVAIL_A_VALIDER = { absencesHubTab: 'teletravail', teletravailTab: 'demandes', teletravailFilters: { employeeId: '', statut: 'En attente' } };
-const NAVPARAMS_FRAIS_A_VALIDER = { fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
+const NAVPARAMS_FRAIS_A_VALIDER = { fraisVue: 'equipe', fraisFilters: { employeeId: '', categorie: '', statut: 'En attente' } };
 
 /** §refonte identité 20/08/2026 : jeu d'icônes vectorielles (traits fins, cohérentes avec le bleu
  * marine/or de la marque) partagé par TOUTE l'application — navigation, page publique, cartes de
@@ -704,7 +706,7 @@ const NAV_ITEMS = [
   // les demandes en attente au lieu de revenir à la vue personnelle par défaut. Remet explicitement
   // congesFilters au neutre, même patron que Planning/Calendrier (navParams: vue "personnel").
   { key: 'absences', label: 'Congés & absences', icon: ICONS.sun, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: ['conges', 'planning'], navParams: { congesFilters: { employeeId: '', typeId: '', statut: '', periode: '' } } },
-  { key: 'frais', label: 'Notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', module: 'frais' },
+  { key: 'frais', label: 'Mes notes de frais', icon: ICONS.receipt, roles: ['salarie', 'manager', 'rh', 'comptabilite', 'proprietaire'], group: 'personnel', navParams: { fraisVue: 'personnel' }, module: 'frais' },
   // §retour Betty du 21/09/2026 (relecture par rôle, point 1, "le salarié n'a aucun accès à sa
   // propre fiche") : VOIR_PROPRE_FICHE (PERMISSIONS, data.js) existait déjà, accordée par défaut à
   // tous les rôles, mais n'était lue nulle part dans le code — un écran pensé, jamais branché. Cette
@@ -769,6 +771,8 @@ const NAV_ITEMS = [
   // voir ni créer aucun salarié — donc jamais poser aucune demande de congé non plus, ce qui rendait
   // le module congés invendable seul. Le module 'rh' reste sur organigramme/export-paie/mes-documents
   // (coffre-fort, préparation de paie), qui restent des fonctionnalités RH à part entière.
+  // Audit du 26/11/2026 : les notes de frais des autres ont leur entrée dans Équipe (Mon espace reste strictement personnel).
+  { key: 'frais', label: "Notes de frais de l'équipe", icon: ICONS.receipt, roles: ['manager', 'rh', 'comptabilite', 'proprietaire'], group: 'equipe', navParams: { fraisVue: 'equipe' }, module: 'frais' },
   { key: 'tickets', label: 'Tickets restaurant', icon: ICONS.utensils, permissions: [PERMISSIONS.CALCULER_TICKETS_RESTAURANT], group: 'equipe', navParams: { ticketsRestaurantVue: 'equipe' }, module: 'tickets' },
   { key: 'employees', label: 'Salariés', icon: ICONS.people, roles: ['manager', 'rh', 'proprietaire'], permissions: [PERMISSIONS.VOIR_SALARIES, PERMISSIONS.VOIR_EQUIPE], group: 'equipe' },
   // §retour QA du 26/08/2026 (point 7.2) : vue d'ensemble des soldes de congés, un manager ne voit
@@ -2730,13 +2734,14 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.27.3';
+const APP_VERSION = '2026.11.27.4';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Mon espace : « Mes notes de frais » ne montre plus que vos propres notes, quel que soit votre profil (RH, comptabilité, propriétaire). Les notes des autres sont dans une entrée « Notes de frais de l'équipe » du menu Équipe, et les rappels « à valider » y mènent directement.",
       "Inscription : une case d'acceptation obligatoire (conditions générales, politique de confidentialité, engagement à vérifier les paramètres légaux) ; la version acceptée et la date sont conservées avec le compte.",
       "Politique de confidentialité : la liste des sous-traitants est complète (hébergement, paiement, e-mails, IA, intégrations selon votre activation) et ne promet plus ce que le contrat ou le serveur ne garantit pas.",
       "Mention de réserve unique (Paramètres > Congés et absences) : une ligne courte avec bulle « i », à jour au jour indiqué, affichée sur l'estimation des arrêts, les seuils d'effectif, le barème kilométrique et Ma retraite.",
@@ -7512,7 +7517,7 @@ function performGlobalSearch(term) {
         label: `${nomCompletAffiche(employee)} · ${n.libelle}`,
         sublabel: `Note de frais · ${formatCurrencyFR(n.montantTTC)} · ${n.statut}`,
         nav: 'frais',
-        params: {}
+        params: employee.id === (authRepository.getCurrentUser() || {}).id ? {} : { fraisVue: 'equipe' }
       });
     }
   });
@@ -7859,8 +7864,8 @@ async function syncNotifications() {
     const employee = employeeRepository.getById(n.employeeId);
     if (!employee) return;
     candidates.push(makeNotification(`expense-${n.id}`, ICONS.receipt, 'Note de frais en attente',
-      `${nomCompletAffiche(employee)} · ${n.libelle}`, 'frais', {}, employee.id));
-    relancePromises.push(pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', {}, n.libelle || n.categorie || 'Note de frais'));
+      `${nomCompletAffiche(employee)} · ${n.libelle}`, 'frais', { fraisVue: 'equipe' }, employee.id));
+    relancePromises.push(pushRelanceNotificationsForRequest(candidates, n, 'frais', 'frais', { fraisVue: 'equipe' }, n.libelle || n.categorie || 'Note de frais'));
   });
 
   // §correctif audit du 23/08/2026 (§7.10) : "avec une clôture au 31 mai et un report nul, les
@@ -9074,7 +9079,7 @@ function renderDashboardShortcuts() {
         <button class="btn btn-primary" data-nav="employees">Gérer les salariés</button>
         ${ifModule('conges', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"conges"}'>Gérer les congés</button>`)}
         ${ifModule('planning', `<button class="btn btn-secondary" data-nav="absences" data-nav-params='{"absencesHubTab":"teletravail"}'>Gérer le télétravail</button>`)}
-        ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais">Gérer les notes de frais</button>`)}
+        ${ifModule('frais', `<button class="btn btn-secondary" data-nav="frais" data-nav-params='{"fraisVue":"equipe"}'>Gérer les notes de frais</button>`)}
         ${ifModule('tickets', `<button class="btn btn-secondary" data-nav="tickets" data-nav-params='{"ticketsRestaurantVue":"equipe"}'>Voir les tickets restaurant</button>`)}
       </div>
     </div>
@@ -29334,8 +29339,16 @@ function hydrationWindowCutoffDateISO() {
   return new Date(now.getFullYear(), now.getMonth() - HYDRATION_WINDOW_MONTHS, now.getDate()).toISOString().slice(0, 10);
 }
 
+/** Audit du 26/11/2026 : vue de l'équipe réservée aux profils qui gèrent d'autres personnes ; sinon (et toujours dans Mon espace) uniquement ses propres notes. */
+function fraisVueEquipeActive() {
+  const user = authRepository.getCurrentUser();
+  return Boolean(user) && state.fraisVue === 'equipe' && user.role !== ROLES.SALARIE;
+}
+
 function getFilteredExpenses() {
-  let filtered = applyStateFilters(scopeToVisibleEmployees(expenseRepository.getAll()), state.fraisFilters,
+  const user = authRepository.getCurrentUser();
+  const baseNotes = fraisVueEquipeActive() ? scopeToVisibleEmployees(expenseRepository.getAll()) : expenseRepository.getAll().filter(n => user && n.employeeId === user.id);
+  let filtered = applyStateFilters(baseNotes, state.fraisFilters,
     [['employeeId', 'employeeId'], ['categorie', 'categorie'], ['statut', 'statut']]);
   // §retour Betty du 19/09/2026 (socle commun, point 6) : matchesPeriodeFilter (une seule
   // implémentation, désormais partagée avec Congés/Entretiens) plutôt qu'un startsWith réécrit ici.
@@ -29365,7 +29378,7 @@ function getFilteredExpenses() {
 }
 
 function renderFrais() {
-  const employees = getScopedEmployeesForFilters();
+  const employees = fraisVueEquipeActive() ? getScopedEmployeesForFilters() : [authRepository.getCurrentUser()].filter(Boolean);
   const settings = settingsRepository.getSettings();
   const expenses = getFilteredExpenses();
   // §retour Betty du 07/09/2026 (point 6) : additionner aussi les notes Refusé/Annulé rendait ce
@@ -29412,7 +29425,7 @@ function renderFrais() {
   return `
     <div class="view-header view-header-row">
       <div>
-        <h1>Notes de frais</h1>
+        <h1>${fraisVueEquipeActive() ? 'Notes de frais de l\'équipe' : 'Mes notes de frais'}</h1>
         <p class="view-subtitle">
           ${expenses.length} note${expenses.length > 1 ? 's' : ''} · ${formatCurrencyFR(total)} TTC dû (en attente + remboursé)
           ${totauxParStatut.map(t => ` · <span class="badge badge-${STATUT_BADGE_CLASS[t.statut]}">${escapeHtml(LIBELLE_FILTRE_STATUT_FRAIS[t.statut])} : ${t.notes.length} (${formatCurrencyFR(t.montant)})</span>`).join('')}
@@ -29757,7 +29770,7 @@ function bindFraisEvents() {
   const btnAValider = document.getElementById('btn-frais-a-valider');
   if (btnAValider) {
     btnAValider.addEventListener('click', () => {
-      Object.assign(state, { fraisFilters: { ...NAVPARAMS_FRAIS_A_VALIDER.fraisFilters } }); // copie : les filtres sont modifiés en place
+      Object.assign(state, { fraisVue: 'equipe', fraisFilters: { ...NAVPARAMS_FRAIS_A_VALIDER.fraisFilters } }); // copie : les filtres sont modifiés en place
       state.fraisPage = 1;
       render();
     });
