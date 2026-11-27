@@ -558,6 +558,9 @@ const DEFAULT_SETTINGS = {
   priseEnMainEtapes: {},
   // Revue du 13/10/2026 : carence du maintien de salaire par l'employeur en maladie ordinaire (jours). 7 = à partir du 8e jour (D1226-3) ; distinct des 3 jours de carence des IJ Sécurité sociale. Valeur à valider (docs/regles-a-valider.md).
   carenceMaintienMaladieJours: 7,
+  // Audit du 26/11/2026 : mention de réserve unique, affichée partout où Nexus donne une information juridique ou un calcul indicatif (Paramètres, Mentions de réserve).
+  mentionReserveTexte: '',
+  mentionReserveDate: '2026-11-27',
   // Audit du 26/11/2026 : la commande de titres-restaurant doit être soumise par une personne et validée par une autre (si au moins deux personnes ont le droit de l'envoyer).
   ticketsCommandeDoubleValidation: true,
   ticketsCommandesAValider: {},
@@ -5794,14 +5797,14 @@ const DB = {
    * déjà disponible (confirmation email désactivée sur ce projet), enchaîne directement sur la
    * création de l'entreprise. Sinon, la création est reportée à la prochaine restoreSession, une
    * fois l'email confirmé (voir _finalizeCompanySelfServiceCreation). */
-  async signUpNewCompany(raisonSociale, email, password, nom, prenom) {
+  async signUpNewCompany(raisonSociale, email, password, nom, prenom, acceptation) {
     if (!password || password.length < 6) {
       return { success: false, error: 'Le mot de passe doit contenir au moins 6 caractères.' };
     }
     if (!raisonSociale || !nom || !prenom) {
       return { success: false, error: 'Raison sociale, nom et prénom sont obligatoires.' };
     }
-    const authResult = await window.SupabaseSync.signUpNewCompany(email, password, raisonSociale, nom, prenom);
+    const authResult = await window.SupabaseSync.signUpNewCompany(email, password, raisonSociale, nom, prenom, acceptation);
     if (!authResult.success) {
       return { success: false, error: authResult.error };
     }
@@ -6219,7 +6222,7 @@ const authRepository = {
   isLoggedIn: () => DB.isLoggedIn(),
   login: (email, password) => DB.login(email, password),
   loginWithOAuth: (provider) => DB.loginWithOAuth(provider),
-  signUpNewCompany: (raisonSociale, email, password, nom, prenom) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom),
+  signUpNewCompany: (raisonSociale, email, password, nom, prenom, acceptation) => DB.signUpNewCompany(raisonSociale, email, password, nom, prenom, acceptation),
   resendSignupConfirmation: (email) => DB.resendSignupConfirmation(email),
   logout: () => DB.logoutCurrentAccount(),
   changePassword: (employeeId, currentPassword, newPassword) => DB.changePassword(employeeId, currentPassword, newPassword),

@@ -692,10 +692,10 @@ async function signIn(email, password) {
  * d'email) et transmet raisonSociale/nom/prenom en métadonnées — c'est create_company_self_service
  * (RPC ci-dessous) qui les relit depuis auth.users, pour rester utilisable même après un délai de
  * confirmation d'email (voir son commentaire dans la migration). */
-async function signUpNewCompany(email, password, raisonSociale, nom, prenom) {
+async function signUpNewCompany(email, password, raisonSociale, nom, prenom, acceptation) {
   const { data, error } = await supabase.auth.signUp({
     email, password,
-    options: { data: { nom, prenom, raisonSociale, intent: 'creer_entreprise' }, emailRedirectTo: currentSiteBase() }
+    options: { data: { nom, prenom, raisonSociale, intent: 'creer_entreprise', ...(acceptation ? { acceptationConditions: { version: acceptation.version, date: acceptation.date } } : {}) }, emailRedirectTo: currentSiteBase() }
   });
   if (error) return { success: false, error: error.message };
   // Protection anti-énumération de Supabase : pour un email déjà inscrit (confirmé ou non), signUp()

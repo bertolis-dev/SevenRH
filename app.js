@@ -2349,6 +2349,20 @@ const LEGAL_CONTACT_EMAIL = 'contact@bertolis.fr';
  * DU DROIT (ou un service comme LegalPlace/Captain Contrat) avant de s'appuyer dessus
  * contractuellement, en particulier pour les données de santé (arrêts de travail, catégorie
  * "sensible" au sens de l'article 9 du RGPD). */
+/** Audit du 26/11/2026 : mention de réserve unique, tenue dans les paramètres (texte et date de mise à jour), affichée en une ligne courte avec une bulle « i » qui donne le texte complet.
+ * `source` : la source citée à l'endroit où l'information est affichée (ex. « décret 2025-160 »). */
+const MENTION_RESERVE_PAR_DEFAUT = 'Information indicative, non exhaustive, qui ne constitue pas un conseil juridique. Elle est donnée sous réserve de l\'évolution de la législation et de la réglementation, de la convention collective et des accords d\'entreprise applicables. Faites-la valider par votre expert-comptable ou votre conseil avant toute décision.';
+function renderMentionReserve(source) {
+  const reglages = settingsRepository.getSettings();
+  const date = reglages.mentionReserveDate ? formatDate(reglages.mentionReserveDate) : '';
+  const complet = (reglages.mentionReserveTexte || '').trim() || MENTION_RESERVE_PAR_DEFAUT;
+  const court = `Information indicative${date ? ', à jour au ' + date : ''}${source ? ' (source : ' + source + ')' : ''}, non exhaustive, sans valeur de conseil juridique.`;
+  return `<p class="mention-reserve">${escapeHtml(court)} <span class="mention-reserve-info" tabindex="0" role="note" title="${escapeHtml(complet)}" aria-label="${escapeHtml(complet)}">${icon(ICONS.info, 13)}</span></p>`;
+}
+
+/** Audit du 26/11/2026 : version des conditions (CGU/CGV, politique de confidentialité, contrat de sous-traitance) acceptées à l'inscription. À changer à chaque nouvelle version : la date et la version acceptées sont conservées avec le compte. */
+const CONDITIONS_VERSION = '2026-11-27';
+
 const LEGAL_CONTENT = {
   mentions: {
     title: 'Mentions légales',
@@ -2362,7 +2376,7 @@ const LEGAL_CONTENT = {
       Contact : <a href="mailto:${LEGAL_CONTACT_EMAIL}">${LEGAL_CONTACT_EMAIL}</a></p>
       <p><strong>Hébergement</strong><br>
       Hébergement du site : GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis<br>
-      Hébergement des données applicatives : Supabase Pte. Ltd.</p>
+      Hébergement des données applicatives : Supabase Pte. Ltd. (localisation précise communiquée sur demande)</p>
       <p><strong>Paiement</strong><br>
       Les paiements sont traités par Stripe. Nexus ne stocke aucune donnée de carte bancaire.</p>
       <p><strong>Propriété intellectuelle</strong><br>
@@ -2392,13 +2406,15 @@ const LEGAL_CONTENT = {
     title: 'Politique de confidentialité',
     body: `
       <p style="margin-top:0;"><strong>Qui est responsable de vos données ?</strong><br>
-      Pour les données des salariés d'une entreprise cliente (congés, notes de frais, documents RH, arrêts de travail...), c'est cette entreprise qui est responsable du traitement au sens du RGPD ; BERTOLIS agit en qualité de sous-traitant, dans le cadre d'un contrat de sous-traitance conforme à l'article 28 du RGPD. Pour les données de contact d'une entreprise prospect ou cliente elle-même (facturation, compte), BERTOLIS est responsable du traitement.</p>
+      Pour les données des salariés d'une entreprise cliente (congés, notes de frais, documents RH, arrêts de travail...), c'est cette entreprise qui est responsable du traitement au sens du RGPD ; BERTOLIS agit en qualité de sous-traitant au sens de l'article 28 du RGPD ; le contrat de sous-traitance qui encadre ce traitement est communiqué sur demande à ${LEGAL_CONTACT_EMAIL}. Pour les données de contact d'une entreprise prospect ou cliente elle-même (facturation, compte), BERTOLIS est responsable du traitement.</p>
       <p><strong>Quelles données, pour quoi et pendant combien de temps</strong><br>
       Nexus traite les données nécessaires à la gestion des ressources humaines des entreprises clientes (identité, contrat, absences, notes de frais, documents RH...), sur la base de l'exécution du contrat conclu avec l'entreprise cliente. Les durées de conservation sont configurables par chaque entreprise (voir Paramètres → Types d'absences / Confidentialité) ; passé ce délai après le départ d'un salarié, sa fiche est anonymisée automatiquement, jamais supprimée sans trace pour les besoins de compteurs et de rapports.</p>
       <p><strong>Donnée de santé</strong><br>
-      Les arrêts de travail et données médicales associées constituent une catégorie particulière de données au sens de l'article 9 du RGPD. Leur accès est strictement limité aux rôles habilités (RH, manager concerné) selon les permissions définies par l'entreprise cliente, contrôlées côté serveur.</p>
+      Les arrêts de travail et données médicales associées constituent une catégorie particulière de données au sens de l'article 9 du RGPD. Leur accès est limité aux rôles habilités (RH, manager concerné) selon les permissions définies par l'entreprise cliente. Dans les canaux partagés (Slack, Teams, Google Chat, calendrier abonné), un motif d'absence de santé s'affiche « Absence ».</p>
       <p><strong>Isolation et destinataires</strong><br>
-      Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur, contrôlé côté serveur (pas seulement dans l'interface). Les seuls destinataires des données sont Supabase (hébergement et base de données) et Stripe (paiement) ; aucune donnée n'est vendue ni utilisée à des fins publicitaires.</p>
+      Chaque entreprise cliente est strictement isolée des autres. L'accès aux données est limité selon le rôle et les permissions de chaque utilisateur. Aucune donnée n'est vendue ni utilisée à des fins publicitaires.</p>
+      <p><strong>Sous-traitants et destinataires</strong><br>
+      Pour fournir le service, BERTOLIS fait appel à : Supabase (hébergement de la base de données et authentification), GitHub Pages (hébergement du site), Stripe (paiement), Resend (envoi des e-mails de notification), Anthropic (analyse des demandes de support et assistant Boussole, uniquement lorsque ces fonctions sont utilisées). Selon les intégrations que l'entreprise cliente active elle-même : Slack, Microsoft Teams, Google Chat (notifications) et Swile (titres-restaurant). La localisation précise de l'hébergement des données est communiquée sur demande à ${LEGAL_CONTACT_EMAIL} ; certains de ces prestataires sont établis hors de l'Union européenne.</p>
       <p><strong>Cookies</strong><br>
       Nexus n'utilise aucun cookie de mesure d'audience ni de publicité. Seules des informations techniques nécessaires à la connexion (session, préférences d'affichage) sont conservées dans votre navigateur.</p>
       <p><strong>Vos droits</strong><br>
@@ -2714,13 +2730,16 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.27.2';
+const APP_VERSION = '2026.11.27.3';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Inscription : une case d'acceptation obligatoire (conditions générales, politique de confidentialité, engagement à vérifier les paramètres légaux) ; la version acceptée et la date sont conservées avec le compte.",
+      "Politique de confidentialité : la liste des sous-traitants est complète (hébergement, paiement, e-mails, IA, intégrations selon votre activation) et ne promet plus ce que le contrat ou le serveur ne garantit pas.",
+      "Mention de réserve unique (Paramètres > Congés et absences) : une ligne courte avec bulle « i », à jour au jour indiqué, affichée sur l'estimation des arrêts, les seuils d'effectif, le barème kilométrique et Ma retraite.",
       "Tickets restaurant, commande Swile : elle est maintenant soumise par une personne puis validée par une autre avant l'envoi ou le dépôt du fichier (toute modification demande une nouvelle validation). La comptabilité peut consulter la commande et exporter le tableau, mais ne peut plus l'envoyer ; un nouveau droit « Soumettre, valider et envoyer la commande de titres-restaurant » est proposé dans les permissions. Un droit « Voir les totaux de paie agrégés » est créé pour la comptabilité.",
       "Effectif et masse salariale : une seule définition (salariés en poste : embauchés, pas encore partis, non archivés, statut actif) sur le tableau de bord, la vue groupe, le radar de trésorerie, les seuils d'effectif et le turnover.",
       "Préparation de paie : une personne qui n'a pas le droit de voir les salaires ne voit plus de fausse anomalie « salaire manquant », ni d'indemnité compensatrice à 0 €.",
@@ -4139,6 +4158,9 @@ function renderSignupCompanyView() {
           </div>
           <span class="password-match-indicator" id="f-signup-company-password-confirm-match"></span>
         </div>
+        <div class="form-field">
+          <label class="checkbox-label" style="align-items:flex-start;"><input type="checkbox" id="f-signup-company-accept" required> <span>J'ai lu et j'accepte les <button type="button" class="btn-link" data-legal-trigger="cgu">conditions générales d'utilisation et de vente</button> et la <button type="button" class="btn-link" data-legal-trigger="confidentialite">politique de confidentialité</button> (y compris le contrat de sous-traitance de l'article 28 du RGPD). Je m'engage à vérifier et valider les paramètres légaux (convention collective, accords d'entreprise, valeurs par défaut) avant tout usage réel.</span></label>
+        </div>
         ${state.authError ? `<p class="login-error" role="alert">${escapeHtml(state.authError)}</p>` : ''}
         <button type="submit" class="btn btn-primary" id="btn-signup-company-submit" style="width: 100%;">Créer mon entreprise</button>
       </form>
@@ -4406,6 +4428,9 @@ function bindLoginScreenEvents() {
   const cancelAddAccountBtn = document.getElementById('btn-cancel-add-account');
   if (cancelAddAccountBtn) cancelAddAccountBtn.addEventListener('click', () => showApp());
 
+  document.querySelectorAll('#login-root [data-legal-trigger]').forEach(btn => {
+    btn.addEventListener('click', () => openLegalModal(btn.dataset.legalTrigger));
+  });
   const signupCompanyForm = document.getElementById('signup-company-form');
   if (signupCompanyForm) signupCompanyForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
@@ -4416,10 +4441,13 @@ function bindLoginScreenEvents() {
     const p1 = document.getElementById('f-signup-company-password').value;
     const p2 = document.getElementById('f-signup-company-password-confirm').value;
     if (p1 !== p2) { state.authError = 'Les deux mots de passe ne correspondent pas.'; renderLoginScreen(); return; }
+    const caseAcceptation = document.getElementById('f-signup-company-accept');
+    if (!caseAcceptation || !caseAcceptation.checked) { state.authError = 'Vous devez accepter les conditions générales et la politique de confidentialité pour créer un compte.'; renderLoginScreen(); return; }
+    const acceptation = { version: CONDITIONS_VERSION, date: new Date().toISOString() };
     const submitBtn = document.getElementById('btn-signup-company-submit');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Création...';
-    const result = await authRepository.signUpNewCompany(raisonSociale, email, p1, nom, prenom);
+    const result = await authRepository.signUpNewCompany(raisonSociale, email, p1, nom, prenom, acceptation);
     if (!result.success) { state.authError = result.error; renderLoginScreen(); return; }
     if (result.needsEmailConfirmation) {
       state.pendingSignupConfirmation = email;
@@ -9071,6 +9099,7 @@ function renderRadarSeuilsCard(employees) {
           ${s.obligationsLongDelai.length ? `<p class="text-muted" style="margin: 4px 0 0;">${s.longDelaiApplicable ? 'Applicables (délai de 5 ans écoulé)' : 'Applicables après 5 années civiles consécutives si le seuil se maintient'} : ${s.obligationsLongDelai.map(o => escapeHtml(o)).join(', ')}.</p>` : ''}
         </div>
       `).join('')}
+      ${renderMentionReserve('loi PACTE, Code du travail')}
       <p class="form-hint" style="margin-top:10px;">Estimation indicative à partir de l'effectif enregistré dans Nexus (peut ne pas couvrir tout l'historique réel de l'entreprise), les délais précis varient par obligation ; à confirmer avec votre expert-comptable/juriste social avant toute décision de mise en conformité.</p>
     </div>
   `;
@@ -10648,6 +10677,7 @@ function renderRetraite() {
   return `
     <div class="view-header">
       <h1>Ma retraite</h1>
+      ${renderMentionReserve('Code de la sécurité sociale, caisses de retraite')}
       <p class="view-subtitle">Des repères sur votre carrière et votre départ à la retraite. Ces informations sont indicatives et ne remplacent pas les caisses de retraite : Nexus n'est pas la caisse de retraite et ne calcule ni votre pension ni vos trimestres validés (ils dépendent de vos salaires).</p>
     </div>
 
@@ -19145,6 +19175,7 @@ function renderEstimationIndemnitesArret(r, employee) {
     <p>Carence Sécurité sociale : <strong>${estimation.joursCarence} jour(s)</strong> · Jours indemnisés par la Sécurité sociale : <strong>${estimation.joursIndemnisables}</strong> sur ${estimation.nbJoursCalendaires} jours calendaires</p>
     <p>Carence du maintien de salaire par l'employeur : <strong>${estimation.joursCarenceMaintien} jour(s)</strong> · Jours maintenus par l'employeur : <strong>${estimation.joursMaintien}</strong></p>
     <p>IJ sécurité sociale estimée : <strong>${formatCurrencyFR(estimation.ijSecuEstimee)}</strong></p>
+    ${renderMentionReserve('décret 2025-160, art. R323-4 du Code de la sécurité sociale')}
     ${m.ancienneteInsuffisante
       ? `<p>Maintien de salaire employeur : <strong>aucun</strong> (ancienneté inférieure à 1 an, minimum légal L1226-1, une convention collective peut prévoir mieux, non appliqué ici).</p>`
       : `<p>Maintien de salaire employeur (ancienneté retenue : ${estimation.ancienneteAnneesEntieres} an(s)) : <strong>${m.joursPlein}</strong> jour(s) à 90% + <strong>${m.joursDemi}</strong> jour(s) à 66,66%${m.joursNonCouverts > 0 ? ` · <strong>${m.joursNonCouverts}</strong> jour(s) hors capacité 12 mois glissants` : ''}, maintien total estimé <strong>${formatCurrencyFR(m.montant)}</strong>, dont complément employeur (au-delà de l'IJ sécu) estimé à <strong>${formatCurrencyFR(estimation.complementEmployeurEstime)}</strong>.</p>`}
@@ -22568,6 +22599,14 @@ function renderParametresTypesAbsences() {
       <div style="margin-top: 8px;"><button type="button" class="btn btn-secondary" id="btn-comparatif-double-decompte">Télécharger le comparatif avant / après (Excel)</button></div>
     </div>
     <div class="card" style="margin-bottom: 16px;">
+      <h2>Mentions de réserve</h2>
+      <p class="text-muted">Une seule mention, affichée partout où Nexus donne une information juridique ou un calcul indicatif (arrêts, indemnité compensatrice, seuils d'effectif, barème kilométrique, Ma retraite...). La ligne courte rappelle la date de mise à jour ; la bulle « i » affiche le texte complet.</p>
+      <div class="form-grid" style="max-width: 720px;">
+        <div class="form-field"><label for="f-mention-reserve-date">À jour au</label><input class="input" type="date" id="f-mention-reserve-date" value="${escapeHtml(settings.mentionReserveDate || '')}"></div>
+        <div class="form-field"><label for="f-mention-reserve-texte">Texte complet (vide : texte par défaut)</label><textarea class="input" id="f-mention-reserve-texte" rows="4" placeholder="${escapeHtml(MENTION_RESERVE_PAR_DEFAUT)}">${escapeHtml(settings.mentionReserveTexte || '')}</textarea></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom: 16px;">
       <h2>Entretiens professionnels</h2>
       <p class="text-muted">Loi du 24/10/2025 : un entretien de parcours professionnel tous les 4 ans, un état des lieux récapitulatif tous les 8 ans. Un accord de branche ou d'entreprise peut prévoir plus fréquent, jamais plus espacé. Valeurs à faire valider par votre juriste avant les décrets d'application.</p>
       <div class="form-grid" style="max-width: 520px;">
@@ -22612,6 +22651,15 @@ function bindParametresTypesAbsencesEvents() {
   bindNumberField('f-rappel-perte-conges', 'delaiRappelPerteCongesJours', 60, 'Délai de rappel mis à jour.');
   bindNumberField('f-carence-maintien-maladie', 'carenceMaintienMaladieJours', 7, 'Carence du maintien de salaire mise à jour.');
   bindNumberField('f-smic-mensuel', 'smicMensuelBrut', 1823.03, 'SMIC mis à jour.');
+  [['f-mention-reserve-date', 'mentionReserveDate'], ['f-mention-reserve-texte', 'mentionReserveTexte']].forEach(([id, cle]) => {
+    const champ = document.getElementById(id);
+    if (champ) champ.addEventListener('change', () => {
+      const reglages = settingsRepository.getSettings();
+      reglages[cle] = champ.value;
+      settingsRepository.saveSettings(reglages);
+      showToast('Mention de réserve mise à jour.');
+    });
+  });
   bindNumberField('f-entretien-premier', 'entretienProfessionnelPremierAnnees', 1, 'Délai du premier entretien mis à jour.');
   bindNumberField('f-entretien-periodicite', 'entretienProfessionnelPeriodiciteAnnees', 4, 'Périodicité de l\'entretien mise à jour.');
   bindNumberField('f-bilan-recapitulatif', 'bilanRecapitulatifAnnees', 8, 'Périodicité du bilan mise à jour.');
@@ -24286,7 +24334,7 @@ function renderBaremeKilometriqueCard(settings) {
   };
   const statut = existant && existant.valide
     ? `<p class="text-muted">Barème de l'entreprise confirmé pour ${annee} : il est utilisé pour les notes de cette année.</p>`
-    : `<p class="form-hint">Aucun barème validé pour ${annee} : le barème indicatif de la plateforme est utilisé en attendant. Il est <strong>non validé</strong> : vérifiez les valeurs officielles (service-public.fr, impots.gouv.fr) avant de vous y fier en paie.</p>`;
+    : `${renderMentionReserve('barème kilométrique de l\'administration fiscale')}<p class="form-hint">Aucun barème validé pour ${annee} : le barème indicatif de la plateforme est utilisé en attendant. Il est <strong>non validé</strong> : vérifiez les valeurs officielles (service-public.fr, impots.gouv.fr) avant de vous y fier en paie.</p>`;
   const tableau = (type) => {
     const def = BAREMES_STRUCTURE_KM[type];
     return `
