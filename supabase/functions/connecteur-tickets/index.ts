@@ -425,7 +425,8 @@ Deno.serve(async (req) => {
 
     // ---------------------------------------------------------------------------------------------
     if (action === "envoyer-commande") {
-      if (!peutCommander) return reponse({ error: "Permission refusée" }, 403);
+      // Audit du 26/11/2026 : l'envoi de la commande est réservé à qui paramètre l'outil (RH, propriétaire), plus à la comptabilité.
+      if (!peutParametrer) return reponse({ error: "Permission refusée" }, 403);
       const libelle = periodeLibelle(corps.periode);
       if (!libelle) return reponse({ error: "Période invalide." }, 400);
       if (!config || !config.commande_email) return reponse({ error: "Renseignez l'adresse de commande dans Paramètres > Tickets restaurant." }, 409);

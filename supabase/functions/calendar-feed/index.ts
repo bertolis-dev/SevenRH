@@ -116,6 +116,14 @@ function buildCalendar(calname: string, events: string[]): string {
   ].join("\r\n") + "\r\n";
 }
 
+// Audit du 26/11/2026 : un motif touchant à la santé n'apparaît jamais dans un calendrier abonné (Google Agenda, Outlook, Apple) : « Absence ».
+// Même liste que MOTS_MOTIF_CONFIDENTIEL dans data.js.
+const MOTS_MOTIF_CONFIDENTIEL = ["maladie", "arrêt", "arret", "accident", "santé", "sante", "médic", "medic", "hospital", "handicap", "maternité", "maternite", "paternité", "paternite", "thérapeut", "therapeut"];
+function libelleAbsencePartage(nom: string, confidentiel?: boolean): string {
+  const n = (nom || "").toLowerCase();
+  return confidentiel === true || MOTS_MOTIF_CONFIDENTIEL.some((m) => n.includes(m)) ? "Absence" : (nom || "Absence");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "GET") return textResponse("Méthode non autorisée.", 405);
@@ -164,8 +172,8 @@ Deno.serve(async (req) => {
     .in("employee_id", employeeIds)
     .eq("statut", "Validé");
 
-  const { data: leaveTypes } = await supabaseAdmin.from("leave_types").select("id, nom").eq("company_id", owner.company_id);
-  const typeById = new Map((leaveTypes || []).map((t: { id: string; nom: string }) => [t.id, t.nom]));
+  const { data: leaveTypes } = await supabaseAdmin.from("leave_types").select("id, nom, data").eq("company_id", owner.company_id);
+  const typeById = new Map((leaveTypes || []).map((t: { id: string; nom: string; data?: { confidentiel?: boolean } }) => [t.id, libelleAbsencePartage(t.nom, t.data?.confidentiel)]));
 
   const stamp = toIcsTimestamp(new Date());
   const events = (leaveRequests || []).map((r: { id: string; employee_id: string; type_id: string; date_debut: string; date_fin: string; updated_at: string }) => {

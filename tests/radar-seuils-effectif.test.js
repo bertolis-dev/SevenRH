@@ -16,7 +16,7 @@ function shiftMonthsISO(iso, months) {
 }
 
 function makeEmployees(n, dateEmbauche, dateDepart) {
-  return Array.from({ length: n }, (_, i) => ({ id: `e${i}`, dateEmbauche, dateDepart: dateDepart || '' }));
+  return Array.from({ length: n }, (_, i) => ({ id: `e${i}`, dateEmbauche, dateDepart: dateDepart || '', statut: 'Actif', archive: false }));
 }
 
 async function run() {

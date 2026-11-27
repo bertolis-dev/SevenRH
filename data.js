@@ -129,7 +129,11 @@ const PERMISSIONS = {
   GERER_ABONNEMENTS: 'gererAbonnements',
   GERER_TICKETS: 'gererTickets',
   GERER_ENTRETIENS: 'gererEntretiens',
-  GERER_IDEES: 'gererIdees'
+  GERER_IDEES: 'gererIdees',
+  // Audit du 26/11/2026 : passer la commande de titres-restaurant (envoi ou dépôt du fichier) est réservé à qui a ce droit (RH, propriétaire), avec double validation ; la comptabilité ne l'a plus.
+  ENVOYER_COMMANDE_TICKETS: 'envoyerCommandeTickets',
+  // Audit du 26/11/2026 : droit de consulter les totaux de paie agrégés (masse, cotisations globales) sans accès au journal de paie nominatif. Prévu pour la comptabilité ; les écrans de totaux le consulteront.
+  VOIR_PAIE_AGREGEE: 'voirPaieAgregee'
 };
 
 /** Permissions accordées par défaut à chaque rôle — reproduit le comportement actuel de l'app
@@ -164,7 +168,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.PROLONGER_MALADIE, PERMISSIONS.VALIDER_NOTE_FRAIS, PERMISSIONS.CALCULER_TICKETS_RESTAURANT,
     PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, PERMISSIONS.EXPORTER_PAIE, PERMISSIONS.GERER_PARAMETRES,
     PERMISSIONS.GERER_UTILISATEURS, PERMISSIONS.VOIR_JOURNAL_AUDIT, PERMISSIONS.GERER_TICKETS,
-    PERMISSIONS.GERER_ENTRETIENS, PERMISSIONS.GERER_IDEES
+    PERMISSIONS.GERER_ENTRETIENS, PERMISSIONS.GERER_IDEES, PERMISSIONS.ENVOYER_COMMANDE_TICKETS, PERMISSIONS.VOIR_PAIE_AGREGEE
   ],
   comptabilite: [
     PERMISSIONS.VOIR_PROPRE_FICHE, PERMISSIONS.MODIFIER_PROPRES_COORDONNEES, PERMISSIONS.VOIR_COMPTEURS,
@@ -172,7 +176,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     PERMISSIONS.CONTROLER_NOTE_FRAIS, PERMISSIONS.MARQUER_NOTE_REMBOURSEE,
     // Sans CORRIGER_TICKETS_RESTAURANT : la Comptabilité consulte/exporte les tickets restaurant mais
     // ne corrige pas manuellement le calcul (réservé à RH/Propriétaire, cf. les compteurs de congés).
-    PERMISSIONS.CALCULER_TICKETS_RESTAURANT
+    PERMISSIONS.CALCULER_TICKETS_RESTAURANT, PERMISSIONS.VOIR_PAIE_AGREGEE
   ],
   proprietaire: Object.values(PERMISSIONS)
 };
@@ -337,6 +341,7 @@ const IDCC_CONVENTIONS = [
   { code: '86', nom: 'Publicité', secteur: 'Services' },
   // §retour Betty du 16/09/2026 : signalée manquante ("IDCC 0982" puis "IDCC 0892" — le bon numéro,
   // vérifié sur Légifrance/LégiSocial/Doctrine, était 892).
+  { code: '716', nom: 'Distribution de films (employés et ouvriers)', secteur: 'Services' }, // ajouté le 26/11/2026 (audit) : aucune règle de congés propre codée pour 716 ni 892
   { code: '892', nom: 'Distribution de films (cadres et agents de maîtrise)', secteur: 'Services' },
   { code: '218', nom: 'Organismes de sécurité sociale', secteur: 'Services' },
   { code: '240', nom: 'Greffes des tribunaux de commerce', secteur: 'Services' },
@@ -553,6 +558,9 @@ const DEFAULT_SETTINGS = {
   priseEnMainEtapes: {},
   // Revue du 13/10/2026 : carence du maintien de salaire par l'employeur en maladie ordinaire (jours). 7 = à partir du 8e jour (D1226-3) ; distinct des 3 jours de carence des IJ Sécurité sociale. Valeur à valider (docs/regles-a-valider.md).
   carenceMaintienMaladieJours: 7,
+  // Audit du 26/11/2026 : la commande de titres-restaurant doit être soumise par une personne et validée par une autre (si au moins deux personnes ont le droit de l'envoyer).
+  ticketsCommandeDoubleValidation: true,
+  ticketsCommandesAValider: {},
   // Audit du 26/11/2026 : SMIC brut mensuel (35 h) qui sert au plafond des IJ (1,4 SMIC depuis le 01/04/2025). À mettre à jour à chaque revalorisation ; valeur par défaut non validée.
   smicMensuelBrut: 1823.03,
   // Audit du 26/11/2026 (loi n° 2025-989 du 24/10/2025) : entretien de parcours professionnel dans l'année qui suit l'arrivée, puis tous les 4 ans ; état des lieux récapitulatif tous les 8 ans. Réglables (un accord peut prévoir mieux, jamais plus de 4 ans).
@@ -3807,7 +3815,7 @@ const DB = {
     // sémantique différente) : un échec Slack ne doit produire NI toast NI blocage, juste un
     // .catch(()=>{}) silencieux — l'utilisateur n'a même pas besoin de savoir que Slack existe.
     if (request.statut === 'En attente' && employee) {
-      window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${leaveType ? leaveType.nom : '—'}`).catch(() => {});
+      window.SupabaseSync.notifySlack('🏖️', 'Nouvelle demande de congé', `${employee.prenom} ${employee.nom} · ${libelleAbsencePartage(leaveType)}`).catch(() => {});
       notifyValidatorsByEmailForNewRequest(request.id, 'conge');
     }
     // §correctif audit du 23/08/2026 (2.3) : `workflowEscalated` n'est JAMAIS mis sur `request`
@@ -9061,6 +9069,20 @@ function calculateAcquisition(employee, leaveType, refDate, periodOverride, allR
  * jours de la préparation de paie sans aucune anomalie signalée. Reste une heuristique par nom, pas
  * un vrai identifiant stable — un renommage complet (ex. "RTT" → "Récupération") échapperait
  * toujours à ce rapprochement ; seul un champ dédié réglerait ça durablement. */
+/** Audit du 26/11/2026 : un motif touchant à la santé (maladie, accident, maternité...) ne sort jamais de Nexus vers un canal partagé (Slack, Teams, Google Chat, calendrier .ics) :
+ * ces canaux affichent « Absence ». Un type peut aussi être marqué confidentiel à la main (leaveType.confidentiel). La même liste est reprise dans supabase/functions/calendar-feed/index.ts. */
+const MOTS_MOTIF_CONFIDENTIEL = ['maladie', 'arrêt', 'arret', 'accident', 'santé', 'sante', 'médic', 'medic', 'hospital', 'handicap', 'maternité', 'maternite', 'paternité', 'paternite', 'thérapeut', 'therapeut'];
+function motifAbsenceConfidentiel(leaveType) {
+  if (!leaveType) return false;
+  if (leaveType.confidentiel === true) return true;
+  const nom = String(leaveType.nom || '').toLowerCase();
+  return MOTS_MOTIF_CONFIDENTIEL.some(mot => nom.includes(mot));
+}
+/** Libellé d'un type d'absence pour un canal partagé : « Absence » si le motif est confidentiel. */
+function libelleAbsencePartage(leaveType) {
+  return motifAbsenceConfidentiel(leaveType) ? 'Absence' : (leaveType ? leaveType.nom : '—');
+}
+
 function leaveTypeNameMatches(nom, target) {
   const n = (nom || '').trim().toLowerCase();
   const t = target.trim().toLowerCase();
@@ -9604,8 +9626,8 @@ function getRadarTresorerieRH(employees, refDate) {
   // Coût actuel : salariés réellement EN POSTE aujourd'hui (déjà embauchés, pas encore partis) — pas
   // simplement statut === 'Actif', qui resterait vrai pour un salarié pré-créé avant sa date
   // d'embauche réelle (limite connue ailleurs dans l'app, hors périmètre ici).
-  const enPosteAujourdhui = employees.filter(e => e.dateEmbauche && e.dateEmbauche <= todayStr && (!e.dateDepart || e.dateDepart > todayStr));
-  const coutMensuelActuel = round2(enPosteAujourdhui.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0));
+  const enPosteAujourdhui = getEffectifEnPoste(employees, ref);
+  const coutMensuelActuel = getMasseSalarialeEnPoste(employees, ref);
 
   const horizons = RADAR_TRESORERIE_HORIZONS_JOURS.map(jours => {
     const dateLimite = toISODate(addDays(ref, jours));
@@ -9708,7 +9730,7 @@ function calculateTurnoverRate(employees, refDate) {
   const entrees = employees.filter(e => e.dateEmbauche && e.dateEmbauche >= depuis && e.dateEmbauche <= refStr).length;
   // Les salariés archivés restent dans la liste reçue (une sortie se traduit presque toujours par un
   // archivage, voir setArchived) pour être comptés parmi les sorties, mais jamais dans l'effectif actuel.
-  const effectifFin = employees.filter(e => e.statut === 'Actif' && !e.archive).length;
+  const effectifFin = getEffectifEnPoste(employees, ref).length;
   const effectifDebut = Math.max(0, effectifFin - entrees + sorties);
   const effectifMoyen = (effectifDebut + effectifFin) / 2;
   if (!effectifMoyen) return 0;
@@ -9738,9 +9760,29 @@ function calculateAbsenteeismRate(employees, leaveRequests, leaveTypes, year) {
 // Reconstruit l'effectif à une date passée à partir des dates d'embauche/départ déjà enregistrées —
 // ne peut refléter que l'historique RÉELLEMENT saisi dans Nexus (un salarié parti avant l'adoption de
 // l'outil et jamais renseigné n'y apparaît pas). Limite explicite, rappelée dans le disclaimer UI.
+/** Audit du 26/11/2026 — UNE SEULE définition de l'effectif et de la masse salariale, utilisée par le tableau de bord, la vue groupe, le radar de trésorerie, les seuils d'effectif
+ * et le turnover (auparavant quatre variantes : statut seul, dates seules, archive seule, archive + statut).
+ * « En poste » à une date = déjà embauché (une fiche sans date d'embauche compte aujourd'hui), pas encore parti ; pour aujourd'hui ou une date future, il faut en plus que la fiche
+ * ne soit pas archivée et que le statut soit « Actif » ; pour une date passée, l'historique est reconstitué depuis les dates (une fiche sans date d'embauche n'y figure pas).
+ * Ce n'est PAS l'effectif légal pondéré (temps partiel, CDD, intérim : art. L1111-2 et suivants), ni le nombre de comptes facturés (l'abonnement compte les fiches non archivées). */
+function estEnPoste(employee, refDate) {
+  const date = toISODate(toRefDate(refDate));
+  const aujourdhui = toISODate(new Date());
+  if (employee.dateEmbauche && employee.dateEmbauche > date) return false;
+  if (employee.dateDepart && employee.dateDepart <= date) return false;
+  if (date >= aujourdhui) return !employee.archive && employee.statut === 'Actif';
+  return Boolean(employee.dateEmbauche);
+}
+function getEffectifEnPoste(employees, refDate) {
+  const ref = refDate || new Date();
+  return employees.filter(e => estEnPoste(e, ref));
+}
+function getMasseSalarialeEnPoste(employees, refDate) {
+  return round2(getEffectifEnPoste(employees, refDate).reduce((somme, e) => somme + (Number(e.salaireBrutMensuel) || 0), 0));
+}
+
 function getEffectifActifAt(employees, date) {
-  const dateStr = toISODate(toRefDate(date));
-  return employees.filter(e => e.dateEmbauche && e.dateEmbauche <= dateStr && (!e.dateDepart || e.dateDepart > dateStr)).length;
+  return getEffectifEnPoste(employees, date).length;
 }
 
 // Seuils harmonisés par la loi PACTE (n°2019-486 du 22/05/2019, en vigueur depuis le 01/01/2020),

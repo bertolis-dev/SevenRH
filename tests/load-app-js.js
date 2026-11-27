@@ -102,6 +102,7 @@ globalThis.__hasPermission = hasPermission;
 globalThis.__calculateTicketsRestaurant = calculateTicketsRestaurant;
 globalThis.__calculerEcartRegularisationTickets = calculerEcartRegularisationTickets;
 globalThis.__getLeaveBalance = getLeaveBalance;
+globalThis.__IDCC_CONVENTIONS = IDCC_CONVENTIONS;
 globalThis.__calculateAcquisition = calculateAcquisition;
 globalThis.__resolveAncienneteAcquisAnnuel = resolveAncienneteAcquisAnnuel;
 globalThis.__CHAMPS_FUSION_MODELE = CHAMPS_FUSION_MODELE;

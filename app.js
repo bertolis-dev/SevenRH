@@ -2714,13 +2714,18 @@ function openAboutModal() {
 /** Numéro de la version de l'application, affiché dans le menu du compte, le guide et les Nouveautés. À changer À CHAQUE mise en ligne,
  * en même temps que le ?v= d'index.html et la première entrée de CHANGELOG_ENTRIES : le test version-application-26-10 vérifie qu'ils
  * restent alignés. */
-const APP_VERSION = '2026.11.27.1';
+const APP_VERSION = '2026.11.27.2';
 
 const CHANGELOG_ENTRIES = [
   {
     date: 'Novembre 2026',
     version: APP_VERSION,
     items: [
+      "Tickets restaurant, commande Swile : elle est maintenant soumise par une personne puis validée par une autre avant l'envoi ou le dépôt du fichier (toute modification demande une nouvelle validation). La comptabilité peut consulter la commande et exporter le tableau, mais ne peut plus l'envoyer ; un nouveau droit « Soumettre, valider et envoyer la commande de titres-restaurant » est proposé dans les permissions. Un droit « Voir les totaux de paie agrégés » est créé pour la comptabilité.",
+      "Effectif et masse salariale : une seule définition (salariés en poste : embauchés, pas encore partis, non archivés, statut actif) sur le tableau de bord, la vue groupe, le radar de trésorerie, les seuils d'effectif et le turnover.",
+      "Préparation de paie : une personne qui n'a pas le droit de voir les salaires ne voit plus de fausse anomalie « salaire manquant », ni d'indemnité compensatrice à 0 €.",
+      "Conventions collectives : ajout de l'IDCC 716 (distribution de films, employés et ouvriers). Aucune règle de congés propre n'est codée pour 716 ni pour 892.",
+      "Motifs d'absence touchant à la santé (maladie, accident, maternité...) : les notifications Slack, Teams et Google Chat et le calendrier abonné affichent « Absence ».",
       "Calculs (audit du 26/11) : le plafond des indemnités journalières de la Sécurité sociale passe à 1,4 SMIC pour les arrêts commencés à partir du 01/04/2025 (1,8 avant), et le SMIC est réglable dans Paramètres > Congés et absences (valeur par défaut à faire valider).",
       "Entretiens professionnels : l'échéance suit la loi du 24/10/2025, un entretien de parcours tous les 4 ans (premier dans l'année qui suit l'arrivée) et un bilan récapitulatif tous les 8 ans ; ces intervalles sont réglables (Paramètres > Congés et absences). Les libellés et rappels sont mis à jour.",
       "Congés payés : quand un type a des paliers d'ancienneté (ex. 25 jours, puis 27 à partir de 15 ans), la base annuelle s'applique aussi sous le premier palier au lieu de 0.",
@@ -4789,13 +4794,13 @@ async function runGroupSummaryRefresh() {
           rows.push({ companyName: account.companyName || account.email, erreur: result.error });
           continue;
         }
-        const employees = employeeRepository.getAll().filter(e => !e.archive);
-        const actifs = employees.filter(e => e.statut === 'Actif');
+        const employees = employeeRepository.getAll();
+        const actifs = getEffectifEnPoste(employees, new Date());
         const settings = settingsRepository.getSettings();
         rows.push({
           companyName: DB.getCurrentCompany().raisonSociale || account.companyName || account.email,
           effectifActif: actifs.length,
-          masseSalariale: settings.masseSalarialeActivee ? round2(actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)) : null,
+          masseSalariale: settings.masseSalarialeActivee ? getMasseSalarialeEnPoste(employees, new Date()) : null,
           congesEnAttente: hasModule('conges') ? leaveRepository.getAll().filter(r => r.statut === 'En attente').length : null
         });
       } catch (err) {
@@ -8817,7 +8822,7 @@ function renderMyAstreinteBanner(user) {
 
 /** Bloc KPI + graphiques + naissances/fins de contrat + présence, partagé par les vues RH/Manager/Propriétaire. `employeeIds` = null pour l'entreprise entière, sinon liste restreinte (équipe d'un manager). */
 function renderOperationalDashboardBody(employees, employeeIds) {
-  const actifs = employees.filter(e => e.statut === 'Actif');
+  const actifs = getEffectifEnPoste(employees, new Date());
   const cdi = actifs.filter(e => e.typeContrat === 'CDI').length;
   const cdd = actifs.filter(e => e.typeContrat === 'CDD').length;
   const services = new Set(actifs.map(e => e.service).filter(Boolean)).size;
@@ -9184,7 +9189,7 @@ function renderDashboardProprietaire() {
   const leaveTypes = leaveTypeRepository.getLeaveTypes();
   const leaveRequests = leaveRepository.getAll();
   const expenses = expenseRepository.getAll();
-  const actifs = employees.filter(e => e.statut === 'Actif');
+  const actifs = getEffectifEnPoste(employees, new Date());
   const year = new Date().getFullYear();
 
   // Tous les salariés, archivés compris : ceux qui sont partis sont archivés (voir calculateTurnoverRate).
@@ -9206,7 +9211,7 @@ function renderDashboardProprietaire() {
   ].filter(r => r.statut === 'En attente').length;
 
   const masseSalariale = settings.masseSalarialeActivee
-    ? actifs.reduce((sum, e) => sum + (e.salaireBrutMensuel || 0), 0)
+    ? getMasseSalarialeEnPoste(actifs, new Date())
     : null;
   const ageBuckets = settings.suiviAgeActive ? getAgePyramidBuckets(employees) : null;
   const genderBreakdown = settings.suiviGenreActive ? getGenderBreakdown(employees) : null;
@@ -17030,6 +17035,8 @@ function renderPermissionsCard(e, user) {
     { key: PERMISSIONS.EXPORTER_PAIE, label: 'Exporter la paie' },
     { key: PERMISSIONS.CALCULER_TICKETS_RESTAURANT, label: 'Accéder aux tickets restaurant' },
     { key: PERMISSIONS.CORRIGER_TICKETS_RESTAURANT, label: 'Corriger manuellement les tickets restaurant' },
+    { key: PERMISSIONS.ENVOYER_COMMANDE_TICKETS, label: 'Soumettre, valider et envoyer la commande de titres-restaurant' },
+    { key: PERMISSIONS.VOIR_PAIE_AGREGEE, label: 'Voir les totaux de paie agrégés (sans le journal nominatif)' },
     { key: PERMISSIONS.CREER_SALARIE, label: 'Créer un salarié' },
     { key: PERMISSIONS.MODIFIER_SALARIE, label: 'Modifier un salarié' },
     { key: PERMISSIONS.ARCHIVER_SALARIE, label: 'Archiver un salarié' },
@@ -30841,12 +30848,39 @@ function genererFichierCommandeTickets() {
 }
 
 /** Fenêtre « Commande Swile » : aperçu propre de la commande du mois, contrôles avant dépôt, puis téléchargement du fichier Swile, du tableau Excel ou envoi par email. */
+/** Audit du 26/11/2026 : somme de contrôle de la commande (bénéficiaires, jours, contenu du fichier) : une commande validée puis modifiée doit être revalidée. */
+function signatureCommandeTickets(fichier) {
+  let h = 0;
+  fichier.octets.forEach(o => { h = (h * 31 + o) >>> 0; });
+  return `${fichier.nombreSalaries}:${fichier.nombreJours}:${h}`;
+}
+
+/** Audit du 26/11/2026 : état de la double validation d'une commande de titres-restaurant pour la personne connectée.
+ * Exigée seulement si au moins deux personnes non archivées ont le droit de l'envoyer (sinon impossible : l'écran le dit). */
+function etatValidationCommandeTickets(settings, periode, signature, user) {
+  const habilites = employeeRepository.getAll().filter(e => !e.archive && hasPermission(e, PERMISSIONS.ENVOYER_COMMANDE_TICKETS)).length;
+  const exigee = settings.ticketsCommandeDoubleValidation !== false && habilites >= 2;
+  const entree = (settings.ticketsCommandesAValider || {})[periode];
+  const aJour = Boolean(entree && entree.signature === signature);
+  return {
+    exigee, habilites, entree: aJour ? entree : null,
+    soumettre: exigee && !aJour,
+    valider: exigee && aJour && !entree.validePar && entree.preparePar !== user.id,
+    envoiPossible: !exigee || (aJour && Boolean(entree.validePar))
+  };
+}
+
 async function openCommandeSwileModal() {
   const settings = settingsRepository.getSettings();
   const annee = state.ticketsYear;
   const mois = state.ticketsMonth;
   const lignes = lignesCommandeSwile(getTicketsRows(), settings);
   const fichier = construireFichierCommandeSwile(lignes);
+  const utilisateur = authRepository.getCurrentUser();
+  const periodeCommande = `${annee}-${String(mois + 1).padStart(2, '0')}`;
+  const peutEnvoyer = hasPermission(utilisateur, PERMISSIONS.ENVOYER_COMMANDE_TICKETS);
+  const signature = signatureCommandeTickets(fichier);
+  const validation = etatValidationCommandeTickets(settings, periodeCommande, signature, utilisateur);
   const nomFichier = nomFichierCommandeSwile(settings, annee, mois);
   const problemes = lignes.filter(l => l.problemes.length);
   const connecteur = window.SupabaseSync && window.SupabaseSync.connecteurTicketsLire ? await window.SupabaseSync.connecteurTicketsLire('swile') : null;
@@ -30872,13 +30906,22 @@ async function openCommandeSwileModal() {
             <tfoot><tr><td colspan="5"><strong>Total</strong></td><td class="cell-numeric"><strong>${fichier.nombreJours}</strong></td><td></td></tr></tfoot>
           </table>
         </div>
+        ${!peutEnvoyer ? '<p class="form-hint" style="margin-top:12px;">Seul un RH ou un propriétaire peut passer la commande ; vous pouvez la consulter et exporter le tableau.</p>'
+          : validation.exigee ? `<div class="card" style="margin-top:12px;"><strong>Double validation</strong><p class="form-hint" style="margin:4px 0 0;">${validation.entree
+            ? (validation.entree.validePar
+              ? `Commande validée par ${escapeHtml(validation.entree.valideParNom || '')} le ${formatDate(validation.entree.valideLe)} (soumise par ${escapeHtml(validation.entree.prepareParNom || '')}).`
+              : `Soumise par ${escapeHtml(validation.entree.prepareParNom || '')} le ${formatDate(validation.entree.prepareLe)}, en attente de la validation d'une autre personne habilitée.`)
+            : 'Une personne soumet la commande, une autre la valide avant l\'envoi ou le dépôt du fichier. Toute modification de la commande demande une nouvelle validation.'}</p></div>`
+          : `<p class="form-hint" style="margin-top:12px;">${validation.habilites < 2 ? 'Un seul profil est habilité à passer la commande : la double validation ne peut pas s\'appliquer. Habilitez une seconde personne (droit « Envoyer la commande de tickets restaurant ») pour la rendre effective.' : 'La double validation est désactivée dans les paramètres.'}</p>`}
         <p class="form-hint" style="margin-top:12px;">Pour passer la commande : téléchargez le fichier <strong>${escapeHtml(nomFichier)}</strong> puis déposez-le sur le site Swile (même format que le modèle fourni par Swile). Le nombre de jours à charger est celui calculé par Nexus pour le mois (jours travaillés, hors congés, fériés et demi-journées).</p>
       </div>
       <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
         <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Fermer</button>
         <button type="button" class="btn btn-secondary" id="btn-commande-excel">Tableau Excel</button>
-        ${emailCommande ? `<button type="button" class="btn btn-secondary" id="btn-commande-email">Envoyer par email à ${escapeHtml(emailCommande)}</button>` : ''}
-        <button type="button" class="btn btn-primary" id="btn-commande-fichier-swile">Télécharger le fichier Swile</button>
+        ${peutEnvoyer && validation.soumettre ? '<button type="button" class="btn btn-primary" id="btn-commande-soumettre">Soumettre pour validation</button>' : ''}
+        ${peutEnvoyer && validation.valider ? '<button type="button" class="btn btn-primary" id="btn-commande-valider">Valider la commande</button>' : ''}
+        ${peutEnvoyer && emailCommande ? `<button type="button" class="btn btn-secondary" id="btn-commande-email" ${validation.envoiPossible ? '' : 'disabled title="Commande à valider d\'abord"'}>Envoyer par email à ${escapeHtml(emailCommande)}</button>` : ''}
+        ${peutEnvoyer ? `<button type="button" class="btn ${validation.envoiPossible ? 'btn-primary' : 'btn-secondary'}" id="btn-commande-fichier-swile" ${validation.envoiPossible ? '' : 'disabled title="Commande à valider d\'abord"'}>Télécharger le fichier Swile</button>` : ''}
       </div>
     </div>`;
   const modalRoot = document.getElementById('modal-root');
@@ -30890,7 +30933,33 @@ async function openCommandeSwileModal() {
     DB.enregistrerCommandeTickets(annee, mois, leaveRepository.getAll(), teleworkRepository.getAll());
     auditLogRepository.logAudit('Export', 'Commande Swile', `${MONTH_NAMES[mois]} ${annee}`, `${fichier.nombreJours} jours pour ${fichier.nombreSalaries} salariés`);
   };
-  document.getElementById('btn-commande-fichier-swile').addEventListener('click', () => {
+  // Audit du 26/11/2026 : double validation, l'état est conservé dans les réglages (une entrée par mois) et lié à la somme de contrôle de la commande.
+  const enregistrerEtat = (champs) => {
+    const reglages = settingsRepository.getSettings();
+    reglages.ticketsCommandesAValider = Object.assign({}, reglages.ticketsCommandesAValider, { [periodeCommande]: champs });
+    settingsRepository.saveSettings(reglages);
+  };
+  const boutonSoumettre = document.getElementById('btn-commande-soumettre');
+  if (boutonSoumettre) boutonSoumettre.addEventListener('click', () => {
+    enregistrerEtat({ signature, nombreJours: fichier.nombreJours, nombreSalaries: fichier.nombreSalaries, preparePar: utilisateur.id, prepareParNom: nomCompletAffiche(utilisateur), prepareLe: new Date().toISOString() });
+    auditLogRepository.logAudit('Création', 'Commande Swile soumise', `${MONTH_NAMES[mois]} ${annee}`, `${fichier.nombreJours} jours pour ${fichier.nombreSalaries} salariés`);
+    showToast('Commande soumise : une autre personne habilitée doit la valider.');
+    closeModal();
+    openCommandeSwileModal();
+  });
+  const boutonValider = document.getElementById('btn-commande-valider');
+  if (boutonValider) boutonValider.addEventListener('click', () => {
+    const entree = (settingsRepository.getSettings().ticketsCommandesAValider || {})[periodeCommande];
+    if (!entree || entree.signature !== signature || entree.preparePar === utilisateur.id) { showToast('Cette commande ne peut pas être validée par vous.', 'error'); return; }
+    enregistrerEtat(Object.assign({}, entree, { validePar: utilisateur.id, valideParNom: nomCompletAffiche(utilisateur), valideLe: new Date().toISOString() }));
+    auditLogRepository.logAudit('Validation', 'Commande Swile validée', `${MONTH_NAMES[mois]} ${annee}`, `soumise par ${entree.prepareParNom || '—'}`);
+    showToast('Commande validée : elle peut être envoyée.');
+    closeModal();
+    openCommandeSwileModal();
+  });
+  const boutonFichier = document.getElementById('btn-commande-fichier-swile');
+  if (boutonFichier) boutonFichier.addEventListener('click', () => {
+    if (!validation.envoiPossible) { showToast('La commande doit d\'abord être validée par une autre personne habilitée.', 'error'); return; }
     telechargerOctets(fichier.octets, nomFichier, 'text/csv');
     enregistrerCommande();
     showToast('Fichier de commande Swile téléchargé : déposez-le sur le site Swile.');
@@ -30900,8 +30969,9 @@ async function openCommandeSwileModal() {
   document.getElementById('btn-commande-excel').addEventListener('click', () => { closeModal(); genererFichierCommandeTickets(); });
   const boutonEmail = document.getElementById('btn-commande-email');
   if (boutonEmail) boutonEmail.addEventListener('click', async () => {
+    if (!validation.envoiPossible) { showToast('La commande doit d\'abord être validée par une autre personne habilitée.', 'error'); return; }
     boutonEmail.disabled = true;
-    const periode = `${annee}-${String(mois + 1).padStart(2, '0')}`;
+    const periode = periodeCommande;
     let binaire = '';
     fichier.octets.forEach(o => { binaire += String.fromCharCode(o); });
     const envoi = await window.SupabaseSync.connecteurTicketsAppeler('envoyer-commande', {
@@ -31230,6 +31300,9 @@ function getPaieAnomalies(year, month) {
   const validLeaveAndTeleworkRequestsByEmployeeId = groupByEmployeeId(validLeaveAndTeleworkRequests);
   const validLeaveRequestsByEmployeeId = groupByEmployeeId(validLeaveRequests);
 
+  // Audit du 26/11/2026 : sans le droit « voir les informations financières », le salaire n'est pas envoyé à la personne qui prépare la paie (il vit dans une table à part) :
+  // elle ne doit voir ni fausse anomalie « salaire manquant » ni indemnité compensatrice à 0 €.
+  const voitLesSalaires = peutVoirSalaireContrat();
   const anomalies = [];
   employees.forEach(e => {
     const employeeLeaveRequests = allLeaveRequestsByEmployeeId.get(e.id) || [];
@@ -31255,7 +31328,7 @@ function getPaieAnomalies(year, month) {
 
     const champsManquants = [];
     if (!e.numeroSecu) champsManquants.push('n° sécurité sociale');
-    if (!e.salaireBrutMensuel) champsManquants.push('salaire brut mensuel');
+    if (voitLesSalaires && !e.salaireBrutMensuel) champsManquants.push('salaire brut mensuel');
     if (!e.matricule) champsManquants.push('matricule');
     if (champsManquants.length) {
       anomalies.push({ severity: 'avertissement', type: 'donnees_incompletes', employee: e, message: `Données manquantes : ${champsManquants.join(', ')}` });
@@ -31268,7 +31341,9 @@ function getPaieAnomalies(year, month) {
       // le plus de chances d'être effectivement vu au bon moment, le mois du départ.
       const { montant, joursRestants } = calculateIndemniteCompensatrice(e, e.dateDepart);
       if (joursRestants > 0) {
-        anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris), à valider avec votre expert-comptable` });
+        anomalies.push({ severity: 'information', type: 'indemnite_compensatrice', employee: e, message: voitLesSalaires
+          ? `Indemnité compensatrice de congés payés estimée : ${formatCurrencyFR(montant)} (${formatDurationFR(joursRestants)} non pris), à valider avec votre expert-comptable`
+          : `Indemnité compensatrice de congés payés à calculer : ${formatDurationFR(joursRestants)} non pris (le montant est visible d'une personne habilitée à voir les salaires)` });
       }
     }
 
